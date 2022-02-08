@@ -1,4 +1,4 @@
-# PoCA: Point Clouds Analyst
+# PoCA: Point Cloud Analyst
 PoCA is the direct continuation of SR-Tesseler and Coloc-Tesseler. SR-Tesseler has been released in 2015 and, since then, I worked in parralel on extending SR-Tesseler and developing Coloc-Tesseler. As some point, SR-Tesseler became a monster when speaking of coding, and doing any modification was painful. Similarly, I needed to clear the Coloc-Tesseler code to be able to make it available. I therefore decided last summer to re-code completely the platform. PoCA will be the result of this decision and integrate SR-, Coloc-Tesseler and much more in a single software platform.
 
 I released a a new preliminary version for the workshop I will animate at Mifobio 2021. The manual has not been updated since the version 0.1.0.
