@@ -1,0 +1,5 @@
+{"MainWindow":{"open":{"calibration_t":1.0,"calibration_xy":1.0,"calibration_z":1.0,"frame":4,"intensity":3,"path":"C:/DevC++/poca/bin/poca/simulation_1.csv","separator":44,"sigmaZ":6,"x":0,"y":1,"z":2}}}
+{"DetectionSet":{"computeDelaunay":""}}
+{"DelaunayTriangulation":{"objectCreationParameters":{"cutDistance":50.0,"inROIs":false,"maxArea":1000.0,"maxLocs":500,"minArea":0.0,"minLocs":10,"useDistance":true,"useMaxArea":false,"useMaxLocs":false,"useMinArea":false,"useMinLocs":true}}}
+{"DelaunayTriangulation":{"createFilteredObjects":""}}
+{"DelaunayTriangulation":{"selected":false}}
