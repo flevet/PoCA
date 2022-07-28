@@ -46,6 +46,7 @@
 #include <Geometry/ObjectList.hpp>
 #include <General/MyData.hpp>
 #include <General/Misc.h>
+#include <Interfaces/PaletteInterface.hpp>
 
 #include "DetectionSetBasicCommands.hpp"
 
@@ -90,6 +91,100 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 			msgBox.setText(_infos->errorMessageToStdString(e.what()).c_str());
 			msgBox.exec();
 		}
+	}
+	else if (_infos->nameCommand == "clustersForChallenge") {
+		std::string selectedComponent = "DetectionSet";
+		uint32_t currentScreen = 1;
+		if (_infos->hasParameter("selection"))
+			selectedComponent = _infos->getParameter<std::string>("selection");
+		size_t minNbLocs = 1, maxNbLocs = std::numeric_limits < size_t >::max();
+		float factor = 0.f;
+		if (_infos->hasParameter("minNbLocs"))
+			minNbLocs = _infos->getParameter<size_t>("minNbLocs");
+		if (_infos->hasParameter("maxNbLocs"))
+			maxNbLocs = _infos->getParameter<size_t>("maxNbLocs");
+		if (_infos->hasParameter("currentScreen"))
+			currentScreen = _infos->getParameter<uint32_t>("currentScreen");
+		if (_infos->hasParameter("factor"))
+			factor = _infos->getParameter<float>("factor");
+
+		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
+		poca::core::MyObjectInterface* obj = lds->getObject(m_dset);
+		poca::core::BasicComponent* bc = obj->getBasicComponent(selectedComponent);
+		if (bc == NULL)
+			return;
+		const std::vector <bool>& selection = bc->getSelection();
+
+		poca::geometry::ObjectIndicesFactoryInterface* factory = poca::geometry::createObjectIndicesFactory();
+		std::vector <uint32_t> indices = factory->createObjects(obj, selection, minNbLocs, maxNbLocs);
+
+		std::vector <float> clusterIndices(indices.size());
+		std::transform(indices.begin(), indices.end(), clusterIndices.begin(), [](uint32_t x) { return (float)x; });
+
+		std::map <std::string, poca::core::MyData*>& data = m_dset->getData();
+		data["clustersIndices"] = new poca::core::MyData(clusterIndices);
+
+		obj->notifyAll("LoadObjCharacteristicsDetectionSetWidget");
+		QString origName = obj->getName().c_str();
+		origName = origName.remove(".csv");
+		QString directory("e:/Git/ARI-and-IoU-cluster-analysis-evaluation/Challenge/MultiBlinking/");
+		directory.append(origName);
+		QDir().mkdir(directory);
+		QString directoryRes(directory);
+		directoryRes.append("/classes");
+		QDir().mkdir(directoryRes);
+
+		//Save GT data
+		bc = obj->getBasicComponent("DetectionSet");
+		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bc);
+		if (dset) {
+			const std::vector <float>& xs = dset->getOriginalHistogram("x")->getValues();
+			const std::vector <float>& ys = dset->getOriginalHistogram("y")->getValues();
+			const std::vector <float>& indices = dset->getOriginalHistogram("index")->getValues();
+
+			std::string filename = directory.toStdString() + "/data.csv";
+			std::ofstream fs(filename);
+			fs << "x,y,index" << std::endl;
+			for (auto n = 0; n < xs.size(); n++)
+				fs << xs[n] << "," << ys[n] << "," << ((uint32_t)indices[n]) << std::endl;
+			/*for (auto&& [x, y, index] : c9::zip(xs, ys, indices))
+				fs << x << "," << y << "," << ((uint32_t)index) << std::endl;*/
+			fs.close();
+		}
+
+		std::string filename = directoryRes.toStdString() + "/" + std::to_string(currentScreen) + ".csv";
+		std::ofstream fs(filename);
+		fs << "result" << std::endl;
+		for (auto idx : indices)
+			fs << idx << std::endl;
+		fs.close();
+
+		filename = directory.toStdString() + "/info.csv";
+		std::filesystem::path path = filename;
+		std::ofstream ofs;
+		if (!std::filesystem::exists(path)) {
+			ofs.open(filename);
+			ofs << "file,factor" << std::endl;
+		}
+		else {
+			ofs.open(filename, std::ofstream::app);
+		}
+		ofs << (std::to_string(currentScreen) + ".csv") << ',' << std::to_string(factor) << std::endl;
+		ofs.close();
+		/*QString directory(obj->getDir().c_str());
+		if (!directory.endsWith("/"))
+			directory.append("/");
+		directory.append("results");
+		QDir dir(directory);
+		if (!dir.exists())
+			QDir().mkdir(directory);
+
+		std::string filename = directory.toStdString() + "/" + obj->getName();
+		std::ofstream fs(filename);
+		fs << "result" << std::endl;
+		for(auto idx : indices)
+			fs << idx << std::endl;
+		fs.close();*/
 	}
 	else if (_infos->nameCommand == "createObjectsFromHistogram") {
 		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
@@ -143,6 +238,11 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		float mean2 = poca::core::mean(densities);
 		std::cout << "Final mean = " << mean2 << std::endl;
 	}
+	else if (_infos->nameCommand == "saveAsSVG") {
+		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
+		filename.insert(filename.lastIndexOf("."), "_detections");
+		saveAsSVG(filename);
+	}
 }
 
 poca::core::CommandInfo DetectionSetBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -182,6 +282,12 @@ poca::core::CommandInfo DetectionSetBasicCommands::createCommand(const std::stri
 			ci.addParameter("radius", _parameters["radius"].get<float>());
 		return ci;
 	}
+	else if (_nameCommand == "saveAsSVG") {
+		if (_parameters.contains("filename")) {
+			std::string val = _parameters["filename"].get<std::string>();
+			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
+		}
+	}
 	return poca::core::CommandInfo();
 }
 
@@ -190,3 +296,40 @@ poca::core::Command* DetectionSetBasicCommands::copy()
 	return new DetectionSetBasicCommands(*this);
 }
 
+void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
+{
+	poca::core::BoundingBox bbox = m_dset->boundingBox();
+	std::ofstream fs(_filename.toLatin1().data());
+	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
+	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (bbox[3] - bbox[0]) << "\" height=\"" << (bbox[4] - bbox[1]) << "\" viewBox=\"" << bbox[0] << " " << bbox[1] << " " << bbox[3] << " " << bbox[4] << " " "\">\n";
+	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
+	fs << "<desc>\n";
+	fs << "Creator: Florian Levet\n";
+	fs << "</desc>\n";
+	fs << "<defs>\n";
+	fs << "</defs>\n";
+
+	const std::vector <float>& xs = m_dset->getData("x");
+	const std::vector <float>& ys = m_dset->getData("y");
+	const std::vector <float>& zs = m_dset->hasData("z") ? m_dset->getData("z") : std::vector <float>(xs.size(), 0.f);
+	poca::core::HistogramInterface* histogram = m_dset->getCurrentHistogram();
+	const std::vector<float>& values = histogram->getValues();
+	const std::vector<bool>& selection = m_dset->getSelection();
+	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
+
+	char col[32];
+	poca::core::PaletteInterface* pal = m_dset->getPalette();
+	for (size_t n = 0; n < xs.size(); n++) {
+		if (!selection[n]) continue;
+		float valPal = (values[n] - minH) / interH;
+		poca::core::Color4uc c = pal->getColor(valPal);
+		unsigned char r = c[0], g = c[1], b = c[2];
+		poca::core::getColorStringUC(r, g, b, col);
+		fs << "<circle fill=\"" << col << "\" cx =\"";
+		fs << xs[n] << "\" cy=\"";
+		fs << ys[n] << "\" cz=\"";
+		fs << zs[n] << "\" r=\"1\"/>\n";
+	}
+	fs.close();
+}

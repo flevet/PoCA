@@ -123,7 +123,7 @@ namespace poca::core {
 	protected:
 		Vec2mf m_center;
 		float m_radius;
-		poca::opengl::PointGLBuffer <Vec3mf> m_centerBuffer;
+		poca::opengl::PointSingleGLBuffer <Vec3mf> m_centerBuffer;
 	};
 
 	class PolylineROI : public ROI {

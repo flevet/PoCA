@@ -69,6 +69,21 @@ foreach(source IN LISTS source_list)
     source_group("${source_path_msvc}" FILES "${source}")
 endforeach()
 
+find_package(CGAL REQUIRED COMPONENTS Core)
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    include(${CGAL_USE_FILE})
+
+    message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
+    add_definitions(${CGAL_CXX_GLAFS_INIT})
+
+    message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
+    message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
+    #target_link_libraries(OpenSMLM ${CGAL_LIBRARY_DIRS} ${CGAL_3RD_PARTY_LIBRARIES_DIRS})
+else()
+    message(FATAL_ERROR "CGAL is required.")
+endif()
+
 add_definitions(-DNOMINMAX)
 add_definitions(-DQT_NO_WARNING_OUTPUT)
 find_package(Qt5 COMPONENTS Core Widgets Gui PrintSupport OpenGL REQUIRED)

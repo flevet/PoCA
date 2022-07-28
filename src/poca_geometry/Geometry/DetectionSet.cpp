@@ -257,5 +257,22 @@ namespace poca::geometry {
 			_fs << std::endl;
 		}
 	}
+
+	DetectionSet* DetectionSet::copySelection(const std::vector <uint32_t>& _indexes)
+	{
+		std::map <std::string, std::vector <float>> data;
+
+		poca::core::stringList features = getNameData();
+		for (auto feature : features)
+			data[feature] = std::vector <float>();
+
+		for (auto idx : _indexes) {
+			for (auto feature : features)
+				data[feature].push_back(m_data[feature]->getOriginalData()[idx]);
+		}
+
+		DetectionSet* dset = new DetectionSet(data);
+		return dset;
+	}
 }
 

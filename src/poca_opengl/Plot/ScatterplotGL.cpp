@@ -348,7 +348,7 @@ namespace poca::plot {
 		const unsigned char* glver = glGetString(GL_VERSION);
 		std::cout << glver << std::endl;
 
-		glShadeModel(GL_SMOOTH);
+		//glShadeModel(GL_SMOOTH);
 		glClearColor(1.f, 1.f, 1.f, 1.f);
 		glDisable(GL_COLOR_MATERIAL);
 

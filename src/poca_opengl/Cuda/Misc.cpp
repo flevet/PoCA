@@ -33,6 +33,8 @@
 #include <stdexcept>
 #include <numeric>
 #include <algorithm>
+#include <iostream>
+#include <cuda_runtime.h>
 
 #include "Misc.h"
 
@@ -50,7 +52,12 @@ void sortArrayWRTKeys_CPU(std::vector <float>& _keys, std::vector <uint32_t>& _v
 
 void sortArrayWRTKeys(std::vector <float>& _keys, std::vector <uint32_t>& _values) {
 #ifndef NO_CUDA
-	sortArrayWRTKeys_GPU(_keys, _values);
+	int devCount; // Number of CUDA devices
+	cudaError_t err = cudaGetDeviceCount(&devCount);
+	if (err != cudaSuccess) 
+		sortArrayWRTKeys_CPU(_keys, _values);
+	else 
+		sortArrayWRTKeys_GPU(_keys, _values);
 #else
 	sortArrayWRTKeys_CPU(_keys, _values);
 #endif

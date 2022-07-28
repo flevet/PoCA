@@ -32,12 +32,67 @@
 
 #include <Windows.h>
 #include <gl/GL.h>
+#include <gl/GLU.h>
 #include <fstream>
 
 #include <DesignPatterns/StateSoftwareSingleton.hpp>
 
 #include "MyObjectDisplayCommand.hpp"
 #include "MyObject.hpp"
+
+#ifndef NDEBUG
+#include <iostream>
+#include <cassert>
+
+#define __TO_STR2(x) __EVAL_STR2(x)
+#define __EVAL_STR2(x) #x
+
+#define glAssert2(code) do{code; int l = __LINE__;\
+   GLuint err = glGetError(); \
+                if (err != GL_NO_ERROR)\
+                { \
+                  std::cerr << "OpenGL error : " << __FILE__ << "\n";\
+                  std::cerr << "line : " << l << "\n";\
+                  std::cerr << "Source code : " << __TO_STR2(code) << "\n";\
+                  std::cerr << "Message : " << (const char*)gluErrorString(err) << "("<<err<<")" << "\n";\
+                  assert(false); \
+              }\
+}while(false)
+
+// -----------------------------------------------------------------------------
+
+#define GL_CHECK_ERRORS2() \
+do{ GLuint err = glGetError(); \
+                if (err != GL_NO_ERROR)\
+                { \
+                  std::cerr << "OpenGL error : " << __FILE__ << "\n";\
+                  std::cerr << "line : " << __LINE__ << "\n";\
+                  std::cerr << "Source code : " << __TO_STR2(code) << "\n";\
+                  std::cerr << "Message : " << (const char*)gluErrorString(err) << "("<<err<<")" << "\n";\
+                  assert(false); \
+              }\
+}while(false)
+
+#else
+
+#define __TO_STR(x) __EVAL_STR(x)
+#define __EVAL_STR(x) #x
+
+#define glAssert(code) \
+    code
+
+//#define GL_CHECK_ERRORS()
+#define GL_CHECK_ERRORS() \
+do{ GLuint err = glGetError(); \
+                if (err != GL_NO_ERROR)\
+                { \
+                  std::cerr << "OpenGL error : " << __FILE__ << "\n";\
+                  std::cerr << "line : " << __LINE__ << "\n";\
+                  std::cerr << "Source code : " << __TO_STR(code) << "\n";\
+                  std::cerr << "Message : " << (const char*)gluErrorString(err) << "("<<err<<")" << "\n";\
+              }\
+}while(false)
+#endif
 
 MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _obj) :poca::core::Command("MyObjectDisplayCommand")
 {
@@ -184,12 +239,14 @@ const poca::core::CommandInfos MyObjectDisplayCommand::saveParameters() const
 
 void MyObjectDisplayCommand::display() const
 {
+	/*GL_CHECK_ERRORS2();
 	if (hasParameter("smoothPoint")) {
 		if (getParameter<bool>("smoothPoint"))
 			glEnable(GL_POINT_SMOOTH);
 		else
 			glDisable(GL_POINT_SMOOTH);
 	}
+	GL_CHECK_ERRORS2();
 
 	if (hasParameter("smoothLine")) {
 		if (getParameter<bool>("smoothLine"))
@@ -197,12 +254,14 @@ void MyObjectDisplayCommand::display() const
 		else
 			glDisable(GL_LINE_SMOOTH);
 	}
+	GL_CHECK_ERRORS2();
 
 	if (hasParameter("pointSizeGL"))
 		glPointSize(getParameter<unsigned int>("pointSizeGL"));
+	GL_CHECK_ERRORS2();*/
 
-	if (hasParameter("lineWidthGL"))
-		glPointSize(getParameter<unsigned int>("lineWidthGL"));
+	//if (hasParameter("lineWidthGL"))
+	//	glPointSize(getParameter<unsigned int>("lineWidthGL"));
 
 	//glClear(GL_DEPTH_BUFFER_BIT);
 }

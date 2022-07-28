@@ -111,6 +111,8 @@ namespace poca::geometry {
 
 		void saveDetections(std::ofstream&);
 
+		DetectionSet* copySelection(const std::vector <uint32_t>&);
+
 		inline KdTree_DetectionPoint* getKdTree() { return m_kdTree; }
 
 	protected:

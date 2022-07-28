@@ -182,6 +182,7 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectList* _
 	addCommandInfo(poca::core::CommandInfo(false, "shapeRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "bboxSelection", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
+	addCommandInfo(poca::core::CommandInfo(false, "ellipsoidRendering", true));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if(param.contains("fill"))
@@ -196,6 +197,8 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectList* _
 			loadParameters(poca::core::CommandInfo(false, "bboxSelection", param["bboxSelection"].get<bool>()));
 		if (param.contains("pointSizeGL"))
 			loadParameters(poca::core::CommandInfo(false, "pointSizeGL", param["pointSizeGL"].get<uint32_t>()));
+		if (param.contains("ellipsoidRendering"))
+			loadParameters(poca::core::CommandInfo(false, "ellipsoidRendering", param["ellipsoidRendering"].get<bool>()));
 	}
 }
 
@@ -293,7 +296,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "bboxSelection") {
+	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "ellipsoidRendering" || _nameCommand == "bboxSelection") {
 		bool val = _parameters.get<bool>();
 		return poca::core::CommandInfo(false, _nameCommand, val);
 	}
@@ -434,7 +437,73 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
 	}
 	GL_CHECK_ERRORS();
+
+	drawEllipsoid(_cam);
+	GL_CHECK_ERRORS();
 }
+
+void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
+{
+	bool ellipsoidRendering = getParameter<bool>("ellipsoidRendering");
+	if (m_ellipsoidTransformBuffer.empty() || !ellipsoidRendering)
+		return;
+
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+	glDisable(GL_CULL_FACE);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	poca::opengl::Shader* shader = _cam->getShader("3DInstanceRenderingShader");
+	const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+	shader->use();
+	shader->setMat4("MVP", proj * view * model);
+	shader->setBool("useSingleColor", false);
+
+	shader->setInt("lutTexture", 0);
+	shader->setFloat("minFeatureValue", m_minOriginalFeature);
+	shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+
+	shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
+	shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
+	shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
+	shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
+	shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
+	shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+
+	poca::opengl::HelperSingleton* helper = poca::opengl::HelperSingleton::instance();
+	poca::opengl::QuadSingleGLBuffer <float>& ellipsoidBuffer = helper->getEllipsoidBuffer();
+	poca::opengl::QuadSingleGLBuffer <GLushort>& ellipsoidIndicesBuffer = helper->getEllipsoidIndicesBuffer();
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glEnableVertexAttribArray(9);
+	ellipsoidBuffer.bindBuffer(0);
+	ellipsoidIndicesBuffer.bindBuffer(1);
+	m_ellipsoidFeatureBuffer.bindBuffer(9);
+	// This is the important bit... set the divisor for the color array
+	// to 1 to get OpenGL to give us a new value of "feature" per-instance
+	// rather than per-vertex.
+	glVertexAttribDivisor(9, 1);
+	for (int i = 0; i < 4; i++)
+	{
+		glEnableVertexAttribArray(5 + i);
+		m_ellipsoidTransformBuffer.bindBuffer(5 + i, (void*)(4 * sizeof(float) * i));
+	}
+	glDrawElementsInstanced(GL_QUADS, helper->getNbIndicesUnitSphere(), GL_UNSIGNED_SHORT, 0, m_objects->nbElements());
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(9);
+	for (int i = 0; i < 4; i++)
+		glDisableVertexAttribArray(5 + i);
+	glBindTexture(GL_TEXTURE_1D, 0); // Unbind any textures
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	shader->release();
+	GL_CHECK_ERRORS();
+}
+
 
 void ObjectListDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
@@ -669,6 +738,33 @@ void ObjectListDisplayCommand::createDisplay()
 		m_lineFeatureBuffer.generateBuffer(outlines.size(), 1, GL_FLOAT);
 	}
 
+	if (m_objects->dimension() == 3) {
+		const std::vector < std::array<poca::core::Vec3mf, 3>>& axisPCA = m_objects->getAxisObjects();
+		const std::vector<float>& major = m_objects->getData("major");
+		const std::vector<float>& minor = m_objects->getData("minor");
+		const std::vector<float>& minor2 = m_objects->getData("minor2");
+
+		std::vector <glm::mat4> matrices(m_objects->nbElements());
+		for (unsigned int n = 0; n < m_objects->nbElements(); n++) {
+			matrices[n] = glm::mat4(1);
+
+			glm::mat3 rotation = glm::mat3(axisPCA[n][0].x(), axisPCA[n][0].y(), axisPCA[n][0].z(), axisPCA[n][1].x(), axisPCA[n][1].y(), axisPCA[n][1].z(), axisPCA[n][2].x(), axisPCA[n][2].y(), axisPCA[n][2].z());
+
+			poca::core::Vec3mf centroidTmp = m_objects->computeBarycenterElement(n);
+			const glm::vec3& centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);// m_centroidEllipsoid[n];
+
+			glm::vec3 values = glm::vec3(major[n] / 2.f, minor[n] / 2.f, minor2[n] / 2.f);
+			matrices[n] = glm::translate(matrices[n], centroid);
+			matrices[n] *= glm::mat4(rotation);
+			matrices[n] = glm::scale(matrices[n], values);
+		}
+
+		m_ellipsoidTransformBuffer.generateBuffer(matrices.size(), 4, GL_FLOAT);
+		m_ellipsoidTransformBuffer.updateBuffer(matrices.data());
+
+		m_ellipsoidFeatureBuffer.generateBuffer(major.size(), 1, GL_FLOAT);
+	}
+
 	poca::core::HistogramInterface* hist = m_objects->getCurrentHistogram();
 	generateFeatureBuffer(hist);
 }
@@ -689,6 +785,8 @@ void ObjectListDisplayCommand::freeGPUMemory()
 
 	m_triangleBuffer.freeGPUMemory();
 
+	m_ellipsoidTransformBuffer.freeGPUMemory();
+
 	if (m_pickOneObject != NULL)
 		delete m_pickOneObject;
 	m_pickOneObject = NULL;
@@ -706,7 +804,7 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 	m_maxOriginalFeature = _histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
-	std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs;
+	std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs, featureEllipsoid(values.size());
 	if (m_objects->isHiLow()) {
 		float inter = m_maxOriginalFeature - m_minOriginalFeature;
 		float selectedValue = m_minOriginalFeature + inter / 4.f;
@@ -716,6 +814,9 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 		m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
 		if (!m_lineBuffer.empty())
 			m_objects->getOutlinesFeatureInSelectionHiLow(featureOutlines, selection, selectedValue, notSelectedValue);
+
+		for (auto n = 0; n < values.size(); n++)
+			featureEllipsoid[n] = selection[n] ? selectedValue : notSelectedValue;
 	}
 	else {
 		m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
@@ -723,12 +824,18 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 		m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 		if (!m_lineBuffer.empty())
 			m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+
+		for (auto n = 0; n < values.size(); n++)
+			featureEllipsoid[n] = selection[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
 	}
 	m_locsFeatureBuffer.updateBuffer(featureLocs.data());
 	m_triangleFeatureBuffer.updateBuffer(featureValues.data());
 	m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
 	if (!m_lineBuffer.empty())
 		m_lineFeatureBuffer.updateBuffer(featureOutlines.data());
+
+	if (!m_ellipsoidFeatureBuffer.empty())
+		m_ellipsoidFeatureBuffer.updateBuffer(featureEllipsoid.data());
 }
 
 QString ObjectListDisplayCommand::getInfosTriangle(const int _id) const

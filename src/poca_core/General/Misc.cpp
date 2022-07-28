@@ -98,6 +98,17 @@ namespace poca::core {
 		sprintf(_str, "#%2.2x%2.2x%2.2x", rc, gc, bc);
 	}
 
+	void getColorStringUC(unsigned char _r, unsigned char _g, unsigned char _b, char _str[32])
+	{
+		int r = _r;
+		int g = _g;
+		int b = _b;
+		int rc = (r < 0) ? 0 : (r > 255) ? 255 : r;
+		int gc = (g < 0) ? 0 : (g > 255) ? 255 : g;
+		int bc = (b < 0) ? 0 : (b > 255) ? 255 : b;
+		sprintf(_str, "#%2.2x%2.2x%2.2x", rc, gc, bc);
+	}
+
 	std::vector < std::string >& split(const std::string& s, char delim, std::vector < std::string >& elems) {
 		std::stringstream ss(s);
 		std::string item;
@@ -404,6 +415,60 @@ namespace poca::geometry {
 
 		float area = (_r * _r) * acos((_r - h) / _r) - ((_r - h) * sqrt((2. * _r * h) - (h * h)));
 		return area;
+	}
+}
+
+namespace poca::core::utils {
+	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first)
+	{
+		int pos = -1;
+		for (int n = 0; n < _parent->count(); n++)
+			if (_parent->tabText(n) == _nameMainTab)
+				pos = n;
+		if (pos != -1) {
+			QTabWidget* tabW = static_cast <QTabWidget*>(_parent->widget(pos));
+			pos = -1;
+			for (int n = 0; n < tabW->count(); n++)
+				if (tabW->tabText(n) == _nameSubTab)
+					pos = n;
+			QTabWidget* tabW2 = NULL;
+			if (pos == -1) {
+				tabW2 = new QTabWidget;
+				QVBoxLayout* layout = new QVBoxLayout;
+				QWidget* emptyW = new QWidget;
+				emptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+				layout->addWidget(emptyW);
+				tabW2->setLayout(layout);
+				tabW->addTab(tabW2, _nameSubTab);
+			}
+			else
+				tabW2 = static_cast <QTabWidget*>(tabW->widget(pos));
+			QLayout* layout = tabW2->layout();
+			QVBoxLayout* vlayout = dynamic_cast <QVBoxLayout*>(layout);
+			/*if (!vlayout)
+				tabW2->addTab(w, QObject::tr("Nearest neighbor distribution"));
+			else*/ {
+				int size = vlayout->count();
+				size = size > 0 ? size - 1 : size;
+				vlayout->insertWidget(_first ? 0 : size, _widget);
+				tabW->update();
+			}
+		}
+		else {
+			QTabWidget* tabW = new QTabWidget;
+			_parent->addTab(tabW, _nameMainTab);
+			QTabWidget* miscWidget = new QTabWidget;
+			QVBoxLayout* layout = new QVBoxLayout;
+			QWidget* emptyW = new QWidget;
+			emptyW->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+			layout->addWidget(emptyW);
+			miscWidget->setLayout(layout);
+			tabW->addTab(miscWidget, _nameSubTab);
+			int size = layout->count();
+			size = size > 0 ? size - 1 : size;
+			layout->insertWidget(size, _widget);
+			miscWidget->update();
+		}
 	}
 }
 

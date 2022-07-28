@@ -177,7 +177,9 @@ namespace poca::geometry {
 		// Construct the triangulation in parallel
 		Triangulation_3_inexact* delaunay3D = new Triangulation_3_inexact(V.begin(), V.end(), &locking_ds);
 		
-		std::cout << "Delaunay triangulation 3D created, composed of: " << std::endl;
+		t2 = clock();
+		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
+		std::cout << "Delaunay triangulation 3D created in " << elapsed << ", composed of : " << std::endl;
 		std::cout << "		----> " << delaunay3D->number_of_vertices() << " vertices" << std::endl;
 		std::cout << "		----> " << delaunay3D->number_of_finite_cells() << " tetrahedra" << std::endl;
 		assert(delaunay3D->is_valid());

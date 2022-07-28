@@ -247,461 +247,6 @@ char* fsTextureFBO = "#version 330 core\n"
 "	color = texture( lut, coord );\n"
 "}";
 
-char* vsRoundedRect = "precision highp float;\n"
-"uniform vec4 box;\n"
-"uniform vec2 window;\n"
-"uniform float sigma;\n"
-"attribute vec2 coord;\n"
-"varying vec2 vertex;\n"
-"void main() {\n"
-"  float padding = 3.0 * sigma;\n"
-"  vertex = mix(box.xy - padding, box.zw + padding, coord);\n"
-"  gl_Position = vec4(vertex / window * 2.0 - 1.0, 0.0, 1.0);\n"
-"}";
-
-char* fsRoundedRect = "precision highp float;\n"
-"uniform vec4 box; \n"
-"uniform vec4 color;\n"
-"uniform float sigma;\n"
-"uniform float corner;\n"
-"varying vec2 vertex;\n"
-"// A standard gaussian function, used for weighting samples\n"
-"float gaussian(float x, float sigma) {\n"
-"  const float pi = 3.141592653589793;\n"
-"  return exp(-(x * x) / (2.0 * sigma * sigma)) / (sqrt(2.0 * pi) * sigma);\n"
-"}\n"
-"// This approximates the error function, needed for the gaussian integral\n"
-"vec2 erf(vec2 x) {\n"
-"  vec2 s = sign(x), a = abs(x);\n"
-"  x = 1.0 + (0.278393 + (0.230389 + 0.078108 * (a * a)) * a) * a;\n"
-"  x *= x;\n"
-"  return s - s / (x * x);\n"
-"}\n"
-"// Return the blurred mask along the x dimension\n"
-"float roundedBoxShadowX(float x, float y, float sigma, float corner, vec2 halfSize) {\n"
-"  float delta = min(halfSize.y - corner - abs(y), 0.0);\n"
-"  float curved = halfSize.x - corner + sqrt(max(0.0, corner * corner - delta * delta));\n"
-"  vec2 integral = 0.5 + 0.5 * erf((x + vec2(-curved, curved)) * (sqrt(0.5) / sigma));\n"
-"  return integral.y - integral.x;\n"
-"}\n"
-"// Return the mask for the shadow of a box from lower to upper\n"
-"float roundedBoxShadow(vec2 lower, vec2 upper, vec2 point, float sigma, float corner) {\n"
-"  // Center everything to make the math easier\n"
-"  vec2 center = (lower + upper) * 0.5;\n"
-"  vec2 halfSize = (upper - lower) * 0.5;\n"
-"  point -= center;\n"
-"  // The signal is only non-zero in a limited range, so don\'t waste samples\n"
-"  float low = point.y - halfSize.y;\n"
-"  float high = point.y + halfSize.y;\n"
-"  float start = clamp(-3.0 * sigma, low, high);\n"
-"  float end = clamp(3.0 * sigma, low, high);\n"
-"  // Accumulate samples (we can get away with surprisingly few samples)\n"
-"  float step = (end - start) / 4.0;\n"
-"  float y = start + step * 0.5;\n"
-"  float value = 0.0;\n"
-"  for (int i = 0; i < 4; i++) {\n"
-"    value += roundedBoxShadowX(point.x, point.y - y, sigma, corner, halfSize) * gaussian(y, sigma) * step;\n"
-"    y += step;\n"
-"  }\n"
-"  return value;\n"
-"}\n"
-"void main() {\n"
-"  gl_FragColor = color;\n"
-"  gl_FragColor.a *= roundedBoxShadow(box.xy, box.zw, vertex, sigma, corner);\n"
-"}";
-
-char* vsCircle2D = "#version 330 core\n"
-"layout(location = 0) in vec3 centers;\n"
-"uniform mat4 MVP;\n"
-"uniform uvec4 viewport;\n"
-"uniform float radius;\n"
-"uniform float thickness;\n"
-"uniform float antialias;\n"
-"out vec2 v_center;\n"
-"out float v_radius;\n"
-"\n"
-"vec2 wrldToScreen(vec3 coord) {\n"
-"  vec4 clipSpacePos = MVP * vec4(coord, 1.f);\n"
-"  vec3 ndcSpacePos = vec3(clipSpacePos.x, clipSpacePos.y, clipSpacePos.z) / clipSpacePos.w;\n"
-"  vec2 viewOffset = vec2(viewport.x, viewport.y), viewSize = vec2(viewport[2], viewport[3]);\n"
-"  vec2 windowSpacePos = ((vec2(ndcSpacePos.x, ndcSpacePos.y) + 1.f) / 2.f) * viewSize + viewOffset;\n"
-"  return windowSpacePos;\n"
-"}\n"
-"\n"
-"void main()\n"
-"{\n"
-"	vec2 center = wrldToScreen(vec3(centers.xy, 0.f));\n"
-"	vec2 offset = wrldToScreen(vec3(centers.x + radius, centers.y, 0.));\n"
-"	v_radius = length(offset - center);\n"
-"	v_center = center;\n"
-"   float d = ceil(thickness + 2.5 * antialias);\n"
-"	gl_PointSize = ceil(2.0 * v_radius + d);\n"
-"	gl_Position = MVP * vec4(centers, 1.0);\n"
-"}";
-
-char* fsCircle2D = "#version 330 core\n"
-"uniform vec4 singleColor;\n"
-"uniform float thickness;\n"
-"uniform float antialias;\n"
-"uniform bool activatedAntialias;\n"
-"in vec2 v_center;\n"
-"in float v_radius;\n"
-"out vec4 color;\n"
-"void main()\n"
-"{\n"
-"   float w = thickness / 2.0; \n"
-"	vec2 p = gl_FragCoord.xy - v_center;\n"
-"	float a = 1.0;\n"
-"	float d = 0.;\n"
-"	d = abs(v_radius - length(p));\n"
-"   if (activatedAntialias) {\n"
-"		d = d - w - antialias;\n"
-"		if (d <= 0) {\n"
-"			color = vec4(singleColor.rgb, 1.0); \n"
-"		}\n"
-"		else {\n"
-"			d /= antialias; \n"
-"			color = vec4(singleColor.rgb, exp(-d * d)); \n"
-"		}\n"
-"   }\n"
-"   else {\n"
-"		if (d > w)\n"
-"			discard; \n"
-"		color = vec4(singleColor.rgb, 1.0); \n"
-"   }\n"
-"}";
-
-char* vsLine2D = "#version 330 core\n"
-"layout(location = 0) in vec3 points;\n"
-"uniform mat4 MVP;\n"
-"uniform uvec4 viewport;\n"
-"\n"
-"vec2 wrldToScreen(vec3 coord) {\n"
-"  vec4 clipSpacePos = MVP * vec4(coord, 1.f);\n"
-"  vec3 ndcSpacePos = vec3(clipSpacePos.x, clipSpacePos.y, clipSpacePos.z) / clipSpacePos.w;\n"
-"  vec2 viewOffset = vec2(viewport.x, viewport.y), viewSize = vec2(viewport[2], viewport[3]);\n"
-"  vec2 windowSpacePos = ((vec2(ndcSpacePos.x, ndcSpacePos.y) + 1.f) / 2.f) * viewSize + viewOffset;\n"
-"  return windowSpacePos;\n"
-"}\n"
-"\n"
-"void main()\n"
-"{\n"
-"	vec4 pos = vec4(wrldToScreen(vec3(points.xyz)), 0., 1.);\n"
-"	gl_Position = pos;\n"
-"}";
-
-char* gsLine2D = "#version 330 core\n"
-"layout(lines) in;\n"
-"layout(triangle_strip, max_vertices = 4) out;\n"
-"uniform mat4 MVP;\n"
-"uniform vec2 resolution;\n"
-"uniform float thickness;\n"
-"uniform float antialias;\n"
-"out vec2 uv;\n"
-"out float linelength;\n"
-"void main() {\n"
-"	vec2 p0 = vec2(gl_in[0].gl_Position.xy), p1 = vec2(gl_in[1].gl_Position.xy);\n"
-"	float lengthL = length(p1-p0);\n"
-"	vec2 T = normalize(p1-p0);\n"
-"   vec2 O = vec2(-T.y, T.x);\n"
-"   vec2 axis = vec2(1, 0);\n"
-"   float d = ceil(thickness + 2.5 * antialias);\n"
-"	vec2 offset = T * d;\n"
-"	vec2 displacement = O * (d / 2.0);\n"
-"	vec2 vc[4];\n"
-"	vc[0] = vec2(p0 + displacement - offset);\n"
-"	vc[1] = vec2(p1 + displacement + offset);\n"
-"	vc[2] = vec2(p0 - displacement - offset);\n"
-"	vc[3] = vec2(p1 - displacement + offset);\n"
-"   vec2 TexCoords_GS[4] = vec2[4](vec2(-d, d),\n"
-"	    vec2(lengthL + d, d),\n"
-"	    vec2(-d, -d),\n"
-"	    vec2(lengthL + d, -d));\n"
-"	for (int i = 0; i < 4; i++) {\n"
-"		gl_Position = vec4(2.0*vc[i]/resolution-1.0, 0.0, 1.0);\n"
-"		uv = TexCoords_GS[i];\n"
-"		linelength = lengthL;\n"
-"		EmitVertex();\n"
-"	}\n"
-"	EndPrimitive();\n"
-"}\n";
-
-char* fsLine2D = "#version 330 core\n"
-"out vec4 color;\n"
-"uniform vec4 singleColor;\n"
-"uniform float thickness;\n"
-"uniform float antialias;\n"
-"in float linelength;\n"
-"in vec2 uv;\n"
-"void main() {\n"
-"	float d = 0;\n"
-"   float w = thickness / 2.0 - antialias; \n"
-"   // Cap at start\n"
-"   if (uv.x < 0)\n"
-"   	discard;\n"
-"   // Cap at end\n"
-"   else if (uv.x >= linelength)\n"
-"       discard;\n"
-"   // Body\n"
-"   else\n"
-"       d = abs(uv.y) - w; \n"
-"   if (d < 0) {\n"
-"   	color = vec4(singleColor.rgb, 1.0); \n"
-"   }\n"
-"   else {\n"
-"   	d /= antialias; \n"
-"   	color = vec4(singleColor.rgb, exp(-d * d)); \n"
-"   }\n"
-"}\n";
-
-char* vsLines2D_3 = "#version 330 core\n"
-"layout(location = 0) in vec3 points;\n"
-"uniform mat4 MVP;\n"
-"uniform uvec4 viewport;\n"
-"out vec4 v_points;\n"
-"\n"
-"vec2 wrldToScreen(vec3 coord) {\n"
-"  vec4 clipSpacePos = MVP * vec4(coord, 1.f);\n"
-"  vec3 ndcSpacePos = vec3(clipSpacePos.x, clipSpacePos.y, clipSpacePos.z) / clipSpacePos.w;\n"
-"  vec2 viewOffset = vec2(viewport.x, viewport.y), viewSize = vec2(viewport[2], viewport[3]);\n"
-"  vec2 windowSpacePos = ((vec2(ndcSpacePos.x, ndcSpacePos.y) + 1.f) / 2.f) * viewSize + viewOffset;\n"
-"  return windowSpacePos;\n"
-"}\n"
-"\n"
-"void main()\n"
-"{\n"
-"	vec4 pos = vec4(wrldToScreen(vec3(points.xy, 0.f)), 0., 1.);\n"
-"	gl_Position = pos;\n"
-"}";
-
-char* gsLines2D_3 = "#version 330 core\n"
-"layout( lines_adjacency ) in;\n"
-"layout( triangle_strip, max_vertices = 4 ) out;\n"
-"uniform mat4 projection;\n"
-"uniform vec2 resolution;\n"
-"uniform float thickness;\n"
-"uniform float antialias;\n"
-"uniform float miter_limit;\n"
-"out vec2 v_caps;\n"
-"out float v_length;\n"
-"out vec2 v_texcoord;\n"
-"out vec2 v_bevel_distance;\n"
-"float compute_u(vec2 p0, vec2 p1, vec2 p)\n"
-"{\n"
-"	// Projection p' of p such that p' = p0 + u*(p1-p0)\n"
-"	// Then  u *= lenght(p1-p0)\n"
-"	vec2 v = p1 - p0;\n"
-"	float l = length(v);\n"
-"	return ((p.x - p0.x) * v.x + (p.y - p0.y) * v.y) / l;\n"
-"}\n"
-"float line_distance(vec2 p0, vec2 p1, vec2 p)\n"
-"{\n"
-"	// Projection p' of p such that p' = p0 + u*(p1-p0)\n"
-"	vec2 v = p1 - p0;\n"
-"	float l2 = v.x * v.x + v.y * v.y;\n"
-"	float u = ((p.x - p0.x) * v.x + (p.y - p0.y) * v.y) / l2;\n"
-"	// h is the projection of p on (p0,p1)\n"
-"	vec2 h = p0 + u * v;\n"
-"	return length(p - h);\n"
-"}\n"
-"void main() {\n"
-"	// get the four vertices passed to the shader:\n"
-"	vec2 p0 = gl_in[0].gl_Position.xy;	// start of previous segment\n"
-"	vec2 p1 = gl_in[1].gl_Position.xy;	// end of previous segment, start of current segment\n"
-"	vec2 p2 = gl_in[2].gl_Position.xy;	// end of current segment, start of next segment\n"
-"	vec2 p3 = gl_in[3].gl_Position.xy;	// end of next segment\n"
-"	// determine the direction of each of the 3 segments (previous, current, next)\n"
-"	vec2 v0 = normalize(p1 - p0);\n"
-"	vec2 v1 = normalize(p2 - p1);\n"
-"	vec2 v2 = normalize(p3 - p2);\n"
-"	// determine the normal of each of the 3 segments (previous, current, next)\n"
-"	vec2 n0 = vec2(-v0.y, v0.x);\n"
-"	vec2 n1 = vec2(-v1.y, v1.x);\n"
-"	vec2 n2 = vec2(-v2.y, v2.x);\n"
-"	// determine miter lines by averaging the normals of the 2 segments\n"
-"	vec2 miter_a = normalize(n0 + n1);	// miter at start of current segment\n"
-"	vec2 miter_b = normalize(n1 + n2);	// miter at end of current segment\n"
-"	// Determine the length of the miter by projecting it onto normal\n"
-"	vec2 p,v;\n"
-"	float d;\n"
-"	float w = thickness / 2.0 + antialias;\n"
-"	v_length = length(p2 - p1);\n"
-"	float length_a = w / dot(miter_a, n1);\n"
-"	float length_b = w / dot(miter_b, n1);\n"
-"	float m = miter_limit * thickness / 2.0;\n"
-"	// Angle between prev and current segment (sign only)\n"
-"	float d0 = -sign(v0.x * v1.y - v0.y * v1.x);\n"
-"	// Angle between current and next segment (sign only)\n"
-"	float d1 = -sign(v1.x * v2.y - v1.y * v2.x); \n"
-"	// Generate the triangle strip\n"
-"	// First vertex\n"
-"	// ------------------------------------------------------------------------\n"
-"	// Cap at start\n"
-"	if (p0 == p1) {\n"
-"		p = p1 - w * v1 + w * n1;\n"
-"		v_texcoord = vec2(-w, +w);\n"
-"		v_caps.x = v_texcoord.x;\n"
-"		// Regular join\n"
-"	}\n"
-"	else {\n"
-"		p = p1 + length_a * miter_a;\n"
-"		v_texcoord = vec2(compute_u(p1, p2, p), +w);\n"
-"		v_caps.x = 1.0;\n"
-"	}\n"
-"	if (p2 == p3) v_caps.y = v_texcoord.x;\n"
-"	else           v_caps.y = 1.0;\n"
-"	gl_Position = vec4(2 * p / resolution - 1., 0.0, 1.0);\n"
-"	v_bevel_distance.x = +d0 * line_distance(p1 + d0 * n0 * w, p1 + d0 * n1 * w, p);\n"
-"	v_bevel_distance.y = -line_distance(p2 + d1 * n1 * w, p2 + d1 * n2 * w, p);\n"
-"	EmitVertex();\n"
-"	// Second vertex\n"
-"	// ------------------------------------------------------------------------\n"
-"	// Cap at start\n"
-"	if (p0 == p1) {\n"
-"		p = p1 - w * v1 - w * n1;\n"
-"		v_texcoord = vec2(-w, -w);\n"
-"		v_caps.x = v_texcoord.x;\n"
-"		// Regular join\n"
-"	}\n"
-"	else {\n"
-"		p = p1 - length_a * miter_a;\n"
-"		v_texcoord = vec2(compute_u(p1, p2, p), -w);\n"
-"		v_caps.x = 1.0;\n"
-"	}\n"
-"	if (p2 == p3) v_caps.y = v_texcoord.x;\n"
-"	else           v_caps.y = 1.0;\n"
-"	gl_Position = vec4(2 * p / resolution - 1., 0.0, 1.0);\n"
-"	v_bevel_distance.x = -d0 * line_distance(p1 + d0 * n0 * w, p1 + d0 * n1 * w, p);\n"
-"	v_bevel_distance.y = -line_distance(p2 + d1 * n1 * w, p2 + d1 * n2 * w, p);\n"
-"	EmitVertex();\n"
-"	// Third vertex\n"
-"	// ------------------------------------------------------------------------\n"
-"	// Cap at end\n"
-"	if (p2 == p3) {\n"
-"		p = p2 + w * v1 + w * n1;\n"
-"		v_texcoord = vec2(v_length + w, +w);\n"
-"		v_caps.y = v_texcoord.x;\n"
-"		// Regular join\n"
-"	}\n"
-"	else {\n"
-"		p = p2 + length_b * miter_b;\n"
-"		v_texcoord = vec2(compute_u(p1, p2, p), +w);\n"
-"		v_caps.y = 1.0;\n"
-"	}\n"
-"	if (p0 == p1) v_caps.x = v_texcoord.x;\n"
-"	else           v_caps.x = 1.0;\n"
-"	gl_Position = vec4(2 * p / resolution - 1., 0.0, 1.0);\n"
-"	v_bevel_distance.x = -line_distance(p1 + d0 * n0 * w, p1 + d0 * n1 * w, p);\n"
-"	v_bevel_distance.y = +d1 * line_distance(p2 + d1 * n1 * w, p2 + d1 * n2 * w, p);\n"
-"	EmitVertex();\n"
-"	// Fourth vertex\n"
-"	// ------------------------------------------------------------------------\n"
-"	// Cap at end\n"
-"	if (p2 == p3) {\n"
-"		p = p2 + w * v1 - w * n1;\n"
-"		v_texcoord = vec2(v_length + w, -w);\n"
-"		v_caps.y = v_texcoord.x;\n"
-"		// Regular join\n"
-"	}\n"
-"	else {\n"
-"		p = p2 - length_b * miter_b;\n"
-"		v_texcoord = vec2(compute_u(p1, p2, p), -w);\n"
-"		v_caps.y = 1.0;\n"
-"	}\n"
-"	if (p0 == p1) v_caps.x = v_texcoord.x;\n"
-"	else           v_caps.x = 1.0;\n"
-"	gl_Position = vec4(2 * p / resolution - 1., 0.0, 1.0);\n"
-"	v_bevel_distance.x = -line_distance(p1 + d0 * n0 * w, p1 + d0 * n1 * w, p);\n"
-"	v_bevel_distance.y = -d1 * line_distance(p2 + d1 * n1 * w, p2 + d1 * n2 * w, p);\n"
-"	EmitVertex();\n"
-"	EndPrimitive();\n"
-"}\n";
-
-char* fsLines2D_3 = "#version 330 core\n"
-"vec4 stroke(float distance, float linewidth, float antialias, vec4 color)\n"
-"{\n"
-"	vec4 frag_color;\n"
-"	float t = linewidth / 2.0 - antialias;\n"
-"	float signed_distance = distance;\n"
-"	float border_distance = abs(signed_distance) - t;\n"
-"	float alpha = border_distance / antialias;\n"
-"	alpha = exp(-alpha * alpha);\n"
-"	if (border_distance > (linewidth / 2.0 + antialias))\n"
-"		discard;\n"
-"	else if (border_distance < 0.0)\n"
-"		frag_color = color;\n"
-"	else\n"
-"		frag_color = vec4(color.rgb, color.a * alpha);\n"
-"	return frag_color;\n"
-"}\n"
-"vec4 cap(int type, float dx, float dy, float linewidth, float antialias, vec4 color)\n"
-"{\n"
-"	float d = 0.0;\n"
-"	dx = abs(dx);\n"
-"	dy = abs(dy);\n"
-"	float t = linewidth / 2.0 - antialias;\n"
-"	// None\n"
-"	if (type == 0)  discard;\n"
-"	// Round\n"
-"	else if (type == 1)  d = sqrt(dx * dx + dy * dy);\n"
-"	// Triangle in\n"
-"	else if (type == 3)  d = (dx + abs(dy));\n"
-"	// Triangle out\n"
-"	else if (type == 2)  d = max(abs(dy), (t + dx - abs(dy)));\n"
-"	// Square\n"
-"	else if (type == 4)  d = max(dx, dy);\n"
-"	// Butt\n"
-"	else if (type == 5)  d = max(dx + t, dy);\n"
-"	return stroke(d, linewidth, antialias, color);\n"
-"}\n"
-"uniform vec4 singleColor;\n"
-"uniform float antialias;\n"
-"uniform float thickness;\n"
-"uniform float miter_limit;\n"
-"in float v_length;\n"
-"in vec2 v_caps;\n"
-"in vec2 v_texcoord;\n"
-"in vec2 v_bevel_distance;\n"
-"out vec4 color;\n"
-"void main()\n"
-"{\n"
-"	float distance = v_texcoord.y;\n"
-"	if (v_caps.x < 0.0)\n"
-"	{\n"
-"		color = cap(1, v_texcoord.x, v_texcoord.y, thickness, antialias, singleColor);\n"
-"		return;\n"
-"	}\n"
-"	if (v_caps.y > v_length)\n"
-"	{\n"
-"		color = cap(1, v_texcoord.x - v_length, v_texcoord.y, thickness, antialias, singleColor);\n"
-"		return;\n"
-"	}\n"
-"	// Round join (instead of miter)\n"
-"	if (miter_limit < 0) {\n"
-"		if (v_texcoord.x < 0.0)\n"
-"		{\n"
-"			distance = length(v_texcoord);\n"
-"		}\n"
-"		else if (v_texcoord.x > v_length)\n"
-"		{\n"
-"			distance = length(v_texcoord - vec2(v_length, 0.0));\n"
-"		}\n"
-"	}\n"
-"	else {\n"
-"		// Miter limit\n"
-"		float t = (miter_limit - 1.0) * (thickness / 2.0) + antialias;\n"
-"		if ((v_texcoord.x < 0.0) && (v_bevel_distance.x > (abs(distance) + t)))\n"
-"		{\n"
-"			distance = v_bevel_distance.x - t;\n"
-"		}\n"
-"		else if ((v_texcoord.x > v_length) && (v_bevel_distance.y > (abs(distance) + t)))\n"
-"		{\n"
-"			distance = v_bevel_distance.y - t;\n"
-"		}\n"
-"	}\n"
-"	color = stroke(distance, thickness, antialias, singleColor);\n"
-"}\n";
-
 char* vsPointRenderingRotation = "#version 330 core\n"
 "layout(location = 0) in vec3 vertexPosition_modelspace;\n"
 "layout(location = 2) in float vertexFeature;\n"
@@ -920,9 +465,11 @@ namespace poca::opengl {
 	{
 		if (m_alreadyInitialized) return;
 
-		glShadeModel(GL_SMOOTH);
+		//glShadeModel(GL_SMOOTH);
 		glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
 		glDisable(GL_COLOR_MATERIAL);
+
+		glDepthRange(0., 1.);
 
 		enableClippingPlanes();
 
@@ -933,10 +480,20 @@ namespace poca::opengl {
 			exit(EXIT_FAILURE);
 		}
 
-#ifdef DEBUG
+//#ifdef DEBUG
+		const unsigned char* glvendor = glGetString(GL_VENDOR);
+		const unsigned char* glrend = glGetString(GL_RENDERER);
 		const unsigned char* glver = glGetString(GL_VERSION);
-		std::cout << glver << std::endl;
-#endif
+		const unsigned char* glshad = glGetString(GL_SHADING_LANGUAGE_VERSION);
+		std::cout << "Vendor: " << glvendor << std::endl;
+		std::cout << "Renderer: " << glrend << std::endl;
+		std::cout << "OpenGL Version: " << glver << std::endl;
+		std::cout << "Shader Version: " << glshad << std::endl;
+		//#endif
+
+		GLint maxx;
+		glGetIntegerv(GL_POINT_SIZE_MAX, &maxx);
+		std::cout << "Max GL Point Size = " << maxx << std::endl;
 
 		m_faceGridBuffer.freeGPUMemory();
 		m_faceGridBuffer.generateBuffer(18, 3, GL_FLOAT);
@@ -1107,15 +664,19 @@ namespace poca::opengl {
 
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)
 	{
+		GL_CHECK_ERRORS();
 		recomputeFrame(m_currentCrop);
 		clock_t beginFrame = clock();
 
+		GL_CHECK_ERRORS();
 		if (_buffOffscreen != NULL) {
 			bool success = _buffOffscreen->bind();
 			if (!success) std::cout << "Problem with binding" << std::endl;
 		}
 
+		GL_CHECK_ERRORS();
 		glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+		glDepthRange(0., 1.0);
 
 		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
 		if (!comObj) return;
@@ -1126,6 +687,7 @@ namespace poca::opengl {
 		uint32_t thickness = 5, pointSizeGL = 1;
 		bool displayFont = true, clip = true;
 		float fontSize = 20.f, antialias = 1.f;
+		GL_CHECK_ERRORS();
 
 		if (comObj->hasParameter("colorBakground")) {
 			std::array <unsigned char, 4> rgba = comObj->getParameter< std::array <unsigned char, 4>>("colorBakground");
@@ -1149,6 +711,7 @@ namespace poca::opengl {
 		if (comObj->hasParameter("pointSizeGL"))
 			pointSizeGL = comObj->getParameter<uint32_t>("pointSizeGL");
 
+		GL_CHECK_ERRORS();
 
 		glClearColor((float)colorBack[0] / 255.f, (float)colorBack[1] / 255.f, (float)colorBack[2] / 255.f, (float)colorBack[3] / 255.f);
 		double a = 1 - (0.299 * colorBack[0] + 0.587 * colorBack[1] + 0.114 * colorBack[2]) / 255;
@@ -1158,32 +721,41 @@ namespace poca::opengl {
 			colorFont = { 255, 255, 255, 255 }; // dark colors - white font
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		GL_CHECK_ERRORS();
 
 		if (clip)
 			enableClippingPlanes();
 		else
 			disableClippingPlanes();
+		GL_CHECK_ERRORS();
 
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		poca::core::Color4D color = poca::core::contrastColor(poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
 		color *= 255.f;
+		GL_CHECK_ERRORS();
 
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
+		GL_CHECK_ERRORS();
 
 		glPointSize(pointSizeGL);
-		glLineWidth(thickness);
-
+		GL_CHECK_ERRORS();
+		//glLineWidth(thickness);
+		GL_CHECK_ERRORS();
 		glDisable(GL_DEPTH_TEST);
+		GL_CHECK_ERRORS();
 		displayGrid();
+		GL_CHECK_ERRORS();
 		displayBoundingBox(thickness, antialias);
+		GL_CHECK_ERRORS();
 
 		glEnable(GL_DEPTH_TEST);
 
 		bool ssao = false;
 		if (comObj->hasParameter("useSSAO"))
 			ssao = comObj->getParameter<bool>("useSSAO");
+		GL_CHECK_ERRORS();
 
 		if (!ssao) {
 			if(_buffOffscreen == NULL)
@@ -1196,6 +768,14 @@ namespace poca::opengl {
 		}
 
 		GL_CHECK_ERRORS();
+
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CLIP_DISTANCE0);
+		glDisable(GL_CLIP_DISTANCE1);
+		glDisable(GL_CLIP_DISTANCE2);
+		glDisable(GL_CLIP_DISTANCE3);
+		glDisable(GL_CLIP_DISTANCE4);
+		glDisable(GL_CLIP_DISTANCE5);
 
 		bool displayROIs = true;
 
@@ -1220,12 +800,6 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 
 		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_CLIP_DISTANCE0);
-		glDisable(GL_CLIP_DISTANCE1);
-		glDisable(GL_CLIP_DISTANCE2);
-		glDisable(GL_CLIP_DISTANCE3);
-		glDisable(GL_CLIP_DISTANCE4);
-		glDisable(GL_CLIP_DISTANCE5);
 
 		poca::opengl::Shader* shader = this->getShader("uniformColorShader");
 		float w = width(), h = height();
@@ -1352,7 +926,6 @@ namespace poca::opengl {
 		}
 
 		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
-
 	}
 
 	void Camera::drawSSAO(QOpenGLFramebufferObject* _buffOffscreen) {
@@ -1629,6 +1202,7 @@ namespace poca::opengl {
 	{
 		if (m_faceGridBuffer.empty() || !m_displayGrid || m_lineGridBuffer.getNbElements() == 0) return;
 
+		GL_CHECK_ERRORS();
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		for (size_t n = 0; n < 4; n++)
@@ -1639,6 +1213,7 @@ namespace poca::opengl {
 			colorGrid.set(0.5, 0.5, 0.5, 1); // bright colors - black font
 		else
 			colorGrid.set(0.2, 0.2, 0.2, 1); // dark colors - white font
+		GL_CHECK_ERRORS();
 		poca::opengl::Shader* shader = getShader("uniformColorShader");
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
@@ -1650,6 +1225,7 @@ namespace poca::opengl {
 		shader->setVec4("clipPlaneW", getClipPlaneW());
 		shader->setVec4("clipPlaneH", getClipPlaneH());
 		shader->setVec4("clipPlaneT", getClipPlaneT());
+		GL_CHECK_ERRORS();
 
 		float valueColor = a < 0.5 ? 242.f : 45.f;
 		shader->setVec4("singleColor", valueColor / 255.f, valueColor / 255.f, valueColor / 255.f, 1.f);
@@ -1657,6 +1233,7 @@ namespace poca::opengl {
 		m_faceGridBuffer.bindBuffer(0);
 		glDrawArrays(m_faceGridBuffer.getMode(), 0, m_faceGridBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
+		GL_CHECK_ERRORS();
 
 		valueColor = a < 0.5 ? 210.f : 75.f;
 		shader->setVec4("singleColor", valueColor / 255.f, valueColor / 255.f, valueColor / 255.f, 1.f);
@@ -1664,6 +1241,7 @@ namespace poca::opengl {
 		m_lineGridBuffer.bindBuffer(0);
 		glDrawArrays(m_lineGridBuffer.getMode(), 0, m_lineGridBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
+		GL_CHECK_ERRORS();
 
 		shader->release();
 	}
@@ -2229,14 +1807,16 @@ namespace poca::opengl {
 			return shader;
 		}
 		if (_nameShader == "roundedRectShader") {
-			Shader* shader = new Shader();
-			shader->createAndLinkProgramFromStr(vsRoundedRect, fsRoundedRect);
+			//Shader* shader = new Shader();
+			//shader->createAndLinkProgramFromStr(vsRoundedRect, fsRoundedRect);
+			Shader* shader = new Shader("./shaders/roundedRect.vs", "./shaders/roundedRect.fs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
 		if (_nameShader == "circle2DShader") {
-			Shader* shader = new Shader();
-			shader->createAndLinkProgramFromStr(vsCircle2D, fsCircle2D);
+			//Shader* shader = new Shader();
+			//shader->createAndLinkProgramFromStr(vsCircle2D, fsCircle2D);
+			Shader* shader = new Shader("./shaders/circle2D.vs", "./shaders/circle2D.fs", "./shaders/circle2D.gs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
@@ -2246,8 +1826,9 @@ namespace poca::opengl {
 			return shader;
 		}
 		if (_nameShader == "polyline2DShader") {
-			Shader* shader = new Shader();
-			shader->createAndLinkProgramFromStr(vsLines2D_3, fsLines2D_3, gsLines2D_3);
+			//Shader* shader = new Shader();
+			//shader->createAndLinkProgramFromStr(vsLines2D_3, fsLines2D_3, gsLines2D_3);
+			Shader* shader = new Shader("./shaders/polyline2D.vs", "./shaders/polyline2D.fs", "./shaders/polyline2D.gs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
@@ -2287,6 +1868,11 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "3DInstanceRenderingShader") {
+			Shader* shader = new Shader("./shaders/3DvertexShaderUniformColor_instancedRendering.vs", "./shaders/fragmentShaderUniformOrNotColor.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		return nullptr;
 	}
 
@@ -2314,6 +1900,8 @@ namespace poca::opengl {
 		m_clip[4] = glm::vec4(0, -1, 0, _bbox[4]);
 		m_clip[5] = glm::vec4(0, 0, -1, _bbox[5]);
 		m_currentCrop = _bbox;
+
+		paintGL();
 	}
 
 	void Camera::resetProjection()
@@ -2465,34 +2053,55 @@ namespace poca::opengl {
 			}
 		}
 		size_t leftFace = indexFaces[leftIndex], rightFace = indexFaces[rightIndex], oppUpFace = (indexFaces[upIndex] + 3) % 6, oppLeftFace = (indexFaces[leftIndex] + 3) % 6;
-		std::vector <poca::core::Vec3mf> vecsFaces, vecsLines(6);
+		std::vector <poca::core::Vec3mf> vecsFaces, vecsLines;
 		std::vector <poca::core::Vec3mf> vPoints;
 		//Lines
 		cpt = 0;
+		uint32_t nbFacingDir = 0;
+		for (auto n = 0; n < 6; n++)
+			nbFacingDir = nbFacingDir + (m_facingDirections[n] ? 1 : 0);
 		std::set <size_t> displayedEdges;
-		for (size_t n = 0; n < 12; n++) {
-			if ((cubeEdgeIndexFaces[n][0] == leftFace && cubeEdgeIndexFaces[n][1] == oppUpFace) || (cubeEdgeIndexFaces[n][0] == oppUpFace && cubeEdgeIndexFaces[n][1] == leftFace)) {
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
-				displayedEdges.insert(n);
+		auto indexFace = 0;
+		if (nbFacingDir < 3) {
+			vecsLines.resize(8);
+			indexFace = nbFacingDir == 1 ? 0 : 1;
+			for (auto i = indexFace; i < 6; i++) {
+				if (!m_facingDirections[i]) continue;
+				for (auto n = 0; n < 4; n++) {
+					size_t e = cubeFaceIndexEdges[i][n];
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[e][0]];
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[e][1]];
+					displayedEdges.insert(e);
+				}
 			}
-			if ((cubeEdgeIndexFaces[n][0] == rightFace && cubeEdgeIndexFaces[n][1] == oppUpFace) || (cubeEdgeIndexFaces[n][0] == oppUpFace && cubeEdgeIndexFaces[n][1] == rightFace)) {
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
-				displayedEdges.insert(n);
-			}
-			if ((cubeEdgeIndexFaces[n][0] == rightFace && cubeEdgeIndexFaces[n][1] == oppLeftFace) || (cubeEdgeIndexFaces[n][0] == oppLeftFace && cubeEdgeIndexFaces[n][1] == rightFace)) {
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
-				vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
-				displayedEdges.insert(n);
+		}
+		else {
+			vecsLines.resize(6);
+			for (size_t n = 0; n < 12; n++) {
+				if ((cubeEdgeIndexFaces[n][0] == leftFace && cubeEdgeIndexFaces[n][1] == oppUpFace) || (cubeEdgeIndexFaces[n][0] == oppUpFace && cubeEdgeIndexFaces[n][1] == leftFace)) {
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
+					displayedEdges.insert(n);
+				}
+				if ((cubeEdgeIndexFaces[n][0] == rightFace && cubeEdgeIndexFaces[n][1] == oppUpFace) || (cubeEdgeIndexFaces[n][0] == oppUpFace && cubeEdgeIndexFaces[n][1] == rightFace)) {
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
+					displayedEdges.insert(n);
+				}
+				if ((cubeEdgeIndexFaces[n][0] == rightFace && cubeEdgeIndexFaces[n][1] == oppLeftFace) || (cubeEdgeIndexFaces[n][0] == oppLeftFace && cubeEdgeIndexFaces[n][1] == rightFace)) {
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][0]];
+					vecsLines[cpt++] = pointsCube[cubeEdgeIndexPoints[n][1]];
+					displayedEdges.insert(n);
+				}
 			}
 		}
 		float stepGrid = stepGridX;
 		//Faces
 		cpt = 0;
 		m_frameTexts.clear();
-		for (size_t n = 0; n < 6; n++) {
-			if (m_facingDirections[n]) continue;
+		for (size_t n = indexFace; n < 6; n++) {
+			if (nbFacingDir < 3 && !m_facingDirections[n]) continue;
+			if (nbFacingDir == 3 && m_facingDirections[n]) continue;
 			//Creation of the face
 			size_t indexes[3] = { 0, 1, 2 };
 			for (size_t i = 0; i < 3; i++)
@@ -2837,7 +2446,8 @@ namespace poca::opengl {
 	{
 		std::vector <poca::core::Vec3mf> arrowVertices;
 		float radius = .02f, height = 0.35f;
-		generateDirectionalArrow(poca::core::Vec3mf(0, 0, 1), poca::core::Vec3mf(1, 0, 0), poca::core::Vec3mf(0, 1, 0), radius, height, arrowVertices);
+		if (m_dimension == 3)
+			generateDirectionalArrow(poca::core::Vec3mf(0, 0, 1), poca::core::Vec3mf(1, 0, 0), poca::core::Vec3mf(0, 1, 0), radius, height, arrowVertices);
 		generateDirectionalArrow(poca::core::Vec3mf(0, 1, 0), poca::core::Vec3mf(1, 0, 0), poca::core::Vec3mf(0, 0, 1), radius, height, arrowVertices);
 		generateDirectionalArrow(poca::core::Vec3mf(1, 0, 0), poca::core::Vec3mf(0, 1, 0), poca::core::Vec3mf(0, 0, 1), radius, height, arrowVertices);
 		m_nbArrowsFrame = arrowVertices.size();
@@ -2906,12 +2516,13 @@ namespace poca::opengl {
 		m_frameTextsThumbnail.clear();
 		m_frameTextsThumbnail.push_back(std::make_pair(poca::core::Vec3mf(coordX[0], m_viewport[3] - coordX[1], 0.f), "X"));
 		m_frameTextsThumbnail.push_back(std::make_pair(poca::core::Vec3mf(coordY[0], m_viewport[3] - coordY[1], 0.f), "Y"));
-		m_frameTextsThumbnail.push_back(std::make_pair(poca::core::Vec3mf(coordZ[0], m_viewport[3] - coordZ[1], 0.f), "Z"));
+		if(m_dimension == 3)
+			m_frameTextsThumbnail.push_back(std::make_pair(poca::core::Vec3mf(coordZ[0], m_viewport[3] - coordZ[1], 0.f), "Z"));
 	}
 
 	void Camera::displayArrowsFrame()
 	{
-		if (m_dimension == 2) return;
+		//if (m_dimension == 2) return;
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		for (size_t n = 0; n < 4; n++)

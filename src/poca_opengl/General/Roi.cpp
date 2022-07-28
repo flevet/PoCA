@@ -130,7 +130,7 @@ namespace poca::core {
 		shader->setFloat("thickness", _thickness * 2.f);
 		shader->setFloat("antialias", _antialias);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
-		shader->setBool("useSpecialColors", false);
+		shader->setBool("useSingleColor", true);
 		glEnableVertexAttribArray(0);
 		m_lineBuffer.bindBuffer(0, 0);
 		glDrawArrays(m_lineBuffer.getMode(), 0, m_lineBuffer.getSizeBuffers()[0]);
@@ -214,7 +214,7 @@ namespace poca::core {
 	void CircleROI::updateDisplay()
 	{
 		if (m_centerBuffer.empty())
-			m_centerBuffer.generateBuffer(1, 512 * 512, 3, GL_FLOAT);
+			m_centerBuffer.generateBuffer(1, 3, GL_FLOAT);
 		std::vector <poca::core::Vec3mf> pt = { poca::core::Vec3mf(m_center.x(),m_center.y(), 0.f) };
 		m_centerBuffer.updateBuffer(pt);
 		m_changed = false;
@@ -228,23 +228,27 @@ namespace poca::core {
 			updateDisplay();
 
 		glDisable(GL_DEPTH_TEST);
-		glEnable(GL_POINT_SPRITE);
-		glEnable(GL_PROGRAM_POINT_SIZE);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("circle2DShader");
 		const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+		const glm::uvec4& viewport = _cam->getViewport();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
-		shader->setUVec4("viewport", _cam->getViewport());
+		shader->setMat4("projection", proj);
+		shader->setMat4("view", view);
+		shader->setUVec4("viewport", viewport);
+		shader->setFloat("scalePix", viewport[2] > viewport[3] ? viewport[3] : viewport[2]);
 		shader->setFloat("radius", m_radius);
 		shader->setFloat("thickness", _thickness);
 		shader->setFloat("antialias", _antialias);
 		shader->setBool("activatedAntialias", _cam->isAntialiasActivated());
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
+		shader->setVec3("light_position", _cam->getEye());
 		glEnableVertexAttribArray(0);
-		m_centerBuffer.bindBuffer(0, 0);
-		glDrawArrays(m_centerBuffer.getMode(), 0, m_centerBuffer.getSizeBuffers()[0]);
+		m_centerBuffer.bindBuffer(0);
+		glDrawArrays(m_centerBuffer.getMode(), 0, m_centerBuffer.getNbElements());
 		glDisableVertexAttribArray(0);
 		shader->release();
 	}

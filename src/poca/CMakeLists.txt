@@ -257,19 +257,3 @@ target_link_libraries(${targetname} debug poca_opengld.lib)
 target_link_libraries(${targetname} optimized poca_opengl.lib)
 target_link_libraries(${targetname} debug poca_plotd.lib)
 target_link_libraries(${targetname} optimized poca_plot.lib)
-
-add_custom_command(TARGET ${targetname} PRE_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/fonts/ ${CMAKE_BINARY_DIR}/${targetname}/fonts/)
-add_custom_command(TARGET ${targetname} PRE_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/images/ ${CMAKE_BINARY_DIR}/${targetname}/images/)
-add_custom_command(TARGET ${targetname} PRE_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/macros/ ${CMAKE_BINARY_DIR}/${targetname}/macros/)
-add_custom_command(TARGET ${targetname} PRE_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/pythonScripts/ ${CMAKE_BINARY_DIR}/${targetname}/pythonScripts/)
-add_custom_command(TARGET ${targetname} PRE_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_SOURCE_DIR}/shaders/ ${CMAKE_BINARY_DIR}/${targetname}/shaders/)			   

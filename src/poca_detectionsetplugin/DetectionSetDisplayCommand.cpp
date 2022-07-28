@@ -178,11 +178,15 @@ void DetectionSetDisplayCommand::display(poca::opengl::Camera* _cam, const bool 
 
 void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
+	GL_CHECK_ERRORS();
 	if (m_pointBuffer.empty())
 		createDisplay();
 
+	GL_CHECK_ERRORS();
 	glEnable(GL_DEPTH_TEST);
+	GL_CHECK_ERRORS();
 	glCullFace(GL_FRONT);
+	GL_CHECK_ERRORS();
 
 	uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
 	if(m_normalBuffer.empty())
@@ -222,9 +226,12 @@ void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 
 void DetectionSetDisplayCommand::createDisplay()
 {
+	GL_CHECK_ERRORS();
 	freeGPUMemory();
+	GL_CHECK_ERRORS();
 
 	try {
+		GL_CHECK_ERRORS();
 		const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData();
 		m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(m_dset->getPalette());
 
@@ -258,6 +265,7 @@ void DetectionSetDisplayCommand::createDisplay()
 
 		poca::core::HistogramInterface* hist = m_dset->getCurrentHistogram();
 		generateFeatureBuffer(hist);
+		GL_CHECK_ERRORS();
 	}
 	catch (std::runtime_error const& e) {
 		std::string mess("Error: creating display for command " + name() + " of component " + m_dset->getName() + " failed with error message: " + e.what());

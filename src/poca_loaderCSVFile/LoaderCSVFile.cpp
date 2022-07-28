@@ -209,6 +209,10 @@ void LoaderCSVFile::loadFile(const QString& _filename, std::map <std::string, st
 	printf("\rDetermination of identical localizations: 100.00 %%\n");
 	std::cout << (chosenValues[indexX].size() - cptKept) << " localizations were identicals (computed in " << getTimeElapsed(time2).toLatin1().data() << ")" << std::endl;
 
+	std::vector <float> ids(hasBeenCorrected ? correctedValues[0].size() : chosenValues[0].size());
+	std::iota(std::begin(ids), std::end(ids), 1);
+	_data["id"] = ids;
+
 	for (size_t n = 0; n < chosenValues.size(); n++)
 		_data[columns[n].second] = hasBeenCorrected ? correctedValues[n] : chosenValues[n];
 

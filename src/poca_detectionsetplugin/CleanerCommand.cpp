@@ -308,11 +308,15 @@ size_t CleanerCommand::computeNbLocsCorrectedSpecifiedDT(const uint32_t _maxDark
 					m_mergedPoints.push_back(index);
 					barycenter = (barycenter + poca::core::Vec3mf(xs[index], ys[index], zs[index])) / 2.f;
 					pointsDone[index] = true;
-					currentFrame = times[m_pointsPerFrame[nextTime]];
 					if (goesOff) {
 						goesOff = false;
 						currentBlinks++;
 					}
+					else if(times[m_pointsPerFrame[nextTime]] - currentFrame > 1) {
+						currentBlinks++;
+						nbSequenceOff++;
+					}
+					currentFrame = times[m_pointsPerFrame[nextTime]];
 					totalTimeOff += (times[index] - currrentTimeOff) - 1;
 					currrentTimeOff = times[index];
 				}
@@ -323,7 +327,8 @@ size_t CleanerCommand::computeNbLocsCorrectedSpecifiedDT(const uint32_t _maxDark
 				}
 				nextTime++;
 			}
-			nbSequenceOff--;
+			if(goesOff)
+				nbSequenceOff--;
 			m_nbBlinks.push_back(currentBlinks); 
 			m_nbSequencesOff.push_back(nbSequenceOff);
 			m_totalOffs.push_back(totalTimeOff);

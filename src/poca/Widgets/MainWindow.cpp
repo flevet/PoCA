@@ -79,6 +79,7 @@
 #include <Objects/MyObjectDisplayCommand.hpp>
 #include <OpenGL/Helper.h>
 #include <General/MyData.hpp>
+#include <Interfaces/MyObjectInterface.hpp>
 
 #include "../../include/LoaderLocalizationsInterface.hpp"
 #include "../../include/GuiInterface.hpp"
@@ -120,6 +121,11 @@ void decomposePathToDirAndFile(const QString& _path, QString& _dirQS, QString& _
 
 MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 {
+	QSurfaceFormat format;
+	format.setVersion(2, 1);
+	format.setProfile(QSurfaceFormat::CoreProfile);
+	QSurfaceFormat::setDefaultFormat(format);
+
 	loadPlugin();
 
 
@@ -173,11 +179,14 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_pythonW = new PythonWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_pythonW);
 	m_tabWidget->addTab(m_pythonW, QObject::tr("Python"));
+	m_pythonW->loadParameters(std::any_cast <poca::core::StateSoftwareSingleton*>(singletons.at("StateSoftwareSingleton"))->getParameters());
 #endif
 
 	m_ROIsW = new ROIGeneralWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_ROIsW);
-	m_tabWidget->addTab(m_ROIsW, QObject::tr("ROI Manager"));
+	poca::core::utils::addWidget(m_tabWidget, QString("ROI Manager"), QString("General"), m_ROIsW, false);
+
+	//m_tabWidget->addTab(m_ROIsW, QObject::tr("ROI Manager"));
 
 	for (int n = 0; n < m_tabWidget->count(); n++) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
@@ -233,7 +242,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	setActiveMdiChild(NULL);
 
-	setWindowTitle(tr("PoCA: Point Cloud Analyst"));
+	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.4.0"));
 	setUnifiedTitleAndToolBarOnMac(true);
 	statusBar()->showMessage(tr("Ready"));
 	m_lblPermanentStatus = new QLabel;
@@ -254,7 +263,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 MainWindow::~MainWindow()
 {
 	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	nlohmann::json& parameters = sss->getParameters();
 
 	if (m_currentMdi != NULL) {
 		m_currentMdi->getWidget()->getObject()->saveCommands(parameters);
@@ -262,6 +271,7 @@ MainWindow::~MainWindow()
 	poca::core::CommandInfo command(false, "saveParameters", "file", &parameters);
 	m_plugins->execute(&command);
 	m_macroW->execute(&command);
+	m_pythonW->execute(&command);
 
 	std::string text = parameters.dump(), textDisplay = parameters.dump(4);
 	std::cout << textDisplay << std::endl;
@@ -887,7 +897,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		m_polyline2DROIAct->setEnabled(dimension == 2);
 		m_sphere3DROIAct->setEnabled(dimension == 3);
 
-		m_xyAct->setEnabled(dimension == 3);
+		//m_xyAct->setEnabled(dimension == 3);
 		m_xzAct->setEnabled(dimension == 3);
 		m_yzAct->setEnabled(dimension == 3);
 
@@ -1433,7 +1443,19 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro)
 		const auto nameComp = json.begin().key();
 		if (nameComp == "MainWindow")
 			runMacro(json[nameComp]);
+		else if (nameComp == "PythonWidget") {
+			nlohmann::json jsonCommand = json[nameComp];
+			for (auto& [nameCommand, value] : jsonCommand.items()) {
+				nlohmann::json parameters;
+				poca::core::CommandInfo command = m_pythonW->createCommand(nameCommand, jsonCommand[nameCommand]);
+				if (!command.empty())
+					m_pythonW->execute(&command);
+				else
+					std::cout << "Widget [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+			}
+		}
 		else {
+			if (m_currentMdi == NULL) continue;
 			poca::core::CommandableObject* comObj = NULL;
 			poca::core::MyObjectInterface* obj = m_currentMdi->getWidget()->getObject();
 			if (nameComp == "Object")
@@ -1457,6 +1479,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro)
 							int index = newName.lastIndexOf(".");
 							newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
 							createWindows(newDset, QString(dir.c_str()), newName);
+						}
+						else if (command.hasParameter("object")) {
+							poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+							createWidget(obj);
 						}
 					}
 					else
@@ -1485,7 +1511,19 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 				}
 				runMacro(command);
 			}
+			else if (nameComp == "PythonWidget") {
+				nlohmann::json jsonCommand = json[nameComp];
+				for (auto& [nameCommand, value] : jsonCommand.items()) {
+					nlohmann::json parameters;
+					poca::core::CommandInfo command = m_pythonW->createCommand(nameCommand, jsonCommand[nameCommand]);
+					if (!command.empty())
+						m_pythonW->execute(&command);
+					else
+						std::cout << "Widget [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+				}
+			}
 			else {
+				if (m_currentMdi == NULL) continue;
 				poca::core::CommandableObject* comObj = NULL;
 				if (nameComp == "Object")
 					comObj = dynamic_cast<poca::core::CommandableObject*>(m_currentMdi->getWidget()->getObject());

@@ -86,6 +86,8 @@ namespace poca::geometry {
 
 		virtual const std::vector < std::array<poca::core::Vec3mf, 3>>& getAxisObjects() const { return m_axis; }
 
+		virtual void setLocs(const float*, const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
+
 	protected:
 		const float* m_xs, * m_ys, * m_zs;
 		poca::core::MyArrayUInt32 m_locs, m_outlineLocs;

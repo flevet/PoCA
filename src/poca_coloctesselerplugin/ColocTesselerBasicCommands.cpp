@@ -200,7 +200,7 @@ void ColocTesselerBasicCommands::computeCorrection()
 	std::vector<bool> selectedLocs[2];
 
 	bool ok;
-	float thresh[2];
+	float thresh[2], thresh_high = FLT_MAX;
 	thresh[0] = getParameter<float>("threshold", "color1");
 	thresh[1] = getParameter<float>("threshold", "color2");
 
@@ -210,11 +210,14 @@ void ColocTesselerBasicCommands::computeCorrection()
 		double tCurrent = (current == 0) ? thresh[0] : thresh[1], tOther = (current == 0) ? thresh[1] : thresh[0];
 
 		poca::geometry::VoronoiDiagram* currentVoronoi = m_colocTesseler->voronoiAt(current);
-		size_t curNbPoints = currentVoronoi->nbElements();
+		size_t curNbPoints = currentVoronoi->nbElements(), countSelected = 0;
 		selectedLocs[current].resize(curNbPoints, false);
-		for (unsigned int n = 0; n < curNbPoints; n++)
+		for (unsigned int n = 0; n < curNbPoints; n++) {
 			selectedLocs[current][n] = vertices[n][current] > tCurrent;
+			if (selectedLocs[current][n]) countSelected++;
+		}
 
+		std::cout << "# locs selected = " << countSelected << std::endl;
 		//Determination of the border locs
 		poca::core::MyArrayUInt32 neighbors = currentVoronoi->getNeighbors();
 		const std::vector <uint32_t>& firsts = neighbors.getFirstElements(), & neighs = neighbors.getData();
@@ -246,12 +249,27 @@ void ColocTesselerBasicCommands::computeCorrection()
 		std::sort(distribution.begin(), distribution.end());
 		float q25 = distribution[int(distribution.size() * 0.25)], q75 = distribution[int(distribution.size() * 0.75)];
 		float cutoff = (q75 - q25) * 1.5, high = q75 + cutoff;
-		std::cout << "*** Percentile : 25th = " << q25 << ", 75th = " << q75 << ", high = " << high << std::endl;
+		std::cout << "*** Distrib size = " << distribution.size() << ", percentile : 25th = " << q25 << ", 75th = " << q75 << ", high = " << high << std::endl;
+
+		thresh_high = high < thresh_high ? high : thresh_high;
+	}
+
+	for (unsigned int current = 0; current < 2; current++) {
+		poca::geometry::VoronoiDiagram* currentVoronoi = m_colocTesseler->voronoiAt(current);
+		poca::geometry::DelaunayTriangulationInterface* delau = currentVoronoi->getDelaunay();
+		const std::vector <float>& values = delau->dimension() == 3 ? delau->getOriginalHistogram("volume")->getValues() : delau->getOriginalHistogram("area")->getValues();
+		const std::vector<uint32_t>& triangles = delau->getTriangles();
+
+		float averageNbLocs = currentVoronoi->averageMeanNbLocs();
 
 		//Corection of the triangle sets
 		if (delau->dimension() == 2) {
-			for (size_t n = 0; n < delau->nbFaces(); n++)
-				m_trianglesSelectedForCorrection[current][n] = m_trianglesSelectedForCorrection[current][n] && ((values[n] / averageNbLocs) < high);
+			const std::vector<uint32_t>& triangles = delau->getTriangles();
+			for (size_t n = 0; n < delau->nbFaces(); n++) {
+				uint32_t i1 = triangles[n * 3], i2 = triangles[n * 3 + 1], i3 = triangles[n * 3 + 2];
+				if (m_borderLocs[current][i1] || m_borderLocs[current][i2] || m_borderLocs[current][i3])
+					m_trianglesSelectedForCorrection[current][n] = m_trianglesSelectedForCorrection[current][n] && ((values[n] / averageNbLocs) < thresh_high);
+			}
 		}
 		else if (delau->dimension() == 3) {
 			const std::vector <uint32_t>& indices = delau->getNeighbors().getFirstElements();
@@ -263,7 +281,7 @@ void ColocTesselerBasicCommands::computeCorrection()
 					i4 = triangles[3 * index + 3 * 3];
 				if(m_borderLocs[current][i1] || m_borderLocs[current][i2] || 
 					m_borderLocs[current][i3] || m_borderLocs[current][i4])
-				m_trianglesSelectedForCorrection[current][n] = (values[n] / averageNbLocs) < high;
+				m_trianglesSelectedForCorrection[current][n] = (values[n] / averageNbLocs) < thresh_high;
 			}
 		}
 		auto nbT = std::count(m_trianglesSelectedForCorrection[current].begin(), m_trianglesSelectedForCorrection[current].end(), true);
@@ -281,11 +299,13 @@ void ColocTesselerBasicCommands::classifyLocalizations()
 	thresh[1] = getParameter<float>("threshold", "color2");
 	correction = getParameter<bool>("correction");
 
+
 	for (size_t current = 0; current < 2; current++) {
 		size_t other = (current + 1) % 2;
 		const poca::core::Scatterplot& vertices = m_colocTesseler->scattergramAt(current);
 		const std::vector <uint32_t>& indexTrisOtherColor = m_colocTesseler->indexTriOtherColorAt(current);
 		std::vector <unsigned char>& classesLocs = m_colocTesseler->classesLocsAt(current);
+		size_t nbBack = 0, nbHD = 0, nbColoc = 0;
 
 		for (size_t n = 0; n < classesLocs.size(); n++) {
 			if (m_roiIndexPerLocs[current][n] == 0) {
@@ -310,7 +330,21 @@ void ColocTesselerBasicCommands::classifyLocalizations()
 			}
 			else
 				classesLocs[n] = ColocTesseler::BACKGROUND;
+			
+			uint32_t val = (uint32_t)classesLocs[n];
+			switch (val) {
+			case 1:
+				nbBack++;
+				break;
+			case 2:
+				nbHD++;
+				break;
+			case 3:
+				nbColoc++;
+				break;
+			}
 		}
+		std::cout << "# back = " << nbBack << ", # hd = " << nbHD << ", # coloc = " << nbColoc << std::endl;
 	}
 }
 
@@ -383,6 +417,7 @@ void ColocTesselerBasicCommands::computeMandersCoefficients()
 			}
 		}
 		m_manders2[current].push_back(sumNom / sumDenom1);
+		std::cout << "num = " << sumNom << ", denum = " << sumDenom1 << std::endl;
 		std::cout << "For color " << (current + 1) << " and ROI " << curROI << ", manders = " << m_manders2[current].back() << std::endl;
 		std::cout << "Locs in ROIs for Manders computation -> " << locsAboveThresh << " / " << locsInROIs << std::endl;
 	}

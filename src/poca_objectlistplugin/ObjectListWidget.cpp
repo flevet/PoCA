@@ -166,6 +166,16 @@ ObjectListWidget::ObjectListWidget(poca::core::MediatorWObjectFWidgetInterface* 
 	layoutLuts->addWidget(m_outlinePointRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_outlinePointRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 
+	m_ellipsoidRenderButton = new QPushButton();
+	m_ellipsoidRenderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_ellipsoidRenderButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_ellipsoidRenderButton->setIcon(QIcon(QPixmap(poca::plot::sphereIcon)));
+	m_ellipsoidRenderButton->setToolTip("Render size as ellipsoid");
+	m_ellipsoidRenderButton->setCheckable(true);
+	m_ellipsoidRenderButton->setChecked(true);
+	layoutLuts->addWidget(m_ellipsoidRenderButton, 0, Qt::AlignRight);
+	QObject::connect(m_ellipsoidRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+
 	m_shapeRenderButton = new QPushButton();
 	m_shapeRenderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_shapeRenderButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -452,6 +462,11 @@ void ObjectListWidget::actionNeeded(bool _val)
 		objList->executeCommand(true, "togglePicking", _val);
 		return;
 	}
+	else if (sender == m_ellipsoidRenderButton) {
+		objList->executeCommand(true, "ellipsoidRendering", _val);
+		m_object->notifyAll("updateDisplay");
+		return;
+	}
 }
 
 void ObjectListWidget::performAction(poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _ci)
@@ -582,6 +597,12 @@ void ObjectListWidget::update(poca::core::SubjectInterface* _subject, const poca
 			m_pointRenderButton->setChecked(val);
 			m_pointRenderButton->blockSignals(false);
 		}
+		if (bci->hasParameter("outlinePointRendering")) {
+			bool val = bci->getParameter<bool>("outlinePointRendering");
+			m_outlinePointRenderButton->blockSignals(true);
+			m_outlinePointRenderButton->setChecked(val);
+			m_outlinePointRenderButton->blockSignals(false);
+		}
 		if (bci->hasParameter("shapeRendering")) {
 			bool val = bci->getParameter<bool>("shapeRendering");
 			m_shapeRenderButton->blockSignals(true);
@@ -606,6 +627,13 @@ void ObjectListWidget::update(poca::core::SubjectInterface* _subject, const poca
 			m_sizePointSpn->blockSignals(true);
 			m_sizePointSpn->setValue(val);
 			m_sizePointSpn->blockSignals(false);
+		}
+
+		if (bci->hasParameter("ellipsoidRendering")) {
+			bool val = bci->getParameter<bool>("ellipsoidRendering");
+			m_ellipsoidRenderButton->blockSignals(true);
+			m_ellipsoidRenderButton->setChecked(val);
+			m_ellipsoidRenderButton->blockSignals(false);
 		}
 
 		bool selected = bci->isSelected();

@@ -141,9 +141,6 @@ typedef Triangulation_3_inexact::Vertex_iterator Vertex_iterator_3_inexact;
 typedef Triangulation_3_inexact::Edge Edge_3_inexact;
 typedef Triangulation_3_inexact::Edge_iterator edge_iterator_3_inexact;
 typedef Triangulation_3_inexact::Facet Facet_3_inexact;
-typedef CGAL::Polyhedron_3<K_inexact> Polyhedron_3_inexact;
-typedef CGAL::Surface_mesh<Point_3_inexact> Surface_mesh_3_inexact;
-typedef CGAL::Nef_polyhedron_3<K_inexact> Nef_Polyhedron_3_inexact;
 
 typedef CGAL::Simple_cartesian< double >  Kernel;
 typedef Kernel::Line_2 KernelLine;
@@ -183,6 +180,10 @@ typedef Triangulation_3_exact::Facet Facet_3_exact;
 typedef CGAL::Polyhedron_3<K_exact> Polyhedron_3_exact;
 typedef CGAL::Surface_mesh<Point_3_exact> Surface_mesh_3_exact;
 typedef CGAL::Nef_polyhedron_3<K_exact> Nef_Polyhedron_3_exact;
+typedef CGAL::Polyhedron_3<K_inexact> Polyhedron_3_inexact;
+typedef CGAL::Surface_mesh<Point_3_inexact> Surface_mesh_3_inexact;
+typedef CGAL::Nef_polyhedron_3<K_inexact> Nef_Polyhedron_3_inexact;
+
 
 #define WITH_PROJ
 #ifdef WITH_PROJ

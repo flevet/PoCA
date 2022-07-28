@@ -56,6 +56,9 @@ namespace poca::core {
 
 		const uint32_t memorySize() const;
 
+		void clear();
+		const bool empty() const;
+
 		inline const size_t nbElements() const { return m_nbElements; }
 		inline const size_t nbData() const { return m_nbData; }
 		inline T* elementsObject(const size_t _index) { return &m_data[m_firstElementObjects[_index]]; }
@@ -147,6 +150,20 @@ namespace poca::core {
 		memoryS += m_nbElements * sizeof(size_t);
 		memoryS += 2 * sizeof(size_t);
 		return memoryS;
+	}
+
+	template< class T >
+	void MyArray<T>::clear()
+	{
+		m_data.clear();
+		m_firstElementObjects.clear();
+		m_nbElements = m_nbData = 0;
+	}
+
+	template< class T >
+	const bool MyArray<T>::empty() const
+	{
+		return m_data.empty();
 	}
 
 	typedef MyArray < size_t > MyArraySizeT;

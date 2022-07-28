@@ -33,6 +33,10 @@
 #ifndef Misc_h__
 #define Misc_h__
 
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QVBoxLayout>
+#include <QtCore/QString>
+
 #include <vector>
 #include <map>
 #include <any>
@@ -63,6 +67,7 @@ namespace poca::core{
 
 	bool file_exists(const std::string&);
 	void getColorString(double, double, double, char [32]);
+	void getColorStringUC(unsigned char, unsigned char, unsigned char, char[32]);
 
 	void initializeAllSingletons(std::map <std::string, std::any>&);
 	void setAllSingletons(const std::map <std::string, std::any>&);
@@ -302,6 +307,10 @@ namespace poca::geometry {
 		_bx = (_p1x + _p2x + _p3x) / (T)3;
 		_by = (_p1y + _p2y + _p3y) / (T)3;
 	}
+}
+
+namespace poca::core::utils {
+	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first = true);
 }
 
 #endif

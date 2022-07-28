@@ -261,10 +261,10 @@ void DelaunayTriangulationBasicCommands::saveAsSVG(const QString& _filename) con
 	for (size_t n = 0; n < triangles.size(); n += 3) {
 		if (featureValues[n] == std::numeric_limits <float>::max()) continue;
 		float valPal = (featureValues[n] - minH) / interH;
-		poca::core::Color4D c = pal->getColor(valPal);
-		double r = c[0], g = c[1], b = c[2];
-		poca::core::getColorString(r, g, b, col);
-		size_t idx[] = { n, n + 1, n + 2 };
+		poca::core::Color4uc c = pal->getColor(valPal);
+		unsigned char r = c[0], g = c[1], b = c[2];
+		poca::core::getColorStringUC(r, g, b, col);
+		/*size_t idx[] = {n, n + 1, n + 2};
 		for (size_t i = 0; i < 3; i++) {
 			size_t i1 = idx[i], i2 = idx[(i + 1) % 3];
 			fs << "<line x1 =\"";
@@ -272,7 +272,14 @@ void DelaunayTriangulationBasicCommands::saveAsSVG(const QString& _filename) con
 			fs << triangles[i1].y() << "\" x2=\"";
 			fs << triangles[i2].x() << "\" y2=\"";
 			fs << triangles[i2].y() << "\" stroke=\"" << col << "\" stroke-width=\"1\"/>\n";
-		}
+		}*/
+		fs << "<polygon points =\"";
+		fs << triangles[n].x() << ",";
+		fs << triangles[n].y() << " ";
+		fs << triangles[n + 1].x() << ",";
+		fs << triangles[n + 1].y() << " "; 
+		fs << triangles[n + 2].x() << ",";
+		fs << triangles[n + 2].y() << "\" stroke=\"" << col << "\" stroke-width=\"1\"/>\n";
 	}
 	fs.close();
 }

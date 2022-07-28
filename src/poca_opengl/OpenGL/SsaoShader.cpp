@@ -122,7 +122,7 @@ namespace poca::opengl {
 		m_shaderSSAO = new Shader("./shaders/9.ssao.vert", "./shaders/9.ssao.frag");
 		m_shaderSSAOBlur = new Shader("./shaders/9.ssao.vert", "./shaders/9.ssao_blur.frag");
 		m_shaderSilhouette = new Shader("./shaders/9.ssao.vert", "./shaders/9.ssao_silhouette.frag");
-		m_shaderHalo = new Shader("./shaders/9.ssao_geometry.vert", "./shaders/9.ssao_halo.frag", "./shaders/9.ssao_halo.geom");
+		//m_shaderHalo = new Shader("./shaders/9.ssao_geometry.vert", "./shaders/9.ssao_halo.frag", "./shaders/9.ssao_halo.geom");
 	}
 
 	void SsaoShader::init(const int _w, const int _h)

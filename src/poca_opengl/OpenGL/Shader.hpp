@@ -51,6 +51,7 @@ namespace poca::opengl {
 	public:
 		GLuint ID;
 		GLuint vertex, fragment, geometry = 0;
+		std::string m_names;
 
 		static float MIN_VALUE_FEATURE_SHADER;
 
@@ -70,12 +71,14 @@ namespace poca::opengl {
 
 		void createAndLinkProgram(const GLchar* vertexPath, const GLchar* fragmentPath, const GLchar* geometryPath = nullptr)
 		{
+			m_names = "vertex:" + std::string(vertexPath) + (geometryPath == nullptr ? "" : ", geom=" + std::string(geometryPath)) + "frag:" + std::string(fragmentPath);
 			createWithoutLinkProgram(vertexPath, fragmentPath, geometryPath);
 			linkProgram();
 		}
 
 		void createWithoutLinkProgram(const GLchar* vertexPath, const GLchar* fragmentPath, const GLchar* geometryPath = nullptr)
 		{
+			m_names = "vertex:" + std::string(vertexPath) + (geometryPath == nullptr ? "" : ", geom=" + std::string(geometryPath)) + "frag:" + std::string(fragmentPath);
 			// 1. Retrieve the vertex/fragment source code from filePath
 			std::string vertexCode;
 			std::string fragmentCode;
@@ -148,6 +151,7 @@ namespace poca::opengl {
 
 		void createAndLinkProgramFromStr(const GLchar* vs, const GLchar* fs, const GLchar* gs = nullptr)
 		{
+			m_names = "vertex:" + std::string(vs) + (gs == nullptr ? "" : ", geom=" + std::string(gs)) + "frag:" + std::string(fs);
 			vertex = glCreateShader(GL_VERTEX_SHADER);
 			glShaderSource(vertex, 1, &vs, NULL);
 			glCompileShader(vertex);
@@ -294,7 +298,7 @@ namespace poca::opengl {
 				if (!success)
 				{
 					glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-					std::cout << "| ERROR::::SHADER-COMPILATION-ERROR of type: " << type << "|\n" << infoLog << "\n| -- --------------------------------------------------- -- |" << std::endl;
+					std::cout << "| ERROR::::SHADER-COMPILATION-ERROR of type: " << type << "|\n" << infoLog << "|\n" << m_names << "\n| -- --------------------------------------------------- -- |" << std::endl;
 				}
 			}
 			else
@@ -303,7 +307,7 @@ namespace poca::opengl {
 				if (!success)
 				{
 					glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-					std::cout << "| ERROR::::PROGRAM-LINKING-ERROR of type: " << type << "|\n" << infoLog << "\n| -- --------------------------------------------------- -- |" << std::endl;
+					std::cout << "| ERROR::::PROGRAM-LINKING-ERROR of type: " << type << "|\n" << infoLog << "|\n" << m_names << "\n| -- --------------------------------------------------- -- |" << std::endl;
 				}
 			}
 		}

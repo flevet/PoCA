@@ -117,6 +117,11 @@ namespace poca::geometry {
 		}
 		m_data["area"] = new poca::core::MyData(areas);
 		m_data["density"] = new poca::core::MyData(densities);
+
+		std::vector <float> ids(areas.size());
+		std::iota(std::begin(ids), std::end(ids), 1);
+		m_data["id"] = new poca::core::MyData(ids);
+
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("density");
 		forceRegenerateSelection();
@@ -301,6 +306,10 @@ namespace poca::geometry {
 		std::cout << std::endl;
 		m_data["volume"] = new poca::core::MyData(_volumes);
 		m_data["density"] = new poca::core::MyData(densities);
+		std::vector <float> ids(_volumes.size());
+		std::iota(std::begin(ids), std::end(ids), 1);
+		m_data["id"] = new poca::core::MyData(ids);
+
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("density");
 		forceRegenerateSelection();
@@ -331,6 +340,9 @@ namespace poca::geometry {
 
 		m_data["volume"] = new poca::core::MyData(_volumes);
 		m_data["density"] = new poca::core::MyData(densities);
+		std::vector <float> ids(_volumes.size());
+		std::iota(std::begin(ids), std::end(ids), 1);
+		m_data["id"] = new poca::core::MyData(ids);
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("density");
 		forceRegenerateSelection();

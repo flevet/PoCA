@@ -172,7 +172,7 @@ namespace poca::opengl {
 	template< class T >
 	bool SingleGLBuffer<T>::empty() const
 	{
-		return m_bufferVertex == 0;
+		return m_bufferVertex == 0 || m_nbElems == 0;
 	}
 
 	template< class T >
@@ -198,6 +198,7 @@ namespace poca::opengl {
 	void SingleGLBuffer<T>::updateBuffer(const std::vector < T >& _data)
 	{
 		checkSizeBuffer(_data.size());
+		if (m_nbElems == 0) return;
 		glBindBuffer(m_target, m_bufferVertex);
 		glBufferData(m_target, m_nbElems * sizeof(T), (void*)(&_data[0]), GL_STATIC_DRAW);
 		glBindBuffer(m_target, 0);
@@ -217,7 +218,9 @@ namespace poca::opengl {
 	template< class T >
 	void SingleGLBuffer<T>::bindBuffer(uint32_t _attribPointerIndex) const
 	{
+		GL_CHECK_ERRORS();
 		glBindBuffer(m_target, m_bufferVertex);
+		GL_CHECK_ERRORS();
 		glVertexAttribPointer(
 			_attribPointerIndex,                  // attribute 0. No particular reason for 0, but must match the layout in the ShaderReader.
 			(GLint)m_dim,                  // size
@@ -226,8 +229,10 @@ namespace poca::opengl {
 			0,                  // stride
 			(void*)0            // array buffer offset
 		);
+		GL_CHECK_ERRORS();
 		if (m_bufferIndices != 0)
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufferIndices);
+		GL_CHECK_ERRORS();
 	}
 
 	template< class T >

@@ -36,6 +36,7 @@
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QImage>
 
+#include <DesignPatterns/ListDatasetsSingleton.hpp>
 #include <General/Palette.hpp>
 #include <General/Histogram.hpp>
 #include <General/MyData.hpp>
@@ -115,9 +116,17 @@ void ColocTesselerDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 
 	poca::opengl::Shader* shader = _cam->getShader("simpleShader");
 
+	uint32_t sizeGL = 1;
+	poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
+	poca::core::MyObjectInterface* obj = lds->getObject(m_colocTesseler);
+	poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(obj);
+	if (comObj)
+		if (comObj->hasParameter("pointSizeGL"))
+			sizeGL = comObj->getParameter<uint32_t>("pointSizeGL");
+
 	for(size_t n = 0; n < 2; n++)
 		//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f);
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f, 5.f, false);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f, sizeGL, false);
 
 
 	GL_CHECK_ERRORS();

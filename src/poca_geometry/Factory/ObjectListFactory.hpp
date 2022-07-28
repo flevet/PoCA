@@ -38,6 +38,7 @@
 #include <vector>
 
 #include <General/Vec3.hpp>
+#include <Geometry/CGAL_includes.hpp>
 
 #include "../Interfaces/ObjectListFactoryInterface.hpp"
 
@@ -73,5 +74,5 @@ namespace poca::geometry {
 	};
 }
 
-#endif // DelaunayTriangulationFactory_h__
+#endif // ObjectListFactory_h__
 

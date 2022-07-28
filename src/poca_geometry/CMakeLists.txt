@@ -21,9 +21,12 @@ set(3D_VORONOI_GPU_HEADER_FILES
 set(INTERFACES_HEADER_FILES
   Interfaces/ObjectFeaturesFactoryInterface.hpp
   Interfaces/ObjectListFactoryInterface.hpp
+  Interfaces/ObjectIndicesFactoryInterface.hpp
   Interfaces/VoronoiDiagramFactoryInterface.hpp
   Interfaces/DelaunayTriangulationFactoryInterface.hpp
   Interfaces/DelaunayTriangulationInterface.hpp
+  Interfaces/PolygonFactoryInterface.hpp
+  Interfaces/PolygonInterface.hpp
 )
 
 set(FACTORY_HEADER_FILES
@@ -31,6 +34,8 @@ set(FACTORY_HEADER_FILES
   Factory/ObjectFeaturesFactory.hpp
   Factory/VoronoiDiagramFactory.hpp
   Factory/DelaunayTriangulationFactory.hpp
+  Factory/PolygonFactory.hpp
+  Factory/ObjectIndicesFactory.hpp
 )
 
 set(FACTORY_SOURCE_FILES
@@ -38,6 +43,8 @@ set(FACTORY_SOURCE_FILES
   Factory/ObjectFeaturesFactory.cpp
   Factory/VoronoiDiagramFactory.cpp
   Factory/DelaunayTriangulationFactory.cpp
+  Factory/PolygonFactory.cpp
+  Factory/ObjectIndicesFactory.cpp
 )
 
 set(GEOMETRY_HEADER_FILES
@@ -53,7 +60,9 @@ set(GEOMETRY_HEADER_FILES
   Geometry/voronator.hpp
   Geometry/dbscan.h
   Geometry/kdtree.h
+  Geometry/Polygon.hpp
   Geometry/DelaunayOnSphere.hpp
+  Geometry/TrackSet.hpp
   )
 
 set(GEOMETRY_SOURCE_FILES
@@ -66,7 +75,9 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/delaunator.cpp  
   Geometry/voronator.cpp
   Geometry/kdtree.cpp
+  Geometry/Polygon.cpp
   Geometry/DelaunayOnSphere.cpp
+  Geometry/TrackSet.cpp
 )
 
 set(header_list

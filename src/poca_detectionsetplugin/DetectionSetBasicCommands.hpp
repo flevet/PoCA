@@ -54,6 +54,9 @@ public:
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 protected:
+	void saveAsSVG(const QString&) const;
+
+protected:
 	poca::geometry::DetectionSet* m_dset;
 };
 

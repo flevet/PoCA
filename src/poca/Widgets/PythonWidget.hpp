@@ -42,44 +42,80 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QListWidget>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QGridLayout>
 
-#include "DesignPatterns/Observer.hpp"
-#include "DesignPatterns/MediatorWObjectFWidget.hpp"
-#include "General/Command.hpp"
+#include <DesignPatterns/Observer.hpp>
+#include <DesignPatterns/MediatorWObjectFWidget.hpp>
+#include <General/Command.hpp>
+#include <General/BasicComponent.hpp>
 
 class QPlainTextEdit;
 class QDockWidget;
 class QLabel;
 
-class PythonWidget: public QWidget, public poca::core::ObserverForMediator{
+class PythonWidget: public QTabWidget, public poca::core::ObserverForMediator{
 	Q_OBJECT
 
 public:
-	PythonWidget(poca::core::MediatorWObjectFWidget *, QWidget* = 0, Qt::WindowFlags = 0 );
+	PythonWidget(poca::core::MediatorWObjectFWidget *, QWidget* = 0);
 	~PythonWidget();
 
 	void performAction(poca::core::MyObjectInterface*, poca::core::CommandInfo*);
 	void update(poca::core::SubjectInterface*, const poca::core::CommandInfo & );
 	void executeMacro(poca::core::MyObjectInterface*, poca::core::CommandInfo*);
 
+	void execute(poca::core::CommandInfo*);
+	void loadParameters(const nlohmann::json&);
+	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
+
+signals:
+	void runMacro(std::vector<nlohmann::json>);
+
 protected slots:
 	void actionNeeded();
 	void actionNeeded( int );
 	void actionNeeded( bool );
+	void updateChosenFunctionName(int);
+
+protected:
+	void populateListWidget(poca::core::BasicComponent*, QListWidget*);
+	void populatePredefinedButtons();
+	void addPredefinedButton(uint32_t);
 
 protected:
 	void executeNena();
-	void executeEllipsoidFit();
-	void executeCAML();
+
+	void executePythonScriptDisplayReturn(const poca::core::CommandInfo&);
+	void executePythonScriptAddFeatureToComponent(const poca::core::CommandInfo&);
+
+	QStringList identifyPythonFunctionNames(const QString&) const;
 
 protected:
 	QTabWidget* m_parentTab;
 
-	QGroupBox* m_groupPreloadedPythonFiles, * m_groupLoadPythonFiles;
-	std::vector <std::pair <QPushButton*, std::string>> m_buttonsPreloaded;
+	QPushButton* m_buttonOpenFile, * m_buttonExecuteScript;
+	QLabel* m_labelPythonFile;
+	QLineEdit* m_editNameFunction;
+	
+	std::vector <QPushButton*> m_buttonsPreloaded, m_buttonsRemovePreloaded;
+	QButtonGroup* m_bgroupGrid;
+
+	QComboBox* m_BCCombo, * m_functionNameCombo;
+	QListWidget* m_lists[2];
+	QCheckBox* m_singleValCBox, * m_addFeatureCBox, * m_createNewDatasetCBox, * m_addToPredefinedModules;
+	QLineEdit* m_nameFeatureEdit, * m_nameNewDatasetEdit, * m_namePredefinedCommand;
 	
 	poca::core::MyObjectInterface* m_object;
 	poca::core::MediatorWObjectFWidget * m_mediator;
+
+	nlohmann::json m_json;
+	std::vector <poca::core::CommandInfo> m_pythonCommands;
+	QGridLayout* m_layoutPredefined;
+	int m_curRow = 0, m_curColumn = 0;
 };
 #endif
 #endif // PythonWidget_h__

@@ -35,7 +35,7 @@
 
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QTableWidget>
-#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QLabel>
@@ -48,7 +48,7 @@ namespace poca::core {
 	class ROIInterface;
 }
 
-class ROIGeneralWidget : public QTabWidget, public poca::core::ObserverForMediator{
+class ROIGeneralWidget : public QGroupBox, public poca::core::ObserverForMediator{
 	Q_OBJECT
 
 public:

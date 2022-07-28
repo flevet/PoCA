@@ -309,6 +309,7 @@ namespace poca::geometry {
 		std::vector <float> volumeObjects;
 		float volume = 0.f;
 		double volumeD = 0.;
+		std::vector <uint32_t> allIndexesTriangles;
 
 		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
 			if (!selectionTriangulationFaces[n]) continue;
@@ -453,9 +454,12 @@ namespace poca::geometry {
 				std::copy(normalOutlineLocObject.begin(), normalOutlineLocObject.end(), std::back_inserter(normalsAllOutlineLocs));
 	
 				volumeObjects.push_back(volume);
+	
+				std::copy(indexTrianglesOfObject.begin(), indexTrianglesOfObject.end(), std::back_inserter(allIndexesTriangles));
 			}
 		}
-		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		ObjectList* objs = locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		return objs;
 	}
 
 	ObjectList* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
@@ -860,6 +864,8 @@ namespace poca::geometry {
 		float volume = 0.f;
 		double volumeD = 0.;
 
+		std::vector <uint32_t> allIndexesTriangles;
+
 		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
 			if (selectionTriangulationFaces[n] == std::numeric_limits<uint32_t>::max()) continue;
 			uint32_t indexFoundTriangle = selectionTriangulationFaces[n];
@@ -1003,9 +1009,14 @@ namespace poca::geometry {
 				std::copy(normalOutlineLocObject.begin(), normalOutlineLocObject.end(), std::back_inserter(normalsAllOutlineLocs));
 
 				volumeObjects.push_back(volume);
+
+				std::copy(indexTrianglesOfObject.begin(), indexTrianglesOfObject.end(), std::back_inserter(allIndexesTriangles));
+				
 			}
 		}
-		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+
+		ObjectList* objs = locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		return objs;
 	}
 
 	void ObjectListFactory::computeConvexHullObject(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _triangles, float& _volume)

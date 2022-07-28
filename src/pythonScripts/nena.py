@@ -44,3 +44,7 @@ def plot_NeNA(NeNA_dist,dir_name):
 ##    axarr.set_ylabel('Intensity [a.u.]')
 ##    plt.savefig(name, format='pdf')
     return acc, acc_err
+
+##filename="e:/nearestDistances.txt"
+##data = np.loadtxt(filename, delimiter="\n")
+##NeNA(data)

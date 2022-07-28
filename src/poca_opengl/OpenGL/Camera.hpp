@@ -578,6 +578,7 @@ namespace poca::opengl {
 	template < class T, class M >
 	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao)
 	{
+		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = _ssao ? getShader("geometrySSAO") : getShader("sphereRenderingShader");
 
@@ -586,18 +587,29 @@ namespace poca::opengl {
 				glEnable(GL_DEPTH_TEST);
 			else
 				glDisable(GL_DEPTH_TEST);
+			GL_CHECK_ERRORS();
 			glEnable(GL_BLEND);
-			glEnable(GL_POINT_SPRITE);
-			glEnable(GL_PROGRAM_POINT_SIZE);
+			GL_CHECK_ERRORS();
+			//glEnable(GL_POINT_SPRITE);
+			GL_CHECK_ERRORS();
+			//glEnable(GL_PROGRAM_POINT_SIZE);
+			GL_CHECK_ERRORS();
 		}
 		else {
+			GL_CHECK_ERRORS();
 			glEnable(GL_DEPTH_TEST);
+			GL_CHECK_ERRORS();
 			glDepthFunc(GL_LESS);
+			GL_CHECK_ERRORS();
 			glDisable(GL_BLEND);
+			GL_CHECK_ERRORS();
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			GL_CHECK_ERRORS();
 			glDisable(GL_CULL_FACE);
+			GL_CHECK_ERRORS();
 		}
 
+		GL_CHECK_ERRORS();
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
@@ -618,17 +630,23 @@ namespace poca::opengl {
 		shader->setFloat("nbPoints", _bufferVertex.getNbElements());
 		shader->setVec3("light_position", getEye());
 
+		GL_CHECK_ERRORS();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, _textureLutID);
+		GL_CHECK_ERRORS();
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(2);
+		GL_CHECK_ERRORS();
 		_bufferVertex.bindBuffer(0);
+		GL_CHECK_ERRORS();
 		_bufferFeature.bindBuffer(2);
+		GL_CHECK_ERRORS();
 		if (_bufferVertex.getBufferIndices() != 0)
 			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
 		else
 			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+		GL_CHECK_ERRORS();
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
 		GL_CHECK_ERRORS();

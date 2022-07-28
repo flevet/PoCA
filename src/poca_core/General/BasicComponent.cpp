@@ -32,6 +32,8 @@
 
 #include <fstream>
 #include <algorithm>
+#include <QtWidgets/QFileDialog>
+
 
 #include "BasicComponent.hpp"
 
@@ -179,6 +181,8 @@ namespace poca::core {
 	void BasicComponent::executeCommand(CommandInfo* _ci)
 	{
 			if (_ci->nameCommand == "histogram") {
+				if (!_ci->hasParameter("feature") || !_ci->hasParameter("action"))
+					return;
 				std::string type = _ci->getParameter<std::string>("feature");
 				MyData* data = getMyData(type);
 				if (data != NULL) {
@@ -230,19 +234,26 @@ namespace poca::core {
 						setCurrentHistogramType(type);
 					}
 					else if (action == "save") {
-						std::string dir = _ci->getParameter<std::string>("dir");
-						if (!(dir.back() != '/'))
+						QString nameFile;
+						std::string dir = _ci->hasParameter("dir") ? _ci->getParameter<std::string>("dir") : "", nameFile2 = _ci->hasParameter("filename") ? _ci->getParameter<std::string>("filename") : "";
+						if (dir.back() != '/')
 							dir.append("/");
 						HistogramInterface* hist = data->getHistogram();
-						std::string nameFile(data->isLog() ? "log_" : "");
-						nameFile.append(type).append(".txt");
-						nameFile = dir + nameFile;
-						std::ofstream fs(nameFile.c_str());
+						if (nameFile2.empty()) {
+							nameFile2 = data->isLog() ? "log_" : "";
+							nameFile2.append(type).append(".txt");
+							nameFile = (dir + nameFile2).c_str();
+							nameFile = QFileDialog::getSaveFileName(nullptr, QObject::tr("Save feature..."), nameFile, QObject::tr("Text files (*.txt)"), 0, QFileDialog::DontUseNativeDialog);
+						}
+						else
+							nameFile = (dir + nameFile2).c_str();
+						if (nameFile.isEmpty()) return;
+						std::ofstream fs(nameFile.toStdString().c_str());
 						std::vector <float> values = hist->getValues();
 						for (size_t n = 0; n < values.size(); n++)
 							fs << values[n] << std::endl;
 						fs.close();
-						std::cout << "File " << nameFile.c_str() << " has been saved." << std::endl;
+						std::cout << "File " << nameFile.toStdString().c_str() << " has been saved." << std::endl;
 					}
 					else if (action == "delete")
 						deleteFeature(type);

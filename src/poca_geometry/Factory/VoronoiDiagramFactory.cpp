@@ -36,6 +36,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <fstream>
+#include <cuda_runtime.h>
 
 #include <QtWidgets/QMessageBox>
 
@@ -186,6 +187,16 @@ namespace poca::geometry {
 	VoronoiDiagram* VoronoiDiagramFactory::createVoronoiDiagram(const std::vector <float>& _xs, const std::vector <float>& _ys, const std::vector <float>& _zs, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau, const bool _noCells)
 	{
 #ifndef NO_CUDA
+		int devCount; // Number of CUDA devices
+		cudaError_t err = cudaGetDeviceCount(&devCount);
+		if (err != cudaSuccess) {
+			std::cout << "nope" << std::endl;
+			QMessageBox msgBox;
+			msgBox.setText("Error: CUDA is not installed, Voronoi 3D is therefore not available.");
+			msgBox.exec();
+			return NULL;
+		}
+
 		DelaunayTriangulation3D* d3D = static_cast <DelaunayTriangulation3D*>(_delau);
 		Triangulation_3_inexact* delaunay3D = d3D->getDelaunay();
 		uint32_t nbCells = _xs.size();

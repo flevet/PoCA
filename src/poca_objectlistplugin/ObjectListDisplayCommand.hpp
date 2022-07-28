@@ -62,6 +62,7 @@ public:
 protected:
 	void display(poca::opengl::Camera*, const bool, const bool = false);
 	void drawElements(poca::opengl::Camera*, const bool = false);
+	void drawEllipsoid(poca::opengl::Camera*);
 	void drawPicking(poca::opengl::Camera*);
 
 	void displayZoomToBBox(poca::opengl::Camera*, const poca::core::BoundingBox&);
@@ -90,6 +91,9 @@ protected:
 	poca::opengl::LineSingleGLBuffer <float> m_lineFeatureBuffer;
 
 	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_boundingBoxSelection;
+
+	poca::opengl::QuadSingleGLBuffer <glm::mat4> m_ellipsoidTransformBuffer;
+	poca::opengl::FeatureSingleGLBuffer <float> m_ellipsoidFeatureBuffer;
 
 	bool m_fill;
 

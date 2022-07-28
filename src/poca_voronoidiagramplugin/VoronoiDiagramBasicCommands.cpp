@@ -30,12 +30,17 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <QtCore/QString>
+#include <fstream>
+#include <filesystem>
+
 #include <DesignPatterns/ListDatasetsSingleton.hpp>
 #include <DesignPatterns/StateSoftwareSingleton.hpp>
 #include <Factory/ObjectListFactory.hpp>
 #include <Geometry/ObjectList.hpp>
 #include <General/Misc.h>
 #include <Interfaces/HistogramInterface.hpp>
+#include <Interfaces/PaletteInterface.hpp>
 
 #include "VoronoiDiagramBasicCommands.hpp"
 
@@ -172,6 +177,11 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 			dset->executeCommand(false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n);
 		}
 	}
+	else if (_infos->nameCommand == "saveAsSVG") {
+		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
+		filename.insert(filename.lastIndexOf("."), "_voronoi");
+		saveAsSVG(filename);
+	}
 }
 
 poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -215,6 +225,12 @@ poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::st
 			ci.addParameter("step", _parameters["step"].get<float>());
 		return ci;
 	}
+	else if (_nameCommand == "saveAsSVG") {
+		if (_parameters.contains("filename")) {
+			std::string val = _parameters["filename"].get<std::string>();
+			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
+		}
+	}
 	return poca::core::CommandInfo();
 }
 
@@ -223,3 +239,43 @@ poca::core::Command* VoronoiDiagramBasicCommands::copy()
 	return new VoronoiDiagramBasicCommands(*this);
 }
 
+void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
+{
+	poca::core::BoundingBox bbox = m_voronoi->boundingBox();
+	std::ofstream fs(_filename.toLatin1().data());
+	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
+	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (bbox[3] - bbox[0]) << "\" height=\"" << (bbox[4] - bbox[1]) << "\" viewBox=\"" << bbox[0] << " " << bbox[1] << " " << bbox[3] << " " << bbox[4] << " " "\">\n";
+	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
+	fs << "<desc>\n";
+	fs << "Creator: Florian Levet\n";
+	fs << "</desc>\n";
+	fs << "<defs>\n";
+	fs << "</defs>\n";
+
+	std::vector <poca::core::Vec3mf> lines;
+	m_voronoi->generateLines(lines);
+	poca::core::HistogramInterface* histogram = m_voronoi->getCurrentHistogram();
+	const std::vector<float>& values = histogram->getValues();
+	const std::vector<bool>& selection = m_voronoi->getSelection();
+	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
+
+	std::vector <float> featureValues;
+	m_voronoi->getFeatureInSelection(featureValues, values, selection, std::numeric_limits <float>::max(), true);
+
+	char col[32];
+	poca::core::PaletteInterface* pal = m_voronoi->getPalette();
+	for (size_t n = 0; n < lines.size(); n += 2) {
+		if (featureValues[n] == std::numeric_limits <float>::max()) continue;
+		float valPal = (featureValues[n] - minH) / interH;
+		poca::core::Color4uc c = pal->getColor(valPal);
+		unsigned char r = c[0], g = c[1], b = c[2];
+		poca::core::getColorStringUC(r, g, b, col);
+		fs << "<line x1 =\"";
+		fs << lines[n].x() << "\" y1=\"";
+		fs << lines[n].y() << "\" x2=\"";
+		fs << lines[n+1].x() << "\" y2=\"";
+		fs << lines[n+1].y() << "\" stroke=\"" << col << "\" stroke-width=\"1\"/>\n";
+	}
+	fs.close();
+}

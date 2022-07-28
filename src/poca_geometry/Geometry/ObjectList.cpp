@@ -104,7 +104,7 @@ namespace poca::geometry {
 			nbLocs[i] = m_locs.nbElementsObject(i);
 
 		}
-		const poca::core::MyArrayUInt32& localizations = m_outlineLocs;
+		const poca::core::MyArrayUInt32& localizations = m_locs;// m_outlineLocs;
 		ObjectFeaturesFactoryInterface* factory = createObjectFeaturesFactory();
 		std::vector <float> sizes(localizations.nbElements()), resPCA(factory->nbFeaturesPCA(m_zs != NULL));
 		std::vector <float> major(localizations.nbElements()), minor(localizations.nbElements()), minor2(localizations.nbElements());
@@ -133,7 +133,7 @@ namespace poca::geometry {
 		m_data["minor"] = new poca::core::MyData(minor);
 		m_data["minor2"] = new poca::core::MyData(minor2);
 		m_data["id"] = new poca::core::MyData(ids);
-		m_selection.resize(areas.size());
+		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
 	}
@@ -308,6 +308,20 @@ namespace poca::geometry {
 		}
 	}
 
+	void ObjectList::generatePickingIndices(std::vector <float>& _ids) const
+	{
+		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
+		_ids.resize(triangles.size());
+
+		size_t cpt = 0;
+		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
+			for (size_t j = 0; j < m_triangles.nbElementsObject(i); j++) {
+				_ids[cpt++] = i + 1;
+			}
+
+		}
+	}
+
 	void ObjectList::getFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
 		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
@@ -320,7 +334,6 @@ namespace poca::geometry {
 			}
 
 		}
-
 	}
 
 	void ObjectList::getFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
@@ -332,20 +345,6 @@ namespace poca::geometry {
 		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
 			for (size_t j = 0; j < m_triangles.nbElementsObject(i); j++) {
 				_features[cpt++] = _selection[i] ? _selectedValue : _notSelectedValue;
-			}
-
-		}
-	}
-
-	void ObjectList::generatePickingIndices(std::vector <float>& _ids) const
-	{
-		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
-		_ids.resize(triangles.size());
-
-		size_t cpt = 0;
-		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
-			for (size_t j = 0; j < m_triangles.nbElementsObject(i); j++) {
-				_ids[cpt++] = i + 1;
 			}
 
 		}
@@ -429,6 +428,22 @@ namespace poca::geometry {
 			}
 
 		}
+	}
+
+	void ObjectList::setLocs(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _idxLocsObj, const std::vector <uint32_t>& _rangeLocsObj)
+	{
+		m_xs = _xs;
+		m_ys = _ys;
+		m_zs = _zs;
+		m_locs.initialize(_idxLocsObj, _rangeLocsObj);
+		m_outlineLocs.clear();
+
+		std::vector <float> nbLocs(m_locs.nbElements(), 0.f);
+		for (size_t i = 0; i < m_triangles.nbElements(); i++)
+			nbLocs[i] = m_locs.nbElementsObject(i);
+	
+		delete m_data["nbLocs"];
+		m_data["nbLocs"] = new poca::core::MyData(nbLocs);
 	}
 }
 

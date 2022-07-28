@@ -90,7 +90,7 @@ protected:
 	std::pair<QPushButton*, std::string> m_hilowButton;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
 	QPushButton* m_displayButton, * m_fillButton, * m_pointRenderButton, * m_outlinePointRenderButton, * m_shapeRenderButton, * m_bboxSelectionButton, 
-		* m_exportButton, * m_exportLocsButton, * m_selectionButton, * m_duplicateCentroidsButton, * m_duplicateSelectedObjectsButton;
+		* m_exportButton, * m_exportLocsButton, * m_selectionButton, * m_duplicateCentroidsButton, * m_duplicateSelectedObjectsButton, * m_ellipsoidRenderButton;
 	QSpinBox* m_sizePointSpn;
 
 	QTableWidget* m_tableObjects;

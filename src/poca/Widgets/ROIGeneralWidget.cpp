@@ -44,7 +44,7 @@
 
 #include "ROIGeneralWidget.hpp"
 
-ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidget* _parent/*= 0*/) :QTabWidget(_parent)
+ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidget* _parent/*= 0*/) :QGroupBox("ROIs")
 {
 	m_parentTab = (QTabWidget *)_parent;
 	m_mediator = _mediator;
@@ -55,9 +55,9 @@ ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator
 	this->addActionToObserve("addOneROI");
 	this->addActionToObserve("UpdateSelectionROIs");
 
-	QWidget * generalWidget = new QWidget;
+	//QWidget * generalWidget = new QWidget;
 
-	QGroupBox * groupROIs = new QGroupBox(QObject::tr("Actions"));
+	QWidget * groupROIs = new QWidget();
 	groupROIs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_loadROIsBtn = new QPushButton("Load ROIs");
 	m_loadROIsBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
@@ -126,9 +126,10 @@ ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator
 	QVBoxLayout * layoutROIs = new QVBoxLayout;
 	layoutROIs->addWidget(groupROIs);
 	layoutROIs->addWidget(m_tableW);
-	generalWidget->setLayout(layoutROIs);
+	this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	this->setLayout(layoutROIs);
 
-	this->addTab(generalWidget, tr("General"));
+	//this->addTab(generalWidget, tr("General"));
 
 	QObject::connect(m_loadROIsBtn, SIGNAL(clicked()), this, SLOT(actionNeeded()));
 	QObject::connect(m_saveROIsBtn, SIGNAL(clicked()), this, SLOT(actionNeeded()));
@@ -148,7 +149,7 @@ ROIGeneralWidget::~ROIGeneralWidget()
 }
 
 void ROIGeneralWidget::actionNeeded()
-{
+{ 
 	QObject * sender = QObject::sender();
 	if (sender == m_loadROIsBtn){
 		QString dir(m_object->getDir().c_str());
@@ -156,6 +157,7 @@ void ROIGeneralWidget::actionNeeded()
 
 		std::cout << name.toLatin1().data() << std::endl;
 		m_object->loadROIs(name.toLatin1().data());
+		m_object->notify("LoadObjCharacteristicsROIWidget");
 	}
 	else if (sender == m_saveROIsBtn){
 		std::vector <poca::core::ROIInterface*>& ROIs = m_object->getROIs();
