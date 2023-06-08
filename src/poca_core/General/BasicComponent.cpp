@@ -248,7 +248,8 @@ namespace poca::core {
 						else
 							nameFile = (dir + nameFile2).c_str();
 						if (nameFile.isEmpty()) return;
-						std::ofstream fs(nameFile.toStdString().c_str());
+						QFileInfo info(nameFile);
+						std::ofstream fs(info.absoluteFilePath().toStdString());
 						std::vector <float> values = hist->getValues();
 						for (size_t n = 0; n < values.size(); n++)
 							fs << values[n] << std::endl;
@@ -332,8 +333,12 @@ namespace poca::core {
 			return poca::core::CommandInfo(false, _nameCommand, val);
 		}
 		else if (_nameCommand == "changeLUT") {
-			std::string val = _parameters.get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, val);
+			if (_parameters.contains("LUT")) {
+				std::string val = _parameters["LUT"].get<std::string>();
+				return poca::core::CommandInfo(false, _nameCommand, "LUT", val);
+			}
+			else
+				return poca::core::CommandInfo();
 		}
 
 		return CommandableObject::createCommand(_nameCommand, _parameters);

@@ -1,39 +1,54 @@
 # PoCA: Point Cloud Analyst
-PoCA is the direct continuation of SR-Tesseler and Coloc-Tesseler. SR-Tesseler has been released in 2015 and, since then, I worked in parralel on extending SR-Tesseler and developing Coloc-Tesseler. As some point, SR-Tesseler became a monster when speaking of coding, and doing any modification was painful. Similarly, I needed to clear the Coloc-Tesseler code to be able to make it available. I therefore decided last summer to re-code completely the platform. PoCA will be the result of this decision and integrate SR-, Coloc-Tesseler and much more in a single software platform.
 
-What's in it:
+## Introduction
+PoCA is a a powerful stand-alone software designed to ease the manipulation and quantification of multidimensional and multicolor SMLM point cloud data. It is built around a custom-made Open-GL-based rendering engine that provides full user interactive control of SMLM point cloud data, both for visualization and manipulation. It combines the strengths of both C++ and Python programming languages, providing access to efficient and optimized C++ computer graphics algorithms and Python ecosystem. It is designed for improving users and developers’ experience, by integrating a user-friendly GUI, a macro recorder, and the capability to execute Python code easily. PoCA is the result of a decade of developments and the legacy of SR-Tesseler and Coloc-Tesseler, software solutions that were swiftly adopted by the community.
 
-* 3D Visualization
-* Optimized 2D and 3D Voronoi diagrams (less than a minute processing for 4,000,000 localizations, even in 3D)
-* Advanced interaction through a picking mechanism
-* Creation of a "colocalization object" by linking two opened datasets
-* DBSCAN should work in 2D and 3D
+<p align="center">
+	<img src="https://poca-smlm.github.io/images/poca.gif" width="1000">
+</p>
 
-Known issues:
+**If you use it, please cite it:**
 
-* Using OpenGL has rendering engine seems to sometimes break the native Qt rendering. It can result in having the whole PoCA window rendered as black. Usually, forcing redraw of the window resolves part of the problem (still, at least rendering of one feature such as the Voronoi stays broken)
-* Only one set of objects can be currently created. 
-* PoCA will certainly crash if the user does something I did not planned (clicking on a button while no dataset is opened for instance)
+* Florian Levet & Jean-Baptiste Sibarita. 
+*PoCA: a software platform for point cloud data visualization and quantification*. [Nature Methods 20, 629–630 (2023) doi:10.1038/s41592-023-01811-4](https://doi.org/10.1038/s41592-023-01811-4)
 
-# Compilation
-There are CMakeLists.txt in each project to help with compilation. Nevertheless, some of the libraries are not automatically found and need to be manually added in cmake-gui.
-Required libraries:
+* Florian Levet, Eric Hosy, Adel Kechkar, Corey Butler, Anne Beghin, Daniel Choquet, Jean-Baptiste Sibarita. 
+*SR-Tesseler: a method to segment and quantify localization-based super-resolution microscopy data*. [Nature Methods 12 (11), 1065-71 (2015) doi:10.1038/nmeth.3579](https://doi.org/10.1038/nmeth.3579)
 
-* CGAL (Tested with version 5.3, https://www.cgal.org/)
-* Boost (Tested with version 1.74.0, https://www.boost.org/)
-* Qt (Tested with version 5.15.2, https://www.qt.io/)
-* CUDA (Tested with version 11.5, https://developer.nvidia.com/cuda-zone)
-* TBB (Tested with version 2020.3, https://github.com/oneapi-src/oneTBB/releases/tag/v2020.3)
-* Eigen3 (https://eigen.tuxfamily.org/)
-* GLM (Tested with version 0.9.9.8, https://github.com/g-truc/glm)
-* GLEW (Tested with version 2.1.0, http://glew.sourceforge.net/)
-* Python (Tested with version 3.7.4)
+* Florian Levet, Guillaume Julien, Rémi Galland, Corey Butler, Anne Beghin, Anaël Chazeau, Philipp Hoess, Jonas Ries, Grégory Giannone, Jean-Baptiste Sibarita. 
+*A tessellation-based colocalization analysis approach for single-molecule localization microscopy*.
+[Nature Communications 10, 2379 (2019) doi:10.1038/s41467-019-10007-4](https://doi.org/10.1038/s41467-019-10007-4)
 
-# Binaries
-As of right now, only binaries for Windows are available (https://github.com/flevet/PoCA/releases).
+PoCA is developed by [Florian Levet](https://www.researchgate.net/profile/Florian-Levet), researcher in the [Quantitative Imaging of the Cell team](https://www.iins.u-bordeaux.fr/SIBARITA), headed by [Jean-Baptiste Sibarita](https://www.researchgate.net/profile/Jean-Baptiste-Sibarita). FL and JBS are part of the [Interdisciplinary Insitute for Neuroscience](https://www.iins.u-bordeaux.fr/). FL is part of the [Bordeaux Imaging Center](https://www.bic.u-bordeaux.fr/).
 
-I'm also working on the manual.
+If you search for support, please open a thread on the [image.sc](https://image.sc/) forum or raise an [issue](https://github.com/flevet/PoCA/issues) here.
 
-If upon executing poca.exe Windows asks for dlls such as "VCRUNTIME140_1.dll", you may need to install the "microsoft visual c++ 2019 redistributable package (x64)": https://docs.microsoft.com/en-GB/cpp/windows/latest-supported-vc-redist?view=msvc-160
+## Overview
+* [Installation and compilation](https://poca-smlm.github.io/installation.html)
+* [PoCA main interface](https://poca-smlm.github.io/images/poca_windows.png)
+* [Opening localization files](https://poca-smlm.github.io/opening.html)
+* [Manipulating point clouds](https://poca-smlm.github.io/manipulating.html)
+	- [Visualization](https://poca-smlm.github.io/manipulating.html#visualization)
+	- [Filtering](https://poca-smlm.github.io/manipulating.html#filtering)
+	- [Cropping](https://poca-smlm.github.io/manipulating.html#cropping)
+	- [Picking](https://poca-smlm.github.io/manipulating.html#picking)
+* Quantification techniques
+	- [Delaunay triangulation](https://poca-smlm.github.io/delaunay.html)
+	- [Voronoi diagram](https://poca-smlm.github.io/voronoi.html)
+	- [DBSCAN](https://poca-smlm.github.io/dbscan.html)
+* [Objects](https://poca-smlm.github.io/objects.html)
+* Colocalization analysis
+	- [Prerequesite](https://poca-smlm.github.io/prerequesite_coloc.html)
+	- [Coloc-Tesseler](https://poca-smlm.github.io/coloc-tesseler.html)
+	- [Object colocalization](https://poca-smlm.github.io/objects_colocalization.html)
+* [ROIs](https://poca-smlm.github.io/rois.html)
+* [Macros](https://poca-smlm.github.io/macros.html)
+* [Executing Python scripts](https://poca-smlm.github.io/python.html)
+* [How to cite](https://poca-smlm.github.io/citations.html)
 
-For having access to the Voronoi 3D construction, you will need an NVidia card with the latest drivers installed as well as CUDA (10.2 for instance, may work with newest versions): https://developer.nvidia.com/cuda-10.2-download-archive
+
+## Use cases
+* [Creation of clusters with a Voronoi diagram](https://poca-smlm.github.io/useCase_clustering_voronoi.html)
+* [Creation of clusters with a Delaunay triangulation](https://poca-smlm.github.io/useCase_clustering_delaunay.html)
+* [Colocalization analysis with Coloc-Tesseler](https://poca-smlm.github.io/useCase_coloc_tess.html)
+* [Colocalization analysis with object colocalization](https://poca-smlm.github.io/useCase_coloc_objs.html)

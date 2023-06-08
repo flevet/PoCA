@@ -104,7 +104,8 @@ void MyTableWidget::exportResults(const QString & _dir, const bool _askUser)
 	else
 		name = tmp;
 	std::cout << name.toLatin1().data() << std::endl;
-	std::ofstream fs(name.toLatin1().data());
+	QFileInfo info(name);
+	std::ofstream fs(info.absoluteFilePath().toStdString());
 	if (!fs){
 		std::cout << "Failed to open " << name.toLatin1().data() << " to save values" << std::endl;
 		return;

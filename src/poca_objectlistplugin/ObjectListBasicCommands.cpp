@@ -34,6 +34,7 @@
 #include <iomanip>
 
 #include <QtCore/QString>
+#include <QtCore/QFileInfo>
 #include <QtWidgets/QMessageBox>
 
 #include <DesignPatterns/ListDatasetsSingleton.hpp>
@@ -126,7 +127,8 @@ void ObjectListBasicCommands::saveStatsObj(const std::string& _filename, const s
 {
 	const std::map <std::string, poca::core::MyData*>& data = m_objects->getData();
 
-	std::ofstream fs(_filename);
+	QFileInfo info(_filename.c_str());
+	std::ofstream fs(info.absoluteFilePath().toStdString());
 
 	if (!fs.is_open()) {
 		std::cout << "Failed to open file " << _filename << std::endl;
@@ -162,7 +164,8 @@ void ObjectListBasicCommands::saveLocsObj(const std::string& _filename, const st
 
 	const std::map <std::string, poca::core::MyData*>& datacomp = bci->getData();
 	poca::core::stringList columnNames = bci->getNameData();
-	std::ofstream fs(_filename);
+	QFileInfo info(_filename.c_str());
+	std::ofstream fs(info.absoluteFilePath().toStdString());
 	if (!fs.is_open()) {
 		std::cout << "Failed to open file " << _filename << std::endl;
 		return;

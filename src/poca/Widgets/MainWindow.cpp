@@ -242,7 +242,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	setActiveMdiChild(NULL);
 
-	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.4.0"));
+	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.5.0"));
 	setUnifiedTitleAndToolBarOnMac(true);
 	statusBar()->showMessage(tr("Ready"));
 	m_lblPermanentStatus = new QLabel;
@@ -1395,8 +1395,16 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 			filename = _com->getParameter<std::string>("path");
 		if (filename.empty())
 			openFile();
-		else
-			openFile(filename.c_str(), _com);
+		else {
+			QFileInfo info(filename.c_str());
+			if(!info.exists()){
+				QMessageBox msgBox;
+				msgBox.setText("The file " + QString(filename.c_str()) + " does not exist");
+				msgBox.exec();
+				return;
+			}
+			openFile(info.absoluteFilePath(), _com);
+		}
 	}
 	else if (_com->nameCommand == "computeColocalization") {
 		std::vector <std::string> names = _com->getParameter<std::vector <std::string>>("datasetNames");

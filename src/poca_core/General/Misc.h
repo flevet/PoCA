@@ -310,6 +310,7 @@ namespace poca::geometry {
 }
 
 namespace poca::core::utils {
+	QTabWidget* addSingleTabWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget);
 	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first = true);
 }
 

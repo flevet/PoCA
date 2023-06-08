@@ -296,7 +296,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "ellipsoidRendering" || _nameCommand == "bboxSelection") {
+	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "ellipsoidRendering" || _nameCommand == "bboxSelection" || _nameCommand == "outlinePointRendering") {
 		bool val = _parameters.get<bool>();
 		return poca::core::CommandInfo(false, _nameCommand, val);
 	}

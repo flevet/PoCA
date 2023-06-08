@@ -419,6 +419,28 @@ namespace poca::geometry {
 }
 
 namespace poca::core::utils {
+	QTabWidget* addSingleTabWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget)
+	{
+		QTabWidget* tabW = NULL;
+		int pos = -1;
+		for (int n = 0; n < _parent->count(); n++)
+			if (_parent->tabText(n) == _nameMainTab)
+				pos = n;
+		if (pos != -1) {
+			tabW = static_cast <QTabWidget*>(_parent->widget(pos));
+		}
+		else {
+			pos = _parent->addTab(new QTabWidget, _nameMainTab);
+			tabW = static_cast <QTabWidget*>(_parent->widget(pos));
+		}
+
+		int index = tabW->addTab(_widget, _nameSubTab);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+		tabW->setTabVisible(index, false);
+#endif
+		return tabW;
+	}
+
 	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first)
 	{
 		int pos = -1;

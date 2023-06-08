@@ -31,6 +31,7 @@
 */
 
 #include <QtCore/QString>
+#include <QtCore/QFileInfo>
 
 #include <ctime>
 #include <fstream>
@@ -146,7 +147,8 @@ void ColocTesselerBasicCommands::execute(poca::core::CommandInfo* _infos)
 				name = name.left(index - 1);
 			name.append(QString("_color0%1.txt").arg(n + 1));
 
-			std::ofstream fs(name.toLatin1().data());
+			QFileInfo info(name);
+			std::ofstream fs(info.absoluteFilePath().toStdString());
 			fs << "id\tdensity color 1\tdensity color 2" << std::endl;
 
 			poca::core::Scatterplot* scatter = m_colocTesseler->scattergramPtrAt(n);
