@@ -613,7 +613,7 @@ namespace poca::geometry {
 
 				for (uint32_t i = 0; i < neighbors.nbElementsObject(index); i++) {
 					uint32_t indexNeigh = neighbors.elementIObject(index, i);
-					if (globalSelection[indexNeigh] != globalSelection[index]){
+					if (indexNeigh == std::numeric_limits<std::uint32_t>::max() || globalSelection[indexNeigh] != globalSelection[index]){
 						std::array<size_t, 3> edge = _delaunay->getOutline(index, i);
 						outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[0]], ys[edge[0]], zs[edge[0]]));
 						outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[1]], ys[edge[1]], zs[edge[1]]));

@@ -93,6 +93,7 @@ private:
     uint32_t                _minpts;
     Float               _epsilon;
     uint32_t                _datadim;
+    uint32_t            _nbPointsVisited;
 
     DistanceFunc        _disfunc;
 #if !BRUTEFORCE
@@ -130,6 +131,7 @@ int DBSCAN<T, Float>::Run(
     this->_disfunc = disfunc;
     this->_epsilon = eps;
     this->_datadim = dim;
+    this->_nbPointsVisited = 0;
 
 #if BRUTEFORCE
 #else
@@ -137,11 +139,15 @@ this->buildKdtree(this->_data);
 #endif // !BRUTEFORCE
 
 
-    for (uint32_t pid = 0; pid < this->_datalen; ++pid) {
+std::printf("Computing DBSCAN: 0 %%");
+for (uint32_t pid = 0; pid < this->_datalen; ++pid) {
         // Check if point forms a cluster
         this->_borderset.clear();
         if (!this->_visited[pid]) {
             this->_visited[pid] = true;
+
+            this->_nbPointsVisited++;
+            std::printf("\rComputing DBSCAN: %.2f %%", ((float)this->_nbPointsVisited / (float)this->_datalen * 100.f));
 
             // Outliner it maybe noise or on the border of one cluster.
             const std::vector<uint32_t> neightbors = this->regionQuery(pid);
@@ -185,6 +191,8 @@ this->buildKdtree(this->_data);
     this->destroyKdtree();
 #endif // !BRUTEFORCE
     
+    std::printf("\rComputing DBSCAN: 100 %%\n");
+
     return ERROR_TYPE::SUCCESS;
 
 }
@@ -258,6 +266,9 @@ void DBSCAN<T, Float>::expandCluster(const uint32_t cid, const std::vector<uint3
             this->_visited[pid] = true;
             const std::vector<uint32_t> pidneighbors = this->regionQuery(pid);
 
+            this->_nbPointsVisited++;
+            std::printf("\rComputing DBSCAN: %.2f %", ((float)this->_nbPointsVisited / (float)this->_datalen * 100.f));
+            
             // Core point, the neighbors will be expanded
             if (pidneighbors.size() >= this->_minpts) {
                 this->addToCluster(pid, cid);

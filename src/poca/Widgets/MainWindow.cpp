@@ -242,7 +242,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	setActiveMdiChild(NULL);
 
-	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.5.0"));
+	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.8.0"));
 	setUnifiedTitleAndToolBarOnMac(true);
 	statusBar()->showMessage(tr("Ready"));
 	m_lblPermanentStatus = new QLabel;
