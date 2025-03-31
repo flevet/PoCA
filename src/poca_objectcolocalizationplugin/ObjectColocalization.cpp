@@ -36,16 +36,16 @@
 #include <CGAL/Polygon_mesh_processing/orientation.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
-#include <Geometry/ObjectList.hpp>
 #include <Geometry/DetectionSet.hpp>
 #include <Geometry/CGAL_includes.hpp>
 #include <Factory/ObjectListFactory.hpp>
-//#include <Interfaces/PolygonFactoryInterface.hpp>
+#include <Interfaces/MyObjectInterface.hpp>
 #include <Interfaces/DelaunayTriangulationFactoryInterface.hpp>
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <General/Misc.h>
 #include <General/MyArray.hpp>
+#include <General/MyData.hpp>
 
 #include "ObjectColocalization.hpp"
 
@@ -53,6 +53,11 @@
 ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1, poca::core::MyObjectInterface* _obj2, const bool _sampling, const float _d, const uint32_t _sub, const uint32_t _minNbLocs) : poca::core::BasicComponent("ObjectColocalization"), m_samplingEnabled(_sampling), m_distance2D(_d), m_subdiv3D(_sub), m_minNbLocs(_minNbLocs), m_objectList(NULL), m_delaunay(NULL)
 {
 	m_objects[0] = _obj1; m_objects[1] = _obj2;
+
+	poca::geometry::ObjectListDelaunay* objectsDelaunay[] = { static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[0]->currentObjectList()),  static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[1]->currentObjectList()) };
+	if (objectsDelaunay[0] == NULL || objectsDelaunay[1] == NULL)
+		return;
+
 	computeOverlapLast();
 	//Compute stats
 	std::vector <std::vector<uint32_t>> infoColor1, infoColor2;
@@ -102,7 +107,7 @@ ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1,
 
 	poca::geometry::KdTree_DetectionPoint* kdtrees[2] = { NULL, NULL };
 	for (auto n : idx) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DetectionSet");
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 		if (dset) {
 			kdtrees[n] = dset->getKdTree();
@@ -110,7 +115,7 @@ ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1,
 	}
 	poca::geometry::DelaunayTriangulationInterface* delaunays[2] = { NULL, NULL };
 	for (auto n : idx) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* del = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (del)
 			delaunays[n] = del;
@@ -123,18 +128,18 @@ ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1,
 	const std::size_t num_results = 1;
 	std::vector<size_t> ret_index(num_results);
 	std::vector<double> out_dist_sqr(num_results);
-	std::vector <uint32_t> selectionDelaunayElements[2] = { m_objectsPerColor[0]->getLinkTriangulationFacesToObjects(), m_objectsPerColor[1]->getLinkTriangulationFacesToObjects() }; 
+	std::vector <uint32_t> selectionDelaunayElements[2] = { objectsDelaunay[0]->getLinkTriangulationFacesToObjects(), objectsDelaunay[1]->getLinkTriangulationFacesToObjects() };
 	for (size_t n = 0; n < m_infoColoc.size(); n++) {
 		uint32_t idObjColor[] = { m_infoColoc.at(n).first, m_infoColoc.at(n).second };
 
 		for (auto cur = 0; cur < 2; cur++) {
 			auto curColor = idColor[cur], otherColor = idOtherColor[cur];
-			const poca::core::MyArrayUInt32& locs = m_objectsPerColor[curColor]->getLocsObjects();
+			const poca::core::MyArrayUInt32& locs = m_objectsPerColor[curColor]->currentObjectList()->getLocsObjects();
 			const std::vector <uint32_t>& rangeLocs = locs.getFirstElements();
 			const std::vector <uint32_t>& idxLocs = locs.getData();
-			const float* xsLocs = m_objectsPerColor[curColor]->getXs();
-			const float* ysLocs = m_objectsPerColor[curColor]->getYs();
-			const float* zsLosc = m_objectsPerColor[curColor]->getZs();
+			const float* xsLocs = objectsDelaunay[curColor]->getXs();
+			const float* ysLocs = objectsDelaunay[curColor]->getYs();
+			const float* zsLosc = objectsDelaunay[curColor]->getZs();
 
 			poca::geometry::KdTree_DetectionPoint* otherKdtree = kdtrees[otherColor];
 			poca::geometry::DelaunayTriangulationInterface* otherD = delaunays[otherColor];
@@ -143,7 +148,7 @@ ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1,
 
 			for (uint32_t j = rangeLocs[idObj]; j < rangeLocs[idObj + 1]; j++) {
 				uint32_t idLoc = idxLocs[j];
-				float x = xsLocs[idLoc], y = ysLocs[idLoc], z = zsLosc != NULL ? zsLosc[idLoc] : 0.f;
+				float x = xsLocs[idLoc], y = ysLocs[idLoc], z = zsLosc != NULL ? zsLosc[idLoc] : 0;
 				const double queryPt[3] = { x, y, z };
 				otherKdtree->knnSearch(&queryPt[0], num_results, &ret_index[0], &out_dist_sqr[0]);
 				uint32_t idxDelaunayFace = otherD->indexTriangleOfPoint(x, y, z, ret_index[0]);
@@ -152,7 +157,7 @@ ObjectColocalization::ObjectColocalization(poca::core::MyObjectInterface* _obj1,
 					locsPerOverlap.push_back(poca::core::Vec3mf(x, y, z));
 					m_xsOrigPoints.push_back(x);
 					m_ysOrigPoints.push_back(y);
-					if (zsLosc != NULL)
+					if(zsLosc != NULL)
 						m_zsOrigPoints.push_back(z);
 				}
 			}
@@ -168,7 +173,7 @@ ObjectColocalization::~ObjectColocalization()
 {
 }
 
-poca::core::BasicComponent* ObjectColocalization::copy()
+poca::core::BasicComponentInterface* ObjectColocalization::copy()
 {
 	return new ObjectColocalization(*this);
 }
@@ -177,7 +182,7 @@ void ObjectColocalization::computeOverlapLast2()
 {
 	poca::geometry::KdTree_DetectionPoint* kdtrees[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DetectionSet");
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 		if (dset) {
 			kdtrees[n] = dset->getKdTree();
@@ -185,20 +190,24 @@ void ObjectColocalization::computeOverlapLast2()
 	}
 	poca::geometry::DelaunayTriangulationInterface* delaunays[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* del = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (del)
 			delaunays[n] = del;
 	}
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("ObjectList");
-		poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("ObjectLists");
+		poca::geometry::ObjectLists* obj = dynamic_cast <poca::geometry::ObjectLists*>(bci);
 		if (obj)
 			m_objectsPerColor[n] = obj;
 	}
-	m_dimension = m_objectsPerColor[0]->dimension();
+	m_dimension = m_objectsPerColor[0]->currentObjectList()->dimension();
 
-	std::vector <uint32_t> selectionDelaunayElements[2] = { m_objectsPerColor[0]->getLinkTriangulationFacesToObjects(), m_objectsPerColor[1]->getLinkTriangulationFacesToObjects() };
+	poca::geometry::ObjectListDelaunay* objectsDelaunay[] = { static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[0]->currentObjectList()),  static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[1]->currentObjectList()) };
+	if (objectsDelaunay[0] == NULL || objectsDelaunay[1] == NULL)
+		return;
+
+	std::vector <uint32_t> selectionDelaunayElements[2] = { objectsDelaunay[0]->getLinkTriangulationFacesToObjects(), objectsDelaunay[1]->getLinkTriangulationFacesToObjects() };
 	size_t nbLocsObjs[2], firstIndexObjPerColor = 0;
 
 	const std::size_t num_results = 1;
@@ -206,8 +215,8 @@ void ObjectColocalization::computeOverlapLast2()
 	std::vector<double> out_dist_sqr(num_results);
 
 	for (size_t n = 0; n < 2; n++) {
-		const float* xsobj = m_objectsPerColor[n]->getXs(), * ysobj = m_objectsPerColor[n]->getYs(), * zsobj = m_objectsPerColor[n]->getZs();
-		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->getLocsObjects();
+		const float* xsobj = objectsDelaunay[n]->getXs(), * ysobj = objectsDelaunay[n]->getYs(), * zsobj = objectsDelaunay[n]->getZs();
+		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->currentObjectList()->getLocsObjects();
 		const std::vector <uint32_t>& data = locs.getData();
 		const std::vector <uint32_t>& indexes = locs.getFirstElements();
 
@@ -218,7 +227,7 @@ void ObjectColocalization::computeOverlapLast2()
 		m_nbObjectsPerColor[n] = locs.nbElements();
 		if (m_dimension == 2) {
 			//Add some points on the objects contour, to properly sample them
-			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->getOutlinesObjects();
+			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->currentObjectList()->getOutlinesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = outlines.getData();
 			const std::vector <uint32_t>& indexesO = outlines.getFirstElements();
 			for (size_t i = 0; i < m_nbObjectsPerColor[n]; i++)
@@ -251,7 +260,7 @@ void ObjectColocalization::computeOverlapLast2()
 		}
 		else {
 			//Add some points on the objects surface, to properly sample them
-			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->getTrianglesObjects();
+			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->currentObjectList()->getTrianglesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = triangles.getData();
 			const std::vector <uint32_t>& indexesO = triangles.getFirstElements();
 			std::vector <bool> cutTriangles;
@@ -394,7 +403,7 @@ void ObjectColocalization::computeOverlapLast2()
 	std::cout << __FUNCTION__ << " - " << __LINE__ << std::endl;
 	poca::geometry::ObjectListFactory factoryObjects;
 	//m_objectList = factoryObjects.createObjectListAlreadyIdentified(m_delaunay, m_selectionIntersection, FLT_MAX, m_minNbLocs);
-	m_objectList = factoryObjects.createObjectListFromDelaunay(m_delaunay, m_selectedTetrahedra, FLT_MAX, m_minNbLocs);
+	m_objectList = static_cast<poca::geometry::ObjectListDelaunay*>(factoryObjects.createObjectListFromDelaunay(m_delaunay, m_selectedTetrahedra, FLT_MAX, m_minNbLocs));
 	//m_objectList = factoryObjects.createObjectList(m_delaunay, selectedLocsOverlapObjs, FLT_MAX, m_minNbLocs);
 	m_objectList->setBoundingBox(m_delaunay->boundingBox());
 
@@ -407,9 +416,13 @@ void ObjectColocalization::computeOverlapLast2()
 
 void ObjectColocalization::computeOverlapLast()
 {
+	poca::geometry::ObjectListDelaunay* objectsDelaunay[] = { static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[0]->currentObjectList()),  static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[1]->currentObjectList()) };
+	if (objectsDelaunay[0] == NULL || objectsDelaunay[1] == NULL)
+		return;
+
 	poca::geometry::KdTree_DetectionPoint* kdtrees[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DetectionSet");
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 		if (dset) {
 			kdtrees[n] = dset->getKdTree();
@@ -417,20 +430,20 @@ void ObjectColocalization::computeOverlapLast()
 	}
 	poca::geometry::DelaunayTriangulationInterface* delaunays[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* del = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (del)
 			delaunays[n] = del;
 	}
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("ObjectList");
-		poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("ObjectLists");
+		poca::geometry::ObjectLists* obj = dynamic_cast <poca::geometry::ObjectLists*>(bci);
 		if (obj)
 			m_objectsPerColor[n] = obj;
 	}
-	m_dimension = m_objectsPerColor[0]->dimension();
+	m_dimension = m_objectsPerColor[0]->currentObjectList()->dimension();
 
-	std::vector <uint32_t> selectionDelaunayElements[2] = { m_objectsPerColor[0]->getLinkTriangulationFacesToObjects(), m_objectsPerColor[1]->getLinkTriangulationFacesToObjects() };
+	std::vector <uint32_t> selectionDelaunayElements[2] = { objectsDelaunay[0]->getLinkTriangulationFacesToObjects(), objectsDelaunay[1]->getLinkTriangulationFacesToObjects() };
 	size_t nbLocsObjs[2], firstIndexObjPerColor = 0;
 
 	const std::size_t num_results = 1;
@@ -438,8 +451,8 @@ void ObjectColocalization::computeOverlapLast()
 	std::vector<double> out_dist_sqr(num_results);
 
 	for (size_t n = 0; n < 2; n++) {
-		const float* xsobj = m_objectsPerColor[n]->getXs(), * ysobj = m_objectsPerColor[n]->getYs(), * zsobj = m_objectsPerColor[n]->getZs();
-		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->getLocsObjects();
+		const float* xsobj = objectsDelaunay[n]->getXs(), * ysobj = objectsDelaunay[n]->getYs(), * zsobj = objectsDelaunay[n]->getZs();
+		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->currentObjectList()->getLocsObjects();
 		const std::vector <uint32_t>& data = locs.getData();
 		const std::vector <uint32_t>& indexes = locs.getFirstElements();
 	
@@ -450,7 +463,7 @@ void ObjectColocalization::computeOverlapLast()
 		m_nbObjectsPerColor[n] = locs.nbElements();
 		if (m_dimension == 2) {
 			//Add some points on the objects contour, to properly sample them
-			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->getOutlinesObjects();
+			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->currentObjectList()->getOutlinesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = outlines.getData();
 			const std::vector <uint32_t>& indexesO = outlines.getFirstElements();
 			for (size_t i = 0; i < m_nbObjectsPerColor[n]; i++)
@@ -483,7 +496,7 @@ void ObjectColocalization::computeOverlapLast()
 		}
 		else {
 			//Add some points on the objects surface, to properly sample them
-			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->getTrianglesObjects();
+			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->currentObjectList()->getTrianglesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = triangles.getData();
 			const std::vector <uint32_t>& indexesO = triangles.getFirstElements();
 			std::vector <bool> cutTriangles;
@@ -652,7 +665,7 @@ void ObjectColocalization::computeOverlapLast()
 
 	poca::geometry::ObjectListFactory factoryObjects;
 	//m_objectList = factoryObjects.createObjectListAlreadyIdentified(m_delaunay, m_selectionIntersection, FLT_MAX, m_minNbLocs);
-	m_objectList = factoryObjects.createObjectListFromDelaunay(m_delaunay, m_selectedTetrahedra, FLT_MAX, m_minNbLocs);
+	m_objectList = static_cast<poca::geometry::ObjectListDelaunay*>(factoryObjects.createObjectListFromDelaunay(m_delaunay, m_selectedTetrahedra, FLT_MAX, m_minNbLocs));
 	//m_objectList = factoryObjects.createObjectList(m_delaunay, selectedLocsOverlapObjs, FLT_MAX, m_minNbLocs);
 	m_objectList->setBoundingBox(m_delaunay->boundingBox());
 
@@ -661,9 +674,13 @@ void ObjectColocalization::computeOverlapLast()
 
 void ObjectColocalization::computeOverlap()
 {
+	poca::geometry::ObjectListDelaunay* objectsDelaunay[] = { static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[0]->currentObjectList()),  static_cast<poca::geometry::ObjectListDelaunay*>(m_objectsPerColor[1]->currentObjectList()) };
+	if (objectsDelaunay[0] == NULL || objectsDelaunay[1] == NULL)
+		return;
+
 	poca::geometry::KdTree_DetectionPoint* kdtrees[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DetectionSet");
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 		if (dset) {
 			kdtrees[n] = dset->getKdTree();
@@ -671,25 +688,25 @@ void ObjectColocalization::computeOverlap()
 	}
 	poca::geometry::DelaunayTriangulationInterface* delaunays[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* del = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (del)
 			delaunays[n] = del;
 	}
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("ObjectList");
-		poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("ObjectLists");
+		poca::geometry::ObjectLists* obj = dynamic_cast <poca::geometry::ObjectLists*>(bci);
 		if (obj)
 			m_objectsPerColor[n] = obj;
 	}
-	m_dimension = m_objectsPerColor[0]->dimension();
+	m_dimension = m_objectsPerColor[0]->currentObjectList()->dimension();
 
 	std::vector <uint32_t> selectionDelaunayElements[2];
 	size_t nbLocsObjs[2], firstIndexObjPerColor = 0;
 
 	for (size_t n = 0; n < 2; n++) {
-		const float* xsobj = m_objectsPerColor[n]->getXs(), * ysobj = m_objectsPerColor[n]->getYs(), * zsobj = m_objectsPerColor[n]->getZs();
-		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->getLocsObjects();
+		const float* xsobj = objectsDelaunay[n]->getXs(), * ysobj = objectsDelaunay[n]->getYs(), * zsobj = objectsDelaunay[n]->getZs();
+		const poca::core::MyArrayUInt32& locs = m_objectsPerColor[n]->currentObjectList()->getLocsObjects();
 		const std::vector <uint32_t>& data = locs.getData();
 		const std::vector <uint32_t>& indexes = locs.getFirstElements();
 		m_nbObjectsPerColor[n] = locs.nbElements();
@@ -703,7 +720,7 @@ void ObjectColocalization::computeOverlap()
 			}*/
 		if (m_dimension == 2) {
 			//Add some points on the objects contour, to properly sample them
-			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->getOutlinesObjects();
+			const poca::core::MyArrayVec3mf& outlines = m_objectsPerColor[n]->currentObjectList()->getOutlinesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = outlines.getData();
 			const std::vector <uint32_t>& indexesO = outlines.getFirstElements();
 			for (size_t i = 0; i < m_nbObjectsPerColor[n]; i++)
@@ -736,7 +753,7 @@ void ObjectColocalization::computeOverlap()
 		}
 		else {
 			//Add some points on the objects surface, to properly sample them
-			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->getTrianglesObjects();
+			const poca::core::MyArrayVec3mf& triangles = m_objectsPerColor[n]->currentObjectList()->getTrianglesObjects();
 			const std::vector <poca::core::Vec3mf>& dataO = triangles.getData();
 			const std::vector <uint32_t>& indexesO = triangles.getFirstElements();
 			//Only contours of the objects
@@ -794,7 +811,7 @@ void ObjectColocalization::computeOverlap()
 		}
 		nbLocsObjs[n] = m_xs.size();
 		firstIndexObjPerColor += m_nbObjectsPerColor[n];
-		selectionDelaunayElements[n] = m_objectsPerColor[n]->getLinkTriangulationFacesToObjects();
+		selectionDelaunayElements[n] = objectsDelaunay[n]->getLinkTriangulationFacesToObjects();
 	}
 
 	/*uint32_t idD = 1;
@@ -1005,7 +1022,7 @@ void ObjectColocalization::computeOverlap()
 	std::cout << __FUNCTION__ << " - " << __LINE__ << std::endl;
 	poca::geometry::ObjectListFactory factoryObjects;
 	//m_objectList = factoryObjects.createObjectListAlreadyIdentified(m_delaunay, m_selectionIntersection, FLT_MAX, m_minNbLocs);
-	m_objectList = factoryObjects.createObjectListFromDelaunay(m_delaunay, tmpSelection, FLT_MAX, m_minNbLocs);
+	m_objectList = static_cast<poca::geometry::ObjectListDelaunay*>(factoryObjects.createObjectListFromDelaunay(m_delaunay, tmpSelection, FLT_MAX, m_minNbLocs));
 	//m_objectList = factoryObjects.createObjectList(m_delaunay, selectedLocsOverlapObjs, FLT_MAX, m_minNbLocs);
 	m_objectList->setBoundingBox(m_delaunay->boundingBox());
 
@@ -1020,7 +1037,7 @@ void ObjectColocalization::computeOverlap2()
 {
 	poca::geometry::KdTree_DetectionPoint* kdtrees[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DetectionSet");
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 		if (dset) {
 			kdtrees[n] = dset->getKdTree();
@@ -1028,15 +1045,15 @@ void ObjectColocalization::computeOverlap2()
 	}
 	poca::geometry::DelaunayTriangulationInterface* delaunays[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* del = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (del)
 			delaunays[n] = del;
 	}
-	poca::geometry::ObjectList* objLists[2] = { NULL, NULL };
+	poca::geometry::ObjectListDelaunay* objLists[2] = { NULL, NULL };
 	for (size_t n = 0; n < 2; n++) {
-		poca::core::BasicComponent* bci = m_objects[n]->getBasicComponent("ObjectList");
-		poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
+		poca::core::BasicComponentInterface* bci = m_objects[n]->getBasicComponent("ObjectListDelaunay");
+		poca::geometry::ObjectListDelaunay* obj = dynamic_cast <poca::geometry::ObjectListDelaunay*>(bci);
 		if (obj)
 			objLists[n] = obj;
 	}
@@ -1284,7 +1301,7 @@ void ObjectColocalization::computeOverlap2()
 	//Now we can use m_selectionIntersection to create an objectlist of the overlaps
 	std::cout << __FUNCTION__ << " - " << __LINE__ << std::endl;
 	poca::geometry::ObjectListFactory factoryObjects;
-	m_objectList = factoryObjects.createObjectListAlreadyIdentified(m_delaunay, m_selectionIntersection, FLT_MAX, 5);
+	m_objectList = static_cast<poca::geometry::ObjectListDelaunay*>(factoryObjects.createObjectListAlreadyIdentified(m_delaunay, m_selectionIntersection, FLT_MAX, 5));
 	m_objectList->setBoundingBox(m_delaunay->boundingBox());
 
 	std::cout << __FUNCTION__ << " - " << __LINE__ << std::endl;
@@ -1338,15 +1355,14 @@ poca::core::BoundingBox ObjectColocalization::computeBoundingBoxElement(const in
 
 const float ObjectColocalization::getAreaObjectColor(const uint32_t _idxColor, const uint32_t _idxObj) const
 {
-	assert(_idxColor < 2 && _idxObj < m_objectsPerColor[_idxColor]->nbObjects());
-	const std::vector <float>& areas = m_objectsPerColor[_idxColor]->dimension() == 2 ? m_objectsPerColor[_idxColor]->getOriginalHistogram("area")->getValues() : m_objectsPerColor[_idxColor]->getOriginalHistogram("volume")->getValues();
+	assert(_idxColor < 2 && _idxObj < m_objectsPerColor[_idxColor]->currentObjectList()->nbObjects());
+	const std::vector <float>& areas = m_objectsPerColor[_idxColor]->currentObjectList()->dimension() == 2 ? m_objectsPerColor[_idxColor]->currentObjectList()->getMyData("area")->getData<float>() : m_objectsPerColor[_idxColor]->currentObjectList()->getMyData("volume")->getData<float>();
 	return areas[_idxObj];
 }
 
 const float ObjectColocalization::getAreaObjectIntersection(const uint32_t _idxObj) const
 {
 	assert(_idxObj < m_objectList->nbObjects());
-	auto tmp = m_objectList->dimension();
-	const std::vector <float>& areas = m_objectList->dimension() == 2 ? m_objectList->getOriginalHistogram("area")->getValues() : m_objectList->getOriginalHistogram("volume")->getValues();
+	const std::vector <float>& areas = m_objectList->dimension() == 2 ? m_objectList->getMyData("area")->getData<float>() : m_objectList->getMyData("volume")->getData<float>();
 	return areas[_idxObj];
 }

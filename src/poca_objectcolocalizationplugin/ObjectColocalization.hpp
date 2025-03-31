@@ -35,13 +35,14 @@
 
 //#include <Interfaces/PolygonInterface.hpp>
 #include <General/BasicComponent.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <Geometry/ObjectListDelaunay.hpp>
 #include <Geometry/CGAL_includes.hpp>
 
 
 namespace poca::geometry {
 	class MyObjectInterface;
 	class DelaunayTriangulationInterface;
-	class ObjectList;
 }
 
 class ObjectColocalization : public poca::core::BasicComponent {
@@ -49,13 +50,13 @@ public:
 	ObjectColocalization(poca::core::MyObjectInterface*, poca::core::MyObjectInterface*, const bool = true, const float = 0.5f, const uint32_t = 2, const uint32_t = 5);
 	~ObjectColocalization();
 
-	poca::core::BasicComponent* copy();
+	poca::core::BasicComponentInterface* copy();
 
 	poca::core::BoundingBox computeBoundingBoxElement(const int) const;
 
 	poca::geometry::DelaunayTriangulationInterface* getDelaunay() const { return m_delaunay; }
-	poca::geometry::ObjectList* getObjectsOriginalColor(const uint32_t _idx) const { return m_objectsPerColor[_idx]; }
-	poca::geometry::ObjectList* getObjectsOverlap() const { return m_objectList; }
+	poca::geometry::ObjectListInterface* getObjectsOriginalColor(const uint32_t _idx) const { return m_objectsPerColor[_idx]->currentObjectList(); }
+	poca::geometry::ObjectListInterface* getObjectsOverlap() const { return m_objectList; }
 	const std::vector <uint32_t>& getSelectionOverlap() const { return m_selectionIntersection; }
 	const std::vector <float>& getXs() const { return m_xs; }
 	const std::vector <float>& getYs() const { return m_ys; }
@@ -84,7 +85,7 @@ protected:
 
 protected:
 	poca::core::MyObjectInterface* m_objects[2];
-	poca::geometry::ObjectList* m_objectsPerColor[2];
+	poca::geometry::ObjectLists* m_objectsPerColor[2];
 
 	bool m_samplingEnabled;
 	float m_distance2D;
@@ -93,7 +94,7 @@ protected:
 	std::vector <float> m_xs, m_ys, m_zs;
 	std::vector <float> m_xsOrigPoints, m_ysOrigPoints, m_zsOrigPoints;
 	poca::geometry::DelaunayTriangulationInterface* m_delaunay;
-	poca::geometry::ObjectList* m_objectList;
+	poca::geometry::ObjectListDelaunay* m_objectList;
 	std::vector <uint32_t> m_selectionIntersection;
 
 	poca::core::MyArrayUInt32 m_infoColor1, m_infoColor2;

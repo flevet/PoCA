@@ -34,10 +34,11 @@
 
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <General/Engine.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <General/PluginList.hpp>
 #include <Objects/MyObject.hpp>
+#include <General/Engine.hpp>
 
 #include "ObjectColocalizationPlugin.hpp"
 #include "ObjectColocalization.hpp"
@@ -204,8 +205,8 @@ void ObjectColocalizationConstructionCommand::execute(poca::core::CommandInfo* _
 	if (_ci->nameCommand == "computeObjectColocalization") {
 		for (size_t n = 0; n < 2; n++) {
 			poca::core::MyObjectInterface* object = m_object->getObject(n);
-			poca::core::BasicComponent* bci = object->getBasicComponent("ObjectList");
-			poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
+			poca::core::BasicComponentInterface* bci = object->getBasicComponent("ObjectLists");
+			poca::geometry::ObjectLists* obj = dynamic_cast <poca::geometry::ObjectLists*>(bci);
 			if (obj == NULL)
 				return;
 		}
@@ -246,11 +247,11 @@ void ObjectColocalizationPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterf
 {
 	std::string nameStr = name().toLatin1().data();
 	m_parameters[nameStr]["samplingEnabled"] = true;
-	m_parameters[nameStr]["distanceSampling"] = 50.f;
+	m_parameters[nameStr]["distanceSampling"] = 0.5f;
 	m_parameters[nameStr]["subdivisionSampling"] = (uint32_t)2;
 	m_parameters[nameStr]["minNbPoints"] = (uint32_t)5;
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(nameStr)) {
 		nlohmann::json param = parameters[nameStr];
 		if (param.contains("samplingEnabled"))
@@ -309,7 +310,7 @@ poca::core::MyObjectInterface* ObjectColocalizationPlugin::actionTriggered(QObje
 		/*if (_obj == NULL || _obj->nbColors() < 2) return NULL;
 		for (size_t n = 0; n < 2; n++) {
 			poca::core::MyObjectInterface* object = _obj->getObject(n);
-			poca::core::BasicComponent* bci = object->getBasicComponent("ObjectList");
+			poca::core::BasicComponentInterface* bci = object->getBasicComponent("ObjectList");
 			poca::geometry::ObjectList* obj = dynamic_cast <poca::geometry::ObjectList*>(bci);
 			if (obj == NULL)
 				return NULL;
@@ -360,12 +361,9 @@ void ObjectColocalizationPlugin::addCommands(poca::core::CommandableObject* _bc)
 	}
 }
 
-void ObjectColocalizationPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void ObjectColocalizationPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
 void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com)

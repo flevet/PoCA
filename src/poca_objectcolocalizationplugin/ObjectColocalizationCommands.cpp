@@ -35,12 +35,12 @@
 #include <gl/GL.h>
 #include <QtGui/QOpenGLFramebufferObject>
 
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Geometry/DelaunayTriangulation.hpp>
 #include <OpenGL/Shader.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <General/Misc.h>
-#include <Interfaces/HistogramInterface.hpp>
+#include <General/Histogram.hpp>
 #include <OpenGL/Helper.h>
 
 #include "ObjectColocalizationCommands.hpp"
@@ -50,8 +50,8 @@ ObjectColocalizationCommands::ObjectColocalizationCommands(ObjectColocalization*
 {
 	m_colocalization = _coloc;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "pointRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "shapeRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "bboxSelection", true));
@@ -111,7 +111,7 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos)
 			generateBoundingBoxSelection(m_idSelection);
 		}
 	}
-	else if (_infos->nameCommand == "boundingBoxSelectedObject") {
+	else if (_infos->nameCommand == "doubleClickCamera") {
 		size_t idSelection = m_idSelection;
 		//if (_infos->hasParameter("objectID"))
 		//	idSelection = _infos->getParameter<size_t>("objectID");
@@ -179,7 +179,7 @@ void ObjectColocalizationCommands::createDisplay()
 {
 	freeGPUMemory();
 
-	poca::geometry::ObjectList* obj = m_colocalization->getObjectsOverlap();
+	poca::geometry::ObjectListInterface* obj = m_colocalization->getObjectsOverlap();
 	poca::geometry::DelaunayTriangulationInterface* delau = m_colocalization->getDelaunay();
 	std::vector <poca::core::Vec3mf> triangles;
 
@@ -338,14 +338,15 @@ QString ObjectColocalizationCommands::getInfosTriangle(const int _id) const
 
 void ObjectColocalizationCommands::generateFeatureBuffer(poca::core::HistogramInterface* _histogram)
 {
-	poca::geometry::ObjectList* objects = m_colocalization->getObjectsOverlap();
+	poca::geometry::ObjectListInterface* objects = m_colocalization->getObjectsOverlap();
 	if (_histogram == NULL)
 		_histogram = objects->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
+	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(_histogram);
+	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = objects->getSelection();
 	if (values.empty() || selection.empty()) return;
-	m_minOriginalFeature = _histogram->getMin();
-	m_maxOriginalFeature = _histogram->getMax();
+	m_minOriginalFeature = histogram->getMin();
+	m_maxOriginalFeature = histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
 	std::vector <float> featureLocs, featureValues, featureOutlines;

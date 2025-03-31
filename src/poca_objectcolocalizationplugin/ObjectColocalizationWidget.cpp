@@ -40,9 +40,10 @@
 #include <General/BasicComponent.hpp>
 #include <Factory/ObjectListFactory.hpp>
 #include <General/CommandableObject.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <General/MyData.hpp>
 
 #include "ObjectColocalizationWidget.hpp"
 #include "ObjectColocalization.hpp"
@@ -214,7 +215,7 @@ ObjectColocalizationWidget::~ObjectColocalizationWidget()
 
 void ObjectColocalizationWidget::actionNeeded()
 {
-	poca::core::BasicComponent* bc = m_object->getBasicComponent("ObjectColocalization");
+	poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
 	if (!bc) return;
 	ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bc);
 	if (!coloc) return;
@@ -360,7 +361,7 @@ void ObjectColocalizationWidget::actionNeeded()
 
 void ObjectColocalizationWidget::actionNeeded(bool _val)
 {
-	poca::core::BasicComponent* bc = m_object->getBasicComponent("ObjectColocalization");
+	poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
 	if (!bc) return;
 	poca::core::CommandableObject* coloc = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -408,7 +409,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		std::string action = _ci->getParameter<std::string>("action");
 		if (action == "save")
 			_ci->addParameter("dir", _obj->getDir());
-		poca::core::BasicComponent* bc = m_object->getBasicComponent("ObjectColocalization");
+		poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
 		if (!bc) return;
 		ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bc);
 		if (!coloc) return;
@@ -416,7 +417,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		actionDone = true;
 	}
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" ||_ci->nameCommand == "selected" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering" || _ci->nameCommand == "fill" || _ci->nameCommand == "delaunayRendering" || _ci->nameCommand == "selectedDelaunayRendering") {
-		poca::core::BasicComponent* bc = m_object->getBasicComponent("ObjectColocalization");
+		poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
 		bc->executeCommand(_ci);
 		actionDone = true;
 	}
@@ -426,7 +427,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 			if (action == "save")
 				_ci->addParameter("dir", _obj->getDir());
 		}
-		poca::core::BasicComponent* bc = obj->getBasicComponent("ObjectColocalization");
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectColocalization");
 		if (!bc) return;
 		ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bc);
 		if (!coloc) return;
@@ -440,7 +441,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 	}
 	else if (_ci->nameCommand == "updatePickedObject") {
 		poca::core::CommandInfo ci3(false, "getObjectPickedID");
-		poca::core::BasicComponent* bc = _obj->getBasicComponent("ObjectColocalization");
+		poca::core::BasicComponentInterface* bc = _obj->getBasicComponent("ObjectColocalization");
 		if (bc != NULL) {
 			bc->executeCommand(&ci3);
 			if (!ci3.json.empty() && ci3.hasParameter("id")) {
@@ -463,15 +464,17 @@ void ObjectColocalizationWidget::update(poca::core::SubjectInterface* _subject, 
 
 	bool visible = (obj != NULL && obj->hasBasicComponent("ObjectColocalization"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsObjectColocalizationWidget") {
-		poca::core::BasicComponent* bci = obj->getBasicComponent("ObjectColocalization");
+		poca::core::BasicComponentInterface* bci = obj->getBasicComponent("ObjectColocalization");
 		if (!bci) return;
 		ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bci);
 		if (!coloc) return;
-		poca::geometry::ObjectList * objList = coloc->getObjectsOverlap();
+		poca::geometry::ObjectListInterface* objList = coloc->getObjectsOverlap();
 		if (objList == NULL) return;
 
 		poca::core::stringList nameData = objList->getNameData();
@@ -526,11 +529,11 @@ void ObjectColocalizationWidget::update(poca::core::SubjectInterface* _subject, 
 		columnCount++;
 		for (std::string type : nameData) {
 			if (type != "nbLocs") {
-				poca::core::HistogramInterface* hist = objList->getOriginalHistogram(type);
-				if (hist == NULL) continue;
-				const std::vector <float>& values = hist->getValues();
-				for (size_t rowCount = 0; rowCount < values.size(); rowCount++)
-					m_tableObjects->setItem((int)rowCount, (int)columnCount, new QTableWidgetItem(QString::number(values[rowCount])));
+				if (objList->hasData(type)) {
+					const std::vector <float>& values = objList->getMyData(type)->getData<float>();
+					for (size_t rowCount = 0; rowCount < values.size(); rowCount++)
+						m_tableObjects->setItem((int)rowCount, (int)columnCount, new QTableWidgetItem(QString::number(values[rowCount])));
+				}
 			}
 			else {
 				//Since we may have added locs to have a better approximation of the overlap objects
