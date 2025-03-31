@@ -39,6 +39,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
 
 #include <DesignPatterns/Observer.hpp>
 #include <DesignPatterns/MediatorWObjectFWidget.hpp>
@@ -66,6 +67,8 @@ protected:
 	void saveROIs(poca::core::MyObjectInterface*);
 	void setColorROIs(QPushButton*, const unsigned char, const unsigned char, const unsigned char);
 
+	const float getXY() const;
+
 	protected slots:
 	void actionNeeded();
 	void actionNeeded(bool);
@@ -79,6 +82,8 @@ protected:
 	QLabel* m_colorSelectedROILbl, * m_colorUnselectedROILbl;
 	QPushButton* m_colorSelectedROIBtn, * m_colorUnselectedROIBtn;
 	QCheckBox* m_cboxDisplayROIs, * m_cboxDisplayLabelROIs;
+	QLineEdit* m_pixXYEdit;
+
 
 	poca::core::MyObjectInterface* m_object;
 	poca::core::MediatorWObjectFWidget * m_mediator;

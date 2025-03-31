@@ -57,7 +57,9 @@
 #include <QtWidgets/QActionGroup>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
+#include <QtGui/QImage>
 #include <QtCore/QMimeData>
+#include <dtv.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -68,20 +70,23 @@
 #include <Plot/Icons.hpp>
 #include <DesignPatterns/MediatorWObjectFWidget.hpp>
 #include <General/BasicComponent.hpp>
+#include <General/BasicComponentList.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
 #include <General/Misc.h>
 #include <General/PluginList.hpp>
 #include <General/PythonInterpreter.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <Objects/MyObjectDisplayCommand.hpp>
 #include <OpenGL/Helper.h>
 #include <General/MyData.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
+#include <Interfaces/ObjectIndicesFactoryInterface.hpp>
+#include <General/Image.hpp>
+#include <General/Engine.hpp>
 
-#include "../../include/LoaderLocalizationsInterface.hpp"
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
 
@@ -121,21 +126,38 @@ void decomposePathToDirAndFile(const QString& _path, QString& _dirQS, QString& _
 
 MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 {
+	// Get current directory
+	poca::core::PrintFullPath(".\\");
+
+	//Add needed path to environment variable PATH
+	char buf[poca::core::ENV_BUF_SIZE];
+	std::size_t bufsize = poca::core::ENV_BUF_SIZE;
+	std::string pathToAdd = ".\\external\\";
+	int e = getenv_s(&bufsize, buf, bufsize, "PATH");
+	printf("value of PATH: %.*s\n", (int)sizeof(buf), buf);
+	if (e) {
+		//std::cerr << "`getenv_s` failed, returned " << e << '\n';
+		//exit(EXIT_FAILURE);
+	}
+	std::string env_path, orig_path = buf;
+	env_path = pathToAdd + ";";
+	env_path += orig_path;
+	e = _putenv_s("PATH", env_path.c_str());
+	if (e) {
+		std::cerr << "`_putenv_s` failed, returned " << e << std::endl;
+	}
+	std::cout << "new value of path: " << env_path << std::endl;
+
 	QSurfaceFormat format;
 	format.setVersion(2, 1);
 	format.setProfile(QSurfaceFormat::CoreProfile);
 	QSurfaceFormat::setDefaultFormat(format);
 
-	loadPlugin();
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	engine->initialize();
 
-
-	std::map <std::string, std::any> singletons;
-	poca::core::initializeAllSingletons(singletons);
-	poca::opengl::HelperSingleton* help = poca::opengl::HelperSingleton::instance();
-	singletons["HelperSingleton"] = help;
-
-	m_plugins->setSingletons(singletons);
-
+	poca::core::MediatorWObjectFWidget* mediator = engine->getMediator();
+	poca::core::MacroRecorderSingleton* macroRecord = std::any_cast <poca::core::MacroRecorderSingleton*>(engine->getSingleton("MacroRecorderSingleton"));
 	m_mdiArea = new MyMdiArea;
 	m_mdiArea->setObjectName("MdiArea");
 	m_mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -149,7 +171,6 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	createMenus();
 	createStatusBar();
 
-	poca::core::MediatorWObjectFWidget * mediator = poca::core::MediatorWObjectFWidget::instance();
 	m_tabWidget = new QTabWidget(this);
 	m_tabWidget->setObjectName("TabWidget");
 	m_tabWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Expanding);
@@ -160,33 +181,32 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	QTabWidget* tabMisc = new QTabWidget;
 	tabMisc->addTab(m_mfw, QObject::tr("General"));
 	m_tabWidget->addTab(tabMisc, QObject::tr("Misc."));
-	QObject::connect(m_mfw, SIGNAL(savePosition()), this, SLOT(savePositionCameraSlot()));
-	QObject::connect(m_mfw, SIGNAL(loadPosition()), this, SLOT(loadPositionCameraSlot()));
+	QObject::connect(m_mfw, SIGNAL(savePosition(QString)), this, SLOT(savePositionCameraSlot(QString)));
+	QObject::connect(m_mfw, SIGNAL(loadPosition(QString)), this, SLOT(loadPositionCameraSlot(QString)));
+	QObject::connect(m_mfw, SIGNAL(pathCamera(QString, QString, float, bool, bool)), this, SLOT(pathCameraSlot(QString, QString, float, bool, bool)));
+	QObject::connect(m_mfw, SIGNAL(pathCamera2(nlohmann::json, nlohmann::json, float, bool, bool)), this, SLOT(pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool)));
+	QObject::connect(m_mfw, SIGNAL(pathCameraAll(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)), this, SLOT(pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)));
+	QObject::connect(m_mfw, SIGNAL(getCurrentCamera()), this, SLOT(currentCameraForPath()));
 
 	m_macroW = new MacroWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_macroW);
 	m_tabWidget->addTab(m_macroW, QObject::tr("Macro"));
-	poca::core::MacroRecorderSingleton* macroRecord = std::any_cast <poca::core::MacroRecorderSingleton*>(singletons.at("MacroRecorderSingleton"));
 	macroRecord->setTextEdit(m_macroW->getTextEdit());
 	macroRecord->setJson(m_macroW->getJson());
-	m_macroW->loadParameters(std::any_cast <poca::core::StateSoftwareSingleton*>(singletons.at("StateSoftwareSingleton"))->getParameters());
+	m_macroW->loadParameters(engine->getGlobalParameters());
 
-	for (size_t n = 0; n < m_GUIWidgets.size(); n++)
-		m_GUIWidgets[n]->addGUI(mediator, m_tabWidget);
-	m_plugins->addGUI(mediator, m_tabWidget);
+	engine->addGUI(m_tabWidget);
 
 #ifndef NO_PYTHON
 	m_pythonW = new PythonWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_pythonW);
 	m_tabWidget->addTab(m_pythonW, QObject::tr("Python"));
-	m_pythonW->loadParameters(std::any_cast <poca::core::StateSoftwareSingleton*>(singletons.at("StateSoftwareSingleton"))->getParameters());
+	m_pythonW->loadParameters(engine->getGlobalParameters());
 #endif
 
 	m_ROIsW = new ROIGeneralWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_ROIsW);
 	poca::core::utils::addWidget(m_tabWidget, QString("ROI Manager"), QString("General"), m_ROIsW, false);
-
-	//m_tabWidget->addTab(m_ROIsW, QObject::tr("ROI Manager"));
 
 	for (int n = 0; n < m_tabWidget->count(); n++) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
@@ -194,7 +214,14 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 #endif
 		QTabWidget* tab = dynamic_cast <QTabWidget*>(m_tabWidget->widget(n));
 		if (!tab) continue;
+		std::string name = m_tabWidget->tabText(n).toStdString();
+		std::string name2 = tab->tabText(0).toStdString();
+		int cur = tab->currentIndex();
+		std::string name3 = tab->tabText(cur).toStdString();
 		tab->setCurrentIndex(0);
+		int cur2 = tab->currentIndex();
+		std::string name4 = tab->tabText(cur2).toStdString();
+		cur2++;
 	}
 
 	m_tabWidget->setCurrentWidget(m_macroW);
@@ -242,7 +269,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	setActiveMdiChild(NULL);
 
-	setWindowTitle(tr("PoCA: Point Cloud Analyst - v0.8.0"));
+	setWindowTitle(tr("PoCA: Point Cloud Analyst"));
 	setUnifiedTitleAndToolBarOnMac(true);
 	statusBar()->showMessage(tr("Ready"));
 	m_lblPermanentStatus = new QLabel;
@@ -262,14 +289,14 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 MainWindow::~MainWindow()
 {
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	nlohmann::json& parameters = sss->getParameters();
+	nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 
 	if (m_currentMdi != NULL) {
 		m_currentMdi->getWidget()->getObject()->saveCommands(parameters);
 	}
 	poca::core::CommandInfo command(false, "saveParameters", "file", &parameters);
-	m_plugins->execute(&command);
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	engine->getPlugins()->execute(&command);
 	m_macroW->execute(&command);
 	m_pythonW->execute(&command);
 
@@ -292,8 +319,12 @@ void MainWindow::createActions()
 	QObject::connect(m_openFileAct, SIGNAL(triggered()), this, SLOT(openFile()));
 
 	m_openDirAct = new QAction(QIcon(QPixmap(poca::plot::openDirIcon)), tr("&Open directory"), this);
-	m_openDirAct->setStatusTip(tr("Open aqn existing directory"));
+	m_openDirAct->setStatusTip(tr("Open an existing directory"));
 	QObject::connect(m_openDirAct, SIGNAL(triggered()), this, SLOT(openDir()));
+
+	m_plusAct = new QAction(QIcon(QPixmap(poca::plot::plusIcon)), tr("&Add component"), this);
+	m_plusAct->setStatusTip(tr("Add component to current dataset"));
+	QObject::connect(m_plusAct, SIGNAL(triggered()), this, SLOT(addComponentToCurrentMdi()));
 
 	m_duplicateAct = new QAction(QIcon("./images/duplicate.png"), tr("Duplicate localizations"), this);
 	m_duplicateAct->setStatusTip(tr("Open an existing file"));
@@ -330,6 +361,7 @@ void MainWindow::createActions()
 	m_xyAct->setCheckable(true);
 	m_xyAct->setChecked(false);
 	connect(m_xyAct, SIGNAL(toggled(bool)), this, SLOT(setCameraInteraction(bool)));
+	connect(m_xyAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
 	m_xzAct = new QAction(QIcon(QPixmap(poca::plot::xzIcon)), tr("&XZ plane"), this);
 	m_xzAct->setCheckable(true);
 	m_xzAct->setChecked(false);
@@ -401,6 +433,16 @@ void MainWindow::createActions()
 	m_sphere3DROIAct->setCheckable(true);
 	connect(m_sphere3DROIAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
 
+	m_planeROIAct = new QAction(QIcon(QPixmap(poca::plot::planeROIIcon)), tr("&Plane"), this);
+	m_planeROIAct->setStatusTip(tr("Plane ROI"));
+	m_planeROIAct->setCheckable(true);
+	connect(m_planeROIAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
+
+	m_polyplaneROIAct = new QAction(QIcon(QPixmap(poca::plot::planeROIIcon)), tr("&PolyPlane"), this);
+	m_polyplaneROIAct->setStatusTip(tr("PolyPlane ROI"));
+	m_polyplaneROIAct->setCheckable(true);
+	connect(m_polyplaneROIAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
+
 	QActionGroup* roiGroup = new QActionGroup(this);
 	roiGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
 	roiGroup->addAction(m_line2DROIAct);
@@ -409,6 +451,8 @@ void MainWindow::createActions()
 	roiGroup->addAction(m_square2DROIAct);
 	roiGroup->addAction(m_polyline2DROIAct);
 	roiGroup->addAction(m_sphere3DROIAct);
+	roiGroup->addAction(m_planeROIAct);
+	roiGroup->addAction(m_polyplaneROIAct);
 }
 
 void MainWindow::createMenus()
@@ -419,8 +463,10 @@ void MainWindow::createMenus()
 	QMenu* openMenu = fileMenu->addMenu("Open");
 	openMenu->addAction(m_openFileAct);
 	openMenu->addAction(m_openDirAct);
+	openMenu->addAction(m_plusAct);
 
-	const std::vector <PluginInterface*>& plugins = m_plugins->getPlugins();
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
 	for (size_t n = 0; n < plugins.size(); n++) {
 		std::vector <std::pair<QAction*, QString>> actions = plugins[n]->getActions();
 		for (std::pair<QAction*, QString> action : actions) {
@@ -486,8 +532,9 @@ void MainWindow::createMenus()
 
 void MainWindow::setParametersPython()
 {
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	nlohmann::json& parameters = sss->getParameters();
+	
+	
+	nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 
 	PythonParametersDialog* ppd = new PythonParametersDialog(parameters);
 	ppd->setModal(true);
@@ -510,6 +557,7 @@ void MainWindow::createToolBars()
 	m_fileToolBar = new QToolBar(tr("Toolbar"));
 	m_fileToolBar->addAction(m_openFileAct);
 	m_fileToolBar->addAction(m_openDirAct);
+	m_fileToolBar->addAction(m_plusAct);
 	m_fileToolBar->addAction(m_duplicateAct);
 	m_fileToolBar->addSeparator();
 	m_lastActionQuantifToolbar = m_fileToolBar->addSeparator();
@@ -519,6 +567,8 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_square2DROIAct);
 	m_fileToolBar->addAction(m_polyline2DROIAct);
 	m_fileToolBar->addAction(m_sphere3DROIAct);
+	m_fileToolBar->addAction(m_planeROIAct);
+	m_fileToolBar->addAction(m_polyplaneROIAct);
 	m_lastActionROIToolbar = m_fileToolBar->addSeparator();
 	m_fileToolBar->addAction(m_colocAct);
 	m_lastActionColocToolbar = m_fileToolBar->addSeparator();
@@ -537,7 +587,8 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_closeAllAct); 
 	m_fileToolBar->addAction(m_aboutAct);
 
-	const std::vector <PluginInterface*>& plugins = m_plugins->getPlugins();
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
 	for (size_t n = 0; n < plugins.size(); n++) {
 		std::vector <std::pair<QAction*, QString>> actions = plugins[n]->getActions();
 		for (std::pair<QAction*, QString> action : actions) {
@@ -570,7 +621,17 @@ void MainWindow::setCameraInteraction()
 	if (m_currentMdi == NULL) return;
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
 	if (cam == NULL) return;
+	size_t dimension = cam->getObject()->dimension();
 	QObject* sender = QObject::sender();
+	if (sender == m_xyAct) {
+		if (dimension == 3)
+			return;
+		else {
+			cam->fixPlane(poca::opengl::Camera::Plane_XY, true);
+			cam->fixPlane(poca::opengl::Camera::Plane_XY, false);
+			return;
+		}
+	}
 	if (sender == m_line2DROIAct)
 		cam->setCameraInteraction(m_line2DROIAct->isChecked() ? poca::opengl::Camera::Line2DRoiDefinition : poca::opengl::Camera::None);
 	else if (sender == m_triangle2DROIAct)
@@ -583,6 +644,10 @@ void MainWindow::setCameraInteraction()
 		cam->setCameraInteraction(m_polyline2DROIAct->isChecked() ? poca::opengl::Camera::Polyline2DRoiDefinition : poca::opengl::Camera::None);
 	else if (sender == m_sphere3DROIAct)
 		cam->setCameraInteraction(m_sphere3DROIAct->isChecked() ? poca::opengl::Camera::Sphere3DRoiDefinition : poca::opengl::Camera::None);
+	else if (sender == m_planeROIAct)
+		cam->setCameraInteraction(m_planeROIAct->isChecked() ? poca::opengl::Camera::PlaneRoiDefinition : poca::opengl::Camera::None);
+	else if (sender == m_polyplaneROIAct)
+		cam->setCameraInteraction(m_polyplaneROIAct->isChecked() ? poca::opengl::Camera::PolyPlaneRoiDefinition : poca::opengl::Camera::None);
 }
 
 void MainWindow::setCameraInteraction(bool _on)
@@ -590,6 +655,7 @@ void MainWindow::setCameraInteraction(bool _on)
 	if (m_currentMdi == NULL) return;
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
 	if (cam == NULL) return;
+	size_t dimension = cam->getObject()->dimension();
 	QObject* sender = QObject::sender();
 	QAction* act = NULL;
 	if (sender == m_xyAct) {
@@ -604,12 +670,58 @@ void MainWindow::setCameraInteraction(bool _on)
 		cam->fixPlane(poca::opengl::Camera::Plane_YZ, _on);
 		act = m_yzAct;
 	}
-	else if (sender == m_cropAct)
+	else if (sender == m_cropAct) {
 		cam->setCameraInteraction(_on ? poca::opengl::Camera::Crop : poca::opengl::Camera::None);
+
+		size_t dimension = cam->getObject()->dimension();
+		m_line2DROIAct->setEnabled(!_on || dimension == 2);
+		m_triangle2DROIAct->setEnabled(!_on || dimension == 2);
+		m_circle2DROIAct->setEnabled(!_on || dimension == 2);
+		m_square2DROIAct->setEnabled(!_on || dimension == 2);
+		m_polyline2DROIAct->setEnabled(!_on || dimension == 2);
+	}
+
+	if (dimension == 2) return;
+	if (act == m_xyAct) {
+		m_line2DROIAct->setEnabled(_on);
+		m_triangle2DROIAct->setEnabled(_on);
+		m_circle2DROIAct->setEnabled(_on);
+		m_square2DROIAct->setEnabled(_on);
+		m_polyline2DROIAct->setEnabled(_on);
+		if (!_on) {
+			bool ROI2D = false;
+			ROI2D |= m_line2DROIAct->isChecked();
+			ROI2D |= m_triangle2DROIAct->isChecked();
+			ROI2D |= m_circle2DROIAct->isChecked();
+			ROI2D |= m_square2DROIAct->isChecked();
+			ROI2D |= m_polyline2DROIAct->isChecked();
+
+			m_line2DROIAct->setChecked(false);
+			m_triangle2DROIAct->setChecked(false);
+			m_circle2DROIAct->setChecked(false);
+			m_square2DROIAct->setChecked(false);
+			m_polyline2DROIAct->setChecked(false);
+
+			if (ROI2D)
+				cam->setCameraInteraction(poca::opengl::Camera::None);
+		}
+	}
+	else {
+		m_line2DROIAct->setEnabled(false);
+		m_triangle2DROIAct->setEnabled(false);
+		m_circle2DROIAct->setEnabled(false);
+		m_square2DROIAct->setEnabled(false);
+		m_polyline2DROIAct->setEnabled(false);
+		m_line2DROIAct->setChecked(false);
+		m_triangle2DROIAct->setChecked(false);
+		m_circle2DROIAct->setChecked(false);
+		m_square2DROIAct->setChecked(false);
+		m_polyline2DROIAct->setChecked(false);
+	}
 
 	if (act != NULL)
 		m_cropAct->setEnabled(act->isChecked());
-	if(!m_xyAct->isChecked() && !m_xzAct->isChecked() && !m_yzAct->isChecked() && cam->getCameraInteraction() == poca::opengl::Camera::Crop)
+	if(!m_xyAct->isChecked() && !m_xzAct->isChecked() && !m_yzAct->isChecked())// && cam->getCameraInteraction() == poca::opengl::Camera::Crop)
 		m_cropAct->setChecked(false);
 }
 
@@ -623,7 +735,8 @@ void MainWindow::actionFromPlugin()
 	}
 
 	QObject* sender = QObject::sender();
-	obj = m_plugins->actionTriggered(sender, obj);
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	obj = engine->getPlugins()->actionTriggered(sender, obj);
 
 	if (obj != NULL) {
 		createWidget(obj);
@@ -652,11 +765,11 @@ void MainWindow::dropEvent(QDropEvent* _e)
 	auto urls = _e->mimeData()->urls();
 	for (auto url : urls) {
 		QString name = url.toLocalFile();
-		//if (!name.endsWith(".txt"))
 		execute(&poca::core::CommandInfo(true, "open", "path", name.toStdString()));
 		if (name.endsWith(".txt")) {
 			poca::core::CommandInfo ci(true, "openFile", "name", name.toStdString());
-			m_plugins->execute(&ci);
+			poca::core::Engine* engine = poca::core::Engine::instance();
+			engine->getPlugins()->execute(&ci);
 			if (!ci.hasParameter("object")) continue;
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			if (obj != NULL) {
@@ -666,14 +779,28 @@ void MainWindow::dropEvent(QDropEvent* _e)
 	}
 }
 
+void MainWindow::createObjectFromFeatures(const std::map <std::string, std::vector <float>>& _features, const std::string _dir, const std::string _name)
+{
+	poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(_features);
+	poca::core::MyObject* wobj = new poca::core::MyObject();
+	wobj->setDir(_dir.c_str());
+	wobj->setName(_name.c_str());
+	wobj->addBasicComponent(dset);
+	wobj->setDimension(dset->dimension());
+	createWidget(wobj);
+}
+
 void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::PluginList* plugins = engine->getPlugins();
 	poca::opengl::Camera* cam = new poca::opengl::Camera(_obj, _obj->dimension(), NULL);// this);
 
 	poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
 	poca::core::SubjectInterface* subject = dynamic_cast<poca::core::SubjectInterface*>(_obj);
 	if (subject) {
 		mediator->addObserversToSubject(subject, "LoadObjCharacteristicsAllWidgets");
+		mediator->addObserversToSubject(subject, "UpdateMainTabWidgets");
 		mediator->addObserversToSubject(subject, "LoadObjCharacteristicsMiscWidget");
 		mediator->addObserversToSubject(subject, "LoadObjCharacteristicsDetectionSetWidget");
 		mediator->addObserversToSubject(subject, "LoadObjCharacteristicsDelaunayTriangulationWidget");
@@ -683,15 +810,26 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	_obj->attach(cam, "updateInfosObject");
 	_obj->attach(this, "addCommandLastAddedComponent");
 	_obj->attach(this, "addCommandToSpecificComponent");
-	_obj->attach(this, "duplicateCleanedData"); 
+	_obj->attach(this, "LoadObjCharacteristicsAllWidgets");
+	_obj->attach(this, "UpdateMainTabWidgets");
+	_obj->attach(this, "duplicateCleanedData");
 
 	_obj->addCommand(new MyObjectDisplayCommand(_obj));
-	poca::core::BasicComponent* bci = _obj->getLastAddedBasicComponent();
+	poca::core::BasicComponentInterface* bci = _obj->getLastAddedBasicComponent();
 	if (bci != NULL && bci->nbCommands() == 0)
-		m_plugins->addCommands(bci);
+		plugins->addCommands(bci);
+
+	if (bci != NULL) {
+		poca::core::BasicComponentList* blist = dynamic_cast<poca::core::BasicComponentList*>(bci);
+		if (blist)
+			for (auto bcomp : blist->components())
+				if(bcomp->nbCommands() == 0)
+					plugins->addCommands(bcomp);
+	}
 
 	MdiChild* child = new MdiChild(cam);
 	QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
+	QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
 	m_mdiArea->addSubWindow(child);
 	setActiveMdiChild(child);
 	child->layout()->update();
@@ -701,6 +839,8 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 
 	_obj->notify("LoadObjCharacteristicsAllWidgets");
 	_obj->notifyAll("updateDisplay");
+
+	engine->addData(_obj, cam);
 }
 
 
@@ -743,20 +883,40 @@ void MainWindow::openDir()
 	}
 }
 
+void MainWindow::addComponentToCurrentMdi()
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+	poca::core::MyObjectInterface* obj = cam->getObject();
+	if (obj == NULL) return;
+
+	QString path = QDir::currentPath();
+	QString filename = QFileDialog::getOpenFileName(0,
+		QObject::tr("Select one component to add"),
+		path,
+		QObject::tr("Component files (*.*)"), 0, QFileDialog::DontUseNativeDialog);
+
+	if (filename.isEmpty()) return;
+
+	poca::core::CommandInfo ci(false, "open", "path", std::string(filename.toStdString()));
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	if (engine->loadDataAndAddToObject(filename, obj, &ci)) {
+		obj->notify("LoadObjCharacteristicsAllWidgets");
+		obj->notifyAll("updateDisplay");
+	}
+}
+
 void MainWindow::openFile(const QString& _filename, poca::core::CommandInfo* _command)
 {
-	std::map <std::string, std::vector <float>> data;
-	for (std::size_t n = 0; n < m_loaderslocsFile.size() && data.empty(); n++)
-		m_loaderslocsFile.at(n)->loadFile(_filename, data, _command);
-
-	if (data.empty()) return;
-
-	poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(data);
-
-	QString dir, name;
-	decomposePathToDirAndFile(_filename, dir, name);
-
-	createWindows(dset, dir, name);
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::PluginList* plugins = engine->getPlugins();
+	poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(_filename, _command);
+	if (obj == NULL)
+		return;
+	poca::opengl::CameraInterface* cam = createWindows(obj);
+	engine->addCameraToObject(obj, cam);
 }
 
 void MainWindow::duplicate()
@@ -770,7 +930,7 @@ void MainWindow::duplicate()
 	update(dynamic_cast <poca::core::SubjectInterface*>(obj), "duplicateOrganoidCentroids");
 
 	poca::core::MyObjectInterface* oneColorObj = obj->currentObject();
-	poca::core::BasicComponent* bci = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
 	poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 	if (dset == NULL) return;
 	poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
@@ -781,24 +941,72 @@ void MainWindow::duplicate()
 	createWindows(newDset, QString(dir.c_str()), newName);
 }
 
-void MainWindow::createWindows(poca::geometry::DetectionSet* _dset, const QString& _dir, const QString& _name)
+poca::opengl::CameraInterface* MainWindow::createWindows(poca::core::MyObjectInterface* _obj)
 {
-	if (_dset == NULL) return;
+	if (_obj != NULL) {
+		poca::core::MyObject* obj = static_cast<poca::core::MyObject*>(_obj);
+		if (obj == NULL)
+			return NULL;
+		poca::opengl::Camera* cam = new poca::opengl::Camera(_obj, _obj->dimension(), NULL);// this);
+
+		int indexVoronoiTab = 0;
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MediatorWObjectFWidget* mediator = engine->getMediator();// poca::core::MediatorWObjectFWidget::instance();
+
+		mediator->addObserversToSubject(obj, "LoadObjCharacteristicsAllWidgets");
+		mediator->addObserversToSubject(obj, "UpdateMainTabWidgets");
+		mediator->addObserversToSubject(obj, "LoadObjCharacteristicsMiscWidget");
+		mediator->addObserversToSubject(obj, "LoadObjCharacteristicsDetectionSetWidget");
+		mediator->addObserversToSubject(obj, "LoadObjCharacteristicsDelaunayTriangulationWidget");
+		mediator->addObserversToSubject(obj, "LoadObjCharacteristicsVoronoiDiagramWidget");
+		obj->attach(cam, "updateDisplay");
+		obj->attach(cam, "updateInfosObject");
+
+		obj->attach(this, "addCommandLastAddedComponent");
+		obj->attach(this, "addCommandToSpecificComponent");
+		obj->attach(this, "LoadObjCharacteristicsAllWidgets");
+		obj->attach(this, "UpdateMainTabWidgets");
+		obj->attach(this, "duplicateCleanedData");
+
+		MdiChild* child = new MdiChild(cam);
+		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
+		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
+		m_mdiArea->addSubWindow(child);
+		setActiveMdiChild(child);
+
+		child->layout()->update();
+		child->layout()->activate();
+		child->getWidget()->update();
+		child->show();
+
+		return static_cast <poca::opengl::CameraInterface*>(cam);
+	}
+	return NULL;
+}
+
+poca::core::MyObjectInterface* MainWindow::createWindows(poca::core::BasicComponent* _bc, const QString& _dir, const QString& _name)
+{
+	if (_bc == NULL) return NULL;
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::PluginList* plugins = engine->getPlugins();
 
 	poca::core::MyObject* wobj = new SMLMObject();
 	wobj->setDir(_dir.toLatin1().data());
 	wobj->setName(_name.toLatin1().data());
-	wobj->addBasicComponent(_dset);
-	wobj->setDimension(_dset->dimension());
+	wobj->addBasicComponent(_bc);
+	wobj->setDimension(_bc->dimension());
 
 	if (wobj != NULL) {
-		poca::opengl::Camera* cam = new poca::opengl::Camera(wobj, _dset->dimension(), NULL);// this);
+		poca::opengl::Camera* cam = new poca::opengl::Camera(wobj, _bc->dimension(), NULL);// this);
 
 		int indexVoronoiTab = 0;
 
-		poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
+		poca::core::MediatorWObjectFWidget* mediator = engine->getMediator();// poca::core::MediatorWObjectFWidget::instance();
 
 		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsAllWidgets");
+		mediator->addObserversToSubject(wobj, "UpdateMainTabWidgets");
 		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsMiscWidget");
 		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsDetectionSetWidget");
 		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsDelaunayTriangulationWidget");
@@ -808,16 +1016,19 @@ void MainWindow::createWindows(poca::geometry::DetectionSet* _dset, const QStrin
 
 		wobj->attach(this, "addCommandLastAddedComponent");
 		wobj->attach(this, "addCommandToSpecificComponent");
+		wobj->attach(this, "LoadObjCharacteristicsAllWidgets");	
+		wobj->attach(this, "UpdateMainTabWidgets");
 		wobj->attach(this, "duplicateCleanedData");
 		
 		SMLMObject* sobj = dynamic_cast <SMLMObject*>(wobj);
-		sobj->addCommand(new MyObjectDisplayCommand(sobj));
+		sobj->addCommand(new MyObjectDisplayCommand(sobj)); 
 
-		m_plugins->addCommands(_dset);
-		m_plugins->addCommands(wobj);
+		plugins->addCommands(_bc);
+		plugins->addCommands(wobj);
 
 		MdiChild* child = new MdiChild(cam);
 		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
+		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
 		m_mdiArea->addSubWindow(child);
 		setActiveMdiChild(child);
 
@@ -826,15 +1037,17 @@ void MainWindow::createWindows(poca::geometry::DetectionSet* _dset, const QStrin
 		child->getWidget()->update();
 		child->show();
 
-		poca::geometry::DelaunayTriangulationFactoryInterface* factory = poca::geometry::createDelaunayTriangulationFactory();
-		poca::geometry::DelaunayTriangulationInterface* delaunay = factory->createDelaunayTriangulation(wobj, NULL, false);
-		delete factory;
+		//poca::geometry::DelaunayTriangulationFactoryInterface* factory = poca::geometry::createDelaunayTriangulationFactory();
+		//poca::geometry::DelaunayTriangulationInterface* delaunay = factory->createDelaunayTriangulation(wobj, NULL, false);
+		//delete factory;
 	}
+	return wobj;
 }
 
 void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 {
-	poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MediatorWObjectFWidget* mediator = engine->getMediator();//poca::core::MediatorWObjectFWidget::instance();
 	if (_mdiChild == NULL) {
 		m_currentMdi = NULL;
 		if (m_mdiArea->subWindowList().isEmpty())
@@ -896,10 +1109,25 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		m_square2DROIAct->setEnabled(dimension == 2);
 		m_polyline2DROIAct->setEnabled(dimension == 2);
 		m_sphere3DROIAct->setEnabled(dimension == 3);
+		m_planeROIAct->setEnabled(dimension == 3);
+		m_polyplaneROIAct->setEnabled(dimension == 3);
 
-		//m_xyAct->setEnabled(dimension == 3);
+		if (m_xyAct->isChecked())
+			m_xyAct->setChecked(false);
+		if (m_xzAct->isChecked())
+			m_xzAct->setChecked(false);
+		if (m_yzAct->isChecked())
+			m_yzAct->setChecked(false);
+		
+		m_xyAct->setCheckable(dimension == 3);
 		m_xzAct->setEnabled(dimension == 3);
 		m_yzAct->setEnabled(dimension == 3);
+
+		poca::opengl::Camera* cam = dynamic_cast<poca::opengl::Camera*>(_mdiChild->getWidget());
+		if (cam != NULL) {
+			cam->setCameraInteraction(poca::opengl::Camera::None);
+			cam->fixPlane(poca::opengl::Camera::None, false);
+		}
 
 		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(wobj);
 		if (!comObj) return;
@@ -970,72 +1198,29 @@ void MainWindow::cascadeWindows()
 	m_mdiArea->cascadeSubWindows();
 }
 
-void MainWindow::loadPlugin()
-{
-	m_plugins = new poca::core::PluginList();
-	QDir pluginsDir(QCoreApplication::applicationDirPath());
-#if defined(Q_OS_WIN)
-	if (pluginsDir.dirName().toLower() == "debug" || pluginsDir.dirName().toLower() == "release")
-		pluginsDir.cdUp();
-#elif defined(Q_OS_MAC)
-	if (pluginsDir.dirName() == "MacOS") {
-		pluginsDir.cdUp();
-		pluginsDir.cdUp();
-		pluginsDir.cdUp();
-	}
-#endif
-	pluginsDir.cd("plugins");
-	QString extension(".dll");
-#if defined _DEBUG
-	pluginsDir.cd("Debug");
-	extension.push_front("d");
-#endif
-	//std::cout << pluginsDir.absolutePath().toLatin1().data() << std::endl;
-	const QStringList entries = pluginsDir.entryList(QDir::Files);
-	for (const QString& fileName : entries) {
-		if (!fileName.endsWith(extension)) continue;
-		QPluginLoader pluginLoader(pluginsDir.absoluteFilePath(fileName));
-		QObject* plugin = pluginLoader.instance();
-		LoaderLocalizationsInterface* linterface = NULL;
-		GuiInterface* ginterface = NULL;
-		PluginInterface* pinterface = NULL;
-		if (plugin) {
-			linterface = qobject_cast<LoaderLocalizationsInterface*>(plugin);
-			if (linterface)
-				m_loaderslocsFile.push_back(linterface);
-			ginterface = qobject_cast<GuiInterface*>(plugin);
-			if (ginterface)
-				m_GUIWidgets.push_back(ginterface);
-			pinterface = qobject_cast<PluginInterface*>(plugin);
-			if (pinterface)
-				m_plugins->addPlugin(pinterface);
-			if(linterface == NULL && ginterface == NULL && pinterface == NULL)
-				pluginLoader.unload();
-		}
-	}
-	const std::vector <PluginInterface*>& plugs = m_plugins->getPlugins();
-	for (PluginInterface* plugin : plugs)
-		plugin->setPlugins(m_plugins);
-}
-
 void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::CommandInfo& _action)
 {
 	poca::core::MyObjectInterface* obj = dynamic_cast <poca::core::MyObjectInterface*>(_subj);
 	if (obj == NULL) return;
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::PluginList* plugins = engine->getPlugins();
+
+	if (_action == "LoadObjCharacteristicsAllWidgets" || _action == "UpdateMainTabWidgets")
+		updateTabWidget();
 	if(_action == "addCommandToSpecificComponent"){
-		poca::core::BasicComponent* comp = _action.getParameterPtr<poca::core::BasicComponent>("component");
-		m_plugins->addCommands(comp);
-		poca::core::ListDatasetsSingleton::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
+		poca::core::BasicComponentInterface* comp = _action.getParameterPtr<poca::core::BasicComponentInterface>("component");
+		plugins->addCommands(comp);
+		poca::core::Engine::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
 		updateTabWidget();
 		obj->notify("LoadObjCharacteristicsAllWidgets");
 	}
 	if (_action == "addCommandLastAddedComponent") {
-		poca::core::BasicComponent* bci = obj->getLastAddedBasicComponent();
+		poca::core::BasicComponentInterface* bci = obj->getLastAddedBasicComponent();
 		if (bci == NULL) return;
-		m_plugins->addCommands(bci);
+		plugins->addCommands(bci);
 
-		poca::core::ListDatasetsSingleton::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
+		poca::core::Engine::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
 
 		updateTabWidget();
 		obj->notify("LoadObjCharacteristicsAllWidgets");
@@ -1060,7 +1245,7 @@ void MainWindow::resetViewer()
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
 	if (cam == NULL) return;
 	cam->resetProjection();
-	cam->repaint();
+	cam->update();
 }
 
 void MainWindow::toggleBoundingBoxDisplay()
@@ -1168,36 +1353,20 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 	for (MdiChild* mc : _ws)
 		objs.push_back(mc->getWidget()->getObject());
 
-	for (poca::core::MyObjectInterface* obj : objs)
-		if (obj == NULL) return;
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::PluginList* plugins = engine->getPlugins();
 
-	poca::core::ChangeManagerSingleton* singleton = poca::core::ChangeManagerSingleton::instance();
+	poca::core::MyObjectInterface* wobj = engine->generateMultipleObject(objs);
+	if (wobj == NULL) return;
 
-	ColocObject* wobj = new ColocObject(objs);
-	wobj->setDir(objs[0]->getDir());
-	QString name("Colocalization_[");
-	for (poca::core::MyObjectInterface* obj : objs)
-		name.append(obj->getName().c_str()).append(",");
-	name.append("]");
-	wobj->setName(name.toLatin1().data());
 	if (wobj != NULL) {
 		std::vector <std::string> names;
 		for (MdiChild* mdi : _ws)
 			names.push_back(mdi->getWidget()->getObject()->getName());
 		poca::core::MacroRecorderSingleton::instance()->addCommand("MainWindow", &poca::core::CommandInfo(true, "computeColocalization", "datasetNames", names));
 
-		poca::core::CommandInfo ciHeatmap(false, "DetectionSet", "displayHeatmap", false);
-		poca::core::CommandInfo ci(false, "All", "freeGPU", true);
-		for (size_t n = 0; n < objs.size(); n++) {
-			objs[n]->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(false, "displayHeatmap", false));
-			objs[n]->executeGlobalCommand(&poca::core::CommandInfo(false, "freeGPU"));
-			poca::core::SubjectInterface* subject = dynamic_cast <poca::core::SubjectInterface*>(objs[n]);
-			if(subject)
-				singleton->UnregisterFromAllObservers(subject);
-		}
 		for (MdiChild* mc : _ws) {
 			poca::opengl::CameraInterface* camW = mc->getWidget();
-			camW->setDeleteObject(false);
 			camW->makeCurrent();
 			m_mdiArea->removeSubWindow(mc);
 			delete mc;
@@ -1209,11 +1378,13 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 
 		poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
 
-		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsAllWidgets");
-		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsMiscWidget");
-		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsDetectionSetWidget");
-		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsDelaunayTriangulationWidget");
-		mediator->addObserversToSubject(wobj, "LoadObjCharacteristicsVoronoiDiagramWidget");
+		poca::core::SubjectInterface* si = dynamic_cast<poca::core::SubjectInterface*>(wobj);
+
+		mediator->addObserversToSubject(si, "LoadObjCharacteristicsAllWidgets");
+		mediator->addObserversToSubject(si, "LoadObjCharacteristicsMiscWidget");
+		mediator->addObserversToSubject(si, "LoadObjCharacteristicsDetectionSetWidget");
+		mediator->addObserversToSubject(si, "LoadObjCharacteristicsDelaunayTriangulationWidget");
+		mediator->addObserversToSubject(si, "LoadObjCharacteristicsVoronoiDiagramWidget");
 		wobj->attach(cam, "updateDisplay");
 		wobj->attach(cam, "updateInfosObject");
 		wobj->attach(cam, "updateInfosObjectOverlap");
@@ -1221,12 +1392,12 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		wobj->attach(this, "addCommandLastAddedComponent");
 
 		wobj->addCommand(new MyObjectDisplayCommand(wobj));
-		m_plugins->addCommands(wobj);
-
+		
 		for (size_t n = 0; n < objs.size(); n++) {
 			objs[n]->attach(cam, "updateDisplay");
 			objs[n]->attach(this, "addCommandLastAddedComponent");
 			objs[n]->attach(this, "addCommandToSpecificComponent");
+			objs[n]->attach(this, "LoadObjCharacteristicsAllWidgets");
 		}
 
 		MdiChild* child = new MdiChild(cam);
@@ -1258,7 +1429,14 @@ void MainWindow::changeColorObject(QAbstractButton* _button)
 	obj->notifyAll("updateDisplay");
 }
 
-void MainWindow::savePositionCameraSlot()
+void MainWindow::currentCameraForPath()
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	m_mfw->setCurrentCamera(cam);
+}
+
+void MainWindow::savePositionCameraSlot(QString _filename)
 {
 	execute(&poca::core::CommandInfo(false, "savePositionCamera"));
 }
@@ -1295,7 +1473,7 @@ void MainWindow::savePositionCamera(const std::string& _filename)
 	json["stateCamera"]["eye"] = stateCam.m_eye;
 	json["stateCamera"]["matrix"] = stateCam.m_matrix;
 	json["stateCamera"]["up"] = stateCam.m_up;
-	json["translationMatrix"] = cam->getTranslationMatrix();
+	json["stateCamera"]["translationModel"] = cam->getTranslationModel();
 	json["distanceOrtho"] = cam->getDistanceOrtho();
 	json["distanceOrthoOriginal"] = cam->getOriginalDistanceOrtho();
 	json["crop"] = cam->getCurrentCrop();
@@ -1307,9 +1485,187 @@ void MainWindow::savePositionCamera(const std::string& _filename)
 	fs.close();
 }
 
-void MainWindow::loadPositionCameraSlot()
+void MainWindow::loadPositionCameraSlot(QString _filename)
 {
-	execute(&poca::core::CommandInfo(false, "loadPositionCamera"));
+	if(_filename.isEmpty())
+		execute(&poca::core::CommandInfo(false, "loadPositionCamera"));
+	else
+		execute(&poca::core::CommandInfo(true, "loadPositionCamera", "path", _filename.toStdString()));
+}
+
+void MainWindow::pathCameraSlot(QString _pos1, QString _pos2, float _duration, bool _saveImages, bool _traveling)
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+
+	std::array <QString, 2> names = { _pos1, _pos2 };
+	std::array <poca::opengl::StateCamera, 2> scams;
+	std::array <float, 2> distances;
+
+	for (auto n = 0; n < 2; n++) {
+		nlohmann::json json;
+		std::ifstream fs(names[n].toStdString());
+		if (fs.good())
+			fs >> json;
+		fs.close();
+
+		if (json.contains("stateCamera")) {
+			nlohmann::json tmp = json["stateCamera"];
+			if (tmp.contains("matrixView"))
+				scams[n].m_matrixView = tmp["matrixView"].get<glm::mat4>();
+			if (tmp.contains("rotationSum"))
+				scams[n].m_rotationSum = tmp["rotationSum"].get<glm::quat>();
+			if (tmp.contains("rotation"))
+				scams[n].m_rotation = tmp["rotation"].get<glm::quat>();
+			if (tmp.contains("center"))
+				scams[n].m_center = tmp["center"].get<glm::vec3>();
+			if (tmp.contains("eye"))
+				scams[n].m_eye = tmp["eye"].get<glm::vec3>();
+			if (tmp.contains("up"))
+				scams[n].m_up = tmp["up"].get<glm::vec3>();
+			if (tmp.contains("translationModel"))
+				scams[n].m_translationModel = tmp["translationModel"].get<glm::vec3>();
+		}
+		if (json.contains("distanceOrtho"))
+			distances[n] = json["distanceOrtho"].get<float>();
+	}
+
+	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
+}
+
+void MainWindow::pathCameraSlot2(nlohmann::json _pos1, nlohmann::json _pos2, float _duration, bool _saveImages, bool _traveling)
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+
+	std::array <nlohmann::json, 2> jsons = { _pos1, _pos2 };
+	std::array <poca::opengl::StateCamera, 2> scams;
+	std::array <float, 2> distances;
+
+	for (auto n = 0; n < 2; n++) {
+		const nlohmann::json& json = jsons[n];
+		if (json.contains("stateCamera")) {
+			nlohmann::json tmp = json["stateCamera"];
+			if (tmp.contains("matrixView"))
+				scams[n].m_matrixView = tmp["matrixView"].get<glm::mat4>();
+			if (tmp.contains("rotationSum"))
+				scams[n].m_rotationSum = tmp["rotationSum"].get<glm::quat>();
+			if (tmp.contains("rotation"))
+				scams[n].m_rotation = tmp["rotation"].get<glm::quat>();
+			if (tmp.contains("center"))
+				scams[n].m_center = tmp["center"].get<glm::vec3>();
+			if (tmp.contains("eye"))
+				scams[n].m_eye = tmp["eye"].get<glm::vec3>();
+			if (tmp.contains("up"))
+				scams[n].m_up = tmp["up"].get<glm::vec3>();
+			if (tmp.contains("translationModel"))
+				scams[n].m_translationModel = tmp["translationModel"].get<glm::vec3>();
+		}
+		if (json.contains("distanceOrtho"))
+			distances[n] = json["distanceOrtho"].get<float>();
+	}
+
+	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
+}
+
+void MainWindow::pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>& _iterations, bool _saveImages, bool _traveling)
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+	cam->animateCameraPath(_iterations, _saveImages, _traveling);
+}
+
+void MainWindow::createMovie()
+{
+	QObject* obj = this->sender();
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(obj);
+	if (cam == NULL)
+		return;
+
+	QString filename("movie.mp4");
+	filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save movie..."), filename, QString("mp4 files (*.mp4)"), 0, QFileDialog::DontUseNativeDialog);
+	if (filename.isEmpty()) return;
+
+	const std::vector <QImage>& _frames = cam->getMovieFrames();
+
+	atg_dtv::Encoder encoder;
+	atg_dtv::Encoder::VideoSettings settings{};
+
+	// Output filename
+	settings.fname = filename.toStdString();
+
+	// Input dimensions
+	settings.inputWidth = _frames[0].width();
+	settings.inputHeight = _frames[0].height();
+
+	// Output dimensions
+	settings.width = _frames[0].width();
+	settings.height = _frames[0].height();
+
+	// Encoder settings
+	settings.hardwareEncoding = true;
+	settings.bitRate = 16000000;
+	settings.frameRate = 24;
+
+	const int FrameCount = _frames.size();
+
+	auto start = std::chrono::steady_clock::now();
+
+	std::cout << "==============================================\n";
+	std::cout << " Direct to Video (DTV) Sample Application\n\n";
+
+	encoder.run(settings, 2);
+
+	for (int i = 0; i < FrameCount; ++i) {
+		if ((i + 1) % 100 == 0 || i >= FrameCount - 10) {
+			std::cout << "Frame: " << (i + 1) << "/" << FrameCount << "\n";
+		}
+
+		const int sin_i = std::lroundf(255 * (0.5 + 0.5 * std::sin(i * 0.01)));
+
+		atg_dtv::Frame* frame = encoder.newFrame(true);
+		if (frame == nullptr) break;
+		if (encoder.getError() != atg_dtv::Encoder::Error::None) break;
+
+		const int lineWidth = frame->m_lineWidth;
+		for (int y = 0; y < settings.inputHeight; ++y) {
+			uint8_t* row = &frame->m_rgb[y * lineWidth];
+			for (int x = 0; x < settings.inputWidth; ++x) {
+				const int index = x * 3;
+				QRgb color = _frames[i].pixel(x, y);
+				row[index + 0] = qRed(color); // r
+				row[index + 1] = qGreen(color); // g
+				row[index + 2] = qBlue(color);   // b
+			}
+		}
+
+		/*QString paddedNumber = QString::number(i).rightJustified(5, '0');
+		bool res = _frames[i].save(QString("e:/poca_") + paddedNumber + QString(".png"));
+		if (!res)
+			std::cout << "Problem with saving" << std::endl;*/
+
+		encoder.submitFrame();
+	}
+
+	encoder.commit();
+	encoder.stop();
+
+	auto end = std::chrono::steady_clock::now();
+
+	const double elapsedSeconds =
+		std::chrono::duration<double>(end - start).count();
+
+	std::cout << "==============================================\n";
+	if (encoder.getError() == atg_dtv::Encoder::Error::None) {
+		std::cout << "Encoding took: " << elapsedSeconds << " seconds" << "\n";
+		std::cout << "Real-time framerate: " << FrameCount / elapsedSeconds << " FPS" << "\n";
+	}
+	else {
+		std::cout << "Encoding failed\n";
+	}
 }
 
 void MainWindow::loadPositionCamera()
@@ -1326,10 +1682,15 @@ void MainWindow::loadPositionCamera()
 		QObject::tr("Camera position (*.json)"), 0, QFileDialog::DontUseNativeDialog);
 
 	if (filename.isEmpty()) return;
-	execute(&poca::core::CommandInfo(true, "loadPositionCamera", "path", filename.toStdString()));
+	bool view = m_mfw->isViewCameraChecked(); 
+	bool rotation = m_mfw->isRotationCameraChecked();
+	bool translation = m_mfw->isTranslationCameraChecked();
+	bool zoom = m_mfw->isZoomCameraChecked();
+	bool crop = m_mfw->isCropCameraChecked();
+	execute(&poca::core::CommandInfo(true, "loadPositionCamera", "path", filename.toStdString(), "view", view, "rotation", rotation, "translation", translation, "zoom", zoom, "crop", crop));
 }
 
-void MainWindow::loadPositionCamera(const std::string& _filename, const bool _reset)
+void MainWindow::loadPositionCamera(const std::string& _filename, const bool _reset, const bool _view, const bool _rotation, const bool _translation, const bool _zoom, const bool _crop)
 {
 	if (m_currentMdi == NULL) return;
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
@@ -1345,27 +1706,37 @@ void MainWindow::loadPositionCamera(const std::string& _filename, const bool _re
 	if (json.contains("stateCamera")) {
 		poca::opengl::StateCamera& stateCam = cam->getStateCamera();
 		nlohmann::json tmp = json["stateCamera"];
-		if (tmp.contains("matrixView"))
+		if (tmp.contains("matrixView") && _view)
 			stateCam.m_matrixView = tmp["matrixView"].get<glm::mat4>();
-		if (tmp.contains("rotationSum"))
+		if (tmp.contains("rotationSum") && _rotation)
 			stateCam.m_rotationSum = tmp["rotationSum"].get<glm::quat>();
-		if (tmp.contains("rotation"))
+		if (tmp.contains("rotation") && _rotation)
 			stateCam.m_rotation = tmp["rotation"].get<glm::quat>();
-		if (tmp.contains("center"))
+		if (tmp.contains("center") && _view)
 			stateCam.m_center = tmp["center"].get<glm::vec3>();
-		if (tmp.contains("eye"))
+		if (tmp.contains("eye") && _view)
 			stateCam.m_eye = tmp["eye"].get<glm::vec3>();
-		if (tmp.contains("up"))
+		if (tmp.contains("up") && _view)
 			stateCam.m_up = tmp["up"].get<glm::vec3>();
+		if (tmp.contains("translationModel") && _translation)
+			stateCam.m_translationModel = tmp["translationModel"].get<glm::vec3>();
+
 	}
-	if (json.contains("translationMatrix"))
-		cam->setTranslationMatrix(json["translationMatrix"].get<glm::mat4>());
-	if (json.contains("distanceOrtho"))
+	if (json.contains("distanceOrtho") && _zoom)
 		cam->setDistanceOrtho(json["distanceOrtho"].get<float>());
-	if (json.contains("crop"))
+	if (json.contains("crop") && _crop)
 		cam->setCurrentCrop(json["crop"].get<poca::core::BoundingBox>());
 
 	cam->zoomToBoundingBox(cam->getCurrentCrop(), _reset);
+	cam->getObject()->notifyAll("updateDisplay");
+}
+
+void MainWindow::zoomToCropCurrentMdi(poca::core::BoundingBox _crop)
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+	cam->zoomToBoundingBox(_crop);
 	cam->getObject()->notifyAll("updateDisplay");
 }
 
@@ -1406,6 +1777,14 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 			openFile(info.absoluteFilePath(), _com);
 		}
 	}
+	else if (_com->nameCommand == "close") {
+		QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
+		if (m_currentMdi != NULL) {
+			m_currentMdi->close();
+			windows = m_mdiArea->subWindowList();
+			m_currentMdi = windows.empty() ? NULL : static_cast <MdiChild*>(windows[windows.size() - 1]);
+		}
+	}
 	else if (_com->nameCommand == "computeColocalization") {
 		std::vector <std::string> names = _com->getParameter<std::vector <std::string>>("datasetNames");
 		computeColocalization(names);
@@ -1427,10 +1806,15 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 	}
 	else if (_com->nameCommand == "loadPositionCamera") {
 		bool reset = _com->hasParameter("reset") ? _com->getParameter<bool>("reset") : false;
+		bool view = _com->hasParameter("view") ? _com->getParameter<bool>("view") : true;
+		bool rotation = _com->hasParameter("rotation") ? _com->getParameter<bool>("rotation") : true;
+		bool translation = _com->hasParameter("translation") ? _com->getParameter<bool>("translation") : true;
+		bool zoom = _com->hasParameter("zoom") ? _com->getParameter<bool>("zoom") : true;
+		bool crop = _com->hasParameter("crop") ? _com->getParameter<bool>("crop") : true;
 		if (_com->hasParameter("path")) {
 			std::string filename = _com->getParameter<std::string>("path");
 			std::cout << "reset " << reset << std::endl;
-			loadPositionCamera(filename, reset);
+			loadPositionCamera(filename, reset, view, rotation, translation, zoom, crop);
 		}
 		else
 			loadPositionCamera();
@@ -1514,7 +1898,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 			if (nameComp == "MainWindow") {
 				auto command = json[nameComp];
 				if (command.contains("open")) {
-					if (command["open"].contains("path"))
+					//if (command["open"].contains("path"))
 						command["open"]["path"] = filename.toStdString();
 				}
 				runMacro(command);
@@ -1544,8 +1928,13 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 					for (auto& [nameCommand, value] : jsonCommand.items()) {
 						nlohmann::json parameters;
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
-						if (!command.empty())
+						if (!command.empty()) {
 							comObj->executeCommand(&command);
+							if (command.hasParameter("object")) {
+								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+								createWidget(obj);
+							}
+						}
 						else
 							std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
 					}
@@ -1584,6 +1973,9 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 
 		execute(&command);
 	}
+	else if (tmp == "close") {
+		execute(&poca::core::CommandInfo(false, tmp));
+	}
 	else if (tmp == "computeColocalization") {
 		if (_json[tmp].contains("datasetNames")) {
 			std::vector <std::string> val = _json[tmp]["datasetNames"].get<std::vector <std::string>>();
@@ -1603,6 +1995,16 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			command.addParameter("path", _json[tmp]["path"].get<std::string>());
 		if (_json[tmp].contains("reset"))
 			command.addParameter("reset", _json[tmp]["reset"].get<bool>());
+		if (_json[tmp].contains("view"))
+			command.addParameter("view", _json[tmp]["view"].get<bool>());
+		if (_json[tmp].contains("rotation"))
+			command.addParameter("rotation", _json[tmp]["rotation"].get<bool>());
+		if (_json[tmp].contains("translation"))
+			command.addParameter("translation", _json[tmp]["translation"].get<bool>());
+		if (_json[tmp].contains("zoom"))
+			command.addParameter("zoom", _json[tmp]["zoom"].get<bool>());
+		if (_json[tmp].contains("crop"))
+			command.addParameter("crop", _json[tmp]["crop"].get<bool>());
 		execute(&command);
 	}
 	else if (tmp == "computeDensityWithRadius") {
@@ -1610,5 +2012,39 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			float val = _json[tmp]["radius"].get<float>();
 			execute(&poca::core::CommandInfo(false, tmp, "radius", val));
 		}
+	}
+	else if (tmp == "computeTimingVoronoi") {
+		poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
+		poca::core::BasicComponentInterface* bc = object->getBasicComponent("DetectionSet");
+		if (bc == NULL)
+			return;
+		poca::geometry::DetectionSet* dset = (poca::geometry::DetectionSet*)bc;
+		poca::geometry::VoronoiDiagramFactoryInterface* factoryVoronoi = poca::geometry::createVoronoiDiagramFactory();
+		clock_t t1, t2;
+		t1 = clock();
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::PluginList* plugins = engine->getPlugins();
+		for (auto n = 0; n < 50; n++) {
+			poca::geometry::VoronoiDiagram* voro = factoryVoronoi->createVoronoiDiagram(object, true, plugins, false);
+			if (voro == NULL) return;
+			voro->executeCommand(&poca::core::CommandInfo(false, "densityFactor", "factor", 1.6f));
+			const std::vector <bool>& selection = voro->getSelection();
+			poca::geometry::ObjectIndicesFactoryInterface* factory = poca::geometry::createObjectIndicesFactory();
+			std::vector <uint32_t> indices = factory->createObjects(object, selection, (size_t)3);
+		}
+		t2 = clock();
+		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
+		printf("time for computeTimingVoronoi: %ld ms\n", elapsed);
+		/*std::vector <float> clusterIndices(indices.size());
+		std::transform(indices.begin(), indices.end(), clusterIndices.begin(), [](uint32_t x) { return (float)x; });
+		std::map <std::string, poca::core::MyData*>& data = dset->getData();
+		data["clustersIndices"] = new poca::core::MyData(clusterIndices);
+
+		object->notifyAll("LoadObjCharacteristicsDetectionSetWidget");*/
+		delete factoryVoronoi;
+
+		std::ofstream fs("e:/timings.txt", std::fstream::out | std::fstream::app);
+		fs << elapsed << std::endl;
+		fs.close();
 	}
 }

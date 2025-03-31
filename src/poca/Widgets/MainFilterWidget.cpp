@@ -38,10 +38,15 @@
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QOpenGLWidget>
 #include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QFileDialog>
+#include <fstream>
+#include <tuple>
+#include <glm/gtx/string_cast.hpp>
 
 #include <OpenGL/Camera.hpp>
 #include <General/Misc.h>
 #include <OpenGL/SsaoShader.hpp>
+#include <Plot/Icons.hpp>
 
 #include "../Widgets/MainFilterWidget.hpp"
 #include "../Objects/SMLM_Object/SMLMObject.hpp"
@@ -50,6 +55,7 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 {
 	m_mediator = _mediator;
 	m_object = NULL;
+	m_currentCamera = NULL;
 
 	this->setObjectName( "MainFilterWidget" );
 	this->addActionToObserve( "LoadObjCharacteristicsAllWidgets" );
@@ -106,10 +112,8 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 	m_fillPolygonCB = new QCheckBox("Fill Polygon");
 	m_fillPolygonCB->setChecked(true);
 	m_fillPolygonCB->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
-	m_savePositionBtn = new QPushButton("Save camera pos");
-	m_savePositionBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
-	m_loadPositionBtn = new QPushButton("Load camera pos");
-	m_loadPositionBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_listCommandsBtn = new QPushButton("List commands");
+	m_listCommandsBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	QGridLayout * layoutMisc = new QGridLayout;
 	int lineCount = 0, columnCount = 0;
 	layoutMisc->addWidget( m_sizePointLbl, lineCount, columnCount++, 1, 1 );
@@ -129,9 +133,7 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 	layoutMisc->addWidget(m_cullFaceCB, lineCount, columnCount++, 1, 1);
 	layoutMisc->addWidget(m_clipCB, lineCount, columnCount++, 1, 1);
 	layoutMisc->addWidget(m_fillPolygonCB, lineCount++, columnCount++, 1, 1);
-	columnCount = 0;
-	layoutMisc->addWidget(m_savePositionBtn, lineCount, columnCount++, 1, 1);
-	layoutMisc->addWidget(m_loadPositionBtn, lineCount, columnCount++, 1, 1);
+	layoutMisc->addWidget(m_listCommandsBtn, lineCount, columnCount++, 1, 1);
 	QWidget * generalW = new QWidget;
 	generalW->setLayout(layoutMisc);
 	m_dockGeneral->setWidget(generalW);
@@ -312,16 +314,95 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 	ssaoW->setLayout(layoutSSAO);
 	m_dockSSAO->setWidget(ssaoW);
 
+	/************************************************************************/
+	/* For Camera position                                                      */
+	/************************************************************************/
+	columnCount = 0;
+	m_dockCameraPosition = new QDockWidget("Camera position");
+	m_dockCameraPosition->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
+	m_dockCameraPosition->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_savePositionBtn = new QPushButton("Save camera pos");
+	m_savePositionBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_loadPositionBtn = new QPushButton("Load camera pos");
+	m_loadPositionBtn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxViewCamera = new QCheckBox("View");
+	m_cboxViewCamera->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxViewCamera->setChecked(true);
+	m_cboxRotationCamera = new QCheckBox("Rotation");
+	m_cboxRotationCamera->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxRotationCamera->setChecked(true);
+	m_cboxTranslationCamera = new QCheckBox("Translation");
+	m_cboxTranslationCamera->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxTranslationCamera->setChecked(true);
+	m_cboxZoomCamera = new QCheckBox("Zoom");
+	m_cboxZoomCamera->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxZoomCamera->setChecked(true);
+	m_cboxCropCamera = new QCheckBox("Crop");
+	m_cboxCropCamera->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxCropCamera->setChecked(true);
+
+	QGridLayout* layoutCameraPosition = new QGridLayout;
+	lineCount = 0; columnCount = 0;
+	layoutCameraPosition->addWidget(m_savePositionBtn, lineCount, columnCount++, 1, 1);
+	layoutCameraPosition->addWidget(m_loadPositionBtn, lineCount++, columnCount++, 1, 1);
+	columnCount = 0;
+	layoutCameraPosition->addWidget(m_cboxViewCamera, lineCount, columnCount++, 1, 1);
+	layoutCameraPosition->addWidget(m_cboxRotationCamera, lineCount, columnCount++, 1, 1);
+	layoutCameraPosition->addWidget(m_cboxTranslationCamera, lineCount++, columnCount++, 1, 1);
+	columnCount = 0;
+	layoutCameraPosition->addWidget(m_cboxZoomCamera, lineCount, columnCount++, 1, 1);
+	layoutCameraPosition->addWidget(m_cboxCropCamera, lineCount, columnCount++, 1, 1);
+	QWidget* cameraPositionW = new QWidget;
+	cameraPositionW->setLayout(layoutCameraPosition);
+	m_dockCameraPosition->setWidget(cameraPositionW);
+
+	/************************************************************************/
+	/* For Camera path                                                      */
+	/************************************************************************/
+	columnCount = 0;
+	m_dockCameraPath = new QDockWidget("Camera path");
+	m_dockCameraPath->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
+	m_dockCameraPath->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxSaveImagesCameraPath = new QCheckBox("Save images");
+	m_cboxSaveImagesCameraPath->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxSaveImagesCameraPath->setChecked(false);
+	m_btnPaths = new QPushButton("Compute path");
+	m_btnPaths->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxTravelingCameraPath = new QCheckBox("Traveling");
+	m_cboxTravelingCameraPath->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_cboxTravelingCameraPath->setChecked(true);
+
+	QHBoxLayout* layoutOptionsCamPath = new QHBoxLayout;
+	int maxSize = 20;
+	m_btnScreenShot = new QPushButton();
+	m_btnScreenShot->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_btnScreenShot->setMaximumSize(QSize(maxSize, maxSize));
+	m_btnScreenShot->setIcon(QIcon(QPixmap(poca::plot::screenShotIcon)));
+	m_btnScreenShot->setToolTip("Add camera pos");
+	QObject::connect(m_btnScreenShot, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	layoutOptionsCamPath->addWidget(m_btnScreenShot);
+	layoutOptionsCamPath->addWidget(m_cboxSaveImagesCameraPath);
+	layoutOptionsCamPath->addWidget(m_cboxTravelingCameraPath);
+	layoutOptionsCamPath->addWidget(m_btnPaths);
+	QWidget* cameraPathW = new QWidget;
+	cameraPathW->setLayout(layoutOptionsCamPath);
+	m_dockCameraPath->setWidget(cameraPathW);
+
 	columnCount = 0;
 
+	m_layoutCamPath = new QVBoxLayout;
 	m_emptyWidget = new QWidget;
 	m_emptyWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Expanding);
+	//m_layoutCamPath->addWidget(m_emptyWidget);
 
-	QGridLayout * layout = new QGridLayout;
+	QVBoxLayout* layout = new QVBoxLayout;
 	layout->addWidget(m_dockGeneral);
 	layout->addWidget(m_dockInfoDataset);
 	layout->addWidget(m_dockGrid);
 	layout->addWidget(m_dockSSAO);
+	layout->addWidget(m_dockCameraPosition);
+	layout->addWidget(m_dockCameraPath);
+	layout->addLayout(m_layoutCamPath);
 	layout->addWidget(m_emptyWidget);
 
 	this->setLayout( layout );
@@ -339,9 +420,13 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 	QObject::connect(m_fillPolygonCB, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
 	QObject::connect(m_savePositionBtn, SIGNAL(clicked()), this, SLOT(actionNeeded()));
 	QObject::connect(m_loadPositionBtn, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+	QObject::connect(m_listCommandsBtn, SIGNAL(clicked()), this, SLOT(actionNeeded()));
 
-	QObject::connect(m_lineEditWidthData, SIGNAL(editingFinished()), this, SLOT(actionNeeded()));
-	QObject::connect(m_lineEditHeightData, SIGNAL(editingFinished()), this, SLOT(actionNeeded()));
+	QObject::connect(m_btnScreenShot, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+	QObject::connect(m_btnPaths, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+
+	QObject::connect(m_lineEditWidthData, SIGNAL(editingFinished()), this, SLOT(actionNeeded())); 
+	QObject::connect(m_lineEditHeightData, SIGNAL(editingFinished()), this, SLOT(actionNeeded())); 
 
 	QObject::connect(m_leditDimXNb, SIGNAL(editingFinished()), this, SLOT(actionNeeded()));
 	QObject::connect(m_leditDimYNb, SIGNAL(editingFinished()), this, SLOT(actionNeeded()));
@@ -474,10 +559,43 @@ void MainFilterWidget::actionNeeded()
 			m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_savePositionBtn) {
-		emit(savePosition());
+		//emit(savePosition(QString()));
+		emit(getCurrentCamera());
+		if (m_currentCamera != NULL) {
+			QString filename("cameraPosition.json");
+			filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save camera position..."), filename, QString("json files (*.json)"), 0, QFileDialog::DontUseNativeDialog);
+			if (filename.isEmpty()) return;
+			const poca::opengl::StateCamera& stateCam = m_currentCamera->getStateCamera();
+			nlohmann::json json;
+			json["stateCamera"]["matrixView"] = stateCam.m_matrixView;
+			json["stateCamera"]["rotationSum"] = stateCam.m_rotationSum;
+			json["stateCamera"]["rotation"] = stateCam.m_rotation;
+			json["stateCamera"]["center"] = stateCam.m_center;
+			json["stateCamera"]["eye"] = stateCam.m_eye;
+			json["stateCamera"]["matrix"] = stateCam.m_matrix;
+			json["stateCamera"]["up"] = stateCam.m_up;
+			json["stateCamera"]["translationModel"] = m_currentCamera->getTranslationModel();
+			json["distanceOrtho"] = m_currentCamera->getDistanceOrtho();
+			json["distanceOrthoOriginal"] = m_currentCamera->getOriginalDistanceOrtho();
+			json["crop"] = m_currentCamera->getCurrentCrop();
+
+			std::string text = json.dump();
+			std::cout << text << std::endl;
+			std::ofstream fs(filename.toLatin1().data());
+			fs << text;
+			fs.close();
+		}
 	}
 	else if (sender == m_loadPositionBtn) {
-		emit(loadPosition());
+		emit(loadPosition(QString()));
+	}
+	else if (sender == m_listCommandsBtn) {
+		for (poca::core::BasicComponentInterface* bc : m_object->getComponents()) {
+			std::cout << "For component " << bc->name() << ":" << std::endl;
+			for (poca::core::Command* com : bc->getCommands()) {
+				std::cout << "      -> " << com->name() << std::endl;
+			}
+		}
 	}
 	else if (sender == m_leditRadiusSSAO) {
 		bool ok;
@@ -517,6 +635,217 @@ void MainFilterWidget::actionNeeded()
 			m_sliderStrengthSSAO->blockSignals(false);
 		}
 	}
+	/*else if (sender == m_btnPosition1) {
+		QString path = QDir::currentPath();
+		QString filename = QFileDialog::getOpenFileName(0,
+			QObject::tr("Select one camera position file to open"),
+			path,
+			QObject::tr("Camera position file (*.json)"), 0, QFileDialog::DontUseNativeDialog);
+
+		if (filename.isEmpty())
+			return;
+
+		m_filePath1 = filename;
+		filename = filename.right(filename.size() - (filename.lastIndexOf("/") + 1));
+		m_lblPosition1->setText(filename);
+	}
+	else if (sender == m_btnPosition2) {
+		QString path = QDir::currentPath();
+		QString filename = QFileDialog::getOpenFileName(0,
+			QObject::tr("Select one camera position file to open"),
+			path,
+			QObject::tr("Camera position file (*.json)"), 0, QFileDialog::DontUseNativeDialog);
+
+		if (filename.isEmpty())
+			return;
+
+		m_filePath2 = filename;
+		filename = filename.right(filename.size() - (filename.lastIndexOf("/") + 1));
+		m_lblPosition2->setText(filename);
+	}
+	else if (sender == m_btnApplyPosition1) {
+		if (m_lblPosition1->text().isEmpty())
+			return;
+		emit(loadPosition(m_filePath1));
+	}
+	else if (sender == m_btnApplyPosition2) {
+		if (m_lblPosition2->text().isEmpty())
+			return;
+		emit(loadPosition(m_filePath2));
+	}*/
+	else if (sender == m_btnPaths) {
+		/*if (m_lblPosition1->text().isEmpty() || m_lblPosition2->text().isEmpty())
+			return;
+		bool ok;
+		float val = m_leditDuration->text().toFloat(&ok);
+		if (!ok)
+			return;
+		emit(pathCamera(m_filePath1, m_filePath2, val, m_cboxSaveImagesCameraPath->isChecked(), m_cboxTravelingCameraPath->isChecked()));*/
+		
+		if (m_positions.size() < 2)
+			return;
+
+		std::vector <std::tuple<float, glm::vec3, glm::quat>> path;
+		for (auto n = 0; n < m_positions.size() - 1; n++) {
+			auto layoutH = m_layoutCamPath->itemAt(n)->layout();
+			auto edit = layoutH->itemAt(2)->widget();
+			float val = ((QLineEdit*)edit)->text().toFloat();
+
+			glm::vec3 translations[] = { m_positions[n]["stateCamera"]["translationModel"].get<glm::vec3>(), m_positions[n + 1]["stateCamera"]["translationModel"].get<glm::vec3>() };
+			float distances[] = { m_positions[n]["distanceOrtho"].get<float>(), m_positions[n + 1]["distanceOrtho"].get<float>() };
+			glm::quat rotationSums[] = { m_positions[n]["stateCamera"]["rotationSum"].get<glm::quat>(), m_positions[n + 1]["stateCamera"]["rotationSum"].get<glm::quat>() };
+			float nbs = val * 25.f;
+			float stepDistanceCameraPath = (distances[1] - distances[0]) / nbs;
+			auto stepTranslation = (translations[1] - translations[0]) / nbs;
+			float stepPath = 1.f / nbs;
+
+			auto curTranslation = translations[0];
+			auto curDistance = distances[0];
+			auto curStep = stepPath;
+			for (auto i = 0; i < nbs; i = i + 1) {
+				curTranslation = curTranslation + stepTranslation;
+				curDistance = curDistance + stepDistanceCameraPath;
+				auto curRotation = glm::mix(rotationSums[0], rotationSums[1], curStep);
+				curStep = curStep + stepPath;
+				path.push_back(std::make_tuple(curDistance, curTranslation, curRotation));
+			}
+
+			emit(pathCameraAll(path, m_cboxSaveImagesCameraPath->isChecked(), m_cboxTravelingCameraPath->isChecked()));
+		}
+		std::cout << "Done" << std::endl;
+	}
+	else if (sender == m_btnScreenShot) {
+		emit(getCurrentCamera());
+		if (m_currentCamera != NULL) {
+			for (auto n = 0; n < m_layoutCamPath->count(); n++) {
+				auto edit = m_layoutCamPath->itemAt(n)->layout()->itemAt(2)->widget();
+				edit->setVisible(true);
+			}
+			const poca::opengl::StateCamera& stateCam = m_currentCamera->getStateCamera();
+			nlohmann::json json;
+			json["stateCamera"]["matrixView"] = stateCam.m_matrixView;
+			json["stateCamera"]["rotationSum"] = stateCam.m_rotationSum;
+			json["stateCamera"]["rotation"] = stateCam.m_rotation;
+			json["stateCamera"]["center"] = stateCam.m_center;
+			json["stateCamera"]["eye"] = stateCam.m_eye;
+			json["stateCamera"]["matrix"] = stateCam.m_matrix;
+			json["stateCamera"]["up"] = stateCam.m_up;
+			json["stateCamera"]["translationModel"] = m_currentCamera->getTranslationModel();
+			json["distanceOrtho"] = m_currentCamera->getDistanceOrtho();
+			json["distanceOrthoOriginal"] = m_currentCamera->getOriginalDistanceOrtho();
+			json["crop"] = m_currentCamera->getCurrentCrop();
+
+			m_positions.push_back(json);
+
+			QPushButton* button = new QPushButton("Position");
+			button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+			QLabel* lbl = new QLabel("Screenshot");
+			lbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+			QLineEdit* edit = new QLineEdit("2");
+			edit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+			QSizePolicy p = edit->sizePolicy();
+			p.setRetainSizeWhenHidden(true);
+			edit->setSizePolicy(p);
+			edit->setVisible(false);
+			QPushButton* apply = new QPushButton("Apply");
+			apply->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+			int maxSize = 20;
+			QPushButton* remove = new QPushButton();
+			remove->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+			remove->setMaximumSize(QSize(maxSize, maxSize));
+			remove->setIcon(QIcon(QPixmap(poca::plot::deleteIcon)));
+			remove->setToolTip("Delete feature");
+			QHBoxLayout* layout = new QHBoxLayout;
+			layout->addWidget(button);
+			layout->addWidget(lbl);
+			layout->addWidget(edit);
+			layout->addWidget(apply);
+			layout->addWidget(remove);
+			m_layoutCamPath->addLayout(layout);
+			this->repaint();
+
+			QObject::connect(button, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+			QObject::connect(apply, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+			QObject::connect(remove, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+		}
+	}
+	for (auto n = 0; n < m_layoutCamPath->count(); n++) {
+		auto layoutH = m_layoutCamPath->itemAt(n)->layout();
+		auto test = layoutH->count();
+		//For apply button
+		auto button = layoutH->itemAt(3)->widget();
+		if (button == sender) {
+			emit(getCurrentCamera());
+			if (m_currentCamera != NULL) {
+				const nlohmann::json json = m_positions[n];
+				if (json.contains("stateCamera")) {
+					poca::opengl::StateCamera& stateCam = m_currentCamera->getStateCamera();
+					nlohmann::json tmp = json["stateCamera"];
+					if (tmp.contains("matrixView"))
+						stateCam.m_matrixView = tmp["matrixView"].get<glm::mat4>();
+					if (tmp.contains("rotationSum"))
+						stateCam.m_rotationSum = tmp["rotationSum"].get<glm::quat>();
+					if (tmp.contains("rotation"))
+						stateCam.m_rotation = tmp["rotation"].get<glm::quat>();
+					if (tmp.contains("center"))
+						stateCam.m_center = tmp["center"].get<glm::vec3>();
+					if (tmp.contains("eye"))
+						stateCam.m_eye = tmp["eye"].get<glm::vec3>();
+					if (tmp.contains("up"))
+						stateCam.m_up = tmp["up"].get<glm::vec3>();
+					if (tmp.contains("translationModel"))
+						stateCam.m_translationModel = tmp["translationModel"].get<glm::vec3>();
+
+				}
+				if (json.contains("distanceOrtho"))
+					m_currentCamera->setDistanceOrtho(json["distanceOrtho"].get<float>());
+				if (json.contains("crop"))
+					m_currentCamera->setCurrentCrop(json["crop"].get<poca::core::BoundingBox>());
+
+				m_currentCamera->zoomToBoundingBox(m_currentCamera->getCurrentCrop(), false);
+				m_currentCamera->getObject()->notifyAll("updateDisplay");
+			}
+			return;
+		}
+		//For open button
+		button = layoutH->itemAt(0)->widget();
+		if (button == sender) {
+			QString path = QDir::currentPath();
+			QString filename = QFileDialog::getOpenFileName(0,
+				QObject::tr("Select one camera position file to open"),
+				path,
+				QObject::tr("Camera position file (*.json)"), 0, QFileDialog::DontUseNativeDialog);
+
+			if (!filename.isEmpty()) {
+				QString simpleFilename = filename.right(filename.size() - (filename.lastIndexOf("/") + 1));
+
+				nlohmann::json json;
+				std::ifstream fs(filename.toStdString());
+				if (fs.good())
+					fs >> json;
+				fs.close();
+				m_positions[n] = json;
+				((QLabel *)layoutH->itemAt(1)->widget())->setText(simpleFilename);
+			}
+			return;
+		}
+
+		//For remove button
+		button = layoutH->itemAt(4)->widget();
+		if (button == sender) {
+			auto test2 = layoutH->count();
+			m_positions.erase(m_positions.begin() + n);
+			QLayoutItem* child;
+			while ((child = layoutH->takeAt(0)) != nullptr) {
+				delete child->widget(); // delete the widget
+				delete child;   // delete the layout item
+			}
+			m_layoutCamPath->removeItem(layoutH);
+			layoutH->setParent(NULL);
+			delete layoutH;
+			return;
+		}
+	}
 }
 
 void MainFilterWidget::actionNeeded( int _val )
@@ -554,6 +883,7 @@ void MainFilterWidget::actionNeeded( int _val )
 		m_object->executeCommand(&poca::core::CommandInfo(true, "strengthSSAO", strength));
 		m_object->notifyAll("updateDisplay");
 	}
+
 }
 
 void MainFilterWidget::actionNeeded(bool _val)

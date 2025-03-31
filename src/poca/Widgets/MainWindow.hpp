@@ -36,9 +36,11 @@
 #include <Windows.h>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QLabel>
+#include <glm/glm.hpp>
 
 #include <DesignPatterns/Observer.hpp>
 #include <General/json.hpp>
+#include  <General/Vec6.hpp>
 
 class QMdiArea;
 class QProgressBar;
@@ -48,6 +50,7 @@ class QSignalMapper;
 class QPushButton;
 class QButtonGroup;
 class QAbstractButton;
+class QImage;
 
 class MdiChild;
 class MainFilterWidget;
@@ -56,15 +59,21 @@ class ROIGeneralWidget;
 class MacroWidget;
 
 class LoaderLocalizationsInterface;
+class LoaderImageInterface;
 class GuiInterface;
 class PluginInterface;
 
 namespace poca::core {
 	class PluginList;
+	class BasicComponent;
 }
 
 namespace poca::geometry {
 	class DetectionSet;
+}
+
+namespace poca::opengl {
+	class CameraInterface;
 }
 
 class MainWindow : public QMainWindow, public poca::core::Observer {
@@ -94,7 +103,8 @@ protected:
 
 	void openFile(const QString &, poca::core::CommandInfo*);
 
-	void createWindows(poca::geometry::DetectionSet*, const QString&, const QString&);
+	poca::opengl::CameraInterface* createWindows(poca::core::MyObjectInterface*);
+	poca::core::MyObjectInterface* createWindows(poca::core::BasicComponent*, const QString&, const QString&);
 	void updateTabWidget();
 
 	void execute(poca::core::CommandInfo*);
@@ -103,12 +113,13 @@ protected:
 	void savePositionCamera();
 	void savePositionCamera(const std::string&);
 	void loadPositionCamera();
-	void loadPositionCamera(const std::string&, const bool = false);
+	void loadPositionCamera(const std::string&, const bool = false, const bool = true, const bool = true, const bool = true, const bool = true, const bool = true);
 
 private slots:
 	void actionNeeded();
 	void openFile();
 	void openDir();
+	void addComponentToCurrentMdi();
 	void setActiveMdiChild( MdiChild * );
 	void toggleGridDisplay();
 	void toggleFontDisplay();
@@ -124,18 +135,27 @@ private slots:
 	void duplicate();
 	void setCameraInteraction();
 	void setCameraInteraction(bool);
-
 	void createWidget(poca::core::MyObjectInterface*);
+
 	
-	void savePositionCameraSlot();
-	void loadPositionCameraSlot();
+	void savePositionCameraSlot(QString);
+	void loadPositionCameraSlot(QString);
+	void pathCameraSlot(QString, QString, float, bool, bool);
+	void pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool);
+	void pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool);
 
 	void setParametersPython();
+
+	void currentCameraForPath();
+
 
 public slots:
 	void setPermanentStatusText(const QString &);
 	void runMacro(std::vector<nlohmann::json>);
 	void runMacro(std::vector<nlohmann::json>, QStringList);
+	void createObjectFromFeatures(const std::map <std::string, std::vector <float>>&, const std::string, const std::string);
+	void createMovie();
+	void zoomToCropCurrentMdi(poca::core::BoundingBox);
 
 private:
 	void createActions();
@@ -143,16 +163,14 @@ private:
 	void createStatusBar();
 	void createMenus();
 
-	void loadPlugin();
-
 	QMdiArea * m_mdiArea;
 	QSignalMapper * m_windowMapper;
 
 	QToolBar * m_fileToolBar;
-	QAction * m_openFileAct, * m_openDirAct, * m_duplicateAct, * m_exitAct, * m_gridAct, * m_fontDisplayAct, * m_colocAct, * m_aboutAct, * m_resetProjAct;
+	QAction * m_openFileAct, * m_openDirAct, * m_plusAct, * m_duplicateAct, * m_exitAct, * m_gridAct, * m_fontDisplayAct, * m_colocAct, * m_aboutAct, * m_resetProjAct;
 	QAction * m_closeAllAct, * m_boundingBoxAct;
 	QAction * m_tileWindowsAct, *m_cascadeWindowsAct;
-	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct;
+	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_pythonParamsAct;
 	QTabWidget * m_tabWidget;
@@ -170,10 +188,6 @@ private:
 	MdiChild * m_currentMdi;
 
 	double m_infosCreationDatasets[8];
-
-	std::vector < LoaderLocalizationsInterface* > m_loaderslocsFile;
-	std::vector < GuiInterface* > m_GUIWidgets;
-	poca::core::PluginList* m_plugins;
 
 	QWidget* m_widgetColors;
 	std::vector <QPushButton*> m_colorButtons;

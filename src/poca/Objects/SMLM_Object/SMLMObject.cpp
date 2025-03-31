@@ -62,8 +62,8 @@ const QString SMLMObject::getCorrectPath(const QString & _path){
 
 poca::geometry::DetectionSet * SMLMObject::getLocalizations() const
 {
-	for (std::vector < poca::core::BasicComponent * >::const_iterator it = m_components.begin(); it != m_components.end(); it++){
-		poca::core::BasicComponent* bc = *it;
+	for (std::vector < poca::core::BasicComponentInterface * >::const_iterator it = m_components.begin(); it != m_components.end(); it++){
+		poca::core::BasicComponentInterface* bc = *it;
 		if (bc->getName() == "DetectionSet")
 			return dynamic_cast <poca::geometry::DetectionSet *>(bc);
 	}
@@ -72,9 +72,17 @@ poca::geometry::DetectionSet * SMLMObject::getLocalizations() const
 
 const size_t SMLMObject::dimension() const
 {
-	poca::geometry::DetectionSet* dset = getLocalizations();
-	if (dset == NULL) return 0;
-	return dset->dimension();
+	if (m_components.size() == 0)
+		return 0;
+	auto dimension = m_components[0]->dimension();
+	for (auto n = 1; n < m_components.size(); n++) {
+		auto dimension2 = m_components[n]->dimension();
+		if (dimension != dimension2) {
+			std::cout << "Weird behavior, dimensions between the component of the object are different, using the biggest dimension found." << std::endl;
+			dimension = std::max(dimension, dimension2);
+		}
+	}
+	return dimension;
 }
 
 std::ostream & operator<<( std::ostream & _os, const SMLMObject & _obj )

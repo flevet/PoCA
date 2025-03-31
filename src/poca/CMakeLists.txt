@@ -28,10 +28,10 @@ set(COLOC_OBJECT_SOURCE_FILES
 
 set(WIDGET_HEADER_FILES
   Widgets/MainFilterWidget.hpp
-  Widgets/MainWindow.hpp
   Widgets/MdiChild.hpp
   Widgets/ColocalizationChoiceDialog.hpp
   Widgets/MacroWidget.hpp
+  Widgets/MainWindow.hpp
   Widgets/PythonParametersDialog.hpp
   Widgets/PythonWidget.hpp
   Widgets/ROIGeneralWidget.hpp
@@ -39,10 +39,10 @@ set(WIDGET_HEADER_FILES
 
 set(WIDGET_SOURCE_FILES
   Widgets/MainFilterWidget.cpp
-  Widgets/MainWindow.cpp
   Widgets/MdiChild.cpp
   Widgets/ColocalizationChoiceDialog.cpp
   Widgets/MacroWidget.cpp
+  Widgets/MainWindow.cpp
   Widgets/PythonParametersDialog.cpp
   Widgets/PythonWidget.cpp
   Widgets/ROIGeneralWidget.cpp
@@ -51,10 +51,10 @@ set(WIDGET_SOURCE_FILES
 if(ADD_PYTHON)
 	set(FOO_MOC_HEADERS
 	  Widgets/MainFilterWidget.hpp
-	  Widgets/MainWindow.hpp
 	  Widgets/MdiChild.hpp
 	  Widgets/ColocalizationChoiceDialog.hpp
 	  Widgets/MacroWidget.hpp
+	  Widgets/MainWindow.hpp
 	  Widgets/PythonParametersDialog.hpp
 	  Widgets/PythonWidget.hpp
 	  Widgets/ROIGeneralWidget.hpp
@@ -62,10 +62,10 @@ if(ADD_PYTHON)
 else()
 	set(FOO_MOC_HEADERS
 	  Widgets/MainFilterWidget.hpp
-	  Widgets/MainWindow.hpp
 	  Widgets/MdiChild.hpp
 	  Widgets/ColocalizationChoiceDialog.hpp
 	  Widgets/MacroWidget.hpp
+	  Widgets/MainWindow.hpp
 	  Widgets/ROIGeneralWidget.hpp
 	  Widgets/PythonParametersDialog.hpp
 	)
@@ -75,10 +75,10 @@ endif()
 if(ADD_PYTHON)
 	set(FOO_SOURCE_FILES
 	  Widgets/MainFilterWidget.cpp
-	  Widgets/MainWindow.cpp
 	  Widgets/MdiChild.cpp
 	  Widgets/ColocalizationChoiceDialog.cpp
 	  Widgets/MacroWidget.cpp
+	  Widgets/MainWindow.cpp
 	  Widgets/PythonParametersDialog.cpp
 	  Widgets/PythonWidget.cpp
 	  Widgets/ROIGeneralWidget.cpp
@@ -86,10 +86,10 @@ if(ADD_PYTHON)
 else()
 	set(FOO_SOURCE_FILES
 	  Widgets/MainFilterWidget.cpp
-	  Widgets/MainWindow.cpp
 	  Widgets/MdiChild.cpp
 	  Widgets/ColocalizationChoiceDialog.cpp
 	  Widgets/MacroWidget.cpp
+	  Widgets/MainWindow.cpp
 	  Widgets/ROIGeneralWidget.cpp
 	  Widgets/PythonParametersDialog.cpp
 	  )
@@ -140,14 +140,17 @@ find_package(CUDA QUIET)
 find_package(CGAL REQUIRED COMPONENTS Core)
 if(CGAL_FOUND)
     message("Found CGAL.")
-    include(${CGAL_USE_FILE})
+    if(CGAL_VERSION VERSION_LESS "6.0")
+	message("CGAL version 5")
+	include(${CGAL_USE_FILE})
+    	message("CGAL thing: ${CGAL_USE_FILE}")
 
-    message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
-    add_definitions(${CGAL_CXX_GLAFS_INIT})
+    	message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
+    	add_definitions(${CGAL_CXX_GLAFS_INIT})
 
-    message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
-    message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
-    #target_link_libraries(OpenSMLM ${CGAL_LIBRARY_DIRS} ${CGAL_3RD_PARTY_LIBRARIES_DIRS})
+    	message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
+    	message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
+    endif()
 else()
     message(FATAL_ERROR "CGAL is required.")
 endif()
@@ -157,6 +160,14 @@ qt5_wrap_cpp (FOO_MOC_OUTFILES ${FOO_MOC_HEADERS})
 message("MOC: ${FOO_MOC_OUTFILES}")
 
 add_executable(${targetname} ${header_list} ${source_list} ${main_CPP} ${FOO_MOC_OUTFILES})
+
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_GREATER_EQUAL "6.0")
+	message("CGAL version 6")
+	target_link_libraries(${targetname} CGAL::CGAL)
+    endif()
+endif()
 
 if(CUDA_FOUND)
   message("CUDA was found")
@@ -186,6 +197,13 @@ endif()
 	
 set_target_properties(${targetname} PROPERTIES OUTPUT_NAME "poca$<$<CONFIG:Debug>:d>")
 set_property(TARGET ${targetname} PROPERTY CXX_STANDARD 17)
+IF(MSVC)
+	message("C++ flags: ${CMAKE_CXX_FLAGS}")
+	message("cmake flags changed")
+    #SET(CMAKE_CXX_FLAGS "/EHsc")
+	set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /EHsc")
+	message("C++ flags debug: ${CMAKE_CXX_FLAGS_DEBUG}")
+ENDIF(MSVC)
 
 target_link_libraries(${targetname} Qt5::Widgets Qt5::Core Qt5::Gui Qt5::OpenGL Qt5::PrintSupport)
 
@@ -200,6 +218,29 @@ target_link_libraries(${targetname} ${GLEW_STATIC_LIBRARIES})
 find_package(GLM REQUIRED)
 message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
 include_directories(${GLM_INCLUDE_DIR})
+
+find_package(FFmpeg REQUIRED)
+include_directories(
+    ${AVCODEC_INCLUDE_DIR}
+    ${AVFORMAT_INCLUDE_DIR}
+    ${AVUTIL_INCLUDE_DIR}
+    ${AVDEVICE_INCLUDE_DIR}
+)
+
+target_link_libraries(${targetname}
+    ${AVCODEC_LIBRARY}
+    ${AVFORMAT_LIBRARY}
+    ${AVUTIL_LIBRARY}
+    ${AVDEVICE_LIBRARY}
+    ${SWSCALE_LIBRARY}
+    ${SWRESAMPLE_LIBRARY}
+)
+
+find_package(direct-to-video REQUIRED)
+include_directories(${direct-to-video_INCLUDE_DIRS})
+#target_link_libraries(${targetname} ${direct-to-video_LIBRARIES})
+target_link_libraries(${targetname} debug ${direct-to-video_LIBRARY_DEBUG})
+target_link_libraries(${targetname} optimized ${direct-to-video_LIBRARY_RELEASE})
 
 find_package(TBB COMPONENTS tbb tbbmalloc)
 if(TBB_FOUND)

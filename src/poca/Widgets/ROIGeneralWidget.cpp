@@ -59,6 +59,11 @@ ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator
 
 	QWidget * groupROIs = new QWidget();
 	groupROIs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	QLabel* pixXLbl = new QLabel("Pixel X/Y calibration:");
+	pixXLbl->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+	m_pixXYEdit = new QLineEdit("1");
+	m_pixXYEdit->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+
 	m_loadROIsBtn = new QPushButton("Load ROIs");
 	m_loadROIsBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_saveROIsBtn = new QPushButton("Save ROIs");
@@ -100,16 +105,18 @@ ROIGeneralWidget::ROIGeneralWidget(poca::core::MediatorWObjectFWidget* _mediator
 		"padding: 3px;"
 	);
 	QGridLayout * layoutROI = new QGridLayout;
-	layoutROI->addWidget(m_loadROIsBtn, 0, 0, 1, 1);
-	layoutROI->addWidget(m_saveROIsBtn, 0, 1, 1, 1);
-	layoutROI->addWidget(m_discardSelectedROIsBtn, 0, 2, 1, 1);
-	layoutROI->addWidget(m_discardAllROIsBtn, 0, 3, 1, 1);
-	layoutROI->addWidget(m_cboxDisplayROIs, 1, 2, 1, 1);
-	layoutROI->addWidget(m_cboxDisplayLabelROIs, 1, 3, 1, 1);
-	layoutROI->addWidget(m_colorSelectedROILbl, 2, 0, 1, 1);
-	layoutROI->addWidget(m_colorSelectedROIBtn, 2, 1, 1, 1);
-	layoutROI->addWidget(m_colorUnselectedROILbl, 2, 2, 1, 1);
-	layoutROI->addWidget(m_colorUnselectedROIBtn, 2, 3, 1, 1);
+	layoutROI->addWidget(pixXLbl, 0, 0, 1, 1);
+	layoutROI->addWidget(m_pixXYEdit, 0, 1, 1, 1);
+	layoutROI->addWidget(m_loadROIsBtn, 1, 0, 1, 1);
+	layoutROI->addWidget(m_saveROIsBtn, 1, 1, 1, 1);
+	layoutROI->addWidget(m_discardSelectedROIsBtn, 1, 2, 1, 1);
+	layoutROI->addWidget(m_discardAllROIsBtn, 1, 3, 1, 1);
+	layoutROI->addWidget(m_cboxDisplayROIs, 2, 2, 1, 1);
+	layoutROI->addWidget(m_cboxDisplayLabelROIs, 2, 3, 1, 1);
+	layoutROI->addWidget(m_colorSelectedROILbl, 3, 0, 1, 1);
+	layoutROI->addWidget(m_colorSelectedROIBtn, 3, 1, 1, 1);
+	layoutROI->addWidget(m_colorUnselectedROILbl, 3, 2, 1, 1);
+	layoutROI->addWidget(m_colorUnselectedROIBtn, 3, 3, 1, 1);
 
 	groupROIs->setLayout(layoutROI);
 	groupROIs->setVisible(true);
@@ -153,10 +160,14 @@ void ROIGeneralWidget::actionNeeded()
 	QObject * sender = QObject::sender();
 	if (sender == m_loadROIsBtn){
 		QString dir(m_object->getDir().c_str());
-		QString name = QFileDialog::getOpenFileName(this, QObject::tr("Load ROIs..."), dir, QObject::tr("ROIs files (*.txt)"), 0, QFileDialog::DontUseNativeDialog);
-
+		QString name = QFileDialog::getOpenFileName(this, QObject::tr("Load ROIs..."), dir, QObject::tr("ROIs files (*.txt *.rgn)"), 0, QFileDialog::DontUseNativeDialog);
+		if (name.isEmpty()) return;
 		std::cout << name.toLatin1().data() << std::endl;
-		m_object->loadROIs(name.toLatin1().data());
+		//m_object->loadROIs(name.toLatin1().data(), getXY());
+		bool ok;
+		float cal = m_pixXYEdit->text().toFloat(&ok);
+		if (!ok) return;
+		m_object->executeCommand(&poca::core::CommandInfo(true, "loadROIs", "filename", name.toStdString(), "calibrationXY", cal));
 		m_object->notify("LoadObjCharacteristicsROIWidget");
 	}
 	else if (sender == m_saveROIsBtn){
@@ -169,7 +180,8 @@ void ROIGeneralWidget::actionNeeded()
 		name = QFileDialog::getSaveFileName(this, QObject::tr("Save ROIs..."), dir, QObject::tr("ROIs files (*.txt)"), 0, QFileDialog::DontUseNativeDialog);
 
 		std::cout << name.toLatin1().data() << std::endl;
-		m_object->saveROIs(name.toLatin1().data());
+		m_object->executeCommand(&poca::core::CommandInfo(true, "saveROIs", "filename", name.toStdString()));
+		//m_object->saveROIs(name.toLatin1().data());
 	}
 	else if (sender == m_discardSelectedROIsBtn){
 		std::vector <poca::core::ROIInterface*>& ROIs = m_object->getROIs();
@@ -359,3 +371,9 @@ void ROIGeneralWidget::setColorROIs(QPushButton* _btn, const unsigned char _r, c
 	);
 }
 
+const float ROIGeneralWidget::getXY() const
+{
+	bool ok;
+	float val = m_pixXYEdit->text().toFloat(&ok);
+	return ok ? val : 1.f;
+}

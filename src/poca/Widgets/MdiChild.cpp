@@ -35,6 +35,7 @@
 #include <float.h>
 
 #include <OpenGL/Camera.hpp>
+#include <General/Engine.hpp>
 
 #include "../Widgets/MdiChild.hpp"
 
@@ -56,7 +57,10 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 
 MdiChild::~MdiChild()
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MyObjectInterface* obj = m_widget->getObject();
 	delete m_widget;
+	poca::core::Engine::instance()->removeObject(obj);
 	emit(setCurrentMdi( NULL ) );
 }
 
@@ -138,4 +142,5 @@ bool MyMdiArea::eventFilter( QObject * _receiver, QEvent * _event )
 {
 	return QMdiArea::eventFilter( _receiver, _event );
 }
+
 

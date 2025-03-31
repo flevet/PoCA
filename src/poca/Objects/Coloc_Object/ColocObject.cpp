@@ -134,6 +134,7 @@ void ColocObject::executeCommand(poca::core::CommandInfo* _ci)
 	for (poca::core::MyObjectInterface* obj : m_colors) {
 		obj->executeCommand(_ci);
 	}
+	poca::core::MyObject::executeCommand(_ci);
 	poca::core::CommandableObject::executeCommand(_ci);
 }
 
@@ -162,7 +163,7 @@ const size_t ColocObject::dimension() const
 
 void ColocObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 {
-	poca::core::BasicComponent* bci = getBasicComponent(_nameComponent);
+	poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 	if (bci)
 		bci->executeCommand(_ci);
 	for (poca::core::MyObjectInterface* obj : m_colors)
@@ -174,8 +175,8 @@ void ColocObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 	executeCommand(_ci);
 	for (poca::core::MyObjectInterface* obj : m_colors)
 		obj->executeGlobalCommand(_ci);
-	for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
-		poca::core::BasicComponent* bc = *it;
+	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		poca::core::BasicComponentInterface* bc = *it;
 		bc->executeCommand(_ci);
 	}
 }

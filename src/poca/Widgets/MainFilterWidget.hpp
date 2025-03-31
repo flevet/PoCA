@@ -40,10 +40,12 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QVBoxLayout>
 
 #include "DesignPatterns/Observer.hpp"
 #include "DesignPatterns/MediatorWObjectFWidget.hpp"
 #include "General/Command.hpp"
+#include <OpenGL/Camera.hpp>
 
 class QPlainTextEdit;
 class QDockWidget;
@@ -85,6 +87,14 @@ public:
 
 	inline void noChangingFirstImageIndexAnymore(){m_groupFirstImage->setVisible( false );}
 
+	inline bool isViewCameraChecked() const { return m_cboxViewCamera->isChecked(); }
+	inline bool isRotationCameraChecked() const { return m_cboxRotationCamera->isChecked(); }
+	inline bool isTranslationCameraChecked() const { return m_cboxTranslationCamera->isChecked(); }
+	inline bool isZoomCameraChecked() const { return m_cboxZoomCamera->isChecked(); }
+	inline bool isCropCameraChecked() const { return m_cboxCropCamera->isChecked(); }
+
+	inline void setCurrentCamera(poca::opengl::Camera* _cur) { m_currentCamera = _cur; }
+
 protected slots:
 	void actionNeeded();
 	void actionNeeded( int );
@@ -92,15 +102,19 @@ protected slots:
 	void updateDisplay();
 
 signals:
-	void savePosition();
-	void loadPosition();
+	void savePosition(QString);
+	void loadPosition(QString);
+	void pathCamera(QString, QString, float, bool, bool);
+	void pathCamera2(nlohmann::json, nlohmann::json, float, bool, bool);
+	void pathCameraAll(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool);
+	void getCurrentCamera();
 
 protected:
 	//General
 	QCheckBox * m_smoothPointCB, * m_smoothLineCB, * m_antialiasCB, * m_cullFaceCB, * m_clipCB, * m_fillPolygonCB;
 	QLabel * m_sizePointLbl, * m_widthLineLbl, * m_backColorLbl, * m_fontSizeLbl;
 	QSpinBox * m_sizePointSpn, * m_widthLineSpn, * m_fontSizeSpn;
-	QPushButton* m_colorBackBtn, * m_savePositionBtn, * m_loadPositionBtn;
+	QPushButton* m_colorBackBtn, * m_listCommandsBtn;
 
 	//Infos
 	QLabel * m_nameDatasetLbl, * m_idDatasetLbl;
@@ -119,6 +133,19 @@ protected:
 	QLineEdit* m_leditRadiusSSAO, * m_leditStrenghtSSAO;
 	QSlider* m_sliderRadiusSSAO, * m_sliderStrengthSSAO;
 
+	//For camera position
+	QDockWidget* m_dockCameraPosition;
+	QPushButton* m_savePositionBtn, * m_loadPositionBtn;
+	QCheckBox* m_cboxViewCamera, * m_cboxRotationCamera, * m_cboxTranslationCamera, * m_cboxZoomCamera, * m_cboxCropCamera;
+
+	//For camera path
+	QDockWidget* m_dockCameraPath;
+	QPushButton * m_btnPaths;
+	QCheckBox* m_cboxSaveImagesCameraPath, * m_cboxTravelingCameraPath;
+	QPushButton* m_btnScreenShot;
+	QVBoxLayout* m_layoutCamPath;
+	std::vector <nlohmann::json> m_positions;
+
 	QGroupBox * m_groupFirstImage;
 	QDockWidget * m_dockGeneral, * m_dockInfoDataset, * m_dockGrid, * m_dockSSAO;
 
@@ -130,6 +157,7 @@ protected:
 	unsigned int m_firstIndexObj;
 
 	poca::core::MyObjectInterface* m_object;
+	poca::opengl::Camera* m_currentCamera;
 
 	poca::core::MediatorWObjectFWidget * m_mediator;
 };

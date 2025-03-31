@@ -82,7 +82,7 @@ protected slots:
 	void updateChosenFunctionName(int);
 
 protected:
-	void populateListWidget(poca::core::BasicComponent*, QListWidget*);
+	void populateListWidget(poca::core::BasicComponentInterface*, QListWidget*);
 	void populatePredefinedButtons();
 	void addPredefinedButton(uint32_t);
 

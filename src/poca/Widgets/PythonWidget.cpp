@@ -50,10 +50,10 @@
 #include <General/PythonInterpreter.hpp>
 #include <Objects/MyObject.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <General/MyData.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "../Widgets/PythonWidget.hpp"
 
@@ -220,8 +220,8 @@ PythonWidget::~PythonWidget()
 
 void PythonWidget::populatePredefinedButtons()
 {
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	nlohmann::json& parameters = sss->getParameters();
+	
+	nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	std::vector <std::string> names = { "python_path", "python_dll_path", "python_lib_path", "python_packages_path", "python_scripts_path" };
 	std::vector <std::string> paths(names.size());
 	if (!parameters.contains("PythonParameters")) {
@@ -326,8 +326,8 @@ void PythonWidget::actionNeeded()
 	}
 	if (sender == m_buttonOpenFile) {
 		QString path;
-		poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-		nlohmann::json& parameters = sss->getParameters();
+		
+		nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 		if (parameters.contains("PythonParameters") && parameters["PythonParameters"].contains("python_scripts_path")) {
 			std::string pathToScripts = parameters["PythonParameters"]["python_scripts_path"].get<std::string>();
 			path = pathToScripts.c_str();
@@ -422,7 +422,7 @@ void PythonWidget::actionNeeded(int _idx)
 	/*QObject* sender = QObject::sender();
 	bool found = false;
 	if (sender == m_BCCombo) {
-		poca::core::BasicComponent* bc = m_object->getBasicComponent(_idx);
+		poca::core::BasicComponentInterface* bc = m_object->getBasicComponent(_idx);
 		m_lists[0]->clear();
 		populateListWidget(bc, m_lists[0]);
 	}*/
@@ -436,16 +436,16 @@ void PythonWidget::actionNeeded(bool _val)
 void PythonWidget::executeNena()
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bci = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
 	poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
 	if (dset == NULL) return;
 
 	if (!dset->hasData("frame")) return;
 
-	const std::vector <float>& xs = dset->getData("x");
-	const std::vector <float>& ys = dset->getData("y");
-	const std::vector <float>& zs = dset->hasData("z") ? dset->getData("z") : std::vector <float>(xs.size(), 0.f);
-	const std::vector <float>& times = dset->getData("frame");
+	const std::vector <float>& xs = dset->getData<float>("x");
+	const std::vector <float>& ys = dset->getData<float>("y");
+	const std::vector <float>& zs = dset->hasData("z") ? dset->getData<float>("z") : std::vector <float>(xs.size(), 0.f);
+	const std::vector <float>& times = dset->getData<float>("frame");
 
 	//Prepare data per frame
 	std::vector <uint32_t> pointsPerFrame;
@@ -522,12 +522,12 @@ void PythonWidget::update(poca::core::SubjectInterface* _subject, const poca::co
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets") {
 
-		//poca::core::BasicComponent* bci = obj->getBasicComponent("DetectionSet");
+		//poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
 		//if (!bci) return;
 		m_BCCombo->clear();
 		for (size_t n = 0; n < m_object->nbBasicComponents(); n++) {
 			m_BCCombo->insertItem(n, m_object->getBasicComponent(n)->getName().c_str());
-			poca::core::BasicComponent* bc = m_object->getBasicComponent(n);
+			poca::core::BasicComponentInterface* bc = m_object->getBasicComponent(n);
 			populateListWidget(bc, m_lists[0]);
 		}
 	}
@@ -538,8 +538,9 @@ void PythonWidget::executeMacro(poca::core::MyObjectInterface* _wobj, poca::core
 	this->performAction(_wobj, _ci);
 }
 
-void PythonWidget::populateListWidget(poca::core::BasicComponent* _bc, QListWidget* _listW)
+void PythonWidget::populateListWidget(poca::core::BasicComponentInterface* _bc, QListWidget* _listW)
 {
+	if (_bc->nbComponents() == 0) return;
 	QString nameBC = _bc->getName().c_str();
 	for (std::string component : _bc->getNameData())
 		_listW->addItem(nameBC + " -> " + component.c_str());
@@ -634,7 +635,7 @@ void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInf
 		auto pos = feature.find(" -> ");
 		std::string comp = feature.substr(0, pos), feat = feature.substr(pos + 4);
 		//std::cout << comp << " ------ " << feat << std::endl;
-		poca::core::BasicComponent* bc = obj->getBasicComponent(comp);
+		poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent *>(obj->getBasicComponent(comp));
 		if (!bc) {
 			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Component " << comp << " does not exist." << std::endl;
 			return;
@@ -643,7 +644,7 @@ void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInf
 			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Feature " << feat << "from component " << comp << " does not exist." << std::endl;
 			return;
 		}
-		const std::vector <float>& data = bc->getData(feat);
+		const std::vector <float>& data = bc->getData<float>(feat);
 		auto cur = dataPython.size();
 		dataPython.push_back(QVector<double>());
 		for (const auto val : data)
@@ -679,7 +680,7 @@ void PythonWidget::executePythonScriptAddFeatureToComponent(const poca::core::Co
 		auto pos = feature.find(" -> ");
 		std::string comp = feature.substr(0, pos), feat = feature.substr(pos + 4);
 		//std::cout << comp << " ------ " << feat << std::endl;
-		poca::core::BasicComponent* bc = obj->getBasicComponent(comp);
+		poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent*>(obj->getBasicComponent(comp));
 		if (!bc) {
 			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Component " << comp << " does not exist." << std::endl;
 			return;
@@ -688,7 +689,7 @@ void PythonWidget::executePythonScriptAddFeatureToComponent(const poca::core::Co
 			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Feature " << feat << "from component " << comp << " does not exist." << std::endl;
 			return;
 		}
-		const std::vector <float>& data = bc->getData(feat);
+		const std::vector <float>& data = bc->getData<float>(feat);
 		auto cur = dataPython.size();
 		dataPython.push_back(QVector<double>());
 		for (const auto val : data)
@@ -706,12 +707,12 @@ void PythonWidget::executePythonScriptAddFeatureToComponent(const poca::core::Co
 	else {
 		std::vector <float> newFeature(res.size(), 0.f);
 		std::transform(res.begin(), res.end(), newFeature.begin(), [](double x) { return (float)x; });
-		poca::core::BasicComponent* bc = obj->getBasicComponent(component);
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent(component);
 		if (!bc) {
 			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Result should have been added to component " << component << " that does not exist." << std::endl;
 			return;
 		}
-		bc->addFeature(nameFeature, new poca::core::MyData(newFeature));
+		bc->addFeature(nameFeature, poca::core::generateDataWithLog(newFeature));
 		m_object->notify("LoadObjCharacteristicsAllWidgets");
 	}
 }

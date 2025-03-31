@@ -41,6 +41,7 @@
 #include <QtWidgets/QApplication>
 #include <QtCore/QDir>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QSplitter>
 #include <QtGui/QClipboard>
 #include <fstream>
 #include <iomanip>
@@ -59,7 +60,7 @@ std::string slurp(std::ifstream& in) {
 	return sstr.str();
 }
 
-MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget* _parent/*= 0*/)
+MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget* _parent/*= 0*/):m_pathForOpening(QDir::currentPath())
 {
 	m_mediator = _mediator;
 	m_object = NULL;
@@ -89,8 +90,16 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	recordWidget->setLayout(layout);
 
 	int maxSize = 20;
+	QSplitter* splitter = new QSplitter(Qt::Vertical, _parent);
+	splitter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_macroEdit = new QTextEdit;
 	m_macroEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_filesEdit = new QTextEdit;
+	m_filesEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	splitter->addWidget(m_macroEdit);
+	splitter->addWidget(m_filesEdit);
+	splitter->setStretchFactor(0, 3);
+	splitter->setStretchFactor(1, 1);
 	m_loadMacroButton = new QPushButton("Load macro");
 	m_loadMacroButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_saveMacroButton = new QPushButton("Save macro");
@@ -119,7 +128,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	layoutLineRunner->addWidget(emptyRunnerW);
 	layoutLineRunner->addWidget(m_runMacroButton);
 	QVBoxLayout* layoutMacro = new QVBoxLayout;
-	layoutMacro->addWidget(m_macroEdit);
+	layoutMacro->addWidget(splitter);
 	layoutMacro->addLayout(layoutLineRunner);
 	QWidget* macroWidget = new QWidget;
 	macroWidget->setLayout(layoutMacro);
@@ -133,7 +142,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 
 	QObject::connect(m_loadMacroButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_saveMacroButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-	QObject::connect(m_runMacroButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+	QObject::connect(m_runMacroButton, SIGNAL(clicked()), this, SLOT(actionNeeded()));
 }
 
 MacroWidget::~MacroWidget()
@@ -145,7 +154,16 @@ void MacroWidget::actionNeeded()
 	QObject* sender = QObject::sender();
 	if (sender == m_runMacroButton) {
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
-		emit(runMacro(m_jsonRun));
+		if (m_filesEdit->toPlainText().isEmpty()) {
+			emit(runMacro(m_jsonRun));
+		}
+		else {
+			QString files = m_filesEdit->toPlainText();
+			if (files.endsWith("\n"))
+				files.chop(1);
+			QStringList listFiles = files.split("\n");
+			emit(runMacro(m_jsonRun, listFiles));
+		}
 	}
 	else if (sender == m_loadMacroButton) {
 		QString path = QDir::currentPath(), tmp = path;
@@ -208,24 +226,28 @@ void MacroWidget::actionNeeded()
 		clipboard->setText(m_recordEdit->toPlainText());
 	}
 	else if (sender == m_openFileButton) {
-		QString path = QDir::currentPath();
+		QString path = m_pathForOpening;
 		QStringList filenames = QFileDialog::getOpenFileNames(0,
 			QObject::tr("Select one or more files to open"),
 			path,
 			QObject::tr("Localization files (*.*)"), 0, QFileDialog::DontUseNativeDialog);
 
 		if (filenames.isEmpty()) return;
+		QFileInfo info(filenames[0]);
+		m_pathForOpening = info.dir().absolutePath();
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
 		emit(runMacro(m_jsonRun, filenames));
 	}
 	else if (sender == m_openDirButton) {
-		QString path = QDir::currentPath();
+		QString path = m_pathForOpening;
 		QString dirName = QFileDialog::getExistingDirectory(0,
 			QObject::tr("Select directory"),
 			path,
 			QFileDialog::DontUseNativeDialog | QFileDialog::DontResolveSymlinks);
 
 		if (dirName.isEmpty()) return;
+
+		m_pathForOpening = dirName;
 
 		QDir dir(dirName);
 		dir.setFilter(QDir::Files | QDir::NoSymLinks);
@@ -283,7 +305,10 @@ void MacroWidget::execute(poca::core::CommandInfo* _com)
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
 		for (auto json : m_jsonRun)
 			text.append(json.dump().c_str()).append("\n");
-		(*json)[nameStr] = text.toStdString();
+		if (!(*json)[nameStr].contains("macro"))
+			json->erase(nameStr);
+		(*json)[nameStr]["macro"] = text.toStdString();
+		(*json)[nameStr]["path"] = m_pathForOpening.toStdString();
 	}
 }
 
@@ -293,14 +318,29 @@ void MacroWidget::loadParameters(const nlohmann::json& _json)
 	if (_json.contains(nameStr)) {
 		m_macroEdit->clear();
 		m_jsonRun.clear();
-		try {
-			QString text = _json[nameStr].get<string>().c_str();
-			getJsonsFromQString(text, m_jsonRun);
-			for (const auto& json : m_jsonRun)
-				m_macroEdit->append(json.dump(4).c_str());
+		if (_json[nameStr].contains("macro")) {
+			try {
+				QString text = _json[nameStr]["macro"].get<string>().c_str();
+				std::cout << text.toStdString() << std::endl;
+				getJsonsFromQString(text, m_jsonRun);
+				for (const auto& json : m_jsonRun)
+					m_macroEdit->append(json.dump(4).c_str());
+			}
+			catch (nlohmann::json::exception& e) {
+				std::cout << e.what() << std::endl;
+			}
+			m_pathForOpening = _json[nameStr]["path"].get<string>().c_str();
 		}
-		catch (nlohmann::json::exception& e) {
-			std::cout << e.what() << std::endl;
+		else {
+			try {
+				QString text = _json[nameStr].get<string>().c_str();
+				getJsonsFromQString(text, m_jsonRun);
+				for (const auto& json : m_jsonRun)
+					m_macroEdit->append(json.dump(4).c_str());
+			}
+			catch (nlohmann::json::exception& e) {
+				std::cout << e.what() << std::endl;
+			}
 		}
 	}
 }
@@ -326,10 +366,19 @@ void MacroWidget::getJsonsFromTextEdit(QTextEdit* _textEdit, std::vector <nlohma
 		const QString text = _textEdit->toPlainText();
 		std::stringstream ss;
 		ss.str(text.toStdString());
-		while (!ss.eof()) {
-			nlohmann::json json;
-			ss >> json;
-			_jsons.push_back(json);
+		nlohmann::json js;
+		try
+		{
+			size_t i = 0;
+			while (ss.peek() != EOF)
+			{
+				ss >> js;
+				_jsons.push_back(js);
+			}
+		}
+		catch (std::exception& e)
+		{
+			std::cerr << "    std::exception:" << e.what() << std::endl;
 		}
 	}
 	catch (nlohmann::json::exception& e) {
