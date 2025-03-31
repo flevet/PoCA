@@ -15,9 +15,7 @@ include_directories(${CMAKE_SOURCE_DIR}/poca_core)
 link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(3D_VORONOI_GPU_HEADER_FILES
-  3D_voronoi_GPU/params.h
   3D_voronoi_GPU/voronoi.h
-  3D_voronoi_GPU/voronoi_defs.h
   )
 
 set(INTERFACES_HEADER_FILES
