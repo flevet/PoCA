@@ -40,7 +40,7 @@
 #include <Interfaces/MyObjectInterface.hpp>
 #include <General/BasicComponent.hpp>
 #include <Interfaces/HistogramInterface.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "../../include/PluginInterface.hpp"
 
@@ -57,7 +57,7 @@ public:
     poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*) override;
     void addCommands(poca::core::CommandableObject*);
     void setPlugins(poca::core::PluginList* _plugins) { m_plugins = _plugins; }
-    void setSingletons(const std::map <std::string, std::any>&);
+    void setSingletons(poca::core::Engine*);
 
     QString name() const { return "DBSCANPlugin"; }
     void execute(poca::core::CommandInfo*) {}
@@ -66,7 +66,9 @@ protected:
     QTabWidget* m_parent;
 
     std::vector <std::pair<QAction*, QString>> m_actions;
-    poca::core::PluginList* m_plugins;
+
+public:
+    static poca::core::PluginList* m_plugins;
 };
 //! [0]
 

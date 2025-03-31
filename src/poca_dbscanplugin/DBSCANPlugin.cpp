@@ -38,10 +38,13 @@
 #include <OpenGL/Helper.h>
 #include <Geometry/DetectionSet.hpp>
 #include <General/PluginList.hpp>
+#include <General/Engine.hpp>
 
 #include "DBSCANPlugin.hpp"
 #include "DBSCANWidget.hpp"
 #include "DBSCANCommand.hpp"
+
+poca::core::PluginList* DBSCANPlugin::m_plugins = NULL;
 
 void DBSCANPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _mediator, QTabWidget* _parent)
 {
@@ -61,6 +64,7 @@ void DBSCANPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _mediator
 	DBSCANWidget* w = new DBSCANWidget(_mediator, m_parent);
 	_mediator->addWidget(w);
 	int index = m_parent->addTab(w, QObject::tr("DBSCAN"));
+	m_parent->setCurrentIndex(0);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 	m_parent->setTabVisible(index, false);
 #endif
@@ -84,11 +88,8 @@ void DBSCANPlugin::addCommands(poca::core::CommandableObject* _bc)
 	}
 }
 
-void DBSCANPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void DBSCANPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 

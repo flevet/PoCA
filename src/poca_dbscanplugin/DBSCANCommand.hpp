@@ -66,7 +66,7 @@ public:
 	inline poca::core::HistogramInterface* getHistogram() { return m_histSizes; }
 
 protected:
-	void computeDBSCAN(const float, const uint32_t, const uint32_t);
+	void computeDBSCAN(const float, const uint32_t, const uint32_t, const float = -1);
 	void display(poca::opengl::Camera*, const bool);
 	void createDisplay();
 	void updateColorBuffer();
@@ -77,7 +77,7 @@ protected:
 	DBSCAN <dbvec3f, float> m_dbscan;
 	std::vector <float> m_sizeClusters, m_majorAxisClusters, m_minorAxisClusters;
 	std::vector <uint32_t> m_nbLocsClusters;
-	poca::core::Histogram* m_histSizes;
+	poca::core::Histogram<float>* m_histSizes;
 
 	poca::opengl::PointGLBuffer <poca::core::Vec3mf> m_pointBuffer;
 	poca::opengl::PointGLBuffer <poca::core::Color4D> m_colorBuffer;

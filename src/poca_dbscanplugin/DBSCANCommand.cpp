@@ -36,7 +36,7 @@
 #include <QtWidgets/QMessageBox>
 #include <qmath.h>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Geometry/DetectionSet.hpp>
 #include <General/Misc.h>
 #include <Interfaces/HistogramInterface.hpp>
@@ -45,18 +45,22 @@
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/Camera.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <General/Engine.hpp>
+#include <General/PluginList.hpp>
+#include <Interfaces/MyObjectInterface.hpp>
+#include <Objects/MyObject.hpp>
+#include <General/MyData.hpp>
 
 #include "DBSCANCommand.hpp"
-
+#include "DBSCANPlugin.hpp"
 
 DBSCANCommand::DBSCANCommand(poca::geometry::DetectionSet* _ds) :poca::core::Command("DBSCANCommand"), m_histSizes(NULL), m_updateColorBuffer(false)
 {
 	m_dset = _ds;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "DBSCAN", "radius", 50.f, "min", (uint32_t)20));
 	addCommandInfo(poca::core::CommandInfo(false, "displayDBSCAN", true));
 	if (parameters.contains(name())) {
@@ -96,7 +100,7 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos)
 		computeDBSCAN(radius, minNb, minNbForCluster);
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
-		printf("time for computing Voronoi 2D: %ld ms\n", elapsed);
+		printf("Time for computing DBSCAN: %ld ms\n", elapsed);
 	}
 	else if (_infos->nameCommand == "getDBSCANCommand") {
 		_infos->addParameter("dbscanCommand", this);
@@ -109,8 +113,8 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos)
 		display(cam, offscrean);
 	}
 	else if (_infos->nameCommand == "createDBSCANObjects") {
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_dset);
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
 		if (obj == NULL) return;
 
 		std::vector <uint32_t> selection(m_dset->nbElements(), std::numeric_limits<uint32_t>::max());
@@ -121,10 +125,28 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos)
 			cpt++;
 		}
 		poca::geometry::ObjectListFactory factory;
-		poca::geometry::ObjectList* objects = factory.createObjectListAlreadyIdentified(obj, selection);
+		poca::geometry::ObjectListInterface* objects = factory.createObjectListAlreadyIdentified(obj, selection);
+
+		if (objects == NULL) return;
 		objects->setBoundingBox(m_dset->boundingBox());
+		DBSCANPlugin::m_plugins->addCommands(objects);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objects, *_infos, "DBSCANPlugin");
+			DBSCANPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(objects, *_infos, "DBSCANPlugin");
+			std::cout << text << std::endl;
+		}
+		obj->notify("LoadObjCharacteristicsAllWidgets");
+
+		/*objects->setBoundingBox(m_dset->boundingBox());
 		obj->addBasicComponent(objects);
-		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponent*)objects));
+		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponentInterface*)objects));*/
 	}
 }
 
@@ -152,18 +174,18 @@ poca::core::CommandInfo DBSCANCommand::createCommand(const std::string& _nameCom
 	return poca::core::CommandInfo();
 }
 
-void DBSCANCommand::computeDBSCAN(const float _radius, const uint32_t _minNb, const uint32_t _minNbForCluster)
+void DBSCANCommand::computeDBSCAN(const float _radius, const uint32_t _minNb, const uint32_t _minNbForCluster, const float _dZ)
 {
 	bool hasZ = m_dset->hasData("z");
-	const std::vector <float>& xs = m_dset->getOriginalHistogram("x")->getValues();
-	const std::vector <float>& ys = m_dset->getOriginalHistogram("y")->getValues();
-	const std::vector <float>& zs = hasZ ? m_dset->getOriginalHistogram("z")->getValues() : std::vector <float>(xs.size(), 0.f);
+	std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& zs = hasZ ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
 
 	std::vector<dbvec3f> data;
 	for (size_t n = 0; n < xs.size(); n++)
 		data.push_back(dbvec3f{ xs[n], ys[n], zs[n] });
 
-	m_dbscan.Run(&data, 3, _radius, _minNb, _minNbForCluster);
+	m_dbscan.Run(&data, 3, _radius, _minNb, _minNbForCluster, _dZ);
 	m_sizeClusters.resize(m_dbscan.Clusters.size());
 	m_majorAxisClusters.resize(m_dbscan.Clusters.size());
 	m_minorAxisClusters.resize(m_dbscan.Clusters.size());
@@ -190,9 +212,9 @@ void DBSCANCommand::computeDBSCAN(const float _radius, const uint32_t _minNb, co
 	}
 	delete factory;
 	if (m_histSizes == NULL)
-		m_histSizes = new poca::core::Histogram(m_sizeClusters, m_sizeClusters.size(), false, 50);
+		m_histSizes = new poca::core::Histogram<float>(m_sizeClusters, false, 50);
 	else
-		m_histSizes->setHistogram(m_sizeClusters.data(), m_sizeClusters.size(), false, 50);
+		m_histSizes->setHistogram(m_sizeClusters, false, 50);
 	m_updateColorBuffer = true;
 }
 
@@ -202,9 +224,9 @@ void DBSCANCommand::createDisplay()
 	m_colorBuffer.freeGPUMemory();
 
 	bool hasZ = m_dset->hasData("z");
-	const std::vector <float>& xs = m_dset->getOriginalHistogram("x")->getValues();
-	const std::vector <float>& ys = m_dset->getOriginalHistogram("y")->getValues();
-	const std::vector <float>& zs = hasZ ? m_dset->getOriginalHistogram("z")->getValues() : std::vector <float>(xs.size(), 0.f);
+	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& zs = hasZ ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
 
 	std::vector <poca::core::Vec3mf> points(xs.size());
 	for (size_t n = 0; n < xs.size(); n++)

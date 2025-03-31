@@ -183,11 +183,13 @@ void DBSCANWidget::update(poca::core::SubjectInterface* _subject, const poca::co
 
 	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("DetectionSet"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsDBSCANWidget") {
 
-		poca::core::BasicComponent* bci = obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
 		if (!bci) return;
 		updateDBSCANResults();
 	}
