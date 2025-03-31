@@ -314,7 +314,7 @@ void ColocTesselerWidget::actionNeeded(bool _val)
 		return;
 	}
 	if (sender == m_logHeatMapCBox) {
-		poca::core::BasicComponent* bci = m_object->getBasicComponent("ColocTesseler");
+		poca::core::BasicComponentInterface* bci = m_object->getBasicComponent("ColocTesseler");
 		if (!bci) return;
 		ColocTesseler* coloc = dynamic_cast <ColocTesseler*>(bci);
 		if (m_logHeatMapCBox->isChecked())
@@ -374,7 +374,7 @@ void ColocTesselerWidget::performAction(poca::core::MyObjectInterface* _obj, poc
 	}
 	bool actionDone = false;
 	if (_ci->nameCommand == "selected") {
-		poca::core::BasicComponent* bc = _obj->getBasicComponent("ColocTesseler");
+		poca::core::BasicComponentInterface* bc = _obj->getBasicComponent("ColocTesseler");
 		bc->executeCommand(_ci);
 		actionDone = true;
 	}
@@ -396,11 +396,13 @@ void ColocTesselerWidget::update(poca::core::SubjectInterface* _subject, const p
 		if (m_parentTab->tabText(n) == "Coloc-Tesseler")
 			pos = n;
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-	m_parentTab->setTabVisible(pos, visible);
+	auto index = m_parentTab->currentIndex();
+	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsColocTesselerWidget") {
 
-		poca::core::BasicComponent* bci = obj->getBasicComponent("ColocTesseler");
+		poca::core::BasicComponentInterface* bci = obj->getBasicComponent("ColocTesseler");
 		if (!bci) return;
 		if (bci->hasParameter("correction")) {
 			bool val = bci->getParameter<bool>("correction");

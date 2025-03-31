@@ -49,7 +49,7 @@ ColocTesseler::ColocTesseler(poca::geometry::VoronoiDiagram* _voro1, poca::geome
 	m_voronois[1] = _voro2;
 
 	for (size_t n = 0; n < 2; n++){
-		const std::vector <float>& values = m_voronois[n]->getOriginalHistogram("density")->getValues();
+		const std::vector <float>& values = m_voronois[n]->getMyData("density")->getData<float>();
 
 		poca::core::BoundingBox bbox = m_voronois[n]->boundingBox();
 		float nbs = m_voronois[n]->nbElements(), averageD = 0.f;
@@ -60,7 +60,7 @@ ColocTesseler::ColocTesseler(poca::geometry::VoronoiDiagram* _voro1, poca::geome
 		std::transform(values.begin(), values.end(), std::back_inserter(normValues), [&averageD](auto i) { return  i / averageD; });
 		std::string nameFeature = "density_color";
 		nameFeature.append(std::to_string(n + 1));
-		m_data[nameFeature] = new poca::core::MyData(normValues);
+		m_data.insert(std::make_pair(nameFeature, new poca::core::MyData(new poca::core::Histogram<float>(normValues, false), true)));
 
 		uint32_t curNbPoints = m_voronois[n]->nbElements();
 		m_scattergram[n].resize(curNbPoints);
@@ -83,8 +83,8 @@ ColocTesseler::ColocTesseler(poca::geometry::VoronoiDiagram* _voro1, poca::geome
 
 		std::string currentNameFeature = "density_color" + std::to_string(currentVorId + 1);
 		std::string otherNameFeature = "density_color" + std::to_string(otherId + 1);
-		const std::vector <float>& currentDensity = getOriginalHistogram(currentNameFeature)->getValues();
-		const std::vector <float>& otherDensity = getOriginalHistogram(otherNameFeature)->getValues();
+		const std::vector <float>& currentDensity = getMyData(currentNameFeature)->getData<float>();
+		const std::vector <float>& otherDensity = getMyData(otherNameFeature)->getData<float>();
 		
 		const float* xsCur = m_voronois[currentVorId]->getXs(), * ysCur = m_voronois[currentVorId]->getYs(), * zsCur = m_voronois[currentVorId]->getZs();
 		const float* xsOther = m_voronois[otherId]->getXs(), * ysOther = m_voronois[otherId]->getYs(), * zsOther = m_voronois[otherId]->getZs();
@@ -128,7 +128,7 @@ ColocTesseler::~ColocTesseler()
 
 }
 
-poca::core::BasicComponent* ColocTesseler::copy()
+poca::core::BasicComponentInterface* ColocTesseler::copy()
 {
 	return new ColocTesseler(*this);
 }

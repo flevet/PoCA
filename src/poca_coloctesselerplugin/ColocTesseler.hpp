@@ -46,7 +46,7 @@ public:
 	ColocTesseler(poca::geometry::VoronoiDiagram*, poca::geometry::VoronoiDiagram*);
 	~ColocTesseler();
 
-	poca::core::BasicComponent* copy();
+	poca::core::BasicComponentInterface* copy();
 	void executeCommand(poca::core::CommandInfo*);
 
 	inline poca::geometry::VoronoiDiagram* voronoiAt(size_t _idx) const { return m_voronois[_idx]; }
@@ -62,6 +62,8 @@ public:
 	const std::array <float, 2>& getManders() const { return m_manders; };
 	const std::array<std::vector <float>, 2>& getSpearmans2() const { return m_spearmans2; };
 	const std::array<std::vector <float>, 2>& getManders2() const { return m_manders2; };
+
+	const uint32_t dimension() const { return m_voronois[0]->dimension(); }
 
 protected:
 	poca::geometry::VoronoiDiagram* m_voronois[2];

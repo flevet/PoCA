@@ -36,7 +36,7 @@
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QImage>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 #include <General/Palette.hpp>
 #include <General/Histogram.hpp>
 #include <General/MyData.hpp>
@@ -117,8 +117,8 @@ void ColocTesselerDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 	poca::opengl::Shader* shader = _cam->getShader("simpleShader");
 
 	uint32_t sizeGL = 1;
-	poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-	poca::core::MyObjectInterface* obj = lds->getObject(m_colocTesseler);
+	 poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MyObjectInterface* obj = engine->getObject(m_colocTesseler);
 	poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(obj);
 	if (comObj)
 		if (comObj->hasParameter("pointSizeGL"))

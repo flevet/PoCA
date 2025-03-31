@@ -36,13 +36,13 @@
 #include <ctime>
 #include <fstream>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <General/Misc.h>
 #include <General/Roi.hpp>
+#include <General/MyData.hpp>
 
 #include "ColocTesselerBasicCommands.hpp"
 
@@ -59,8 +59,8 @@ ColocTesselerBasicCommands::ColocTesselerBasicCommands(ColocTesseler* _tess) :po
 		m_sortedIndexesInROIs[n].resize(voronoi->nbElements());
 	}
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "correction", true));
 	addCommandInfo(poca::core::CommandInfo(false, "inROIs", false));
 	addCommandInfo(poca::core::CommandInfo(false, "threshold", "color1", 1.f, "color2", 1.f));
@@ -94,8 +94,8 @@ void ColocTesselerBasicCommands::execute(poca::core::CommandInfo* _infos)
 		correction = getParameter<bool>("correction");
 		bool inROIs = getParameter<bool>("inROIs");
 
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_colocTesseler);
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_colocTesseler);
 		const std::vector <poca::core::ROIInterface*>& ROIs = inROIs ? obj->getROIs() : std::vector <poca::core::ROIInterface*>();
 
 		if (ROIs.empty()) {
@@ -235,7 +235,7 @@ void ColocTesselerBasicCommands::computeCorrection()
 		}
 
 		poca::geometry::DelaunayTriangulationInterface* delau = currentVoronoi->getDelaunay();
-		const std::vector <float>& values = delau->dimension() == 3 ? delau->getOriginalHistogram("volume")->getValues() : delau->getOriginalHistogram("area")->getValues();
+		const std::vector <float>& values = delau->dimension() == 3 ? delau->getMyData("volume")->getData<float>() : delau->getMyData("area")->getData<float>();
 		const std::vector<uint32_t>& triangles = delau->getTriangles();
 		std::fill(m_trianglesSelectedForCorrection[current].begin(), m_trianglesSelectedForCorrection[current].end(), false);
 
@@ -259,7 +259,7 @@ void ColocTesselerBasicCommands::computeCorrection()
 	for (unsigned int current = 0; current < 2; current++) {
 		poca::geometry::VoronoiDiagram* currentVoronoi = m_colocTesseler->voronoiAt(current);
 		poca::geometry::DelaunayTriangulationInterface* delau = currentVoronoi->getDelaunay();
-		const std::vector <float>& values = delau->dimension() == 3 ? delau->getOriginalHistogram("volume")->getValues() : delau->getOriginalHistogram("area")->getValues();
+		const std::vector <float>& values = delau->dimension() == 3 ? delau->getMyData("volume")->getData<float>() : delau->getMyData("area")->getData<float>();
 		const std::vector<uint32_t>& triangles = delau->getTriangles();
 
 		float averageNbLocs = currentVoronoi->averageMeanNbLocs();

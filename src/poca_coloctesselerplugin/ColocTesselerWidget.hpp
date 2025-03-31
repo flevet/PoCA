@@ -61,6 +61,7 @@ public:
 	void executeMacro(poca::core::MyObjectInterface*, poca::core::CommandInfo*);
 
 	const float getDensityFactor(size_t, bool*) const;
+	inline void setParentTab(QTabWidget* _tab) { m_parentTab = _tab; }
 
 protected:
 

@@ -33,14 +33,16 @@
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QAction>
 
+#include <General/Misc.h>
 #include <Geometry/VoronoiDiagram.hpp>
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
 #include <Interfaces/VoronoiDiagramFactoryInterface.hpp>
 #include <General/PluginList.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <Objects/MyObject.hpp>
+#include <General/Engine.hpp>
 
 #include "ColocTesselerPlugin.hpp"
 #include "ColocTesselerWidget.hpp"
@@ -198,7 +200,7 @@ void ColocTesselerConstructionCommand::execute(poca::core::CommandInfo* _ci)
 		poca::geometry::VoronoiDiagram* voros[] = { NULL, NULL };
 		for (size_t n = 0; n < 2; n++) {
 			poca::core::MyObjectInterface* object = m_object->getObject(n);
-			poca::core::BasicComponent* bci = object->getBasicComponent("VoronoiDiagram");
+			poca::core::BasicComponentInterface* bci = object->getBasicComponent("VoronoiDiagram");
 			poca::geometry::VoronoiDiagram* voro = dynamic_cast <poca::geometry::VoronoiDiagram*>(bci);
 			if (voro == NULL) {
 				poca::geometry::VoronoiDiagramFactoryInterface* factoryVoronoi = poca::geometry::createVoronoiDiagramFactory();
@@ -240,25 +242,11 @@ nlohmann::json ColocTesselerPlugin::m_parameters;
 
 void ColocTesselerPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _mediator, QTabWidget* _parent)
 {
-	m_parent = NULL;
-	int pos = -1;
-	for (int n = 0; n < _parent->count(); n++)
-		if (_parent->tabText(n) == "Colocalization")
-			pos = n;
-	if (pos != -1) {
-		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
-	}
-	else {
-		pos =_parent->addTab(new QTabWidget, QObject::tr("Colocalization"));
-		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
-	}
-
-	ColocTesselerWidget* w = new ColocTesselerWidget(_mediator, m_parent);
+	ColocTesselerWidget* w = new ColocTesselerWidget(_mediator, _parent);
 	_mediator->addWidget(w);
-	int index = m_parent->addTab(w, QObject::tr("Coloc-Tesseler"));
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-	m_parent->setTabVisible(index, false);
-#endif
+
+	QTabWidget * tabW = poca::core::utils::addSingleTabWidget(_parent, QString("Colocalization"), QString("Coloc-Tesseler"), w);
+	w->setParentTab(tabW);
 }
 
 std::vector <std::pair<QAction*, QString>> ColocTesselerPlugin::getActions()
@@ -296,16 +284,8 @@ void ColocTesselerPlugin::addCommands(poca::core::CommandableObject* _bc)
 	}
 }
 
-void ColocTesselerPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void ColocTesselerPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	if (_list.find("StateSoftwareSingleton") != _list.end()) {
-		poca::core::StateSoftwareSingleton::setStateSoftwareSingleton(std::any_cast <poca::core::StateSoftwareSingleton*>(_list.at("StateSoftwareSingleton")));
-	}
-	if (_list.find("ListDatasetsSingleton") != _list.end()) {
-		poca::core::ListDatasetsSingleton::setListDatasetsSingleton(std::any_cast <poca::core::ListDatasetsSingleton*>(_list.at("ListDatasetsSingleton")));
-	}
-	if (_list.find("MacroRecorderSingleton") != _list.end()) {
-		poca::core::MacroRecorderSingleton::setMacroRecorderSingleton(std::any_cast <poca::core::MacroRecorderSingleton*>(_list.at("MacroRecorderSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
