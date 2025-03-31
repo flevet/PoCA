@@ -79,7 +79,7 @@ OpenFileDialog::OpenFileDialog(std::ifstream& _fs, char _separator, QWidget * _p
 		}
 	}
 	m_knownHeaders = { std::make_pair("x", false), std::make_pair("y", false), std::make_pair("z", false), std::make_pair("intensity", false), std::make_pair("frame", false), 
-		std::make_pair("sigmaXY", false), std::make_pair("sigmaZ", false), std::make_pair("nx", false), std::make_pair("ny", false), std::make_pair("nz", false) };
+		std::make_pair("sigmaXY", false), std::make_pair("sigmaZ", false), std::make_pair("nx", false), std::make_pair("ny", false), std::make_pair("nz", false), std::make_pair("r", false), std::make_pair("g", false), std::make_pair("b", false) };
 	
 	std::vector < std::string > headers, line1, line2, line3;
 	headers = poca::core::split(s, m_separator, headers);

@@ -33,16 +33,16 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <QtCore\QElapsedTimer>
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QFileInfo>
 
 #include <General/Misc.h>
 #include <Geometry/nanoflann.hpp>
 #include <General/Command.hpp>
+#include <Geometry/DetectionSet.hpp>
 
 #include "LoaderCSVFile.hpp"
 #include "OpenFileDialog.hpp"
-
-
 
 const QString getTimeElapsed(QElapsedTimer _time)
 {
@@ -52,10 +52,25 @@ const QString getTimeElapsed(QElapsedTimer _time)
 	return out;
 }
 
-void LoaderCSVFile::loadFile(const QString& _filename, std::map <std::string, std::vector <float>>& _data, poca::core::CommandInfo* _command)
+poca::core::BasicComponentInterface* LoaderCSVFile::loadData(const QString& _filename, poca::core::CommandInfo* _command)
 {
-	if (!_filename.endsWith(".csv")) return;
+	std::map <std::string, std::vector <float>> data;
+	loadFile(_filename, data, _command);
 
+	if (!data.empty()) {
+		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(data);
+		return dset;
+	}
+	return NULL;
+}
+
+QStringList LoaderCSVFile::extensions() const
+{
+	return m_extensions;
+}
+
+void LoaderCSVFile::loadFile(const QString& _filename, std::map <std::string, std::vector <float>>& _data, poca::core::CommandInfo* _command) const
+{
 	std::ifstream fs(_filename.toLatin1().data());
 	char separator = 0;
 	float multXY = 1.f, multZ = 1.f, multT = 1.f;

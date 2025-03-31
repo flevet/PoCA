@@ -35,17 +35,26 @@
 
 #include <QObject>
 #include <QtPlugin>
-#include "../../include/LoaderLocalizationsInterface.hpp"
+#include <General/Engine.hpp>
+#include "../../include/LoaderInterface.hpp"
 
 //! [0]
-class LoaderCSVFile : public QObject, LoaderLocalizationsInterface
+class LoaderCSVFile : public QObject, LoaderInterface
 {
     Q_OBJECT
-        Q_PLUGIN_METADATA(IID "POCA.LoaderLocalizationsInterface_iid" FILE "loadercsvfile.json")
-        Q_INTERFACES(LoaderLocalizationsInterface)
+        Q_PLUGIN_METADATA(IID "POCA.LoaderInterface_iid" FILE "loadercsvfile.json")
+        Q_INTERFACES(LoaderInterface)
 
 public:
-    void loadFile(const QString&, std::map <std::string, std::vector <float>>&, poca::core::CommandInfo*) override;
+    poca::core::BasicComponentInterface* loadData(const QString&, poca::core::CommandInfo* = NULL) override;
+    QStringList extensions() const override;
+    void setSingletons(poca::core::Engine* _engine){ poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons(); }
+
+protected:
+    void loadFile(const QString&, std::map <std::string, std::vector <float>>&, poca::core::CommandInfo*) const;
+
+protected:
+    QStringList m_extensions{ "csv", "txt", "xls" };
 };
 //! [0]
 
