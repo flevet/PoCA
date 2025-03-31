@@ -1,9 +1,9 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      PluginInterface.hpp
+* File:      LoaderInterface.hpp
 *
-* Copyright: Florian Levet (2020-2021)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
@@ -30,57 +30,41 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef PLUGININTERFACE_H
-#define PLUGININTERFACE_H
+#ifndef LOADERINTERFACE_H
+#define LOADERINTERFACE_H
 
-#include <QtCore/QObject>
+#include <QObject>
+#include <QString>
 #include <any>
 
-class QTabWidget;
-class QAction;
+namespace poca {
+	namespace core {
+		class CommandInfo;
+		class BasicComponentInterface;
+		class Engine;
+	}
+};
 
 //! [0]
-
-namespace poca::core{
-	class MyObjectInterface;
-	class BasicComponent;
-	class MediatorWObjectFWidgetInterface;
-    class PluginList;
-    class CommandInfo;
-    class CommandableObject;
-    class Engine;
-}
-
-/*namespace nlohmann {
-    class json;
-}*/
-
-class PluginInterface
+class LoaderInterface
 {
 public:
-    virtual ~PluginInterface() = default;
-    virtual void addGUI(poca::core::MediatorWObjectFWidgetInterface*, QTabWidget*) = 0;
-    virtual std::vector <std::pair<QAction*, QString>> getActions() = 0;
-    virtual poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*) = 0;
-    virtual void addCommands(poca::core::CommandableObject*) = 0;
-    virtual void setPlugins(poca::core::PluginList*) = 0;
-    virtual void setSingletons(poca::core::Engine*) = 0;
-    virtual QString name() const = 0;
-    virtual void execute(poca::core::CommandInfo*) = 0;
+    virtual ~LoaderInterface() = default;
+    virtual poca::core::BasicComponentInterface* loadData(const QString&, poca::core::CommandInfo* = NULL) = 0;
+	virtual QStringList extensions() const = 0;
+	virtual void setSingletons(poca::core::Engine*) = 0;
 };
 
 
 QT_BEGIN_NAMESPACE
 
-#define PluginInterface_iid "POCA.PluginInterface_iid"
+#define LoaderInterface_iid "POCA.LoaderInterface_iid"
 
-Q_DECLARE_INTERFACE(PluginInterface, PluginInterface_iid)
+Q_DECLARE_INTERFACE(LoaderInterface, LoaderInterface_iid)
 QT_END_NAMESPACE
 
 //! [0]
 #endif
-
-
 
 
 
