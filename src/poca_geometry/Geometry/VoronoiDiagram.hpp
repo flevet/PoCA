@@ -47,7 +47,7 @@ namespace poca::geometry {
 	public:
 		virtual ~VoronoiDiagram();
 
-		virtual poca::core::BasicComponent* copy() = 0;
+		virtual poca::core::BasicComponentInterface* copy() = 0;
 
 		virtual void generateTriangles(std::vector <poca::core::Vec3mf>&) = 0;
 		virtual void generateLines(std::vector <poca::core::Vec3mf>&) = 0;
@@ -57,6 +57,8 @@ namespace poca::geometry {
 		virtual poca::core::Vec3mf computeBarycenterElement(const int) const = 0;
 		virtual const uint32_t dimension() const = 0;
 		virtual const bool hasCells() const = 0;
+
+		virtual void determineEdgeEffectLocalizations(std::vector <bool>&) const = 0;
 
 		virtual const float* getXs() const { return m_xs; }
 		virtual const float* getYs() const { return m_ys; }
@@ -70,13 +72,15 @@ namespace poca::geometry {
 
 		virtual void generateLinesNormals(std::vector <poca::core::Vec3mf>&) {}
 
+		virtual const std::vector <bool>& borderLocalizations() const { return m_borderLocs; }
+
 		virtual const float averageDensity() const;
 		virtual const float averageMeanNbLocs() const;
 
 		virtual uint32_t indexTriangleOfPoint(const float, const float, const float) const = 0;
 
 	protected:
-		VoronoiDiagram(const float*, const float*, const float*, const uint32_t, const std::vector<uint32_t>&, const std::vector<uint32_t>&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface * = NULL);
+		VoronoiDiagram(const float*, const float*, const float*, const uint32_t, const std::vector<uint32_t>&, const std::vector<uint32_t>&, const std::vector <bool>&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface * = NULL);
 
 	protected:
 		const float* m_xs, * m_ys, * m_zs;
@@ -86,14 +90,16 @@ namespace poca::geometry {
 		bool m_deleteKdTree;
 		KdTree_DetectionPoint* m_kdTree;
 		DelaunayTriangulationInterface* m_delaunay;
+
+		std::vector <bool> m_borderLocs;
 	};
 
 	class VoronoiDiagram2D : public VoronoiDiagram {
 	public:
-		VoronoiDiagram2D(const poca::core::Vec3md*, const uint32_t, const std::vector<uint32_t>&, const std::vector<uint32_t>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
+		VoronoiDiagram2D(const poca::core::Vec3md*, const uint32_t, const std::vector<uint32_t>&, const std::vector<uint32_t>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
 		~VoronoiDiagram2D();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 
 		void generateTriangles(std::vector <poca::core::Vec3mf>&);
 		void generateLines(std::vector <poca::core::Vec3mf>&);
@@ -102,6 +108,8 @@ namespace poca::geometry {
 		poca::core::BoundingBox computeBoundingBoxElement(const int) const;
 		poca::core::Vec3mf computeBarycenterElement(const int) const;
 		uint32_t indexTriangleOfPoint(const float, const float, const float) const;
+
+		void determineEdgeEffectLocalizations(std::vector <bool>&) const {}
 
 		const uint32_t dimension() const { return 2; }
 		const bool hasCells() const { return true; }
@@ -133,12 +141,12 @@ namespace poca::geometry {
 
 	class VoronoiDiagram3D : public VoronoiDiagram {
 	public:
-		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <float>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
+		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
 		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&,
-			const std::vector <uint32_t>&, const std::vector <float>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
+			const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
 		~VoronoiDiagram3D();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 
 		void generateTriangles(std::vector <poca::core::Vec3mf>&);
 		void generateLines(std::vector <poca::core::Vec3mf>&);
@@ -147,6 +155,8 @@ namespace poca::geometry {
 		poca::core::BoundingBox computeBoundingBoxElement(const int) const;
 		poca::core::Vec3mf computeBarycenterElement(const int) const;
 		uint32_t indexTriangleOfPoint(const float, const float, const float) const;
+
+		void determineEdgeEffectLocalizations(std::vector <bool>&) const;
 
 		const uint32_t dimension() const { return 3; }
 		const bool hasCells() const { return !m_cells.empty(); }

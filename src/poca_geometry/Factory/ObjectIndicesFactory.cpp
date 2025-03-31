@@ -58,7 +58,7 @@ namespace poca::geometry {
 
 	std::vector <uint32_t>  ObjectIndicesFactory::createObjects(poca::core::MyObjectInterface* _obj, const std::vector <bool>& _selection, const size_t _minNbLocs, const size_t _maxNbLocs)
 	{
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("VoronoiDiagram");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("VoronoiDiagram");
 		VoronoiDiagram* voronoi = dynamic_cast <VoronoiDiagram*>(bci);
 		if (!voronoi) return std::vector <uint32_t>();
 		/*if (delaunay->dimension() == 2)

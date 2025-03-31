@@ -50,6 +50,8 @@ namespace voronator {
 		std::vector <double> cells;
 		std::vector <uint32_t> firsts, neighs;
 
+		std::vector <bool> borderCells;
+
 		double xmin, ymin, xmax, ymax;
 
 		Voronator(delaunator::DelaunayFromDelaunator * _delau, const double _xmin, const double _ymin, const double _xmax, const double _ymax);
@@ -73,6 +75,8 @@ namespace voronator {
 
 		inline const uint32_t getNSites() const { return (int)(delaunay->points.size() / 2); }
 		inline const uint32_t nbEdges() const { return (int)neighs.size(); }
+
+		inline const std::vector <bool>& getBorderCells() const { return borderCells; }
 	};
 }
 

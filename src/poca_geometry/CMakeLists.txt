@@ -15,12 +15,15 @@ include_directories(${CMAKE_SOURCE_DIR}/poca_core)
 link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(3D_VORONOI_GPU_HEADER_FILES
+  3D_voronoi_GPU/params.h
   3D_voronoi_GPU/voronoi.h
+  3D_voronoi_GPU/voronoi_defs.h
   )
 
 set(INTERFACES_HEADER_FILES
   Interfaces/ObjectFeaturesFactoryInterface.hpp
   Interfaces/ObjectListFactoryInterface.hpp
+  Interfaces/ObjectListInterface.hpp
   Interfaces/ObjectIndicesFactoryInterface.hpp
   Interfaces/VoronoiDiagramFactoryInterface.hpp
   Interfaces/DelaunayTriangulationFactoryInterface.hpp
@@ -52,7 +55,9 @@ set(GEOMETRY_HEADER_FILES
   Geometry/DelaunayTriangulation.hpp
   Geometry/DetectionSet.hpp
   Geometry/nanoflann.hpp
-  Geometry/ObjectList.hpp
+  Geometry/ObjectLists.hpp
+  Geometry/ObjectListDelaunay.hpp
+  Geometry/ObjectListMesh.hpp
   Geometry/StraightLine.hpp
   Geometry/VoronoiDiagram.hpp
   Geometry/CGAL_includes.hpp
@@ -69,7 +74,9 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/BasicComputation.cpp
   Geometry/DelaunayTriangulation.cpp
   Geometry/DetectionSet.cpp
-  Geometry/ObjectList.cpp
+  Geometry/ObjectLists.cpp
+  Geometry/ObjectListDelaunay.cpp
+  Geometry/ObjectListMesh.cpp
   Geometry/StraightLine.cpp  
   Geometry/VoronoiDiagram.cpp
   Geometry/delaunator.cpp  
@@ -113,24 +120,27 @@ endforeach()
 
 find_package(CUDA QUIET)
 
-find_package(CGAL REQUIRED COMPONENTS Core)
-if(CGAL_FOUND)
-    message("Found CGAL.")
-    include(${CGAL_USE_FILE})
-
-    message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
-    add_definitions(${CGAL_CXX_GLAFS_INIT})
-
-    message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
-    message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
-    #target_link_libraries(OpenSMLM ${CGAL_LIBRARY_DIRS} ${CGAL_3RD_PARTY_LIBRARIES_DIRS})
-else()
-    message(FATAL_ERROR "CGAL is required.")
-endif()
-
 find_package(Eigen3 3.1.0)
   if (EIGEN3_FOUND)
   include( ${EIGEN3_USE_FILE} )
+endif()
+
+find_package(CGAL REQUIRED COMPONENTS Core)
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_LESS "6.0")
+	message("CGAL version 5")
+	include(${CGAL_USE_FILE})
+    	message("CGAL thing: ${CGAL_USE_FILE}")
+
+    	message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
+    	add_definitions(${CGAL_CXX_GLAFS_INIT})
+
+    	message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
+    	message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
+    endif()
+else()
+    message(FATAL_ERROR "CGAL is required.")
 endif()
 
 add_definitions(-DNOMINMAX)
@@ -155,6 +165,14 @@ else()
 	message("CUDA not found")
 	add_definitions(-DNO_CUDA)
 	add_library(${targetname} STATIC ${header_list} ${source_list})
+endif()
+
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_GREATER_EQUAL "6.0")
+	message("CGAL version 6")
+	target_link_libraries(${targetname} CGAL::CGAL)
+    endif()
 endif()
 
 find_package(GLEW REQUIRED)

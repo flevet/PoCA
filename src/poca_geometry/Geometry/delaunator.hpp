@@ -128,6 +128,8 @@ public:
     INLINE Delaunator(std::vector<double> const& in_coords);
     INLINE double get_hull_area();
     INLINE double get_triangle_area();
+    INLINE void get_outline_points(std::vector <std::uint32_t>&);
+    INLINE void get_outline_edges(std::vector <std::uint32_t>&);
 
 private:
     std::vector<std::size_t> m_hash;

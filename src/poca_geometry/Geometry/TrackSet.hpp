@@ -41,15 +41,17 @@ namespace poca::geometry {
 
 	class TrackSet : public poca::core::BasicComponent {
 	public:
-		TrackSet(const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&);
+		TrackSet(const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&);
+		TrackSet(const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <float>&, const std::vector <uint32_t>&);
 		~TrackSet();
 
-		BasicComponent* copy();
+		BasicComponentInterface* copy();
 
 		const poca::core::MyArrayVec3mf& getTracks() const { return m_tracks; }
-		const std::vector <uint32_t>& getPlanes() const { return m_planes; }
+		const std::vector <float>& getTimes() const { return m_planes; }
 
 		const uint32_t nbTracks() const { return m_tracks.nbElements(); }
+		const std::vector <uint32_t>& locsToTrackID() const { return m_locsToTrackID; }
 
 		void generateTracks(std::vector <poca::core::Vec3mf>&) const;
 		void generatePickingIndices(std::vector <float>&) const;
@@ -57,9 +59,17 @@ namespace poca::geometry {
 
 		poca::core::BoundingBox computeBoundingBoxElement(const uint32_t) const;
 
+		inline const bool hasMsds() const { return !m_msds.empty(); }
+		inline const std::vector < std::vector <float>>& getMsds() const { return m_msds; }
+		inline const std::vector <float>& getMsd(const uint32_t _index) const { return m_msds[_index]; }
+		const uint32_t dimension() const { return m_dimension; }
+
 	protected:
 		poca::core::MyArrayVec3mf m_tracks;
-		std::vector <uint32_t> m_planes;
+		std::vector <float> m_planes;
+		std::vector <uint32_t> m_locsToTrackID, m_tracksID;
+		std::vector < std::vector <float>> m_msds;
+		uint32_t m_dimension;
 	};
 
 }

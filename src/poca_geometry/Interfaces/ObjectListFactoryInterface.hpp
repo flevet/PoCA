@@ -42,19 +42,19 @@ namespace poca::core {
 
 namespace poca::geometry {
 	class DelaunayTriangulationInterface;
-	class ObjectList;
+	class ObjectListInterface;
 
 	class ObjectListFactoryInterface {
 	public:
 		enum TypeShape { TRIANGULATION = 0, CONVEX_HULL = 1, POISSON_SURFACE = 2, ALPHA_SHAPE = 3 };
 		
-		virtual ObjectList* createObjectList(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;
-		virtual ObjectList* createObjectListFromDelaunay(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;
-		virtual ObjectList* createObjectListAlreadyIdentified(poca::core::MyObjectInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max()) = 0;
+		virtual ObjectListInterface* createObjectList(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;
+		virtual ObjectListInterface* createObjectListFromDelaunay(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;
+		virtual ObjectListInterface* createObjectListAlreadyIdentified(poca::core::MyObjectInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max()) = 0;
 
-		virtual ObjectList* createObjectList(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>()) = 0;
-		virtual ObjectList* createObjectListFromDelaunay(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>()) = 0;
-		virtual ObjectList* createObjectListAlreadyIdentified(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max()) = 0;
+		virtual ObjectListInterface* createObjectList(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>()) = 0;
+		virtual ObjectListInterface* createObjectListFromDelaunay(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>()) = 0;
+		virtual ObjectListInterface* createObjectListAlreadyIdentified(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max()) = 0;
 	
 		static TypeShape getTypeId(const std::string& _typeS)
 		{

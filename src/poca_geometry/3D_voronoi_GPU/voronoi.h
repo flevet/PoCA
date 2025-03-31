@@ -63,7 +63,7 @@
 #define IF_VERBOSE(x) //x
 
 #ifndef NO_CUDA
-void computeVoronoiFirstRing(std::vector <float> &, std::vector <uint32_t> &, std::vector <uint32_t> &, std::vector <float> &, std::vector <float> &, std::vector <uint32_t> &, bool, uint32_t);
+void computeVoronoiFirstRing(std::vector <float> &, std::vector <uint32_t> &, std::vector <uint32_t> &, std::vector <float> &, std::vector <uint8_t>&, std::vector <float> &, std::vector <uint32_t> &, bool, uint32_t);
 #endif
 
 #endif // __VORONOI_H__

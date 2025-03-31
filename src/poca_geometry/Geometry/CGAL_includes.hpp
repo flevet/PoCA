@@ -195,5 +195,14 @@ typedef CGAL::Delaunay_triangulation_on_sphere_2<SphereTraits>    CGALDelaunayOn
 typedef SphereTraits::Point_3                                     SpherePoint_3;
 typedef SphereTraits::Segment_3                                   SphereSegment_3;
 
+typedef Kernel::Point_3 Point_3_double;
+typedef CGAL::Surface_mesh<Point_3_double> Surface_mesh_3_double;
+typedef boost::graph_traits<Surface_mesh_3_double>::vertex_descriptor    vertex_descriptor;
+typedef boost::graph_traits<Surface_mesh_3_double>::halfedge_descriptor         halfedge_descriptor;
+typedef boost::graph_traits<Surface_mesh_3_double>::face_descriptor             face_descriptor;
+typedef Surface_mesh_3_double::Property_map<face_descriptor, double> Facet_double_map;
+typedef Surface_mesh_3_double::Property_map<face_descriptor, std::size_t> Facet_size_t_map;
+
+
 #endif // CGAL_includes_h__
 

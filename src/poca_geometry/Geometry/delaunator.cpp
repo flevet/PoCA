@@ -508,6 +508,25 @@ double Delaunator::get_triangle_area()
     return sum(vals);
 }
 
+void Delaunator::get_outline_points(std::vector <std::uint32_t>& _points)
+{
+    size_t e = hull_start;
+    do {
+        _points.push_back(e);
+        e = hull_next[e];
+    } while (e != hull_start);
+}
+
+void Delaunator::get_outline_edges(std::vector <std::uint32_t>& _points)
+{
+    size_t e = hull_start;
+    do {
+        _points.push_back(e);
+        _points.push_back(hull_prev[e]);
+        e = hull_next[e];
+    } while (e != hull_start);
+}
+
 std::size_t Delaunator::legalize(std::size_t a) {
     std::size_t i = 0;
     std::size_t ar = 0;

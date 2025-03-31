@@ -571,7 +571,7 @@ __device__ void export_volume(ConvexCell& cc, float* _volumes, int seed, float *
 }
 
 //###################  KERNEL   ######################
-__device__ void compute_voro_cell_first_ring(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status * gpu_stat, float* volumes, float * bbox, /*float * _cells, unsigned int * _nbTCells, */int seed) {
+__device__ void compute_voro_cell_first_ring(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status * gpu_stat, float* volumes, uint8_t* borders, float * bbox, /*float * _cells, unsigned int * _nbTCells, */int seed) {
 	//create BBox
 	volumes[seed] = -1;
 
@@ -594,6 +594,7 @@ __device__ void compute_voro_cell_first_ring(float * pts, int nbpts, uint32_t* c
 	float4 P[6];
 	float4 C = cc.voro_seed;
 
+	uint8_t border = 0;
 	FOR(t, cc.nb_t) {
 		float4 A = cc.compute_triangle_point(tr(t));
 		get_tet_decomposition_of_vertex(cc, t, P);
@@ -602,20 +603,26 @@ __device__ void compute_voro_cell_first_ring(float * pts, int nbpts, uint32_t* c
 			bary_sum = plus4(bary_sum, mul3(tet_vol, tet_bary));
 			cell_vol += tet_vol;
 		}
+
+		uchar3 ts = tr(t);
+		if (ts.x < 6) border = 1;
+		if (ts.y < 6) border = 1;
+		if (ts.z < 6) border = 1;
 	}
 	volumes[seed] = cell_vol;
+	borders[seed] = border;
 }
 
 //----------------------------------KERNEL
-__global__ void voro_cell_test_GPU_param_first_ring(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status * gpu_stat, float* _volumes, float * bbox) {
+__global__ void voro_cell_test_GPU_param_first_ring(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status * gpu_stat, float* _volumes, uint8_t* _borders, float * bbox) {
 	int seed = blockIdx.x * blockDim.x + threadIdx.x;
 	if (seed >= nbpts) return;
 	gpu_stat[seed] = security_radius_not_reached;
-	compute_voro_cell_first_ring(pts, nbpts, ci, ro, gpu_stat, _volumes, bbox, seed);
+	compute_voro_cell_first_ring(pts, nbpts, ci, ro, gpu_stat, _volumes, _borders, bbox, seed);
 }
 
 //###################  KERNEL   ######################
-__device__ void compute_voro_cell_first_ring_with_construction_cells(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status* gpu_stat, float* volumes, float * bbox, float * _cells, unsigned int * _nbTCells, int seed, unsigned int numPointsChunkIndex) {
+__device__ void compute_voro_cell_first_ring_with_construction_cells(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status* gpu_stat, float* volumes, uint8_t* borders, float * bbox, float * _cells, unsigned int * _nbTCells, int seed, unsigned int numPointsChunkIndex) {
 	//create BBox
 	ConvexCell cc(seed, pts, &(gpu_stat[seed]), bbox);
 
@@ -644,6 +651,7 @@ __device__ void compute_voro_cell_first_ring_with_construction_cells(float * pts
 		realNbTet++;
 	}
 
+	uint8_t border = 0;
 	FOR(t, cc.nb_t) {
 		float4 A = cc.compute_triangle_point(tr(t));
 		get_tet_decomposition_of_vertex(cc, t, P);
@@ -652,20 +660,25 @@ __device__ void compute_voro_cell_first_ring_with_construction_cells(float * pts
 			bary_sum = plus4(bary_sum, mul3(tet_vol, tet_bary));
 			cell_vol += tet_vol;
 		}
+		uchar3 ts = tr(t);
+		if (ts.x < 6) border = 1;
+		if (ts.y < 6) border = 1;
+		if (ts.z < 6) border = 1;
 	}
 	volumes[seed] = cell_vol;
 	_nbTCells[seed] = realNbTet;
+	borders[seed] = border;
 }
 
 //----------------------------------KERNEL
-__global__ void voro_cell_test_GPU_param_first_ring_with_construction_cells(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status* gpu_stat, float* _volumes, float * bbox, float * _cells, unsigned int * _nbTCells, unsigned int _numPointChunkIndex, unsigned int _chunkNbPoints) {
+__global__ void voro_cell_test_GPU_param_first_ring_with_construction_cells(float * pts, int nbpts, uint32_t* ci, uint32_t* ro, Status* gpu_stat, float* _volumes, uint8_t* _borders, float * bbox, float * _cells, unsigned int * _nbTCells, unsigned int _numPointChunkIndex, unsigned int _chunkNbPoints) {
 	int seed = _numPointChunkIndex + (blockIdx.x * blockDim.x + threadIdx.x);
 	if (seed >= _chunkNbPoints) return;
 	gpu_stat[seed] = security_radius_not_reached;
-	compute_voro_cell_first_ring_with_construction_cells(pts, nbpts, ci, ro, gpu_stat, _volumes, bbox, _cells, _nbTCells, seed, seed - _numPointChunkIndex);
+	compute_voro_cell_first_ring_with_construction_cells(pts, nbpts, ci, ro, gpu_stat, _volumes, _borders, bbox, _cells, _nbTCells, seed, seed - _numPointChunkIndex);
 }
 
-void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> & _ci, std::vector <uint32_t> & _ro, std::vector <float> & _volumes, std::vector <float> & _cells, std::vector <unsigned int> & _nbTCells, bool _no_ConstructCells, unsigned int _sizeBuffer)
+void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> & _ci, std::vector <uint32_t> & _ro, std::vector <float> & _volumes, std::vector <uint8_t>& _borders, std::vector <float> & _cells, std::vector <unsigned int> & _nbTCells, bool _no_ConstructCells, unsigned int _sizeBuffer)
 {
 	int nb_pts = _pts.size() / 3;
 	std::vector<float> bary(_pts.size(), 0);
@@ -704,6 +717,7 @@ void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> 
 	GPUBuffer<uint32_t> out_ci(_ci);
 	GPUBuffer<uint32_t> out_ro(_ro);
 	GPUBuffer<float> out_volumes(_volumes);
+	GPUBuffer<uint8_t> out_borders(_borders);
 	GPUBuffer<Status> gpu_stat(stat);
 	GPUBuffer<float> out_bbox(bbox);
 	GPUBuffer<unsigned int> out_nbTCells(_nbTCells);
@@ -712,7 +726,7 @@ void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> 
 	if (_no_ConstructCells){
 
 		voro_cell_test_GPU_param_first_ring << < nb_pts / VORO_BLOCK_SIZE + 1, VORO_BLOCK_SIZE >> > (
-			out_pts.gpu_data, nb_pts, out_ci.gpu_data, out_ro.gpu_data, gpu_stat.gpu_data, out_volumes.gpu_data, out_bbox.gpu_data/*, out_cells.gpu_data, out_nbTCells.gpu_data*/
+			out_pts.gpu_data, nb_pts, out_ci.gpu_data, out_ro.gpu_data, gpu_stat.gpu_data, out_volumes.gpu_data, out_borders.gpu_data, out_bbox.gpu_data/*, out_cells.gpu_data, out_nbTCells.gpu_data*/
 			);
 
 	}
@@ -730,7 +744,7 @@ void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> 
 
 			GPUBuffer<float> out_cells(&_cells[chunkIndex], bufferLength);
 			voro_cell_test_GPU_param_first_ring_with_construction_cells << < numPoints / VORO_BLOCK_SIZE + 1, VORO_BLOCK_SIZE >> > (
-				out_pts.gpu_data, nb_pts, out_ci.gpu_data, out_ro.gpu_data, gpu_stat.gpu_data, out_volumes.gpu_data, out_bbox.gpu_data, out_cells.gpu_data, out_nbTCells.gpu_data, numPointsChunkIndex, numPointsChunkIndex + numPoints
+				out_pts.gpu_data, nb_pts, out_ci.gpu_data, out_ro.gpu_data, gpu_stat.gpu_data, out_volumes.gpu_data, out_borders.gpu_data, out_bbox.gpu_data, out_cells.gpu_data, out_nbTCells.gpu_data, numPointsChunkIndex, numPointsChunkIndex + numPoints
 				);
 			cuda_check_error();
 
@@ -747,6 +761,7 @@ void computeVoronoiFirstRing(std::vector <float> & _pts, std::vector <uint32_t> 
 	}
 
 	out_volumes.gpu2cpu();
+	out_borders.gpu2cpu();
 	out_nbTCells.gpu2cpu();
 	gpu_stat.gpu2cpu();
 	show_status_stats(stat);

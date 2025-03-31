@@ -102,8 +102,7 @@ namespace poca::geometry {
 		KernelLine majorAxis;
 		CGAL::linear_least_squares_fitting_2(points.begin(), points.end(), majorAxis, CGAL::Dimension_tag < 0 >());
 		KernelLine minorAxis = majorAxis.perpendicular(centroid);
-		float* distanceToMajorAxis = new float[points.size()];
-		float* distanceToMinorAxis = new float[points.size()];
+		std::vector<float> distanceToMajorAxis(points.size()), distanceToMinorAxis(points.size());
 		float meanDMajor = 0., meanDMinor = 0., nb = points.size();
 		p0.set(centroid.x(), centroid.y());
 		p1.set(centroid.x(), centroid.y());
@@ -181,8 +180,6 @@ namespace poca::geometry {
 		_res[index++] = major * 2.;
 		_res[index++] = minor * 2.;
 
-		delete[] distanceToMinorAxis;
-		delete[] distanceToMajorAxis;
 	}
 
 	void ObjectFeaturesFactory::computePCA3D(const uint32_t* _locIds, const size_t _nbLocs, const float* _xs, const float* _ys, const float* _zs, float* _res)
@@ -222,7 +219,7 @@ namespace poca::geometry {
 		double sizes[3];
 		poca::core::ArrayStatistics stats[3];
 		for (unsigned int i = 0; i < 3; i++) {
-			stats[i] = poca::core::ArrayStatistics::generateArrayStatistics(distanceToPlanes[i].data(), points.size());
+			stats[i] = poca::core::ArrayStatistics::generateArrayStatistics(distanceToPlanes[i], points.size());
 			sizes[i] = rapport * stats[i].getData(poca::core::ArrayStatistics::StdDev);
 		}
 

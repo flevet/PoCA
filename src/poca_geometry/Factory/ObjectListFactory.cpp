@@ -37,12 +37,18 @@
 #include <CGAL/Alpha_shape_3.h>
 #include <CGAL/Alpha_shape_cell_base_3.h>
 #include <CGAL/Alpha_shape_vertex_base_3.h>
+#include <CGAL/convex_hull_2.h>
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+#include <CGAL/Point_set_3.h>
+#include <CGAL/Poisson_reconstruction_function.h>
+#include <CGAL/Implicit_surface_3.h>
+#endif
 
 #include <General/BasicComponent.hpp>
-#include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <Interfaces/ROIInterface.hpp>
-#include <DesignPatterns/GlobalParametersSingleton.hpp>
+#include <General/Histogram.hpp>
+#include <General/Engine.hpp>
 #include <General/Misc.h>
 
 #include "ObjectListFactory.hpp"
@@ -50,7 +56,9 @@
 #include "../Interfaces/DelaunayTriangulationFactoryInterface.hpp"
 #include "../Geometry/DelaunayTriangulation.hpp"
 #include "../Geometry/BasicComputation.hpp"
-#include "../Geometry/ObjectList.hpp"
+#include "../Geometry/ObjectListDelaunay.hpp"
+#include "../Geometry/ObjectListMesh.hpp"
+#include "../Geometry/delaunator.hpp"
 #include "../Geometry/CGAL_includes.hpp"
 
 typedef CGAL::Alpha_shape_vertex_base_3<K_inexact>               Alpha_Vb;
@@ -63,6 +71,10 @@ typedef Alpha_shape_3::NT                                Alpha_NT;
 typedef Alpha_shape_3::Cell_handle                          Alpha_Cell_handle;
 typedef Alpha_shape_3::Vertex_handle                        Alpha_Vertex_handle;
 typedef Alpha_shape_3::Facet                             Alpha_Facet;
+
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+typedef CGAL::Point_set_3<Point_3_inexact, Vector_3_inexact> Point_set;
+#endif
 
 namespace poca::geometry {
 	ObjectListFactoryInterface* createObjectListFactory()
@@ -80,35 +92,35 @@ namespace poca::geometry {
 
 	}
 
-	ObjectList* ObjectListFactory::createObjectList(poca::core::MyObjectInterface* _obj, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const bool _inROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList(poca::core::MyObjectInterface* _obj, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const bool _inROIs)
 	{
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DelaunayTriangulation");
 		DelaunayTriangulationInterface* delaunay = dynamic_cast <DelaunayTriangulationInterface*>(bci);
 		if (!delaunay) return NULL;
 		const std::vector <poca::core::ROIInterface*>& ROIs = _inROIs ? _obj->getROIs() : std::vector <poca::core::ROIInterface*>();
 		return createObjectList(delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea, ROIs);
 	}
-	ObjectList* ObjectListFactory::createObjectList(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		std::vector <bool> selectionDelaunay;
 		_delaunay->generateFaceSelectionFromLocSelection(_selection, selectionDelaunay);
 		return createObjectListFromDelaunay(_delaunay, selectionDelaunay, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea, _ROIs);
 	}
 
-	ObjectList* ObjectListFactory::createObjectListFromDelaunay(poca::core::MyObjectInterface* _obj, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const bool _inROIs)
+	ObjectListInterface* ObjectListFactory::createObjectListFromDelaunay(poca::core::MyObjectInterface* _obj, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const bool _inROIs)
 	{
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DelaunayTriangulation");
 		DelaunayTriangulationInterface* delaunay = dynamic_cast <DelaunayTriangulationInterface*>(bci);
 		if (!delaunay) return NULL;
 		const std::vector <poca::core::ROIInterface*>& ROIs = _inROIs ? _obj->getROIs() : std::vector <poca::core::ROIInterface*>();
 		return createObjectListFromDelaunay(delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea, ROIs);
 	}
 
-	ObjectList* ObjectListFactory::createObjectListFromDelaunay(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectListFromDelaunay(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		clock_t t1, t2;
 		t1 = clock();
-		ObjectList* objs = NULL;
+		ObjectListInterface* objs = NULL;
 		if (_delaunay->dimension() == 2)
 			objs = createObjectList2D(_delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea, _ROIs);
 		else if (_delaunay->dimension() == 3)
@@ -119,32 +131,40 @@ namespace poca::geometry {
 		return objs;
 	}
 
-	ObjectList* ObjectListFactory::createObjectListAlreadyIdentified(poca::core::MyObjectInterface* _obj, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
+	ObjectListInterface* ObjectListFactory::createObjectListAlreadyIdentified(poca::core::MyObjectInterface* _obj, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
 	{
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DelaunayTriangulation");
 		DelaunayTriangulationInterface* delaunay = dynamic_cast <DelaunayTriangulationInterface*>(bci);
 		if (!delaunay) return NULL;
 		return createObjectListAlreadyIdentified(delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
 	}
 
-	ObjectList* ObjectListFactory::createObjectListAlreadyIdentified(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
+	ObjectListInterface* ObjectListFactory::createObjectListAlreadyIdentified(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
 	{
 		clock_t t1, t2;
 		t1 = clock();
-		ObjectList* objs = NULL;
-		std::map <uint32_t, std::vector <uint32_t>> selectionDelaunay;
-		_delaunay->generateFaceSelectionFromLocSelection(_selection, selectionDelaunay);
+		ObjectListInterface* objs = NULL;
+		std::map <uint32_t, std::vector <uint32_t>> objects;
+		for (auto n = 0; n < _selection.size(); n++) {
+			auto index = _selection[n];
+			if (index == std::numeric_limits<uint32_t>::max()) continue;
+			if (objects.find(index) == objects.end())
+				objects[index] = std::vector<uint32_t>();
+			objects[index].push_back(n);
+		}
+		//std::map <uint32_t, std::vector <uint32_t>> selectionDelaunay;
+		//_delaunay->generateFaceSelectionFromLocSelection(_selection, selectionDelaunay);
 		if (_delaunay->dimension() == 2)
-			objs = createObjectList2D(_delaunay, selectionDelaunay, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
+			objs = createObjectList2D(_delaunay, objects, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
 		else if (_delaunay->dimension() == 3)
-			objs = createObjectList3D(_delaunay, selectionDelaunay, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
+			objs = createObjectList3D(_delaunay, objects, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
 		printf("Time for creating objects: %ld ms\n", elapsed);
 		return objs;
 	}
 
-	ObjectList* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
@@ -192,7 +212,6 @@ namespace poca::geometry {
 		firstsLocs.push_back(currentFirstLocs);
 		firstTriangles.push_back(currentFirstTriangles);
 		firstOutlines.push_back(currentFirstOutlines);
-		float area = 0.f;
 		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
 			if (!selectionTriangulationFaces[n]) continue;
 			std::vector <uint32_t> queueTriangles;
@@ -201,6 +220,7 @@ namespace poca::geometry {
 			queueTriangles.push_back(n);
 			size_t currentTriangle = 0, sizeQueue = queueTriangles.size();
 
+			float area = 0.f;
 			while (currentTriangle < sizeQueue) {
 				size_t index = queueTriangles.at(currentTriangle);
 				if (selectionTriangulationFaces[index]) {
@@ -246,15 +266,15 @@ namespace poca::geometry {
 				std::copy(outlineOfObject.begin(), outlineOfObject.end(), std::back_inserter(outlinesAllObjects));
 			}
 		}
-		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, linkTriangulationFacesToObjects);
+		return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, linkTriangulationFacesToObjects);
 	}
 
-	ObjectList* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
 		const float* zs = _delaunay->getZs();
-		const std::vector <float>& volumes = _delaunay->getOriginalHistogram("volume")->getValues();
+		const std::vector <float>& volumes = static_cast<poca::core::Histogram<float>*>(_delaunay->getOriginalHistogram("volume"))->getValues();
 		const std::vector<uint32_t>& triangles = _delaunay->getTriangles();
 		const poca::core::MyArrayUInt32& neighbors = _delaunay->getNeighbors();
 		const std::vector <uint32_t> indiceTriangles = neighbors.getFirstElements();
@@ -415,14 +435,14 @@ namespace poca::geometry {
 			}
 
 			if (_minNbLocs <= locsOfObject.size() && locsOfObject.size() <= _maxNbLocs && _minArea <= volume && volume <= _maxArea) {
-				ObjectListFactoryInterface::TypeShape type = poca::core::GlobalParametersSingleton::instance()->m_parameters["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+				ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
 				switch (type) {
 				case ObjectListFactoryInterface::TRIANGULATION:
 					for (const auto id : indexTrianglesOfObject)
 						trianglesOfObject.push_back(poca::core::Vec3mf(xs[id], ys[id], zs[id]));
 					break;
 				case ObjectListFactoryInterface::CONVEX_HULL:
-					computeConvexHullObject(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
+					computeConvexHullObject3DFromOutline(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
 					break;
 				case ObjectListFactoryInterface::POISSON_SURFACE:
 					computePoissonSurfaceObject(xs, ys, zs, locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, trianglesOfObject, volume);
@@ -458,11 +478,11 @@ namespace poca::geometry {
 				std::copy(indexTrianglesOfObject.begin(), indexTrianglesOfObject.end(), std::back_inserter(allIndexesTriangles));
 			}
 		}
-		ObjectList* objs = locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		ObjectListInterface* objs = locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
 		return objs;
 	}
 
-	ObjectList* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	/*ObjectList* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
@@ -565,9 +585,9 @@ namespace poca::geometry {
 			}
 		}
 		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, linkTriangulationFacesToObjects);
-	}
+	}*/
 
-	ObjectList* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::map <uint32_t, std::vector <uint32_t>>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
+	ObjectListInterface* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::map <uint32_t, std::vector <uint32_t>>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
@@ -576,8 +596,44 @@ namespace poca::geometry {
 			zsTmp = std::vector<float>(_delaunay->nbPoints(), 0.f);
 		const float* zs = _delaunay->getZs() == NULL ? zsTmp.data() : _delaunay->getZs();
 
-		const std::vector<uint32_t>& triangles = _delaunay->getTriangles();
+		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+
+		std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
+		std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects;
+		float area = 0.f;
+
+		for (auto it = _selection.begin(); it != _selection.end(); it++) {
+			auto indexObj = it->first;
+			auto locs = it->second;
+			area = 0.f;
+
+			if (_minNbLocs <= locs.size() && locs.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
+				firstsLocs.push_back(locsAllObjects.size());
+				firstTriangles.push_back(trianglesAllObjects.size());
+				firstOutlines.push_back(outlinesAllObjects.size());
+
+				switch (type) {
+				case ObjectListFactoryInterface::CONVEX_HULL:
+					computeConvexHullObject2D(xs, ys, zs, locs, outlinesAllObjects, trianglesAllObjects, area);
+					break;
+				default:
+					computeConvexHullObject2D(xs, ys, zs, locs, outlinesAllObjects, trianglesAllObjects, area);
+					break;
+				}
+
+				std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
+			}
+		}
+		firstsLocs.push_back(locsAllObjects.size());
+		firstTriangles.push_back(trianglesAllObjects.size());
+		firstOutlines.push_back(outlinesAllObjects.size());
+
+		return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, std::vector <uint32_t>());
+
+		/*const std::vector<uint32_t>& triangles = _delaunay->getTriangles();
 		const poca::core::MyArrayUInt32& neighbors = _delaunay->getNeighbors();
+		const std::vector <uint32_t>& tests = neighbors.getFirstElements();
+		const std::vector <uint32_t>& testsData = neighbors.getData();
 
 		std::vector <uint32_t> globalSelection(_delaunay->nbFaces(), std::numeric_limits<std::size_t>::max());
 		for (auto it = _selection.begin(); it != _selection.end(); it++) {
@@ -597,7 +653,8 @@ namespace poca::geometry {
 		for (auto it = _selection.begin(); it != _selection.end(); it++) {
 			auto indexObj = it->first;
 			area = 0.f;
-			std::set <uint32_t> locsOfObject;
+			std::set <uint32_t> locsOfObject, locsOfOutline;
+			std::vector <uint32_t> indexTrianglesOfObject;
 			std::vector <poca::core::Vec3mf> trianglesOfObject, outlineOfObject;
 			for (auto index : it->second) {
 				uint32_t i1 = triangles[3 * index], i2 = triangles[3 * index + 1], i3 = triangles[3 * index + 2];
@@ -605,9 +662,9 @@ namespace poca::geometry {
 				locsOfObject.insert(i2);
 				locsOfObject.insert(i3);
 				poca::core::Vec3mf v1(xs[i1], ys[i1], zs[i1]), v2(xs[i2], ys[i2], zs[i2]), v3(xs[i3], ys[i3], zs[i3]);
-				trianglesOfObject.push_back(v1);
-				trianglesOfObject.push_back(v2);
-				trianglesOfObject.push_back(v3);
+				indexTrianglesOfObject.push_back(i1);
+				indexTrianglesOfObject.push_back(i2);
+				indexTrianglesOfObject.push_back(i3);
 				float sideA = (v1 - v2).length(), sideB = (v1 - v3).length(), sideC = (v2 - v3).length();
 				area += poca::geometry::computeAreaTriangle<float>(sideA, sideB, sideC);
 
@@ -617,10 +674,22 @@ namespace poca::geometry {
 						std::array<size_t, 3> edge = _delaunay->getOutline(index, i);
 						outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[0]], ys[edge[0]], zs[edge[0]]));
 						outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[1]], ys[edge[1]], zs[edge[1]]));
+						locsOfOutline.insert(edge[0]);
+						locsOfOutline.insert(edge[1]);
 					}
 				}
 			}
 			if (_minNbLocs <= locsOfObject.size() && locsOfObject.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
+				ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+				switch (type) {
+				case ObjectListFactoryInterface::CONVEX_HULL:
+					computeConvexHullObject2DFromOutline(xs, ys, zs, locsOfOutline, trianglesOfObject, area);
+					break;
+				default:
+					for (const auto id : indexTrianglesOfObject)
+						trianglesOfObject.push_back(poca::core::Vec3mf(xs[id], ys[id], zs[id]));
+					break;
+				}
 				currentFirstLocs += locsOfObject.size();
 				currentFirstTriangles += trianglesOfObject.size();
 				currentFirstOutlines += outlineOfObject.size();
@@ -630,12 +699,15 @@ namespace poca::geometry {
 				std::copy(locsOfObject.begin(), locsOfObject.end(), std::back_inserter(locsAllObjects));
 				std::copy(trianglesOfObject.begin(), trianglesOfObject.end(), std::back_inserter(trianglesAllObjects));
 				std::copy(outlineOfObject.begin(), outlineOfObject.end(), std::back_inserter(outlinesAllObjects));
+
+				for (auto t = 0; t < trianglesOfObject.size(); t += 3)
+					std::cout << trianglesOfObject[t] << " - " << trianglesOfObject[t + 1] << " - " << trianglesOfObject[t + 2] << std::endl;
 			}
 		}
-		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, globalSelection);
+		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, globalSelection);*/
 	}
 
-	ObjectList* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	/*ObjectList* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::vector <uint32_t>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
@@ -810,11 +882,53 @@ namespace poca::geometry {
 			}
 		}
 		return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs);
-	}
+	}*/
 
-	ObjectList* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::map <uint32_t, std::vector <uint32_t>>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
+	ObjectListInterface* ObjectListFactory::createObjectList3D(DelaunayTriangulationInterface* _delaunay, const std::map <uint32_t, std::vector <uint32_t>>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea)
 	{
 		const float* xs = _delaunay->getXs();
+		const float* ys = _delaunay->getYs();
+		const float* zs = _delaunay->getZs();
+
+		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+
+		std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
+		std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects, triCHull;
+		float area = 0.f;
+		std::vector <float> volumeObjects;
+
+		for (auto it = _selection.begin(); it != _selection.end(); it++) {
+			auto indexObj = it->first;
+			auto locs = it->second;
+			area = 0.f;
+
+			if (_minNbLocs <= locs.size() && locs.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
+				firstsLocs.push_back(locsAllObjects.size());
+				firstTriangles.push_back(trianglesAllObjects.size());
+				firstOutlines.push_back(outlinesAllObjects.size());
+
+				switch (type) {
+				case ObjectListFactoryInterface::CONVEX_HULL:
+					computeConvexHullObject3D(xs, ys, zs, locs, outlinesAllObjects, triCHull, area);
+					break;
+				default:
+					computeConvexHullObject3D(xs, ys, zs, locs, outlinesAllObjects, triCHull, area);
+					break;
+				}
+
+				std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
+				std::copy(triCHull.begin(), triCHull.end(), std::back_inserter(trianglesAllObjects));
+				volumeObjects.push_back(area);
+			}
+		}
+		firstsLocs.push_back(locsAllObjects.size());
+		firstTriangles.push_back(trianglesAllObjects.size());
+		firstOutlines.push_back(outlinesAllObjects.size());
+
+		//return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, std::vector <uint32_t>());
+		return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, std::vector<uint32_t>(), locsAllObjects, firstsLocs, std::vector <poca::core::Vec3mf>());
+
+		/*const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
 		const float* zs = _delaunay->getZs();
 		const std::vector <float>& volumes = _delaunay->getOriginalHistogram("volume")->getValues();
@@ -970,14 +1084,14 @@ namespace poca::geometry {
 			}
 
 			if (_minNbLocs <= locsOfObject.size() && locsOfObject.size() <= _maxNbLocs && _minArea <= volume && volume <= _maxArea) {
-				ObjectListFactoryInterface::TypeShape type = poca::core::GlobalParametersSingleton::instance()->m_parameters["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+				ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
 				switch (type) {
 				case ObjectListFactoryInterface::TRIANGULATION:
 					for (const auto id : indexTrianglesOfObject)
 						trianglesOfObject.push_back(poca::core::Vec3mf(xs[id], ys[id], zs[id]));
 					break;
 				case ObjectListFactoryInterface::CONVEX_HULL:
-					computeConvexHullObject(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
+					computeConvexHullObject3DFromOutline(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
 					break;
 				case ObjectListFactoryInterface::POISSON_SURFACE:
 					computePoissonSurfaceObject(xs, ys, zs, locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, trianglesOfObject, volume);
@@ -1016,10 +1130,36 @@ namespace poca::geometry {
 		}
 
 		ObjectList* objs = locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
-		return objs;
+		return objs;*/
 	}
 
-	void ObjectListFactory::computeConvexHullObject(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _triangles, float& _volume)
+	void ObjectListFactory::computeConvexHullObject2D(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _outlineLocs, std::vector <poca::core::Vec3mf>& _triangles, float& _feature)
+	{
+		_feature = 0.f;
+		std::vector <double>* coords = new std::vector <double>();
+		coords->resize(_locs.size() * 2);
+		uint32_t cpt = 0;
+		for (auto index : _locs) {
+			(*coords)[2 * cpt] = _xs[index];
+			(*coords)[2 * cpt + 1] = _ys[index];
+			cpt++;
+		}
+		delaunator::Delaunator* d = new delaunator::Delaunator(*coords);
+		for (const auto& index : d->triangles) {
+			_triangles.push_back(poca::core::Vec3mf((float)(*coords)[2 * index], (float)(*coords)[2 * index + 1], 0));
+		}
+		_feature = d->get_hull_area();
+		std::vector <std::uint32_t> outline;
+		d->get_outline_edges(outline);
+		for (auto n = 0; n < outline.size(); n++) {
+			auto index = _locs[outline[n]];
+			_outlineLocs.push_back(poca::core::Vec3mf(_xs[index], _ys[index], _zs[index]));
+		}
+		delete d;
+		delete coords;
+	}
+
+	void ObjectListFactory::computeConvexHullObject3D(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _outlineLocs, std::vector <poca::core::Vec3mf>& _triangles, float& _feature)
 	{
 		std::vector <Point_3_inexact> points;
 		for (const auto id : _locs)
@@ -1039,16 +1179,232 @@ namespace poca::geometry {
 				_triangles.insert(_triangles.begin(), poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
 			} while (++hfc != fi->facet_begin());
 		}
-		_volume = CGAL::Polygon_mesh_processing::volume(poly);
+		_feature = CGAL::Polygon_mesh_processing::volume(poly);
 	}
+
+	void ObjectListFactory::computeConvexHullObject2DFromOutline(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _triangles, float& _feature)
+	{
+		_feature = 0.f;
+		std::vector <double>* coords = new std::vector <double>();
+		coords->resize(_locs.size() * 2);
+		uint32_t cpt = 0;
+		for(auto index : _locs) {
+			(*coords)[2 * cpt] = _xs[index];
+			(*coords)[2 * cpt + 1] = _ys[index];
+			cpt++;
+		}
+		delaunator::Delaunator* d = new delaunator::Delaunator(*coords);
+		for (const auto& index : d->triangles) {
+			_triangles.push_back(poca::core::Vec3mf((float)(*coords)[2 * index], (float)(*coords)[2 * index + 1], 0));
+		}
+		_feature = d->get_hull_area();
+		delete d;
+		delete coords;
+	}
+
+	void ObjectListFactory::computeConvexHullObject3DFromOutline(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _triangles, float& _feature)
+	{
+		std::vector <Point_3_inexact> points;
+		for (const auto id : _locs)
+			points.push_back(Point_3_inexact(_xs[id], _ys[id], _zs[id]));
+
+		Polyhedron_3_inexact poly;
+		CGAL::convex_hull_3(points.begin(), points.end(), poly);
+
+		_triangles.clear();
+		for (Polyhedron_3_inexact::Facet_const_iterator fi = poly.facets_begin(); fi != poly.facets_end(); fi++) {
+			Polyhedron_3_inexact::Halfedge_around_facet_const_circulator hfc = fi->facet_begin();
+			poca::core::Vec3mf prec;
+			bool firstDone = false;
+			do {
+				Polyhedron_3_inexact::Halfedge_const_handle hh = hfc;
+				Polyhedron_3_inexact::Vertex_const_handle v = hh->vertex();
+				_triangles.insert(_triangles.begin(), poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
+			} while (++hfc != fi->facet_begin());
+		}
+		_feature = CGAL::Polygon_mesh_processing::volume(poly);
+	}
+
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+	typedef K_inexact::FT FT;
+	typedef CGAL::First_of_pair_property_map<pointWnormal_3_inexact> Point_map;
+	typedef CGAL::Second_of_pair_property_map<pointWnormal_3_inexact> Normal_map;
+	typedef K_inexact::Sphere_3 Sphere;
+	typedef std::vector<pointWnormal_3_inexact> PointList;
+	typedef CGAL::Polyhedron_3<K_inexact> Polyhedron;
+	typedef CGAL::Poisson_reconstruction_function<K_inexact> Poisson_reconstruction_function;
+	typedef CGAL::Implicit_surface_3<K_inexact, Poisson_reconstruction_function> Surface_3;
+	namespace params = CGAL::parameters;
+
+	template<typename Concurrency_tag, typename PointSet>
+	void poisson_reconstruction(const PointSet& points, Polyhedron& output_mesh)
+	{
+		typedef CGAL::Labeled_mesh_domain_3<K_inexact> Mesh_domain;
+		typedef CGAL::Mesh_triangulation_3<Mesh_domain, CGAL::Default, Concurrency_tag>::type Tr;
+		typedef CGAL::Mesh_complex_3_in_triangulation_3<Tr> C3t3;
+		typedef CGAL::Mesh_criteria_3<Tr> Mesh_criteria;
+
+		// Poisson options
+		FT sm_angle = 20.0; // Min triangle angle in degrees.
+		FT sm_radius = 100; // Max triangle size w.r.t. point set average spacing.
+		FT sm_distance = 0.25; // Surface Approximation error w.r.t. point set average spacing.
+
+		CGAL::Timer time;
+		time.start();
+
+		CGAL::Timer total_time;
+		total_time.start();
+
+		// Creates implicit function from the read points using the default solver.
+
+		// Note: this method requires an iterator over points
+		// + property maps to access each point's position and normal.
+		Poisson_reconstruction_function function(points.begin(), points.end(), Point_map(), Normal_map());
+
+		// Computes the Poisson indicator function f()
+		// at each vertex of the triangulation.
+		if (!function.compute_implicit_function())
+		{
+			std::cerr << "compute_implicit_function() failed." << std::endl;
+			return;
+		}
+
+		time.stop();
+		std::cout << "Compute_implicit_function : " << time.time() << " seconds." << std::endl;
+		time.reset();
+		time.start();
+
+		// Computes average spacing
+		FT average_spacing = CGAL::compute_average_spacing<Concurrency_tag>(points, 6 /* knn = 1 ring */, CGAL::parameters::point_map(Point_map()));
+		average_spacing /= 3;
+
+		time.stop();
+		std::cout << "Average spacing : " << time.time() << " seconds." << std::endl;
+		time.reset();
+		time.start();
+
+		// Gets one point inside the implicit surface
+		// and computes implicit function bounding sphere radius.
+		Point_3_inexact inner_point = function.get_inner_point();
+		Sphere bsphere = function.bounding_sphere();
+		FT radius = std::sqrt(bsphere.squared_radius());
+
+		// Defines the implicit surface: requires defining a
+		// conservative bounding sphere centered at inner point.
+		FT sm_sphere_radius = 5.0 * radius;
+		FT sm_dichotomy_error = sm_distance * average_spacing / 1000.0; // Dichotomy error must be << sm_distance
+		std::cout << "dichotomy error = " << sm_dichotomy_error << std::endl;
+		std::cout << "sm_dichotomy_error / sm_sphere_radius = " << sm_dichotomy_error / sm_sphere_radius << std::endl;
+
+		Sphere sm_sphere(inner_point, sm_sphere_radius * sm_sphere_radius);
+
+		Surface_3 surface(function,
+			sm_sphere,
+			sm_dichotomy_error / sm_sphere_radius);
+
+		time.stop();
+		std::cout << "Surface created in " << time.time() << " seconds." << std::endl;
+		time.reset();
+		time.start();
+
+		// Defines surface mesh generation criteria
+		CGAL::Mesh_criteria_3<Tr> criteria(params::facet_angle = sm_angle,
+			params::facet_size = sm_radius * average_spacing,
+			params::facet_distance = sm_distance * average_spacing);
+
+		Mesh_domain domain = Mesh_domain::create_implicit_mesh_domain(surface, sm_sphere,
+			params::relative_error_bound(sm_dichotomy_error / sm_sphere_radius));
+
+		// Generates surface mesh with manifold option
+		std::cout << "Start meshing...";
+		std::cout.flush();
+		C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::no_exude().no_perturb().manifold_with_boundary());
+		const auto& tr = c3t3.triangulation();
+
+		time.stop();
+		std::cout << "\nTet mesh created in " << time.time() << " seconds." << std::endl;
+		time.reset();
+		time.start();
+
+		if (tr.number_of_vertices() == 0)
+		{
+			std::cerr << "Triangulation empty!" << std::endl;
+			return;
+		}
+
+		// saves reconstructed surface mesh
+		CGAL::facets_in_complex_3_to_triangle_mesh(c3t3, output_mesh);
+
+		time.stop();
+		std::cout << "Surface extracted in " << time.time() << " seconds." << std::endl;
+		time.reset();
+		time.start();
+
+		total_time.stop();
+		std::cout << "Total time : " << total_time.time() << " seconds." << std::endl;
+	}
+#endif
 
 	void ObjectListFactory::computePoissonSurfaceObject(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, const std::vector <uint32_t>& _trianglesIndexes, const std::vector <poca::core::Vec3mf>& _normals, std::vector <poca::core::Vec3mf>& _triangles, float& _volume)
 	{
 		auto maxIndex = *std::max_element(_locs.begin(), _locs.end());
 		std::vector <poca::core::Vec3mf> normalPerLoc;
+
+		std::cout << __LINE__ << " - " << _locs.size() << std::endl;
 		
 		computeNormalOfLocsObject(_locs, _trianglesIndexes, _normals, normalPerLoc);
+		std::cout << __LINE__ << std::endl;
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+		PointList points;
+		size_t cpt = 0;
+		for (auto it = _locs.begin(); it != _locs.end(); it++, cpt++) {
+			auto id = *it;
+			points.push_back(std::make_pair(Point_3_inexact(_xs[id], _ys[id], _zs[id]), Vector_3_inexact((double)normalPerLoc[cpt].x(), (double)normalPerLoc[cpt].y(), (double)normalPerLoc[cpt].z())));
+		}
+		std::cout << "\n\n### Parallel mode ###" << std::endl;
+		Polyhedron poly;
+		poisson_reconstruction<CGAL::Parallel_tag>(points, poly);
+		_triangles.clear();
+		for (Polyhedron::Facet_const_iterator fi = poly.facets_begin(); fi != poly.facets_end(); fi++) {
+			Polyhedron::Halfedge_around_facet_const_circulator hfc = fi->facet_begin();
+			poca::core::Vec3mf prec;
+			bool firstDone = false;
+			do {
+				Polyhedron::Halfedge_const_handle hh = hfc;
+				Polyhedron::Vertex_const_handle v = hh->vertex();
+				_triangles.push_back(poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
+			} while (++hfc != fi->facet_begin());
+		}
+		/*Point_set point_set(true);
+		size_t cpt = 0;
+		for (auto it = _locs.begin(); it != _locs.end(); it++, cpt++) {
+			auto id = *it;
+			point_set.insert(Point_3_inexact(_xs[id], _ys[id], _zs[id]), Vector_3_inexact((double)-normalPerLoc[cpt].x(), (double)-normalPerLoc[cpt].y(), (double)-normalPerLoc[cpt].z()));
+		}
+		std::cout << __LINE__ << std::endl;
+		CGAL::Surface_mesh<Point_3_inexact> output_mesh;
+		double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(point_set, 6);
+		average_spacing *= 3;
 
+		std::cout << __LINE__ << " - " << average_spacing << std::endl;
+		if (CGAL::poisson_surface_reconstruction_delaunay(point_set.begin(), point_set.end(), point_set.point_map(), point_set.normal_map(), output_mesh, average_spacing))
+		{
+			std::cout << __LINE__ << std::endl;
+			_triangles.clear();
+			for (CGAL::Surface_mesh<Point_3_inexact>::Face_index fd : output_mesh.faces()) {
+				int j = 0; 
+				CGAL::Vertex_around_face_iterator<CGAL::Surface_mesh<Point_3_inexact>> vbegin, vend;
+				for (boost::tie(vbegin, vend) = vertices_around_face(output_mesh.halfedge(fd), output_mesh); vbegin != vend; vbegin++) {
+					j++;
+					auto p = output_mesh.point(*vbegin);
+					_triangles.push_back(poca::core::Vec3mf(p.x(), p.y(), p.z()));
+				}
+			}
+			std::cout << __LINE__ << std::endl;
+		}
+		else
+			std::cout << "ERROR !!!!!!!!!!!!!!!!" << std::endl;*/
+#else
 		std::vector<pointWnormal_3_inexact> points;
 		size_t cpt = 0;
 		for (auto it = _locs.begin(); it != _locs.end(); it++, cpt++) {
@@ -1058,7 +1414,7 @@ namespace poca::geometry {
 
 		Polyhedron_3_inexact poly;
 		double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<pointWnormal_3_inexact>()));
-		average_spacing /= 3;
+		//average_spacing /= 3;
 
 		if (CGAL::poisson_surface_reconstruction_delaunay(points.begin(), points.end(),	CGAL::First_of_pair_property_map<pointWnormal_3_inexact>(), CGAL::Second_of_pair_property_map<pointWnormal_3_inexact>(), poly, average_spacing))
 		{
@@ -1076,7 +1432,7 @@ namespace poca::geometry {
 		}
 		else
 			std::cout << "ERROR !!!!!!!!!!!!!!!!" << std::endl;
-
+#endif
 	}
 
 	void ObjectListFactory::computeAlphaShape(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, std::vector <poca::core::Vec3mf>& _triangles, float& _volume)

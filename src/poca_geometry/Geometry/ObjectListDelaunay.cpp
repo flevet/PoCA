@@ -1,9 +1,9 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      ObjectList.cpp
+* File:      ObjectListDelaunay.cpp
 *
-* Copyright: Florian Levet (2020-2022)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
@@ -35,20 +35,20 @@
 #include <General/MyData.hpp>
 #include <General/BasicComponent.hpp>
 #include <Interfaces/HistogramInterface.hpp>
+#include <General/Misc.h>
 
-#include "ObjectList.hpp"
+#include "ObjectListDelaunay.hpp"
 #include "BasicComputation.hpp"
 #include "DelaunayTriangulation.hpp"
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
 
 namespace poca::geometry {
-	ObjectList::ObjectList(const float* _xs, const float* _ys, const float* _zs, 
+	ObjectListDelaunay::ObjectListDelaunay(const float* _xs, const float* _ys, const float* _zs,
 		const std::vector <uint32_t>& _locsAllObjects, const std::vector <uint32_t>& _firstsLocs,
 		const std::vector <poca::core::Vec3mf>& _trianglesAllObjects, const std::vector <uint32_t>& _firstsTriangles,
 		const std::vector <poca::core::Vec3mf>& _outlinesAllObjects, const std::vector <uint32_t>& _firstsOutlines, 
 		const std::vector <uint32_t>& _linkTriangulationFacesToObjects)
-		:BasicComponent("ObjectList"), m_xs(_xs), m_ys(_ys), m_zs(_zs), 
-		m_locs(_locsAllObjects, _firstsLocs), m_triangles(_trianglesAllObjects, _firstsTriangles), m_outlines(_outlinesAllObjects, _firstsOutlines), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
+		:ObjectListInterface("ObjectListDelaunay", _locsAllObjects, _firstsLocs, _trianglesAllObjects, _firstsTriangles, _outlinesAllObjects, _firstsOutlines), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
 	{
 		//Create area feature
 		std::vector <float> areas(m_triangles.nbElements(), 0.f), nbLocs(m_locs.nbElements(), 0.f);
@@ -63,34 +63,35 @@ namespace poca::geometry {
 
 		}
 		ObjectFeaturesFactoryInterface* factory = createObjectFeaturesFactory();
-		std::vector <float> sizes(m_locs.nbElements()), resPCA(factory->nbFeaturesPCA(m_zs != NULL));
+		std::vector <float> sizes(m_locs.nbElements()), circ(m_locs.nbElements()), resPCA(factory->nbFeaturesPCA(m_zs != NULL));
 		for (size_t n = 0; n < m_locs.nbElements(); n++) {
 			float* ptr = &resPCA[0];
 			factory->computePCA(m_locs, n, m_xs, m_ys, m_zs, ptr);
 			sizes[n] = (resPCA[8] + resPCA[9]) / 2.f;
+			circ[n] = resPCA[7];
 		}
 		delete factory;
 
 		std::vector <float> ids(m_locs.nbElements());
 		std::iota(std::begin(ids), std::end(ids), 1);
 
-		m_data["area"] = new poca::core::MyData(areas);
-		m_data["nbLocs"] = new poca::core::MyData(nbLocs);
-		m_data["size"] = new poca::core::MyData(sizes);
-		m_data["id"] = new poca::core::MyData(ids);
+		m_data["area"] = poca::core::generateDataWithLog(areas);
+		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
+		m_data["size"] = poca::core::generateDataWithLog(sizes);
+		m_data["circ"] = poca::core::generateDataWithLog(circ);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("area");
 		forceRegenerateSelection();
 	}
 
-	ObjectList::ObjectList(const float* _xs, const float* _ys, const float* _zs,
+	ObjectListDelaunay::ObjectListDelaunay(const float* _xs, const float* _ys, const float* _zs,
 		const std::vector <uint32_t>& _locsAllObjects, const std::vector <uint32_t>& _firstsLocs,
 		const std::vector <poca::core::Vec3mf>& _trianglesAllObjects, const std::vector <uint32_t>& _firstsTriangles,
 		const std::vector <float>& _volumes, 
 		const std::vector <uint32_t>& _linkTriangulationFacesToObjects, 
 		const std::vector <uint32_t>& _locsOutlineAllObject, const std::vector <uint32_t>& _firstsOutlineLocs, const std::vector <poca::core::Vec3mf>& _normalOutlineLocs)
-		:BasicComponent("ObjectList"), m_xs(_xs), m_ys(_ys), m_zs(_zs),
-		m_locs(_locsAllObjects, _firstsLocs), m_triangles(_trianglesAllObjects, _firstsTriangles), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects), m_outlineLocs(_locsOutlineAllObject, _firstsOutlineLocs), m_normalOutlineLocs(_normalOutlineLocs)
+		:ObjectListInterface("ObjectList", _locsAllObjects, _firstsLocs, _trianglesAllObjects, _firstsTriangles, _locsOutlineAllObject, _firstsOutlineLocs, _normalOutlineLocs), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
 	{
 		//Create area feature
 		std::vector <float> areas(m_triangles.nbElements(), 0.f), nbLocs(m_locs.nbElements(), 0.f);
@@ -107,7 +108,7 @@ namespace poca::geometry {
 		const poca::core::MyArrayUInt32& localizations = m_locs;// m_outlineLocs;
 		ObjectFeaturesFactoryInterface* factory = createObjectFeaturesFactory();
 		std::vector <float> sizes(localizations.nbElements()), resPCA(factory->nbFeaturesPCA(m_zs != NULL));
-		std::vector <float> major(localizations.nbElements()), minor(localizations.nbElements()), minor2(localizations.nbElements());
+		std::vector <float> major(localizations.nbElements()), minor(localizations.nbElements()), minor2(localizations.nbElements()), minMin2(localizations.nbElements());
 		m_axis.resize(localizations.nbElements());
 		for (size_t n = 0; n < localizations.nbElements(); n++) {
 			float* ptr = &resPCA[0];
@@ -115,6 +116,7 @@ namespace poca::geometry {
 			major[n] = resPCA[3];
 			minor[n] = resPCA[4];
 			minor2[n] = resPCA[5];
+			minMin2[n] = minor[n] + minor2[n];
 			sizes[n] = (resPCA[3] + resPCA[4] + resPCA[5]) / 3.f;
 			m_axis[n] = { poca::core::Vec3mf(resPCA[6], resPCA[7], resPCA[8]), 
 				poca::core::Vec3mf(resPCA[9], resPCA[10], resPCA[11]) , 
@@ -125,29 +127,31 @@ namespace poca::geometry {
 		std::vector <float> ids(m_locs.nbElements());
 		std::iota(std::begin(ids), std::end(ids), 1);
 
-		m_data["volume"] = new poca::core::MyData(_volumes);
-		m_data["surface"] = new poca::core::MyData(areas);
-		m_data["nbLocs"] = new poca::core::MyData(nbLocs);
-		m_data["size"] = new poca::core::MyData(sizes);
-		m_data["major"] = new poca::core::MyData(major);
-		m_data["minor"] = new poca::core::MyData(minor);
-		m_data["minor2"] = new poca::core::MyData(minor2);
-		m_data["id"] = new poca::core::MyData(ids);
+		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
+		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
+		m_data["size"] = poca::core::generateDataWithLog(sizes);
+		m_data["surface"] = poca::core::generateDataWithLog(areas);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
+		m_data["major"] = poca::core::generateDataWithLog(major);
+		m_data["minor"] = poca::core::generateDataWithLog(minor);
+		m_data["minor2"] = poca::core::generateDataWithLog(minor2);
+		m_data["minMin2"] = poca::core::generateDataWithLog(minMin2);
+
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
 	}
 
-	ObjectList::~ObjectList()
+	ObjectListDelaunay::~ObjectListDelaunay()
 	{
 	}
 
-	poca::core::BasicComponent* ObjectList::copy()
+	poca::core::BasicComponentInterface* ObjectListDelaunay::copy()
 	{
-		return new ObjectList(*this);
+		return new ObjectListDelaunay(*this);
 	}
 
-	void ObjectList::generateLocs(std::vector <poca::core::Vec3mf>& _locs)
+	void ObjectListDelaunay::generateLocs(std::vector <poca::core::Vec3mf>& _locs)
 	{
 		_locs.resize(m_locs.nbData());
 		const std::vector <uint32_t>& indices = m_locs.getData();
@@ -165,7 +169,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::generateNormalLocs(std::vector <poca::core::Vec3mf>& _norms)
+	void ObjectListDelaunay::generateNormalLocs(std::vector <poca::core::Vec3mf>& _norms)
 	{
 		_norms.resize(m_locs.nbData());
 		const std::vector <uint32_t>& indices = m_locs.getData(), & objects = m_locs.getFirstElements();
@@ -205,7 +209,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getLocsFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
+	void ObjectListDelaunay::getLocsFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
 		_features.resize(m_locs.nbData());
 
@@ -219,7 +223,7 @@ namespace poca::geometry {
 
 	}
 
-	void ObjectList::getLocsFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
+	void ObjectListDelaunay::getLocsFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
 		_features.resize(m_locs.nbData());
 
@@ -232,7 +236,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getOutlinesFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
+	void ObjectListDelaunay::getOutlinesFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
 		_features.resize(m_outlines.nbData());// *2);
 
@@ -244,7 +248,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getOutlinesFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
+	void ObjectListDelaunay::getOutlinesFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
 		_features.resize(m_outlines.nbData());// *2);
 
@@ -257,7 +261,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::generateLocsPickingIndices(std::vector <float>& _ids) const
+	void ObjectListDelaunay::generateLocsPickingIndices(std::vector <float>& _ids) const
 	{
 		_ids.resize(m_locs.nbData());
 
@@ -270,17 +274,17 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::generateTriangles(std::vector <poca::core::Vec3mf>& _triangles)
+	void ObjectListDelaunay::generateTriangles(std::vector <poca::core::Vec3mf>& _triangles)
 	{
 		std::copy(m_triangles.getData().begin(), m_triangles.getData().end(), std::back_inserter(_triangles));
 	}
 
-	void ObjectList::generateOutlines(std::vector <poca::core::Vec3mf>& _outlines)
+	void ObjectListDelaunay::generateOutlines(std::vector <poca::core::Vec3mf>& _outlines)
 	{
 		std::copy(m_outlines.getData().begin(), m_outlines.getData().end(), std::back_inserter(_outlines));
 	}
 
-	void ObjectList::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
+	void ObjectListDelaunay::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
 	{
 		_normals.resize(m_triangles.getData().size());
 		if (m_zs == NULL)
@@ -308,7 +312,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::generatePickingIndices(std::vector <float>& _ids) const
+	void ObjectListDelaunay::generatePickingIndices(std::vector <float>& _ids) const
 	{
 		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
 		_ids.resize(triangles.size());
@@ -322,7 +326,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
+	void ObjectListDelaunay::getFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
 		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
 		_features.resize(triangles.size());
@@ -336,7 +340,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
+	void ObjectListDelaunay::getFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
 		const std::vector <poca::core::Vec3mf> triangles = m_triangles.getData();
 		_features.resize(triangles.size());
@@ -350,7 +354,7 @@ namespace poca::geometry {
 		}
 	}
 
-	poca::core::BoundingBox ObjectList::computeBoundingBoxElement(const int _idx) const
+	poca::core::BoundingBox ObjectListDelaunay::computeBoundingBoxElement(const int _idx) const
 	{
 		poca::core::BoundingBox bbox;
 		if(m_zs == NULL)
@@ -374,7 +378,7 @@ namespace poca::geometry {
 		return bbox;
 	}
 
-	poca::core::Vec3mf ObjectList::computeBarycenterElement(const int _idx) const
+	poca::core::Vec3mf ObjectListDelaunay::computeBarycenterElement(const int _idx) const
 	{
 		poca::core::Vec3mf centroid(0.f, 0.f, 0.f);
 		float nbs = m_locs.nbElementsObject(_idx);
@@ -385,7 +389,7 @@ namespace poca::geometry {
 		return centroid;
 	}
 
-	void ObjectList::generateOutlineLocs(std::vector <poca::core::Vec3mf>& _locs)
+	void ObjectListDelaunay::generateOutlineLocs(std::vector <poca::core::Vec3mf>& _locs)
 	{
 		_locs.resize(m_outlineLocs.nbData());
 		const std::vector <uint32_t>& indices = m_outlineLocs.getData();
@@ -403,7 +407,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::getOutlineLocsFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
+	void ObjectListDelaunay::getOutlineLocsFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
 		_features.resize(m_outlineLocs.nbData());
 
@@ -417,7 +421,7 @@ namespace poca::geometry {
 
 	}
 
-	void ObjectList::getOutlineLocsFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
+	void ObjectListDelaunay::getOutlineLocsFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
 		_features.resize(m_outlineLocs.nbData());
 
@@ -430,7 +434,7 @@ namespace poca::geometry {
 		}
 	}
 
-	void ObjectList::setLocs(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _idxLocsObj, const std::vector <uint32_t>& _rangeLocsObj)
+	void ObjectListDelaunay::setLocs(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _idxLocsObj, const std::vector <uint32_t>& _rangeLocsObj)
 	{
 		m_xs = _xs;
 		m_ys = _ys;
@@ -443,7 +447,7 @@ namespace poca::geometry {
 			nbLocs[i] = m_locs.nbElementsObject(i);
 	
 		delete m_data["nbLocs"];
-		m_data["nbLocs"] = new poca::core::MyData(nbLocs);
+		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
 	}
 }
 

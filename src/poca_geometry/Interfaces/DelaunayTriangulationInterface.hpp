@@ -45,7 +45,7 @@ namespace poca::geometry {
 	public:
 		virtual ~DelaunayTriangulationInterface() = default;
 
-		virtual poca::core::BasicComponent* copy() = 0;
+		virtual poca::core::BasicComponentInterface* copy() = 0;
 
 		virtual void generateTriangles(std::vector <poca::core::Vec3mf>&) = 0;
 		virtual void getFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const = 0;

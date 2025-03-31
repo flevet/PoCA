@@ -36,14 +36,16 @@
 #include <unordered_set>
 #include <algorithm>
 #include <fstream>
+#ifndef NO_CUDA
 #include <cuda_runtime.h>
+#endif
 
 #include <QtWidgets/QMessageBox>
 
 #include <General/Vec3.hpp>
 #include <General/MyArray.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
-#include <Interfaces/HistogramInterface.hpp>
+#include <General/Histogram.hpp>
 #include <General/PluginList.hpp>
 
 #include "VoronoiDiagramFactory.hpp"
@@ -77,7 +79,7 @@ namespace poca::geometry {
 		if (_obj == NULL) return NULL;
 
 		poca::geometry::VoronoiDiagram* voro = nullptr;
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DetectionSet");
 		if (bci == NULL)
 			return NULL;
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
@@ -92,18 +94,23 @@ namespace poca::geometry {
 			if (!delaunay)
 				return NULL;
 		}
+		//std::ofstream fs("e:/timings.txt", std::fstream::out | std::fstream::app);
 		clock_t t1, t2;
 		t1 = clock();
 		poca::geometry::KdTree_DetectionPoint* kdtree = dset->getKdTree();
-		const std::vector <float>& xs = dset->getOriginalHistogram("x")->getValues();
-		const std::vector <float>& ys = dset->getOriginalHistogram("y")->getValues();
+		const std::vector <float>& xs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("x"))->getValues();
+		const std::vector <float>& ys = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("y"))->getValues();
 		if (!dset->hasData("z")) {
 			voro = createVoronoiDiagram(xs, ys, dset->boundingBox(), kdtree, delaunay);
 		}
 		else {
-			const std::vector <float>& zs = dset->getOriginalHistogram("z")->getValues();
+			const std::vector <float>& zs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("z"))->getValues();
 			voro = createVoronoiDiagram(xs, ys, zs, kdtree, delaunay, _noCells);
 		}
+		t2 = clock();
+		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
+		//fs << elapsed << "\t";
+		//fs.close();
 		if (voro != NULL) {
 			voro->setBoundingBox(dset->boundingBox());
 			if(_addCommands)
@@ -115,7 +122,7 @@ namespace poca::geometry {
 			}
 		}
 		t2 = clock();
-		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
+		elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
 		printf("time for computing Voronoi: %ld ms\n", elapsed);
 		return voro;
 	}
@@ -125,7 +132,7 @@ namespace poca::geometry {
 		if (_obj == NULL) return NULL;
 
 		poca::geometry::VoronoiDiagram* voro = nullptr;
-		poca::core::BasicComponent* bci = _obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DetectionSet");
 		if (bci == NULL)
 			return NULL;
 		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
@@ -179,8 +186,9 @@ namespace poca::geometry {
 
 		for (std::size_t n = 0; n < v.firsts.size(); n++)
 			v.firsts[n] /= 2;
+		const std::vector <bool>& borderCells = v.getBorderCells();
 
-		poca::geometry::VoronoiDiagram2D* voro = new poca::geometry::VoronoiDiagram2D(v.getCellPoints(), v.nbEdges(), v.firsts, v.neighs, _xs.data(), _ys.data(), NULL, _kdtree, _delau);
+		poca::geometry::VoronoiDiagram2D* voro = new poca::geometry::VoronoiDiagram2D(v.getCellPoints(), v.nbEdges(), v.firsts, v.neighs, borderCells, _xs.data(), _ys.data(), NULL, _kdtree, _delau);
 		return voro;
 	}
 
@@ -267,8 +275,8 @@ namespace poca::geometry {
 		}
 
 		bool noConstructionCells = _noCells;
-		std::vector <float> volumeTetrahedra, volumeCUDA;
-		volumeCUDA.resize(delaunayVertices.size(), 0);
+		std::vector <float> volumeTetrahedra, volumeCUDA(delaunayVertices.size(), 0);
+		std::vector <uint8_t> borders(delaunayVertices.size(), 0);
 		triangles.clear();
 		firstTriangleCell.resize(nbCells + 1, 0);
 		if (!noConstructionCells) {
@@ -291,7 +299,7 @@ namespace poca::geometry {
 		unsigned int nbPieces = 1;
 		while (cur_avail_mem_kb < (memoryInGPUNeeded / nbPieces)) nbPieces++;
 
-		computeVoronoiFirstRing(pts, columnIndices, rowOffsets, volumeCUDA, cells, nbTriangleCells, noConstructionCells, ceil((float)cells.size() / (float)nbPieces));
+		computeVoronoiFirstRing(pts, columnIndices, rowOffsets, volumeCUDA, borders, cells, nbTriangleCells, noConstructionCells, ceil((float)cells.size() / (float)nbPieces));
 
 		float maxVolume = -FLT_MAX;
 		uint32_t cptT = 0, cptNotConstructed = 0;
@@ -348,11 +356,15 @@ namespace poca::geometry {
 		t2 = clock();
 		elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
 		printf("time for computing Voronoi 3D CUDA: %ld ms\n", elapsed);
+
+		std::vector <bool> bordersBool(borders.size());
+		std::transform(borders.begin(), borders.end(), bordersBool.begin(), [](uint8_t x) { return x != 0; });
+
 		poca::geometry::VoronoiDiagram3D* voro = NULL;
 		if(!noConstructionCells)
-			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, triangles, firstTriangleCell, volumeCUDA, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
+			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, triangles, firstTriangleCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
 		else
-			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, volumeCUDA, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
+			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
 		return voro;
 #else
 	QMessageBox msgBox;

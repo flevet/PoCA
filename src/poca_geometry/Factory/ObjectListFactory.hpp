@@ -48,25 +48,29 @@ namespace poca::geometry {
 		ObjectListFactory();
 		~ObjectListFactory();
 
-		ObjectList* createObjectList(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false);
-		ObjectList* createObjectListFromDelaunay(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false);
-		ObjectList* createObjectListAlreadyIdentified(poca::core::MyObjectInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max());
+		ObjectListInterface* createObjectList(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false);
+		ObjectListInterface* createObjectListFromDelaunay(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false);
+		ObjectListInterface* createObjectListAlreadyIdentified(poca::core::MyObjectInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max());
 
-		ObjectList* createObjectList(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
-		ObjectList* createObjectListFromDelaunay(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
-		ObjectList* createObjectListAlreadyIdentified(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max());
+		ObjectListInterface* createObjectList(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
+		ObjectListInterface* createObjectListFromDelaunay(DelaunayTriangulationInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
+		ObjectListInterface* createObjectListAlreadyIdentified(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max());
 
-		ObjectList* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
-		ObjectList* createObjectList3D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
+		ObjectListInterface* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
+		ObjectListInterface* createObjectList3D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
 
-		ObjectList* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
-		ObjectList* createObjectList3D(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
+		//ObjectList* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
+		//ObjectList* createObjectList3D(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
 
-		ObjectList* createObjectList2D(DelaunayTriangulationInterface*, const std::map <uint32_t, std::vector <uint32_t>>&, const float, const size_t, const size_t, const float, const float);
-		ObjectList* createObjectList3D(DelaunayTriangulationInterface*, const std::map <uint32_t, std::vector <uint32_t>>&, const float, const size_t, const size_t, const float, const float);
+		ObjectListInterface* createObjectList2D(DelaunayTriangulationInterface*, const std::map <uint32_t, std::vector <uint32_t>>&, const float, const size_t, const size_t, const float, const float);
+		ObjectListInterface* createObjectList3D(DelaunayTriangulationInterface*, const std::map <uint32_t, std::vector <uint32_t>>&, const float, const size_t, const size_t, const float, const float);
 
 	protected:
-		void computeConvexHullObject(const float *, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computeConvexHullObject2D(const float*, const float*, const float*, const std::vector <uint32_t>&, std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computeConvexHullObject3D(const float*, const float*, const float*, const std::vector <uint32_t>&, std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computeConvexHullObject2DFromOutline(const float *, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computeConvexHullObject3DFromOutline(const float*, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
+		
 		void computePoissonSurfaceObject(const float*, const float*, const float*, const std::set <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
 		void computeAlphaShape(const float*, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
 	

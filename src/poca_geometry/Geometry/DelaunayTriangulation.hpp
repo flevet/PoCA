@@ -64,7 +64,7 @@ namespace poca::geometry {
 		void generateFaceSelectionFromLocSelection(const std::vector <uint32_t>&, std::map <uint32_t, std::vector<uint32_t>>&);
 		bool isPointInTriangle(const float, const float, const float, const uint32_t) const;
 
-		virtual poca::core::BasicComponent* copy() = 0;
+		virtual poca::core::BasicComponentInterface* copy() = 0;
 		virtual void getTrianglesNeighboringPoint(uint32_t, std::vector <uint32_t>&) = 0;
 		virtual void trianglesAdjacentToTriangle(std::uint32_t, std::vector <std::uint32_t>&) = 0;
 		virtual uint32_t indexTriangleOfPoint(const float, const float, const float, const uint32_t = std::numeric_limits<std::uint32_t>::max()) = 0;
@@ -80,7 +80,7 @@ namespace poca::geometry {
 		DelaunayTriangulation2DDelaunator(const std::vector <float>&, const std::vector <float>&, const std::vector<size_t>&, const poca::core::MyArrayUInt32&, delaunator::DelaunayFromDelaunator*, std::vector <double>*);
 		~DelaunayTriangulation2DDelaunator();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 		void getTrianglesNeighboringPoint(uint32_t, std::vector <uint32_t>&);
 		void trianglesAdjacentToTriangle(std::uint32_t, std::vector <std::uint32_t>&);
 		uint32_t indexTriangleOfPoint(const float, const float, const float, const uint32_t = std::numeric_limits<std::uint32_t>::max());
@@ -99,7 +99,7 @@ namespace poca::geometry {
 		DelaunayTriangulation2DOnSphere(const std::vector <float>&, const std::vector <float>&, const std::vector <float>&, const std::vector<size_t>&, const poca::core::MyArrayUInt32&, CGALDelaunayOnSphere*, const poca::core::Vec3mf&, const float);
 		~DelaunayTriangulation2DOnSphere();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 		void getTrianglesNeighboringPoint(uint32_t, std::vector <uint32_t>&);
 		void trianglesAdjacentToTriangle(std::uint32_t, std::vector <std::uint32_t>&);
 		uint32_t indexTriangleOfPoint(const float, const float, const float, const uint32_t = std::numeric_limits<std::uint32_t>::max());
@@ -121,7 +121,7 @@ namespace poca::geometry {
 		DelaunayTriangulation3D(const std::vector <float>&, const std::vector <float>&, const std::vector <float>&, const std::vector <uint32_t>&, const std::vector <float>&, const poca::core::MyArrayUInt32&, const uint32_t, Triangulation_3_inexact*);
 		~DelaunayTriangulation3D();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 
 		void generateTriangles(std::vector <poca::core::Vec3mf>&);
 		void getFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;

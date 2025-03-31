@@ -95,6 +95,8 @@ namespace voronator {
 			vectors[p0 + 3] = vectors[p1 + 1] = x1 - x0;
 		}
 		std::size_t ncells = delaunay->points.size() / 2, cpt = 0;
+		borderCells.resize(ncells);
+		std::fill(borderCells.begin(), borderCells.end(), false);
 		std::vector <double> cellPoints;
 		cells.resize(2 * 20 * ncells);
 		firsts.resize(ncells + 1);
@@ -167,6 +169,7 @@ namespace voronator {
 		unsigned char c0, c1 = regioncode(x1, y1);
 		unsigned char e0, e1 = 0;
 		double sx0, sy0, sx1, sy1;
+		bool cut = false;
 		for (std::size_t j = 0; j < n; j += 2) {
 			x0 = x1; y0 = y1; x1 = _points[j]; y1 = _points[j + 1];
 			c0 = c1; c1 = regioncode(x1, y1);
@@ -176,6 +179,7 @@ namespace voronator {
 				P.push_back(y1);
 			}
 			else {
+				cut = true;
 				if (c0 == 0) {
 					if (clipSegment(x0, y0, x1, y1, c0, c1, sx0, sy0, sx1, sy1) == 0) continue;
 				}
@@ -201,6 +205,8 @@ namespace voronator {
 			P.assign(tmp, tmp + 8);
 		}
 		_points.assign(P.begin(), P.end());
+		if (cut)
+			borderCells[i] = true;
 	}
 
 	void Voronator::clipInfinite(std::size_t i, std::vector <double> & _points, const double vx0, const double vy0, const double vxn, const double vyn) {
@@ -231,6 +237,8 @@ namespace voronator {
 			P.assign(tmp, tmp + 8);
 		}
 		_points.assign(P.begin(), P.end());
+
+		borderCells[i] = true;
 	}
 
 	std::size_t Voronator::clipSegment(double x0, double y0, double x1, double y1, unsigned char c0, unsigned char c1, double & sx0, double & sy0, double & sx1, double & sy1) {

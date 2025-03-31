@@ -34,15 +34,18 @@
 #include <qmath.h>
 
 #include <General/MyData.hpp>
+#include <General/Misc.h>
 
 #include "VoronoiDiagram.hpp"
+#include "DelaunayTriangulation.hpp"
 #include "BasicComputation.hpp"
+#include "delaunator.hpp"
 
 namespace poca::geometry {
 	VoronoiDiagram::VoronoiDiagram(const float* _xs, const float* _ys, const float* _zs, 
 		const uint32_t _nbCells, const std::vector <uint32_t>& _neighbors,
-		const std::vector <uint32_t>& _firstsNeighbors, KdTree_DetectionPoint* _kdtree,
-		DelaunayTriangulationInterface* _delau) :BasicComponent("VoronoiDiagram"), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_nbCells(_nbCells), m_neighbors(_neighbors, _firstsNeighbors), m_deleteKdTree(false), m_delaunay(_delau)
+		const std::vector <uint32_t>& _firstsNeighbors, const std::vector <bool>& _borderLocs, KdTree_DetectionPoint* _kdtree,
+		DelaunayTriangulationInterface* _delau) :BasicComponent("VoronoiDiagram"), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_nbCells(_nbCells), m_neighbors(_neighbors, _firstsNeighbors), m_borderLocs(_borderLocs), m_deleteKdTree(false), m_delaunay(_delau)
 	{
 		if (_kdtree)
 			m_kdTree = _kdtree;
@@ -84,7 +87,7 @@ namespace poca::geometry {
 		return (float)m_nbCells / val;
 	}
 
-	VoronoiDiagram2D::VoronoiDiagram2D(const poca::core::Vec3md* _cells, const uint32_t _nbEdges, const std::vector<uint32_t>& _firsts, const std::vector<uint32_t>& _neighs, const float *_xs, const float * _ys, const float* _zs, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface * _delau) : VoronoiDiagram(_xs, _ys, _zs, _firsts.size() - 1, _neighs, _firsts, _kdtree, _delau)
+	VoronoiDiagram2D::VoronoiDiagram2D(const poca::core::Vec3md* _cells, const uint32_t _nbEdges, const std::vector<uint32_t>& _firsts, const std::vector<uint32_t>& _neighs, const std::vector <bool>& _borderLocs, const float *_xs, const float * _ys, const float* _zs, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface * _delau) : VoronoiDiagram(_xs, _ys, _zs, _firsts.size() - 1, _neighs, _firsts, _borderLocs, _kdtree, _delau)
 	{
 		std::copy(&_cells[0], &_cells[_nbEdges], std::back_inserter(m_cells));
 		//Create area feature
@@ -115,12 +118,12 @@ namespace poca::geometry {
 			}
 			densities[n] = nbsTot / sumArea;
 		}
-		m_data["area"] = new poca::core::MyData(areas);
-		m_data["density"] = new poca::core::MyData(densities);
+		m_data["area"] = poca::core::generateDataWithLog(areas);
+		m_data["density"] = poca::core::generateDataWithLog(densities);
 
 		std::vector <float> ids(areas.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
-		m_data["id"] = new poca::core::MyData(ids);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
 
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("density");
@@ -131,7 +134,7 @@ namespace poca::geometry {
 	{
 	}
 
-	poca::core::BasicComponent* VoronoiDiagram2D::copy()
+	poca::core::BasicComponentInterface* VoronoiDiagram2D::copy()
 	{
 		return new VoronoiDiagram2D(*this);
 	}
@@ -244,7 +247,7 @@ namespace poca::geometry {
 		return triangleIndex;
 	}
 
-	VoronoiDiagram2DOnSphere::VoronoiDiagram2DOnSphere(const std::vector<poca::core::Vec3md>& _cells, const uint32_t _nbCells, const std::vector<uint32_t>& _firsts, const std::vector<uint32_t>& _neighs, const std::vector <poca::core::Vec3mf>& _normals, const float* _xs, const float* _ys, const float* _zs, const poca::core::Vec3mf& _centroid, const float _radius, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram2D(_cells.data(), _nbCells, _firsts, _neighs, _xs, _ys, _zs, _kdtree, _delau), m_normals(_normals), m_centroid(_centroid), m_radius(_radius)
+	VoronoiDiagram2DOnSphere::VoronoiDiagram2DOnSphere(const std::vector<poca::core::Vec3md>& _cells, const uint32_t _nbCells, const std::vector<uint32_t>& _firsts, const std::vector<uint32_t>& _neighs, const std::vector <poca::core::Vec3mf>& _normals, const float* _xs, const float* _ys, const float* _zs, const poca::core::Vec3mf& _centroid, const float _radius, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram2D(_cells.data(), _nbCells, _firsts, _neighs, std::vector<bool>(), _xs, _ys, _zs, _kdtree, _delau), m_normals(_normals), m_centroid(_centroid), m_radius(_radius)
 	{
 	}
 
@@ -282,9 +285,10 @@ namespace poca::geometry {
 	VoronoiDiagram3D::VoronoiDiagram3D(const uint32_t _nbCells,
 		const std::vector <uint32_t>& _neighbors,
 		const std::vector <uint32_t>& _firstsNeighbors,
-		const std::vector <float>& _volumes, 
+		const std::vector <float>& _volumes,
+		const std::vector <bool>& _borders,
 		const float* _xs, const float* _ys, const float* _zs, 
-		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _kdtree, _delau)
+		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau)
 	{
 		double nbPs = nbFaces();
 		unsigned int nbForUpdate = nbPs / 100., cptTimer = 0;
@@ -304,11 +308,11 @@ namespace poca::geometry {
 			if (cptTimer++ % nbForUpdate == 0) 	std::printf("\rComputing Voronoi density: %.2f %%", ((double)cptTimer / nbPs * 100.));
 		}
 		std::cout << std::endl;
-		m_data["volume"] = new poca::core::MyData(_volumes);
-		m_data["density"] = new poca::core::MyData(densities);
+		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
+		m_data["density"] = poca::core::generateDataWithLog(densities);
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
-		m_data["id"] = new poca::core::MyData(ids);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
 
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("density");
@@ -321,8 +325,9 @@ namespace poca::geometry {
 		const std::vector <poca::core::Vec3mf>& _triangles,
 		const std::vector <uint32_t>& _firstTriangleCell,
 		const std::vector <float>& _volumes,
+		const std::vector <bool>& _borders,
 		const float* _xs, const float* _ys, const float* _zs, 
-		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _kdtree, _delau),
+		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau),
 																	m_cells(_triangles), m_firstCells(_firstTriangleCell)
 	{
 		std::vector <float> densities(nbFaces(), 0.f);
@@ -338,11 +343,11 @@ namespace poca::geometry {
 			densities[n] = nbsTot / sumVol;
 		}
 
-		m_data["volume"] = new poca::core::MyData(_volumes);
-		m_data["density"] = new poca::core::MyData(densities);
+		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
+		m_data["density"] = poca::core::generateDataWithLog(densities);
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
-		m_data["id"] = new poca::core::MyData(ids);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("density");
 		forceRegenerateSelection();
@@ -352,7 +357,7 @@ namespace poca::geometry {
 	{
 	}
 
-	poca::core::BasicComponent* VoronoiDiagram3D::copy()
+	poca::core::BasicComponentInterface* VoronoiDiagram3D::copy()
 	{
 		return new VoronoiDiagram3D(*this);
 	}
@@ -422,6 +427,72 @@ namespace poca::geometry {
 	uint32_t VoronoiDiagram3D::indexTriangleOfPoint(const float _x, const float _y, const float _z) const
 	{
 		return m_delaunay->indexTriangleOfPoint(_x, _y, _z);
+	}
+
+	void VoronoiDiagram3D::determineEdgeEffectLocalizations(std::vector <bool>& _bordersLocs) const
+	{
+		DelaunayTriangulation3D* d3D = dynamic_cast<DelaunayTriangulation3D*>(m_delaunay);
+		if (!d3D) return;
+		Triangulation_3_inexact* delaunay3D = d3D->getDelaunay();
+
+		_bordersLocs.resize(m_nbCells);
+		std::fill(_bordersLocs.begin(), _bordersLocs.end(), false);
+		Vertex_handle_3_inexact infinite = d3D->getDelaunay()->infinite_vertex();
+		//std::list < Cell_handle_3_inexact> cells;
+		//d3D->getDelaunay()->incident_cells(infinite, std::back_inserter(cells));
+
+		/*std::list<Vertex_handle_3_inexact> vertices;
+		d3D->getDelaunay()->finite_adjacent_vertices(infinite, std::back_inserter(vertices));
+		for (std::list<Vertex_handle_3_inexact>::iterator it = vertices.begin(); it != vertices.end(); it++) {
+			Vertex_iterator_3_inexact current = *it;
+			_bordersLocs[current->info()] = true;
+		}*/
+
+		/*for (std::list<Cell_handle_3_inexact>::iterator it = cells.begin(); it != cells.end(); it++) {
+			for (int i = 0; i < 4; i++) {
+				auto v = (*it)->vertex(i);
+				if(!delaunay3D->is_infinite(v))
+					_bordersLocs[v->info()] = true;
+				//centroids[cpttt] += poca::core::Vec3mf(v->point().x() / 4.f, v->point().y() / 4.f, v->point().z() / 4.f);
+				//tetraNoOrder[cpttt] = cit;
+			}
+		}*/
+		const std::vector<uint32_t>& triangles = m_delaunay->getTriangles();
+		const poca::core::MyArrayUInt32& neighbors = m_delaunay->getNeighbors();
+		const std::vector <uint32_t>& indices = neighbors.getFirstElements();
+		for (auto n = 0; n < m_delaunay->nbFaces(); n++) {
+			bool border = false;
+			for (size_t i = 0; i < neighbors.nbElementsObject(n) && !border; i++) {
+				uint32_t indexNeigh = neighbors.elementIObject(n, i);
+				border = indexNeigh == std::numeric_limits<std::uint32_t>::max();
+			}
+			if (border) {
+				uint32_t index = indices[n];
+				uint32_t i1 = triangles[3 * index],
+					i2 = triangles[3 * index + 3 * 1],
+					i3 = triangles[3 * index + 3 * 2],
+					i4 = triangles[3 * index + 3 * 3];
+				_bordersLocs[i1] = true;
+				_bordersLocs[i2] = true;
+				_bordersLocs[i3] = true;
+				_bordersLocs[i4] = true;
+			}
+		}
+
+		/*for (Triangulation_3_inexact::Finite_cells_iterator cit = delaunay3D->finite_cells_begin(); cit != delaunay3D->finite_cells_end(); cit++) {
+			for (int i = 0; i < 4; i++) {
+				Cell_handle_3_inexact other = cit->neighbor(i);
+				if (delaunay3D->is_infinite(other)) {
+					for (int j = 0; j < 4; j++) {
+						auto v = other->vertex(j);
+						if (!delaunay3D->is_infinite(v))
+							_bordersLocs[v->info()] = true;
+						//centroids[cpttt] += poca::core::Vec3mf(v->point().x() / 4.f, v->point().y() / 4.f, v->point().z() / 4.f);
+						//tetraNoOrder[cpttt] = cit;
+					}
+				}
+			}
+		}*/
 	}
 }
 

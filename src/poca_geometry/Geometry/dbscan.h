@@ -35,6 +35,11 @@ struct dbvec3f {
     float operator[](int idx) const { return data[idx]; }
 };
 
+struct dbvec4f {
+    float data[4];
+    float operator[](int idx) const { return data[idx]; }
+};
+
 //! type T must be a vector-like container and MUST SUPPORT operator[] for iteration
 //! Float can be float ,double ,int or any other number type but MUST SUPPORT implicitly convert to double type
 template<typename T, typename Float>
@@ -67,7 +72,7 @@ public:
     * @pitfall: You MUST ensure the data's identicality (TVector* V) during Run(), because DBSCAN just use the reference of data passed in.
     * @TODO: customize kdtree algorithm or rewrite it ,stop further searching when minimal number which indicates cluster core point condition is satisfied
     */
-    int Run(TVector* V, const uint32_t dim, const Float eps, const uint32_t min, const uint32_t _minForCluster, const DistanceFunc& disfunc = [](const T& t1, const T& t2)->Float { return 0; });
+    int Run(TVector* V, const uint32_t dim, const Float eps, const uint32_t min, const uint32_t _minForCluster, const Float _dTemporal = -1.f, const DistanceFunc& disfunc = [](const T& t1, const T& t2)->Float { return 0; });
 
 
 private:
@@ -79,6 +84,11 @@ private:
     bool              isInBorderSet(const uint32_t pid) const { return this->_borderset.end() != this->_borderset.find(pid); }
     void              buildKdtree(const TVector* V);
     void              destroyKdtree();
+
+public:
+    inline void setAssign(const uint32_t _idx, const bool _val) { this->_assigned[_idx] = _val; }
+    inline const bool isAssigned(const uint32_t _idx) const { return this->_assigned[_idx]; }
+    inline const uint32_t datalen() const { return this->_datalen; }
 
 public:
     std::vector<std::vector<uint32_t>>  Clusters;
@@ -93,6 +103,7 @@ private:
     uint32_t                _minpts;
     Float               _epsilon;
     uint32_t                _datadim;
+    Float               _dTemporal;
     uint32_t            _nbPointsVisited;
 
     DistanceFunc        _disfunc;
@@ -112,6 +123,7 @@ int DBSCAN<T, Float>::Run(
     , const Float           eps
     , const uint32_t            min
     , const uint32_t _minForCluster
+    , const Float _dTemporal
     , const DistanceFunc&   disfunc
 ) {
 
@@ -130,6 +142,7 @@ int DBSCAN<T, Float>::Run(
     this->_data = V;
     this->_disfunc = disfunc;
     this->_epsilon = eps;
+    this->_dTemporal = _dTemporal;
     this->_datadim = dim;
     this->_nbPointsVisited = 0;
 
@@ -138,9 +151,8 @@ int DBSCAN<T, Float>::Run(
 this->buildKdtree(this->_data);
 #endif // !BRUTEFORCE
 
-
-std::printf("Computing DBSCAN: 0 %%");
-for (uint32_t pid = 0; pid < this->_datalen; ++pid) {
+    std::printf("Computing DBSCAN: 0 %%");
+    for (uint32_t pid = 0; pid < this->_datalen; ++pid) {
         // Check if point forms a cluster
         this->_borderset.clear();
         if (!this->_visited[pid]) {
@@ -239,7 +251,17 @@ std::vector<uint32_t> DBSCAN<T, Float>::regionQuery(const uint32_t pid) const {
         /* get the data and position of the current result item */
         T* pch = (T*)kd_res_item(presults, v.get());
         uint32_t pnpid = (uint32_t)(pch - &(*this->_data)[0]);
-        if(pid != pnpid) neighbors.push_back(pnpid);
+        if (pid != pnpid) {
+            if(this->_dTemporal < 0.f)
+                neighbors.push_back(pnpid);
+            else {
+                auto p1 = (*this->_data)[pid];
+                auto p2 = (*this->_data)[pnpid];
+                auto dtemporal = p2[3] - p1[3];
+                if (fabs(dtemporal) < this->_dTemporal)
+                    neighbors.push_back(pnpid);
+            }
+        }
         /* go to the next entry */
         kd_res_next(presults);
     }
@@ -268,7 +290,7 @@ void DBSCAN<T, Float>::expandCluster(const uint32_t cid, const std::vector<uint3
 
             this->_nbPointsVisited++;
             std::printf("\rComputing DBSCAN: %.2f %", ((float)this->_nbPointsVisited / (float)this->_datalen * 100.f));
-            
+
             // Core point, the neighbors will be expanded
             if (pidneighbors.size() >= this->_minpts) {
                 this->addToCluster(pid, cid);

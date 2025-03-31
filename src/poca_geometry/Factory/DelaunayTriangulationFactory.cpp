@@ -34,13 +34,14 @@
 #include <limits>
 
 #include <Interfaces/MyObjectInterface.hpp>
-#include <Interfaces/HistogramInterface.hpp>
+#include <General/Histogram.hpp>
 #include <General/PluginList.hpp>
 
 #include "DelaunayTriangulationFactory.hpp"
 #include "../Geometry/DelaunayTriangulation.hpp"
 #include "../Geometry/delaunator.hpp"
 #include "../Geometry/CGAL_includes.hpp"
+#include "../Geometry/BasicComputation.hpp"
 
 namespace poca::geometry {
 	DelaunayTriangulationFactoryInterface* createDelaunayTriangulationFactory() {
@@ -63,16 +64,16 @@ namespace poca::geometry {
 		t1 = clock();
 
 		poca::geometry::DelaunayTriangulationInterface* delau = nullptr;
-		poca::core::BasicComponent* dset = _obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* dset = _obj->getBasicComponent("DetectionSet");
 		if (dset == NULL)
 			return NULL;
-		const std::vector <float>& xs = dset->getOriginalHistogram("x")->getValues();
-		const std::vector <float>& ys = dset->getOriginalHistogram("y")->getValues();
+		const std::vector <float>& xs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("x"))->getValues();
+		const std::vector <float>& ys = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("y"))->getValues();
 		if (!dset->hasData("z")) {
 			delau = createDelaunayTriangulation(xs, ys);
 		}
 		else {
-			const std::vector <float>& zs = dset->getOriginalHistogram("z")->getValues();
+			const std::vector <float>& zs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("z"))->getValues();
 			delau = createDelaunayTriangulation(xs, ys, zs);
 		}
 		if (delau != NULL) {
@@ -100,12 +101,12 @@ namespace poca::geometry {
 		t1 = clock();
 
 		poca::geometry::DelaunayTriangulationInterface* delau = nullptr;
-		poca::core::BasicComponent* dset = _obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* dset = _obj->getBasicComponent("DetectionSet");
 		if (dset == NULL || !dset->hasData("z"))
 			return NULL;
-		const std::vector <float>& xs = dset->getOriginalHistogram("x")->getValues();
-		const std::vector <float>& ys = dset->getOriginalHistogram("y")->getValues();
-		const std::vector <float>& zs = dset->getOriginalHistogram("z")->getValues();
+		const std::vector <float>& xs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("x"))->getValues();
+		const std::vector <float>& ys = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("y"))->getValues();
+		const std::vector <float>& zs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("z"))->getValues();
 
 		delau = createDelaunayTriangulationOnSphere(xs, ys, zs, _center, _radius);
 		if (delau != NULL) {
@@ -144,6 +145,30 @@ namespace poca::geometry {
 			firsts[n + 1] = firsts[n] + currentNeighs.size();
 			std::copy(currentNeighs.begin(), currentNeighs.end(), std::back_inserter(neighbors));
 		}
+
+		//test computing area
+		/*std::ofstream fs("e:/areas_tri.txt");
+		fs << "Side\tPoints\tCGAL" << std::endl;
+		for (size_t t = 0; t < nbTriangles; t++) {
+			size_t idx[] = { t * 3, t * 3 + 1, t * 3 + 2 };
+			double t1x = delau->points[2 * delau->delaunator->triangles[idx[0]]], t1y = delau->points[2 * delau->delaunator->triangles[idx[0]] + 1];
+			double t2x = delau->points[2 * delau->delaunator->triangles[idx[1]]], t2y = delau->points[2 * delau->delaunator->triangles[idx[1]] + 1];
+			double t3x = delau->points[2 * delau->delaunator->triangles[idx[2]]], t3y = delau->points[2 * delau->delaunator->triangles[idx[2]] + 1];
+		
+			poca::core::Vec3mf v1(t1x, t1y, 0), v2(t2x, t2y, 0), v3(t3x, t3y, 0);
+
+			float sideA = (v1 - v2).length(), sideB = (v1 - v3).length(), sideC = (v2 - v3).length();
+			float areaSide = poca::geometry::computeAreaTriangle<float>(sideA, sideB, sideC);
+
+			float areaPoint = poca::geometry::computeTriangleArea(v1.x(), v1.y(), v2.x(), v2.y(), v3.x(), v3.y());
+
+			Point_2 p1(v1.x(), v1.y()), p2(v2.x(), v2.y()), p3(v3.x(), v3.y());
+			float areaCGAL = CGAL::area(p1, p2, p3);
+
+			fs << areaSide << "\t" << areaPoint << "\t" << areaCGAL << std::endl;
+		}
+		fs.close();*/
+
 		poca::core::MyArrayUInt32 neighs;
 		neighs.initialize(neighbors, firsts);
 

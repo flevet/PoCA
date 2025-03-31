@@ -52,9 +52,9 @@ namespace poca::geometry {
 	{
 	}
 
-	poca::core::BasicComponent* DelaunayTriangulation2DOnSphere::copy()
+	poca::core::BasicComponentInterface* DelaunayTriangulation2DOnSphere::copy()
 	{
-		return new DelaunayTriangulation2DOnSphere(*this);
+		return static_cast<poca::core::BasicComponentInterface*>(new DelaunayTriangulation2DOnSphere(*this));
 	}
 
 	void DelaunayTriangulation2DOnSphere::getTrianglesNeighboringPoint(uint32_t _indexPoint, std::vector <uint32_t>& _neighs)
@@ -84,7 +84,7 @@ namespace poca::geometry {
 		delete m_coords;
 	}
 
-	poca::core::BasicComponent* DelaunayTriangulation2DDelaunator::copy()
+	poca::core::BasicComponentInterface* DelaunayTriangulation2DDelaunator::copy()
 	{
 		return new DelaunayTriangulation2DDelaunator(*this);
 	}
@@ -121,7 +121,7 @@ namespace poca::geometry {
 			float sideA = poca::geometry::distance<float>(m_xs[i1], m_ys[i1], m_xs[i2], m_ys[i2]), sideB = poca::geometry::distance<float>(m_xs[i1], m_ys[i1], m_xs[i3], m_ys[i3]), sideC = poca::geometry::distance<float>(m_xs[i3], m_ys[i3], m_xs[i2], m_ys[i2]);
 			areas[n / 3] = computeAreaTriangle<float>(sideA, sideB, sideC);
 		}
-		m_data["area"] = new poca::core::MyData(areas);
+		m_data["area"] = poca::core::generateDataWithLog(areas);
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("area");
 		forceRegenerateSelection();
@@ -140,7 +140,7 @@ namespace poca::geometry {
 				sideC = poca::geometry::distance(m_xs[i3], m_ys[i3], m_zs[i3], m_xs[i2], m_ys[i2], m_zs[i2]);
 			areas[n / 3] = computeAreaTriangle<float>(sideA, sideB, sideC);
 		}
-		m_data["area"] = new poca::core::MyData(areas);
+		m_data["area"] = poca::core::generateDataWithLog(areas);
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("area");
 		forceRegenerateSelection();
@@ -281,7 +281,7 @@ namespace poca::geometry {
 		m_internalDelaunay = _delau;
 		m_neighbors = _neighbors;
 
-		m_data["volume"] = new poca::core::MyData(_volumes);
+		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
@@ -291,7 +291,7 @@ namespace poca::geometry {
 	{
 	}
 
-	poca::core::BasicComponent* DelaunayTriangulation3D::copy()
+	poca::core::BasicComponentInterface* DelaunayTriangulation3D::copy()
 	{
 		return new DelaunayTriangulation3D(*this);
 	}

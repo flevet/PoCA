@@ -75,10 +75,10 @@ namespace poca::geometry {
 
 	DetectionSet::DetectionSet(const DetectionSet& _o) : poca::core::BasicComponent(_o), m_nbPoints(_o.m_nbPoints), m_nbSlices(_o.m_nbSlices), m_kdTree(NULL)
 	{
-		const std::vector <float>& xs = m_data["x"]->getOriginalData(), & ys = m_data["y"]->getOriginalData();
+		const std::vector <float>& xs = m_data["x"]->getOriginalData<float>(), & ys = m_data["y"]->getOriginalData<float>();
 		m_pointCloud.resize(xs.size());
 		if (hasData("z")) {
-			const std::vector <float>& zs = m_data["z"]->getOriginalData();
+			const std::vector <float>& zs = m_data["z"]->getOriginalData<float>();
 			for (size_t n = 0; n < xs.size(); n++)
 				m_pointCloud.m_pts[n].set(xs[n], ys[n], zs[n]);
 		}
@@ -117,7 +117,7 @@ namespace poca::geometry {
 		for (std::vector < DetectionSet* >::const_iterator it2 = _vect.begin(); it2 != _vect.end(); it2++) {
 			DetectionSet* o = *it2;
 			for (std::map<std::string, poca::core::MyData*>::iterator it = o->m_data.begin(); it != o->m_data.end(); ++it) {
-				const std::vector <float>& tmp = it->second->getOriginalData();
+				const std::vector <float>& tmp = it->second->getOriginalData<float>();
 				if (it->first == "time") {
 					std::transform(tmp.begin(), tmp.end(), std::back_inserter(data[it->first]), [&addingForStart](auto i) { return  i + addingForStart; });
 					addingForStart = data[it->first][data[it->first].size() - 1] + 1;
@@ -133,10 +133,10 @@ namespace poca::geometry {
 		this->setBoundingBox(0, 0, zmin < 0. ? floor(zmin) : 0, ceil(xmax), ceil(ymax), zmax < 0. ? floor(zmax) : ceil(zmax));
 		std::cout << "Total number of detections -> " << m_nbPoints << std::endl;
 
-		const std::vector <float>& xs = m_data["x"]->getOriginalData(), & ys = m_data["y"]->getOriginalData();
+		const std::vector <float>& xs = m_data["x"]->getOriginalData<float>(), & ys = m_data["y"]->getOriginalData<float>();
 		m_pointCloud.resize(xs.size());
 		if (hasData("z")) {
-			const std::vector <float>& zs = m_data["z"]->getOriginalData();
+			const std::vector <float>& zs = m_data["z"]->getOriginalData<float>();
 			for (size_t n = 0; n < xs.size(); n++)
 				m_pointCloud.m_pts[n].set(xs[n], ys[n], zs[n]);
 		}
@@ -151,9 +151,9 @@ namespace poca::geometry {
 	{
 		m_palette = poca::core::Palette::getStaticLutPtr("HotCold2");
 		setData(_data);
-		m_nbPoints = m_data["x"]->getOriginalData().size();
-		const std::vector <float>& xs = m_data["x"]->getOriginalData(), & ys = m_data["y"]->getOriginalData();
-		const std::vector <float>& zs = hasData("z") ? m_data["z"]->getOriginalData() : std::vector <float>(xs.size(), 0.f);
+		m_nbPoints = m_data["x"]->getOriginalData<float>().size();
+		const std::vector <float>& xs = m_data["x"]->getOriginalData<float>(), & ys = m_data["y"]->getOriginalData<float>();
+		const std::vector <float>& zs = hasData("z") ? m_data["z"]->getOriginalData<float>() : std::vector <float>(xs.size(), 0.f);
 		float xmin = FLT_MAX, xmax = -FLT_MAX, ymin = FLT_MAX, ymax = -FLT_MAX, zmin = FLT_MAX, zmax = -FLT_MAX;
 		m_pointCloud.resize(xs.size());
 		for (size_t n = 0; n < xs.size(); n++) {
@@ -174,7 +174,7 @@ namespace poca::geometry {
 
 		this->setBoundingBox(floor(xmin), floor(ymin), floor(zmin), ceil(xmax), ceil(ymax), ceil(zmax));
 
-		m_nbSlices = hasData("frame") ? (size_t)(m_data["frame"]->getOriginalData().back() + 1) : 1;
+		m_nbSlices = hasData("frame") ? (size_t)(m_data["frame"]->getOriginalData<float>().back() + 1) : 1;
 		setCurrentHistogramType("x");
 		forceRegenerateSelection();
 		m_kdTree = new KdTree_DetectionPoint(3, m_pointCloud, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
@@ -203,7 +203,7 @@ namespace poca::geometry {
 		return (unsigned int)memoryS;
 	}
 
-	poca::core::BasicComponent* DetectionSet::copy()
+	poca::core::BasicComponentInterface* DetectionSet::copy()
 	{
 		return new DetectionSet(*this);
 	}
@@ -213,7 +213,7 @@ namespace poca::geometry {
 	{
 		poca::core::BasicComponent::setData(_data);
 		for (std::map <std::string, std::vector <float>>::const_iterator it = _data.begin(); it != _data.end(); it++) {
-			m_data[it->first] = new poca::core::MyData(it->second);
+			m_data[it->first] = poca::core::generateDataWithLog(it->second);
 		}
 	}
 
@@ -225,13 +225,28 @@ namespace poca::geometry {
 		return averageD;
 	}
 
+	void DetectionSet::computeBBoxFromPoints()
+	{
+		m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+		std::vector <std::string> headers = { "x", "y", "z" };
+		for (auto n = 0; n < headers.size(); n++) {
+			if (hasData(headers[n])) {
+				std::vector <float>& values = m_data[headers[n]]->getOriginalData<float>();
+				std::vector<float>::iterator min_v = std::min_element(values.begin(), values.end());
+				std::vector<float>::iterator max_v = std::max_element(values.begin(), values.end());
+				m_bbox[n] = *min_v;
+				m_bbox[n + 3] = *max_v;
+			}
+		}
+	}
+
 	DetectionSet* DetectionSet::duplicateSelection() const
 	{
 		std::map <std::string, std::vector <float>> data;
 		std::vector <float> feature(m_nbSelection);
 		for (std::map <std::string, poca::core::MyData*>::const_iterator it = m_data.begin(); it != m_data.end(); it++) {
 			size_t cpt = 0;
-			const std::vector <float>& values = it->second->getOriginalHistogram()->getValues();
+			const std::vector <float>& values = it->second->getOriginalData<float>();;// static_cast<poca::core::Histogram<float>*>(it->second->getOriginalHistogram())->getValues();
 			for (size_t n = 0; n < values.size(); n++)
 				if (m_selection[n])
 					feature[cpt++] = values[n];
@@ -248,7 +263,7 @@ namespace poca::geometry {
 		_fs << std::endl;
 		std::vector <std::vector<float>*> data;
 		for (string name : nameFeatures) {
-			std::vector <float>& values = m_data[name]->getOriginalData();
+			std::vector <float>& values = m_data[name]->getOriginalData<float>();
 			data.push_back(&values);
 		}
 		for (size_t j = 0; j < m_nbPoints; j++) {
@@ -258,18 +273,22 @@ namespace poca::geometry {
 		}
 	}
 
-	DetectionSet* DetectionSet::copySelection(const std::vector <uint32_t>& _indexes)
+	void DetectionSet::getFeaturesOfSelection(const std::vector <uint32_t>& _indexes, std::map <std::string, std::vector <float>>& _data)
 	{
-		std::map <std::string, std::vector <float>> data;
-
 		poca::core::stringList features = getNameData();
 		for (auto feature : features)
-			data[feature] = std::vector <float>();
+			_data[feature] = std::vector <float>();
 
 		for (auto idx : _indexes) {
 			for (auto feature : features)
-				data[feature].push_back(m_data[feature]->getOriginalData()[idx]);
+				_data[feature].push_back(m_data[feature]->getOriginalData<float>()[idx]);
 		}
+	}
+
+	DetectionSet* DetectionSet::copySelection(const std::vector <uint32_t>& _indexes)
+	{
+		std::map <std::string, std::vector <float>> data;
+		this->getFeaturesOfSelection(_indexes, data);
 
 		DetectionSet* dset = new DetectionSet(data);
 		return dset;

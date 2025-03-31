@@ -97,23 +97,30 @@ namespace poca::geometry {
 		DetectionSet(const std::map <std::string, std::vector <float>>&);
 		~DetectionSet();
 
-		inline const size_t nbSlices() const { return m_nbSlices; }
-		inline const size_t nbPoints() const { return m_nbPoints; }
+		inline size_t nbSlices() const { return m_nbSlices; }
+		inline size_t nbPoints() const { return m_nbPoints; }
 		const unsigned int memorySize() const;
 
-		BasicComponent* copy();
+		BasicComponentInterface* copy();
 		void setData(const std::map <std::string, std::vector <float>>&);
 
-		size_t dimension() const { return hasData("z") ? 3 : 2; }
+		const uint32_t dimension() const { return hasData("z") ? 3 : 2; }
 
 		const float averageDensity() const;
 		DetectionSet* duplicateSelection() const;
 
 		void saveDetections(std::ofstream&);
 
+		void getFeaturesOfSelection(const std::vector <uint32_t>&, std::map <std::string, std::vector <float>>&);
 		DetectionSet* copySelection(const std::vector <uint32_t>&);
 
+		void computeBBoxFromPoints();
+
+		inline const poca::core::DetectionPointCloud& getKdTreeCloud() const { return m_pointCloud; }
 		inline KdTree_DetectionPoint* getKdTree() { return m_kdTree; }
+
+	protected:
+		
 
 	protected:
 		size_t m_nbPoints, m_nbSlices;

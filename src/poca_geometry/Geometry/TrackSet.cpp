@@ -31,26 +31,127 @@
 */
 
 #include <General/MyData.hpp>
+#include <General/Misc.h>
+#include <Fit/lmcurve.h>
 
 #include "TrackSet.hpp"
 
 namespace poca::geometry {
 
-	TrackSet::TrackSet(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points, const std::vector <uint32_t>& _planes):poca::core::BasicComponent("TrackSet"), m_tracks(_points, _firsts), m_planes(_planes)
+	TrackSet::TrackSet(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points) :poca::core::BasicComponent("TrackSet"), m_tracks(_points, _firsts)
 	{
-		std::vector <float> lengthes(m_tracks.nbElements());
+		float firstZ = _points[0].z();
+		bool allSames = std::all_of(_points.begin(), _points.end(), [firstZ](poca::core::Vec3mf p) { return p.z() == firstZ; });
+		m_dimension = allSames ? 2 : 3;
+
+		std::vector <float> lengthes(m_tracks.nbElements()), nbLocs(m_tracks.nbElements()), ids(m_tracks.nbElements());
+
 		for (uint32_t n = 0; n < m_tracks.nbElements(); n++) {
 			float l = 0.f;
 			for (uint32_t i = _firsts[n]; i < _firsts[n + 1] - 1; i++) {
 				const poca::core::Vec3mf& p1 = _points[i], & p2 = _points[i + 1];
-				l += p1.distance(p2);
+				auto d = p1.distance(p2);
+				l += d;
 			}
 			lengthes[n] = l;
+			nbLocs[n] = _firsts[n + 1] - _firsts[n];
+			ids[n] = n + 1;
+
 		}
-		m_data["lengthes"] = new poca::core::MyData(lengthes);
+		m_data["lengthes"] = poca::core::generateDataWithLog(lengthes);
+		m_data["ids"] = poca::core::generateDataWithLog(ids);
+		m_data["nb"] = poca::core::generateDataWithLog(nbLocs);
 		m_selection.resize(lengthes.size());
 		setCurrentHistogramType("lengthes");
 		forceRegenerateSelection();
+	}
+
+	TrackSet::TrackSet(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points, const std::vector <float>& _planes, const std::vector <uint32_t>& _locsToTrackID) :poca::core::BasicComponent("TrackSet"), m_tracks(_points, _firsts), m_planes(_planes), m_locsToTrackID(_locsToTrackID)
+	{
+		float firstZ = _points[0].z();
+		bool allSames = std::all_of(_points.begin(), _points.end(), [firstZ](poca::core::Vec3mf p) { return p.z() == firstZ; });
+		m_dimension = allSames ? 2 : 3;
+
+		float dxyz = 0.f, dxy = 0.f;
+		std::vector <float> lengthes(m_tracks.nbElements()), time(m_tracks.nbElements()), nbLocs(m_tracks.nbElements()), msds(m_tracks.nbElements());
+		std::vector <float> ids(m_tracks.nbElements()), diffusionCoeff(m_tracks.nbElements());
+		m_msds.resize(m_tracks.nbElements());
+		for (uint32_t n = 0; n < m_tracks.nbElements(); n++) {
+			float l = 0.f;
+			for (uint32_t i = _firsts[n]; i < _firsts[n + 1] - 1; i++) {
+				const poca::core::Vec3mf& p1 = _points[i], & p2 = _points[i + 1];
+				auto d = p1.distance(p2);
+				l += d;
+
+				auto dx = p2[0] - p1[0], dy = p2[1] - p1[1], dz = p2[2] - p1[2];
+				auto d2 = sqrt(dx * dx + dy * dy);
+				if (d > dxyz)
+					dxyz = d;
+				if (d2 > dxy)
+					dxy = d2;
+			}
+			lengthes[n] = l;
+			nbLocs[n] = _firsts[n + 1] - _firsts[n];
+			time[n] = _planes[_firsts[n]];
+			ids[n] = m_locsToTrackID[_firsts[n]];
+
+			//Compute msd
+			m_msds[n].resize(nbLocs[n] - 1);
+			uint32_t inter = 1;
+			for (uint32_t j = 0; j < m_msds[n].size(); j++) {
+				m_msds[n][j] = 0.f;
+				int iprec = 0;
+				float cpt = 0.f;
+				uint32_t startId = _firsts[n];
+				for (uint32_t i = inter; i < nbLocs[n]; i++, iprec++) {
+					const poca::core::Vec3mf& p1 = _points[startId + i], & p2 = _points[startId + iprec];
+					auto dx = p2[0] - p1[0], dy = p2[1] - p1[1], dz = p2[2] - p1[2];
+					float d = sqrt(dx * dx + dy * dy + dz * dz);
+					m_msds[n][j] += d;
+					cpt = cpt + 1.f;
+				}
+				inter++;
+				m_msds[n][j] /= cpt;
+			}
+
+			/*float msd = 0.f, nbs = _firsts[n + 1] - _firsts[n];
+			const auto& p0 = _points[_firsts[n]];
+			for (uint32_t i = _firsts[n] + 1; i < _firsts[n + 1] - 1; i++) {
+				const auto& p = _points[i];
+				auto d = p.distance(p0);
+				msd += d / nbs;
+			}
+			msds[n] = msd;
+			meanDistance[n] = l / nbs;*/
+
+			uint32_t stop = m_msds[n].size() > 4 ? 4 : m_msds[n].size();
+			std::vector <double> v(stop), x(stop);
+			for (uint32_t i = 0; i < stop; i++) {
+				v[i] = m_msds[n][i];
+				x[i] = i + 1;
+			}
+			lm_control_struct control = lm_control_double;
+			lm_status_struct status;
+			control.verbosity = 9;
+			int nbParamEqn = 2;
+			std::vector<double> paramsEqn(nbParamEqn);
+			paramsEqn[0] = m_msds[n][m_msds[n].size()/2];
+			lmcurve(nbParamEqn, paramsEqn.data(), x.size(), x.data(), v.data(), &poca::core::linear, &control, &status);
+			diffusionCoeff[n] = paramsEqn[0];
+
+		}
+		m_data["lengthes"] = poca::core::generateDataWithLog(lengthes);
+		m_data["ids"] = poca::core::generateDataWithLog(ids);
+		m_data["appearing time"] = poca::core::generateDataWithLog(time);
+		m_data["nb"] = poca::core::generateDataWithLog(nbLocs);
+		m_data["diffusion coefficient"] = poca::core::generateDataWithLog(diffusionCoeff);
+		m_selection.resize(lengthes.size());
+		setCurrentHistogramType("lengthes");
+		forceRegenerateSelection();
+
+		std::cout << "max dxyz = " << dxyz << ", max dxy = " << dxy << std::endl;
+		for (const auto& p : _points)
+			m_bbox.addPointBBox(p.x(), p.y(), p.z());
 	}
 
 	TrackSet::~TrackSet()
@@ -58,7 +159,7 @@ namespace poca::geometry {
 
 	}
 
-	poca::core::BasicComponent* TrackSet::copy()
+	poca::core::BasicComponentInterface* TrackSet::copy()
 	{
 		return new TrackSet(*this);
 	}
@@ -81,15 +182,17 @@ namespace poca::geometry {
 	void TrackSet::generatePickingIndices(std::vector <float>& _ids) const
 	{
 		_ids.clear();
+		const auto& ids = this->getData<float>("ids");
 		const auto& firsts = m_tracks.getFirstElements();
 		const auto& points = m_tracks.getData();
 		for (auto n = 0; n < m_tracks.nbElements(); n++) {
-			_ids.push_back(n + 1);
+			auto trackId = ids[n];
+			_ids.push_back(trackId);
 			for (uint32_t i = firsts[n] + 1; i < firsts[n + 1] - 1; i++) {
-				_ids.push_back(n + 1);
-				_ids.push_back(n + 1);
+				_ids.push_back(trackId);
+				_ids.push_back(trackId);
 			}
-			_ids.push_back(n + 1);
+			_ids.push_back(trackId);
 		}
 	}
 
@@ -127,4 +230,5 @@ namespace poca::geometry {
 		}
 		return bbox;
 	}
+
 }

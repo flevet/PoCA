@@ -50,7 +50,7 @@ namespace poca::geometry {
 	template <typename T>
 	static T computeAreaTriangle(const T _a, const T _b, const T _c) {
 		T semiPerimeter = (_a + _b + _c) / 2.;
-		return (T)sqrt(semiPerimeter * (semiPerimeter - _a) * (semiPerimeter - _b) * (semiPerimeter - _c));
+		return (T)sqrt(fabs(semiPerimeter * (semiPerimeter - _a) * (semiPerimeter - _b) * (semiPerimeter - _c)));
 	}
 
 	class BasicComputation {

@@ -962,6 +962,10 @@ namespace nanoflann
 			return resultSet.size();
 		}
 
+		const DatasetAdaptor& getPointCloud() const {
+			return dataset;
+		}
+
 		/** @} */
 
 	private:

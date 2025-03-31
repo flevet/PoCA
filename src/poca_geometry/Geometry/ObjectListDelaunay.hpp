@@ -1,9 +1,9 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      ObjectList.hpp
+* File:      ObjectListDelaunay.hpp
 *
-* Copyright: Florian Levet (2020-2022)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
@@ -30,24 +30,25 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef ObjectList_hpp__
-#define ObjectList_hpp__
+#ifndef ObjectListDelaunay_hpp__
+#define ObjectListDelaunay_hpp__
 
 #include <any>
+#include <tuple>
 
-#include <General/BasicComponent.hpp>
+#include <General/BasicComponentList.hpp>
 #include <General/MyArray.hpp>
 #include <General/Vec3.hpp>
-#include <Interfaces/MyObjectInterface.hpp>
+#include <Interfaces/ObjectListInterface.hpp>
 
 namespace poca::geometry {
-	class ObjectList : public poca::core::BasicComponent {
+	class ObjectListDelaunay : public poca::geometry::ObjectListInterface {
 	public:
-		ObjectList(const float* , const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
-		ObjectList(const float*, const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>& = std::vector <poca::core::Vec3mf>());
-		~ObjectList();
+		ObjectListDelaunay(const float* , const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
+		ObjectListDelaunay(const float*, const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>& = std::vector <poca::core::Vec3mf>());
+		~ObjectListDelaunay();
 
-		poca::core::BasicComponent* copy();
+		poca::core::BasicComponentInterface* copy();
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);
@@ -66,35 +67,25 @@ namespace poca::geometry {
 		virtual poca::core::BoundingBox computeBoundingBoxElement(const int) const;
 		virtual poca::core::Vec3mf computeBarycenterElement(const int) const;
 
-		inline const poca::core::MyArrayUInt32& getLocsObjects() const { return m_locs; }
-		inline const poca::core::MyArrayVec3mf& getTrianglesObjects() const { return m_triangles; }
-		inline const poca::core::MyArrayVec3mf& getOutlinesObjects() const { return m_outlines; }
-		inline const std::vector <poca::core::Vec3mf>& getNormalOutlineLocs() const { return m_normalOutlineLocs; }
 		inline const std::vector <uint32_t>& getLinkTriangulationFacesToObjects() const { return m_linkTriangulationFacesToObjects; }
-		inline const float* getXs() const { return m_xs; }
-		inline const float* getYs() const { return m_ys; }
-		inline const float* getZs() const { return m_zs; }
+		const float* getXs() const { return m_xs; }
+		const float* getYs() const { return m_ys; }
+		const float* getZs() const { return m_zs; }
 
 		inline const uint32_t dimension() const { return m_zs == NULL ? 2 : 3; }
 		inline const size_t nbObjects() const { return m_locs.nbElements(); }
 
-		inline void setOutlineLocs(const std::vector <uint32_t>& _locsOutlines, const std::vector <uint32_t>& _firstLocsOutlines) { m_outlineLocs = poca::core::MyArrayUInt32(_locsOutlines, _firstLocsOutlines); }
-		inline const poca::core::MyArrayUInt32& getLocOutlines() const { return m_outlineLocs; }
+		bool hasSkeletons() const { return false; }
+
 		virtual void generateOutlineLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void getOutlineLocsFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;
 		virtual void getOutlineLocsFeatureInSelectionHiLow(std::vector <float>&, const std::vector <bool>&, const float, const float) const;
-
-		virtual const std::vector < std::array<poca::core::Vec3mf, 3>>& getAxisObjects() const { return m_axis; }
 
 		virtual void setLocs(const float*, const float*, const float*, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
 
 	protected:
 		const float* m_xs, * m_ys, * m_zs;
-		poca::core::MyArrayUInt32 m_locs, m_outlineLocs;
-		poca::core::MyArrayVec3mf m_triangles, m_outlines;
-		std::vector <poca::core::Vec3mf> m_normalOutlineLocs;
 		std::vector <uint32_t> m_linkTriangulationFacesToObjects;
-		std::vector < std::array<poca::core::Vec3mf, 3>> m_axis;
 	};
 }
 
