@@ -33,12 +33,15 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <set>
+#include <string>
 #include <QtCore\QElapsedTimer>
 
 #include <General/Misc.h>
 #include <Geometry/nanoflann.hpp>
 #include <General/Command.hpp>
 #include <gemmi/mmread.hpp>
+#include <Geometry/DetectionSet.hpp>
 
 #include "LoaderPDBFile.hpp"
 
@@ -50,7 +53,24 @@ const QString getTimeElapsed(QElapsedTimer _time)
 	return out;
 }
 
-void LoaderPDBFile::loadFile(const QString& _filename, std::map <std::string, std::vector <float>>& _data, poca::core::CommandInfo* _command)
+poca::core::BasicComponentInterface* LoaderPDBFile::loadData(const QString& _filename, poca::core::CommandInfo* _command)
+{
+	std::map <std::string, std::vector <float>> data;
+	loadFile(_filename, data, _command);
+
+	if (!data.empty()) {
+		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(data);
+		return dset;
+	}
+	return NULL;
+}
+
+QStringList LoaderPDBFile::extensions() const
+{
+	return m_extensions;
+}
+
+void LoaderPDBFile::loadFile(const QString& _filename, std::map <std::string, std::vector <float>>& _data, poca::core::CommandInfo* _command) const
 {
 	if (!_filename.endsWith(".pdb") && !_filename.endsWith(".cif")) return;
 
