@@ -55,7 +55,7 @@ namespace poca::plot {
 
 		QSize sizeHint() const;
 
-		inline void setInfos(const QString& _n, poca::core::HistogramInterface* _h, poca::core::PaletteInterface* _p) { setHistogram(_h); setPalette(_p); setName(_n); }
+		inline void setInfos(const QString& _n, poca::core::HistogramInterface* _h, poca::core::PaletteInterface* _p) { this->setToolTip(_n); setHistogram(_h); setPalette(_p); setName(_n); }
 		inline void setHistogram(poca::core::HistogramInterface* _hist) { m_histogram = _hist; }
 		inline void setPalette(poca::core::PaletteInterface* _palette) { m_palette = _palette; }
 		inline void setName(const QString& _name) { m_name = _name; }
