@@ -46,9 +46,16 @@
 #include "../General/Vec4.hpp"
 #include "../General/Vec6.hpp"
 #include "../General/ranker.h"
+#include "../General/Histogram.hpp"
+#include "../General/MyData.hpp"
 
 namespace poca::core{
+	enum PHOTOPHYSICS_PARAMETERS {NB_BLINKS = 0, TOTAL_ON = 1, TOTAL_OFF = 2, NB_ON = 3, NB_OFF = 4, LIFETIME = 5};
+	enum ImageType { UINT8, UINT16, UINT32, INT32, FLOAT, RAW, LABEL, NONE };
+
 	static size_t NbObjects = 1;
+	static const std::size_t ENV_BUF_SIZE = 2048; // Enough for your PATH?
+
 	Color4D contrastColor(const Color4D & _backC);
 	int roundUpGeneric(int, int);
 	int roundUpPowerOfTwo(int, int);
@@ -69,10 +76,32 @@ namespace poca::core{
 	void getColorString(double, double, double, char [32]);
 	void getColorStringUC(unsigned char, unsigned char, unsigned char, char[32]);
 
-	void initializeAllSingletons(std::map <std::string, std::any>&);
-	void setAllSingletons(const std::map <std::string, std::any>&);
-
 	void randomPointsOnUnitSphere(const uint32_t, std::vector<Vec3mf>&);
+
+	double linear(double, const double*);
+	double linearFixed(double, const double*);
+
+	void computePhotophysicsParameters(const std::vector <float>&, std::vector <float>&);
+
+	void PrintFullPath(const char*);
+
+	template <class T>
+	MyData* generateDataWithLog(const std::vector<T>& _data)
+	{
+		return new poca::core::MyData(new poca::core::Histogram<T>(_data, false), true);
+	}
+
+	template <class T>
+	MyData* generateDataWithoutLog(const std::vector<T>& _data)
+	{
+		return new poca::core::MyData(new poca::core::Histogram<T>(_data, false), false);
+	}
+
+	template <class T>
+	MyData* generateLogData(const std::vector<T>& _data)
+	{
+		return new poca::core::MyData(new poca::core::Histogram<T>(_data, true), false);
+	}
 
 	/*
 	 * Generic function to find duplicates elements in vector.
@@ -311,7 +340,10 @@ namespace poca::geometry {
 
 namespace poca::core::utils {
 	QTabWidget* addSingleTabWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget);
-	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first = true);
+	QTabWidget* addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first = true);
+	const bool isFileExtensionInList(const QString&, const QStringList&);
+	const bool isExtensionInList(const QString&, const QStringList&);
+	void getJsonsFromString(const QString&, std::vector <nlohmann::json>&);
 }
 
 #endif

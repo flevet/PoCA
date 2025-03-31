@@ -148,6 +148,7 @@ namespace poca::core {
 		inline CommandInfo& operator=(const CommandInfo& other) { nameCommand = other.nameCommand; json = other.json; recordable = other.recordable; return *this; }
 
 		inline const std::string& getNameCommand() const { return nameCommand; }
+		inline const std::string toString() const { return json.dump(4); }
 		inline const size_t nbParameters() const { return json.empty() ? 0 : json[nameCommand].size(); }
 		inline const bool isRecordable() const { return recordable; }
 		inline const bool empty() const { return nameCommand == ""; }
@@ -203,6 +204,24 @@ namespace poca::core {
 			if (!m_commandInfos.at(_nameCommand).hasParameter(_nameParameter))
 				throw std::runtime_error(std::string("Parameter " + _nameCommand + " for command " + _nameCommand + " not found"));
 			return m_commandInfos.at(_nameCommand).getParameter<T>(_nameParameter);
+		}
+
+		template <typename T>
+		T getParameterPtr(const std::string& _nameCommand) const {
+			if (m_commandInfos.find(_nameCommand) == m_commandInfos.end())
+				throw std::runtime_error(std::string("Parameter " + _nameCommand + " not found"));
+			if (!m_commandInfos.at(_nameCommand).hasParameter(_nameCommand))
+				throw std::runtime_error(std::string("Parameter " + _nameCommand + " not found"));
+			return m_commandInfos.at(_nameCommand).getParameterPtr<T>(_nameCommand);
+		}
+
+		template <typename T>
+		T getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter) const {
+			if (m_commandInfos.find(_nameCommand) == m_commandInfos.end())
+				throw std::runtime_error(std::string("Parameter " + _nameCommand + " for command " + _nameCommand + " not found"));
+			if (!m_commandInfos.at(_nameCommand).hasParameter(_nameParameter))
+				throw std::runtime_error(std::string("Parameter " + _nameCommand + " for command " + _nameCommand + " not found"));
+			return m_commandInfos.at(_nameCommand).getParameterPtr<T>(_nameParameter);
 		}
 
 		void addCommandInfo(const CommandInfo& _com) {

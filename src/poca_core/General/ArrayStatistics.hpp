@@ -36,6 +36,8 @@
 #include <iostream>
 #include <vector>
 
+#include "../Cuda/CoreMisc.h"
+
 namespace poca::core {
 
 #define STATS_NB_PARAMS 5
@@ -45,22 +47,38 @@ namespace poca::core {
 		enum StatsParam { Mean = 0, Median = 1, StdDev = 2, Min = 3, Max = 4 };
 		ArrayStatistics();
 		ArrayStatistics(const float, const float, const float, const float, const float);
-		ArrayStatistics(float[STATS_NB_PARAMS]);
+		ArrayStatistics(const std::vector<float>&);
 
 		inline void setData(const int _type, const float _val) { m_data[_type] = _val; }
 		inline const float getData(const int _type) const { return m_data[_type]; }
 
-		static ArrayStatistics generateArrayStatistics(const std::vector<float>&, const size_t);
-		static ArrayStatistics generateArrayStatistics(const float*, const size_t);
-		static ArrayStatistics generateInverseArrayStatistics(const std::vector<float>&, const size_t);
-		static ArrayStatistics generateInverseArrayStatistics(const float*, const size_t);
+		template <class T>
+		static ArrayStatistics generateArrayStatistics(std::vector<T>&, const size_t);
+		//static ArrayStatistics generateArrayStatistics(const float*, const size_t);
+		//static ArrayStatistics generateInverseArrayStatistics(const std::vector<float>&, const size_t);
+		//static ArrayStatistics generateInverseArrayStatistics(const float*, const size_t);
 
 		friend std::ostream& operator<<(std::ostream&, const ArrayStatistics&);
 
 	private:
-		float m_data[5];
+		std::vector <float> m_data;
 	};
 
+	template <class T>
+	ArrayStatistics ArrayStatistics::generateArrayStatistics(std::vector <T>& _data, const size_t _nb)
+	{
+		float nb = (float)_nb;
+		if (_nb == 0) return ArrayStatistics();
+		std::vector <float> vals(STATS_NB_PARAMS);
+		vals[ArrayStatistics::Mean] = vals[ArrayStatistics::Median] = vals[ArrayStatistics::StdDev] = 0.;
+		vals[ArrayStatistics::Min] = FLT_MAX;
+		vals[ArrayStatistics::Max] = -FLT_MAX;
+
+		computeStats(_data, vals);
+
+		ArrayStatistics stats(vals);
+		return stats;
+	}
 }
 #endif // GeneralTools_h__
 

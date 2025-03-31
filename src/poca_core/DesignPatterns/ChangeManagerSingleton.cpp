@@ -116,7 +116,7 @@ namespace poca::core {
 		MappingSubjectObservers::iterator it1 = m_mapping.find(_subject);
 		if (it1 != m_mapping.end()) {
 			Observers* observers = it1->second;
-			for (Observers::iterator it2 = observers->begin(); it2 != observers->end(); it2++) {
+			for (Observers::reverse_iterator it2 = observers->rbegin(); it2 != observers->rend(); it2++) {
 				Observer* observer = *it2;
 				if (observer->hasActionToObserve(_action))
 					observer->update(_subject, _action);
@@ -128,7 +128,7 @@ namespace poca::core {
 	{
 		for (MappingSubjectObservers::iterator it1 = m_mapping.begin(); it1 != m_mapping.end(); it1++) {
 			Observers* observers = it1->second;
-			for (Observers::iterator it2 = observers->begin(); it2 != observers->end(); it2++) {
+			for (Observers::reverse_iterator it2 = observers->rbegin(); it2 != observers->rend(); it2++) {
 				Observer* observer = *it2;
 				if (observer->hasActionToObserve(_action))
 					observer->update(_subject, _action);

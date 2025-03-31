@@ -55,11 +55,14 @@ namespace poca::core {
 		virtual void onMove(const float, const float, const float = 0.f, const bool = false) = 0;
 		virtual void finalize(const float, const float, const float = 0.f, const bool = false) = 0;
 		virtual float getFeature(const std::string&) const = 0;
+		virtual void applyCalibrationXY(const float = 1.f) = 0;
 
 		virtual void setName(const std::string& _name) = 0;
 		virtual const std::string& getName() const = 0;
 		virtual void setType(const std::string& _type) = 0;
 		virtual const std::string& getType() const = 0;
+
+		virtual void load(const std::vector<std::array<float, 2>>&) = 0;
 
 		virtual void save(std::ofstream&) const = 0;
 		virtual void load(std::ifstream&) = 0;

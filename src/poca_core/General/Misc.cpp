@@ -40,13 +40,6 @@
 #include <assert.h>
 #include <sys/stat.h>
 
-#include "../DesignPatterns/ListDatasetsSingleton.hpp"
-#include "../DesignPatterns/StateSoftwareSingleton.hpp"
-#include "../DesignPatterns/MacroRecorderSingleton.hpp"
-#include "../DesignPatterns/MacroRecorderSingleton.hpp"
-#include "../DesignPatterns/MediatorWObjectFWidget.hpp"
-#include "../DesignPatterns/GlobalParametersSingleton.hpp"
-
 #include "Misc.h"
 
 namespace poca::core {
@@ -201,48 +194,6 @@ namespace poca::core {
 		return Color4D(color[0], color[1], color[2], color[3]);
 	}
 
-	void initializeAllSingletons(std::map <std::string, std::any>& _singletons)
-	{
-		nlohmann::json parameters;
-		std::ifstream fs("poca.ini");
-		if (fs.good())
-			fs >> parameters;
-		fs.close();
-
-		poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-		sss->setParameters(parameters);
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MediatorWObjectFWidget* med = poca::core::MediatorWObjectFWidget::instance();
-		poca::core::MacroRecorderSingleton* macroRecord = poca::core::MacroRecorderSingleton::instance();
-		poca::core::GlobalParametersSingleton* globalP = poca::core::GlobalParametersSingleton::instance();
-		
-
-		_singletons["StateSoftwareSingleton"] = sss;
-		_singletons["ListDatasetsSingleton"] = lds;
-		_singletons["MediatorWObjectFWidget"] = med;
-		_singletons["MacroRecorderSingleton"] = macroRecord;
-		_singletons["GlobalParametersSingleton"] = globalP;
-	}
-
-	void setAllSingletons(const std::map <std::string, std::any>& _singletons)
-	{
-		if (_singletons.find("StateSoftwareSingleton") != _singletons.end()) {
-			poca::core::StateSoftwareSingleton::setStateSoftwareSingleton(std::any_cast <poca::core::StateSoftwareSingleton*>(_singletons.at("StateSoftwareSingleton")));
-		}
-		if (_singletons.find("ListDatasetsSingleton") != _singletons.end()) {
-			poca::core::ListDatasetsSingleton::setListDatasetsSingleton(std::any_cast <poca::core::ListDatasetsSingleton*>(_singletons.at("ListDatasetsSingleton")));
-		}
-		if (_singletons.find("MediatorWObjectFWidget") != _singletons.end()) {
-			poca::core::MediatorWObjectFWidget::setMediatorWObjectFWidgetSingleron(std::any_cast <poca::core::MediatorWObjectFWidget*>(_singletons.at("MediatorWObjectFWidget")));
-		}
-		if (_singletons.find("MacroRecorderSingleton") != _singletons.end()) {
-			poca::core::MacroRecorderSingleton::setMacroRecorderSingleton(std::any_cast <poca::core::MacroRecorderSingleton*>(_singletons.at("MacroRecorderSingleton")));
-		}
-		if (_singletons.find("GlobalParametersSingleton") != _singletons.end()) {
-			poca::core::GlobalParametersSingleton::setGlobalParametersSingleton(std::any_cast <poca::core::GlobalParametersSingleton*>(_singletons.at("GlobalParametersSingleton")));
-		}
-	}
-
 	void randomPointsOnUnitSphere(const uint32_t _nbPoints, std::vector<Vec3mf>& _points)
 	{
 		std::default_random_engine generator;
@@ -254,6 +205,51 @@ namespace poca::core {
 			pt.normalize();
 			_points[n] = pt;
 		}
+	}
+
+	double linear(double _x, const double* _p)
+	{
+		return _x * _p[0] + _p[1];
+	}
+
+	double linearFixed(double _x, const double* _p)
+	{
+		return _x * _p[0];
+	}
+
+	void computePhotophysicsParameters(const std::vector <float>& _frames, std::vector <float>& _photophysics)
+	{
+		bool isDown = false;
+		assert(_photophysics.size() == 6);
+
+		std::fill(_photophysics.begin(), _photophysics.begin() + 6, 0);
+		_photophysics[poca::core::TOTAL_ON] = _frames.size();
+		_photophysics[poca::core::NB_ON] = 1;
+
+		if (_frames.size() == 1)
+			_photophysics[poca::core::LIFETIME] = 1;
+		else {
+			for (auto n = 1; n < _frames.size(); n++) {
+				auto dt = (_frames[n] - _frames[n - 1]) - 1;
+				if (dt > 0) {
+					_photophysics[poca::core::NB_ON] = _photophysics[poca::core::NB_ON] + 1;
+					_photophysics[poca::core::NB_OFF] = _photophysics[poca::core::NB_OFF] + 1;
+					_photophysics[poca::core::NB_BLINKS] = _photophysics[poca::core::NB_BLINKS] + 1;
+					_photophysics[poca::core::TOTAL_OFF] = _photophysics[poca::core::TOTAL_OFF] + dt;
+				}
+			}
+			_photophysics[poca::core::LIFETIME] = _photophysics[poca::core::TOTAL_ON] + _photophysics[poca::core::TOTAL_OFF];
+		}
+	}
+
+	void PrintFullPath(const char* partialPath)
+	{
+		printf("Connecting to Python.\n");
+		char full[_MAX_PATH];
+		if (_fullpath(full, partialPath, _MAX_PATH) != NULL)
+			printf("Full path is: %s\n", full);
+		else
+			printf("Invalid path\n");
 	}
 }
 
@@ -441,30 +437,31 @@ namespace poca::core::utils {
 		return tabW;
 	}
 
-	void addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first)
+	QTabWidget* addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first)
 	{
+		QTabWidget* parentTab = NULL;
 		int pos = -1;
 		for (int n = 0; n < _parent->count(); n++)
 			if (_parent->tabText(n) == _nameMainTab)
 				pos = n;
 		if (pos != -1) {
-			QTabWidget* tabW = static_cast <QTabWidget*>(_parent->widget(pos));
+			parentTab = static_cast <QTabWidget*>(_parent->widget(pos));
 			pos = -1;
-			for (int n = 0; n < tabW->count(); n++)
-				if (tabW->tabText(n) == _nameSubTab)
+			for (int n = 0; n < parentTab->count(); n++)
+				if (parentTab->tabText(n) == _nameSubTab)
 					pos = n;
 			QTabWidget* tabW2 = NULL;
 			if (pos == -1) {
 				tabW2 = new QTabWidget;
 				QVBoxLayout* layout = new QVBoxLayout;
-				QWidget* emptyW = new QWidget;
+				/*QWidget* emptyW = new QWidget;
 				emptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-				layout->addWidget(emptyW);
+				layout->addWidget(emptyW);*/
 				tabW2->setLayout(layout);
-				tabW->addTab(tabW2, _nameSubTab);
+				parentTab->addTab(tabW2, _nameSubTab);
 			}
 			else
-				tabW2 = static_cast <QTabWidget*>(tabW->widget(pos));
+				tabW2 = static_cast <QTabWidget*>(parentTab->widget(pos));
 			QLayout* layout = tabW2->layout();
 			QVBoxLayout* vlayout = dynamic_cast <QVBoxLayout*>(layout);
 			/*if (!vlayout)
@@ -473,23 +470,55 @@ namespace poca::core::utils {
 				int size = vlayout->count();
 				size = size > 0 ? size - 1 : size;
 				vlayout->insertWidget(_first ? 0 : size, _widget);
-				tabW->update();
+				parentTab->update();
 			}
 		}
 		else {
-			QTabWidget* tabW = new QTabWidget;
-			_parent->addTab(tabW, _nameMainTab);
+			parentTab = new QTabWidget;
+			_parent->addTab(parentTab, _nameMainTab);
 			QTabWidget* miscWidget = new QTabWidget;
 			QVBoxLayout* layout = new QVBoxLayout;
 			QWidget* emptyW = new QWidget;
 			emptyW->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 			layout->addWidget(emptyW);
 			miscWidget->setLayout(layout);
-			tabW->addTab(miscWidget, _nameSubTab);
+			parentTab->addTab(miscWidget, _nameSubTab);
 			int size = layout->count();
 			size = size > 0 ? size - 1 : size;
 			layout->insertWidget(size, _widget);
 			miscWidget->update();
+		}
+		return parentTab;
+	}
+
+	const bool isFileExtensionInList(const QString& _filename, const QStringList& _extensions)
+	{
+		int index = _filename.lastIndexOf(".");
+		if (index == -1)
+			return false;
+		QString ext = _filename.right(_filename.size() - index);
+		return isExtensionInList(ext, _extensions);
+	}
+
+	const bool isExtensionInList(const QString& _ext, const QStringList& _extensions)
+	{
+		for (const auto& extension : _extensions)
+			if (extension == _ext)
+				return true;
+		return false;
+	}
+
+	void getJsonsFromString(const QString& _text, std::vector <nlohmann::json>& _jsons)
+	{
+		_jsons.clear();
+		for (QString commandTxt : _text.split("\n")) {
+			if (commandTxt.isEmpty()) continue;
+			std::stringstream ss;
+			ss.str(commandTxt.toStdString());
+			nlohmann::json json;
+			ss >> json;
+			if (json.empty()) continue;
+			_jsons.push_back(json);
 		}
 	}
 }

@@ -34,34 +34,88 @@
 #define MyData_h__
 
 #include <vector>
+#include <algorithm>
+#include <execution>
+
+#include "Histogram.hpp" 
 
 namespace poca::core {
-	class Histogram;
 
 	class MyData {
 	public:
-		MyData(const std::vector < float >&);
+		MyData();
+		MyData(HistogramInterface*, HistogramInterface* = NULL);
+		MyData(HistogramInterface*,const bool = false);
 		MyData(const MyData&);
 		~MyData();
 
-		const std::vector < float >& getOriginalData() const;
-		std::vector < float >& getOriginalData();
-		const std::vector < float >& getData() const;
-		std::vector < float >& getData();
+		void finalizeData();
+
+		template <class T>
+		const std::vector < T >& getOriginalData() const;
+		template <class T>
+		std::vector < T >& getOriginalData();
+		template <class T>
+		const std::vector < T >& getData() const;
+		template <class T>
+		std::vector < T >& getData();
 		const size_t nbElements() const;
 		void setLog(const bool);
 
-		inline Histogram* getHistogram() { return m_log ? m_logHistogram : m_histogram; }
-		inline Histogram* getHistogram() const { return m_log ? m_logHistogram : m_histogram; }
-		inline Histogram* getOriginalHistogram() { return m_histogram; }
-		inline Histogram* getOriginalHistogram() const { return m_histogram; }
+		inline HistogramInterface* getHistogram() { return m_log ? m_logHistogram : m_histogram; }
+		inline HistogramInterface* getHistogram() const { return m_log ? m_logHistogram : m_histogram; }
+		inline HistogramInterface* getOriginalHistogram() { return m_histogram; }
+		inline HistogramInterface* getOriginalHistogram() const { return m_histogram; }
 
 		inline const bool isLog() const { return m_log; }
 
 	protected:
-		Histogram* m_histogram, * m_logHistogram;
-		bool m_log;
+		HistogramInterface* m_histogram, * m_logHistogram;
+		bool m_log{ false }, m_computeLog{ true };
 	};
+
+	
+
+	/*template <class T>
+	MyData::MyData(const std::vector < T >& _data, const bool _computeLog) : m_histogram(nullptr), m_logHistogram(nullptr), m_log(false)
+	{
+		m_histogram = new Histogram<T>(_data, _data.size(), false);
+
+		if (_computeLog)
+			m_logHistogram = m_histogram->computeLogHistogram();
+	}
+
+	template <class T>
+	MyData::MyData(const MyData& _o) : m_log(_o.m_log)
+	{
+		m_histogram = new Histogram<T>(*_o.m_histogram);
+		if (_o.m_logHistogram != nullptr)
+			m_logHistogram = new Histogram(*_o.m_logHistogram);
+	}*/
+
+	template <class T>
+	const std::vector < T >& MyData::getOriginalData() const
+	{
+		return dynamic_cast<Histogram<T>*>(m_histogram)->getValues();
+	}
+
+	template <class T>
+	std::vector < T >& MyData::getOriginalData()
+	{
+		return dynamic_cast<Histogram<T>*>(m_histogram)->getValues();
+	}
+
+	template <class T>
+	const std::vector < T >& MyData::getData() const
+	{
+		return m_log ? dynamic_cast<Histogram<T>*>(m_logHistogram)->getValues() : dynamic_cast<Histogram<T>*>(m_histogram)->getValues();
+	}
+
+	template <class T>
+	std::vector < T >& MyData::getData()
+	{
+		return m_log ? dynamic_cast<Histogram<T>*>(m_logHistogram)->getValues() : dynamic_cast<Histogram<T>*>(m_histogram)->getValues();
+	}
 }
 
 #endif

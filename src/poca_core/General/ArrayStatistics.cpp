@@ -32,6 +32,7 @@
 
 #include <vector>
 #include <algorithm>
+#include <execution>
 
 #include "ArrayStatistics.hpp"
 
@@ -39,7 +40,7 @@ namespace poca::core {
 
 	ArrayStatistics::ArrayStatistics()
 	{ 
-		std::fill(&m_data[0], &m_data[0] + STATS_NB_PARAMS, 0.f);
+		m_data.resize(STATS_NB_PARAMS, 0.f);
 	}
 
 	ArrayStatistics::ArrayStatistics(const float _mean, const float _median, const float _stdDev, const float _min, const float _max) 
@@ -51,24 +52,20 @@ namespace poca::core {
 		m_data[Max] = _max;
 	}
 
-	ArrayStatistics::ArrayStatistics(float _vals[STATS_NB_PARAMS]) 
+	ArrayStatistics::ArrayStatistics(const std::vector<float>& _vals) 
 	{ 
-		std::copy(&_vals[0], &_vals[0] + STATS_NB_PARAMS, &m_data[0]);
+		std::copy(_vals.begin(), _vals.end(), std::back_inserter(m_data));
 	}
 
-	ArrayStatistics ArrayStatistics::generateArrayStatistics(const std::vector <float>& _data, const size_t _nb)
-	{
-		return ArrayStatistics::generateArrayStatistics(_data.data(), _nb);
-	}
-
-	ArrayStatistics ArrayStatistics::generateArrayStatistics(const float* _data, const size_t _nb)
+	/*ArrayStatistics ArrayStatistics::generateArrayStatistics(const float* _data, const size_t _nb)
 	{
 		float nb = (float)_nb;
 		if (_nb == 0) return ArrayStatistics();
-		float vals[STATS_NB_PARAMS];
+		std::vector <float> vals(STATS_NB_PARAMS);
 		vals[ArrayStatistics::Mean] = vals[ArrayStatistics::Median] = vals[ArrayStatistics::StdDev] = 0.;
 		vals[ArrayStatistics::Min] = FLT_MAX;
 		vals[ArrayStatistics::Max] = -FLT_MAX;
+
 
 		std::vector < float > vectMedian(_nb);
 		for (size_t n = 0; n < _nb; n++) {
@@ -90,9 +87,9 @@ namespace poca::core {
 
 		ArrayStatistics stats(vals);
 		return stats;
-	}
+	}*/
 
-	ArrayStatistics ArrayStatistics::generateInverseArrayStatistics(const std::vector <float>& _data, const size_t _nb)
+	/*ArrayStatistics ArrayStatistics::generateInverseArrayStatistics(const std::vector <float>& _data, const size_t _nb)
 	{
 		return ArrayStatistics::generateInverseArrayStatistics(_data.data(), _nb);
 	}
@@ -130,7 +127,7 @@ namespace poca::core {
 
 		ArrayStatistics stats(vals);
 		return stats;
-	}
+	}*/
 	std::ostream& operator<<(std::ostream& _os, const ArrayStatistics& _stats)
 	{
 		return _os << "[Mean : " << _stats.getData(ArrayStatistics::Mean) << ", median : " << _stats.getData(ArrayStatistics::Median) << ", std dev : " << _stats.getData(ArrayStatistics::StdDev) << ", min : " << _stats.getData(ArrayStatistics::Min) << ", max = " << _stats.getData(ArrayStatistics::Max) << "]";

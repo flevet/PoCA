@@ -308,6 +308,12 @@ namespace poca::core {
 			m_seedRand = time(NULL);
 			return palette;
 		}
+		else if (_lut == std::string("LightGrayscale")) {
+			return Palette(Color4uc(0, 0, 0, 255), Color4uc(255, 255, 255, 255), _lut);
+		}
+		else if (_lut == std::string("DarkGrayscale")) {
+			return Palette(Color4uc(255, 255, 255, 255), Color4uc(0, 0, 0, 255), _lut);
+		}
 		return Palette();
 	}
 
@@ -448,7 +454,7 @@ namespace poca::core {
 		}
 		else if (_lut == std::string("Random")) {
 			Palette* palette = new Palette(randomColorB(), randomColorB(), _lut);
-			float step = 0.0001f;
+			float step = 0.0000001f;
 			for(float cur = step; cur < 1.f; cur += step)
 				palette->setColor(cur, randomColorB());
 			return palette;

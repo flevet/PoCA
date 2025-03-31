@@ -35,6 +35,8 @@
 #include <QtWidgets/QFileDialog>
 
 
+#include "../General/Engine.hpp"
+#include "../Interfaces/MyObjectInterface.hpp"
 #include "BasicComponent.hpp"
 
 #include "Palette.hpp"
@@ -44,12 +46,12 @@
 
 namespace poca::core {
 
-	BasicComponent::BasicComponent(const std::string& _name) :CommandableObject(_name), m_nameComponent(_name), m_log(false), m_nbSelection(0), m_selected(true), m_hilow(false), m_paletteSaved(NULL)
+	BasicComponent::BasicComponent(const std::string& _name) :BasicComponentInterface(_name), m_nameComponent(_name), m_log(false), m_nbSelection(0), m_selected(true), m_hilow(false), m_paletteSaved(NULL)
 	{
 		m_palette = Palette::getStaticLutPtr("HotCold2");
 	}
 
-	BasicComponent::BasicComponent(const BasicComponent& _o) : CommandableObject(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_data(_o.m_data), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected)
+	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_data(_o.m_data), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected)
 	{
 		m_palette = new Palette(*_o.m_palette);
 	}
@@ -81,14 +83,13 @@ namespace poca::core {
 
 	void BasicComponent::forceRegenerateSelection()
 	{
+		if (m_selection.empty()) return;
 		std::fill(m_selection.begin(), m_selection.end(), 1);
 
 		for (std::map <std::string, MyData*>::iterator it = m_data.begin(); it != m_data.end(); it++) {
 			MyData* current = it->second;
-			Histogram* histogram = current->getHistogram();
-			const std::vector<float>& values = histogram->getValues();
-			for (int n = 0; n < values.size(); n++)
-				m_selection[n] = m_selection[n] && histogram->getCurrentMin() <= values[n] && values[n] <= histogram->getCurrentMax();
+			HistogramInterface* histogram = current->getHistogram();
+			histogram->setSelection(m_selection);
 		}
 
 		m_nbSelection = 0;
@@ -102,6 +103,12 @@ namespace poca::core {
 		return m_data.find(_type) != m_data.end() ? m_data[_type] : NULL;
 	}
 
+	MyData* BasicComponent::getCurrentMyData()
+	{
+		return m_data.find(m_currentHistogram) != m_data.end() ? m_data[m_currentHistogram] : NULL;
+	}
+
+	
 	void BasicComponent::deleteFeature(const std::string& _type)
 	{
 		std::map <std::string, MyData*>::iterator it = m_data.find(_type);
@@ -109,52 +116,6 @@ namespace poca::core {
 		m_data.erase(it);
 		if(m_currentHistogram == _type)
 			m_currentHistogram = m_data.empty() ? "" : m_data.begin()->first;
-	}
-
-	std::vector <float>& BasicComponent::getData(const std::string& _type)
-	{
-		return m_data[_type]->getData();
-	}
-
-	const std::vector <float>& BasicComponent::getData(const std::string& _type) const
-	{
-		return m_data.at(_type)->getData();
-	}
-
-	float* BasicComponent::getDataPtr(const std::string& _type)
-	{
-		return hasData(_type) ? m_data[_type]->getData().data() : nullptr;
-	}
-
-	const float* BasicComponent::getDataPtr(const std::string& _type) const
-	{
-		return hasData(_type) ? m_data.at(_type)->getData().data() : nullptr;
-	}
-
-	std::vector <float>& BasicComponent::getOriginalData(const std::string& _type)
-	{
-		if (hasData(_type))
-			return m_data.at(_type)->getOriginalHistogram()->getValues();
-		else
-			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
-	}
-
-	const std::vector <float>& BasicComponent::getOriginalData(const std::string& _type) const
-	{
-		if (hasData(_type))
-			return m_data.at(_type)->getOriginalHistogram()->getValues();
-		else
-			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
-	}
-
-	float* BasicComponent::getOriginalDataPtr(const std::string& _type)
-	{
-		return hasData(_type) ? m_data[_type]->getOriginalData().data() : nullptr;
-	}
-
-	const float* BasicComponent::getOriginalDataPtr(const std::string& _type) const
-	{
-		return hasData(_type) ? m_data.at(_type)->getOriginalData().data() : nullptr;
 	}
 
 	const std::map <std::string, MyData*>& BasicComponent::getData() const
@@ -236,7 +197,7 @@ namespace poca::core {
 					else if (action == "save") {
 						QString nameFile;
 						std::string dir = _ci->hasParameter("dir") ? _ci->getParameter<std::string>("dir") : "", nameFile2 = _ci->hasParameter("filename") ? _ci->getParameter<std::string>("filename") : "";
-						if (dir.back() != '/')
+						if (!dir.empty() && dir.back() != '/')
 							dir.append("/");
 						HistogramInterface* hist = data->getHistogram();
 						if (nameFile2.empty()) {
@@ -245,14 +206,18 @@ namespace poca::core {
 							nameFile = (dir + nameFile2).c_str();
 							nameFile = QFileDialog::getSaveFileName(nullptr, QObject::tr("Save feature..."), nameFile, QObject::tr("Text files (*.txt)"), 0, QFileDialog::DontUseNativeDialog);
 						}
-						else
+						else {
+							if (dir.empty()) {
+								poca::core::Engine* engine = poca::core::Engine::instance();
+								poca::core::MyObjectInterface* obj = engine->getObject(this);
+								dir = obj->getDir();
+							}
 							nameFile = (dir + nameFile2).c_str();
+						}
 						if (nameFile.isEmpty()) return;
 						QFileInfo info(nameFile);
 						std::ofstream fs(info.absoluteFilePath().toStdString());
-						std::vector <float> values = hist->getValues();
-						for (size_t n = 0; n < values.size(); n++)
-							fs << values[n] << std::endl;
+						hist->saveValues(fs);
 						fs.close();
 						std::cout << "File " << nameFile.toStdString().c_str() << " has been saved." << std::endl;
 					}

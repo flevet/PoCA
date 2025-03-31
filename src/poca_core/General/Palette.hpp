@@ -81,7 +81,7 @@ namespace poca::core {
 		std::string m_name;
 		double m_begin, m_end;
 		int m_from, m_to;
-		bool m_autoscale, m_hilow;
+		bool m_autoscale, m_hilow, m_threshold;
 		float m_filterMin, m_filterMax;
 		
 		static uint32_t m_seedRand;
@@ -165,6 +165,9 @@ namespace poca::core {
 
 		void setHiLow(const bool _val) { m_hilow = _val; }
 		const bool isHiLow() const { return m_hilow; }
+
+		void setThreshold(const bool _val) { m_threshold = _val; }
+		virtual const bool isThreshold() const { return m_threshold; }
 
 		inline const bool null() const { return m_gradient.empty(); }
 		const size_t size() const { return m_gradient.size(); }

@@ -31,13 +31,17 @@
 */
 
 #include <algorithm>
+#include <QtCore/QFileInfo>
+#include <QtCore/QDir>
 
 #include "../General/Vec4.hpp"
 #include "../General/Histogram.hpp"
 #include "../General/MyData.hpp"
 #include "../General/Misc.h"
-#include "../DesignPatterns/ListDatasetsSingleton.hpp"
 #include "../Interfaces/ROIInterface.hpp"
+#include "../General/BasicComponent.hpp"
+#include "../General/Vec3.hpp"
+//#include "../General/BasicComponentList.hpp"
 
 #include "MyObject.hpp"
 
@@ -45,46 +49,51 @@ namespace poca::core {
 	MyObject::MyObject() :poca::core::CommandableObject("Object")
 	{
 		m_internalId = poca::core::NbObjects++;
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		lds->Register(this);
 	}
 
 	MyObject::MyObject(const MyObject& _o) :poca::core::CommandableObject(_o), m_dir(_o.m_dir), m_name(_o.m_name)
 	{
 		m_internalId = poca::core::NbObjects++;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = _o.m_components.begin(); it != _o.m_components.end(); it++)
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = _o.m_components.begin(); it != _o.m_components.end(); it++)
 			this->addBasicComponent((*it)->copy());
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		lds->Register(this);
 	}
 
 	MyObject::~MyObject()
 	{
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		lds->Unregister(this);
-		for (poca::core::BasicComponent* bci : m_components)
+		for (poca::core::BasicComponentInterface* bci : m_components)
 			delete bci;
 		m_components.clear();
 	}
 
-	bool MyObject::hasBasicComponent(poca::core::BasicComponent* _bc)
+	bool MyObject::hasBasicComponent(poca::core::BasicComponentInterface* _bc)
 	{
 		bool found = false;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end() && !found; it++) {
-			poca::core::BasicComponent* bc = *it;
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end() && !found; it++) {
+			poca::core::BasicComponentInterface* bc = *it;
 			found = bc == _bc;
 		}
 		return found;
 	}
 
-	void MyObject::addBasicComponent(poca::core::BasicComponent* _bc)
+	void MyObject::addBasicComponent(poca::core::BasicComponentInterface* _bc)
 	{
 		bool found = false;
 		for (unsigned int n = 0; n < m_components.size() && !found; n++) {
 			if (m_components[n]->getName() == _bc->getName()) {
 				found = true;
-				delete m_components[n];
-				m_components[n] = _bc;
+				poca::core::BasicComponent* bc = dynamic_cast<poca::core::BasicComponent*>(_bc);
+				if (bc) {
+					delete m_components[n];
+					m_components[n] = _bc;
+				}
+
+				/* //This is not working because of deleting bcl -> remove for now and this needs to be done on creation of the BasicComponent to be added to BasicComponentList
+				   //In the future it will be better to try to find a better way
+				poca::core::BasicComponentList* bcl = dynamic_cast<poca::core::BasicComponentList*>(_bc);
+				if (bcl) {
+					((poca::core::BasicComponentList * )m_components[n])->copyComponentsPtr(bcl);
+					delete bcl;
+				}*/
 			}
 		}
 		if (!found)
@@ -94,7 +103,7 @@ namespace poca::core {
 	poca::core::stringList MyObject::getNameBasicComponents() const
 	{
 		poca::core::stringList names;
-		for (poca::core::BasicComponent* bci : m_components)
+		for (poca::core::BasicComponentInterface* bci : m_components)
 			names.push_back(bci->getName());
 		return names;
 	}
@@ -102,7 +111,7 @@ namespace poca::core {
 	float MyObject::getX() const
 	{
 		double x = FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[0] < x) x = bbox[0];
 		}
@@ -112,7 +121,7 @@ namespace poca::core {
 	float MyObject::getY() const
 	{
 		double y = FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[1] < y) y = bbox[1];
 		}
@@ -122,7 +131,7 @@ namespace poca::core {
 	float MyObject::getZ() const
 	{
 		double z = FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[2] < z) z = bbox[2];
 		}
@@ -132,7 +141,7 @@ namespace poca::core {
 	float MyObject::getWidth() const
 	{
 		double w = -FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[3] > w) w = bbox[3];
 		}
@@ -142,7 +151,7 @@ namespace poca::core {
 	float MyObject::getHeight() const
 	{
 		double h = -FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[4] > h) h = bbox[4];
 		}
@@ -152,7 +161,7 @@ namespace poca::core {
 	float MyObject::getThick() const
 	{
 		double t = -FLT_MAX;
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			const poca::core::BoundingBox& bbox = (*it)->boundingBox();
 			if (bbox[5] > t) t = bbox[5];
 		}
@@ -161,27 +170,30 @@ namespace poca::core {
 
 	void MyObject::setWidth(const float _w)
 	{
-		for (std::vector < poca::core::BasicComponent* >::iterator it = m_components.begin(); it != m_components.end(); it++)
+		for (std::vector < poca::core::BasicComponentInterface* >::iterator it = m_components.begin(); it != m_components.end(); it++)
 			(*it)->setWidth(_w);
 	}
 
 	void MyObject::setHeight(const float _h)
 	{
-		for (std::vector < poca::core::BasicComponent* >::iterator it = m_components.begin(); it != m_components.end(); it++)
+		for (std::vector < poca::core::BasicComponentInterface* >::iterator it = m_components.begin(); it != m_components.end(); it++)
 			(*it)->setHeight(_h);
 	}
 
 	void MyObject::setThick(const float _t)
 	{
-		for (std::vector < poca::core::BasicComponent* >::iterator it = m_components.begin(); it != m_components.end(); it++)
+		for (std::vector < poca::core::BasicComponentInterface* >::iterator it = m_components.begin(); it != m_components.end(); it++)
 			(*it)->setThick(_t);
 	}
 
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci)
 	{
 		if (_ci->nameCommand == "loadROIs") {
+			float cal = 1.f;
+			if(_ci->hasParameter("calibrationXY"))
+				cal = _ci->getParameter<float>("calibrationXY");
 			std::string filename = _ci->getParameter<std::string>("filename");
-			loadROIs(filename);
+			loadROIs(filename, cal);
 		}
 		else if (_ci->nameCommand == "saveROIs") {
 			std::string filename = _ci->getParameter<std::string>("filename");
@@ -194,9 +206,26 @@ namespace poca::core {
 		poca::core::CommandableObject::executeCommand(_ci);
 	}
 
+	poca::core::CommandInfo MyObject::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
+	{
+		if (_nameCommand == "loadROIs" || _nameCommand == "saveROIs") {
+			std::string filename;
+			if (_parameters.contains("filename"))
+				filename = _parameters["filename"].get<std::string>();
+			QString curDir = QDir::currentPath();
+			QDir::setCurrent(getDir().c_str());
+			QFileInfo info(filename.c_str());
+			filename = info.absoluteFilePath().toStdString();
+			QDir::setCurrent(curDir);
+			return poca::core::CommandInfo(false, _nameCommand, "filename", filename);
+		}
+
+		return poca::core::CommandInfo();
+	}
+
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 	{
-		poca::core::BasicComponent* bci = getBasicComponent(_nameComponent);
+		poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 		if (bci)
 			bci->executeCommand(_ci);
 	}
@@ -204,73 +233,10 @@ namespace poca::core {
 	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 	{
 		executeCommand(_ci);
-		for (std::vector < poca::core::BasicComponent* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
-			poca::core::BasicComponent* bc = *it;
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+			poca::core::BasicComponentInterface* bc = *it;
 			bc->executeCommand(_ci);
 		}
-	}
-
-	void MyObject::getDataCurrentHistogram(const std::string& _componentName, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getCurrentHistogram();
-		const std::vector<float>& data = hist->getValues();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	}
-
-	void MyObject::getBinsCurrentHistogram(const std::string& _componentName, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getCurrentHistogram();
-		const std::vector<float>& data = hist->getBins();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	}
-
-	void MyObject::getTsCurrentHistogram(const std::string& _componentName, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getCurrentHistogram();
-		const std::vector<float>& data = hist->getTs();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	}
-
-	void MyObject::getDataHistogram(const std::string& _componentName, const std::string& _nameHist, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getHistogram(_nameHist);
-		if (hist == NULL) return;
-		const std::vector<float>& data = hist->getValues();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	}
-
-	void MyObject::getBinsHistogram(const std::string& _componentName, const std::string& _nameHist, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getHistogram(_nameHist);
-		if (hist == NULL) return;
-		const std::vector<float>& data = hist->getBins();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
-	}
-
-	void MyObject::getTsHistogram(const std::string& _componentName, const std::string& _nameHist, std::vector <float>& _data)
-	{
-		_data.clear();
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
-		if (bc == NULL) return;
-		poca::core::HistogramInterface* hist = bc->getHistogram(_nameHist);
-		if (hist == NULL) return;
-		const std::vector<float>& data = hist->getTs();
-		std::copy(data.begin(), data.end(), std::back_inserter(_data));
 	}
 
 	bool MyObject::hasBasicComponent(const std::string& _componentName)
@@ -281,17 +247,17 @@ namespace poca::core {
 	poca::core::stringList MyObject::getNameData(const std::string& _componentName) const
 	{
 		poca::core::stringList list;
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
+		poca::core::BasicComponentInterface* bc = getBasicComponent(_componentName);
 		if (bc == NULL) return list;
 		return bc->getNameData();
 	}
 
-	poca::core::BasicComponent* MyObject::getBasicComponent(const size_t _idx) const
+	poca::core::BasicComponentInterface* MyObject::getBasicComponent(const size_t _idx) const
 	{
 		return m_components[_idx];
 	}
 
-	poca::core::BasicComponent* MyObject::getBasicComponent(const std::string& _nameBC) const
+	poca::core::BasicComponentInterface* MyObject::getBasicComponent(const std::string& _nameBC) const
 	{
 		for (unsigned int n = 0; n < m_components.size(); n++)
 			if (m_components[n]->getName() == _nameBC)
@@ -299,7 +265,19 @@ namespace poca::core {
 		return NULL;
 	}
 
-	poca::core::BasicComponent* MyObject::getLastAddedBasicComponent() const
+	void MyObject::removeBasicComponent(const std::string& _nameBC)
+	{
+		uint32_t n = 0;
+		bool found = false;
+		for (unsigned int n = 0; n < m_components.size() && !found; n++)
+			found = m_components[n]->getName() == _nameBC;
+		if (found) {
+			delete m_components[n];
+			m_components.erase(m_components.begin() + n);
+		}
+	}
+
+	poca::core::BasicComponentInterface* MyObject::getLastAddedBasicComponent() const
 	{
 		if (m_components.empty()) return NULL;
 		return m_components.back();
@@ -307,7 +285,7 @@ namespace poca::core {
 
 	poca::core::HistogramInterface* MyObject::getHistogram(const std::string& _componentName, const std::string& _nameHist)
 	{
-		poca::core::BasicComponent* bc = getBasicComponent(_componentName);
+		poca::core::BasicComponentInterface* bc = getBasicComponent(_componentName);
 		if (bc == NULL) return NULL;
 		poca::core::HistogramInterface* hist = bc->getHistogram(_nameHist);
 		return hist;
@@ -358,7 +336,7 @@ namespace poca::core {
 	{
 		for (poca::core::Command* com : m_commands)
 			com->saveCommands(_parameters[com->name()]);
-		for (poca::core::BasicComponent* bci : m_components) {
+		for (poca::core::BasicComponentInterface* bci : m_components) {
 			poca::core::CommandableObject* com = dynamic_cast <poca::core::CommandableObject*>(bci);
 			com->saveCommands(_parameters);
 		}
@@ -370,7 +348,7 @@ namespace poca::core {
 		std::map <std::string, poca::core::Command*> mapCommands;
 		for (poca::core::Command* com : m_commands)
 			mapCommands[com->name()] = com;
-		for (poca::core::BasicComponent* bci : m_components) {
+		for (poca::core::BasicComponentInterface* bci : m_components) {
 			poca::core::CommandableObject* com = dynamic_cast <poca::core::CommandableObject*>(bci);
 			std::vector <poca::core::Command*> tmp = com->getCommands();
 			for (poca::core::Command* com : tmp)
@@ -384,27 +362,66 @@ namespace poca::core {
 		}
 	}
 
-	void MyObject::loadROIs(const std::string& _filename)
+	void MyObject::loadROIs(const std::string& _filename, const float _calibrationXY)
 	{
 		clearROIs();
-		std::ifstream fs(_filename);
-		int nbRois;
-		bool ok;
+		string tmp = _filename.substr(_filename.size() - 4, 4);
+		if (tmp.compare(".rgn") == 0) {
+			std::ifstream fs(_filename);
+			std::string s;
+			uint32_t curROI = 0;
+			while (std::getline(fs, s)) {
+				std::vector <std::array<float, 2>> points;
+				std::vector <string> elems;
+				std::string type;
+				if (s[2] == '1') {
+					type = "SquareROI";
 
-		std::string s;
-		std::getline(fs, s);
-		std::istringstream is(s);
+					auto i1 = s.find(", 2") + 4, i2 = s.find(", 3");
+					poca::core::split(s.substr(i1, i2 - i1), ' ', elems);
+					points.push_back(std::array <float, 2>{ _calibrationXY * std::stof(elems[0]), _calibrationXY * std::stof(elems[1]) });
 
-		is >> nbRois;
-		for (int n = 0; n < nbRois; n++) {
-			std::getline(fs, s);
-			std::istringstream is2(s);
-			poca::core::ROIInterface* ROI = getROIFromType(s);
-			ROI->load(fs);
-			ROI->setName("r" + n);
-			m_ROIs.push_back(ROI);
+					elems.clear();
+					i1 = s.find(", 6") + 4;
+					i2 = s.find(", 7");
+					poca::core::split(s.substr(i1, i2 - i1), ' ', elems);
+					points.push_back(std::array <float, 2>{ points[0][0] + std::stof(elems[1]), points[0][1] + std::stof(elems[2]) });
+				}
+				else {
+					type = "PolygonROI";
+					auto i1 = s.find(", 6") + 4, i2 = s.find(", 7");
+					poca::core::split(s.substr(i1, i2 - i1), ' ', elems);
+
+					for (auto n = 1; n < elems.size(); n += 2)
+						points.push_back(std::array <float, 2>{ _calibrationXY * std::stof(elems[n]), _calibrationXY * std::stof(elems[n + 1]) });
+				}
+				poca::core::ROIInterface* ROI = getROIFromType(type);
+				ROI->load(points);
+				ROI->setName("r" + curROI++);
+				m_ROIs.push_back(ROI);
+			}
 		}
-		fs.close();
+		if (_filename.substr(_filename.size() - 4, 4).compare(".txt") == 0) {
+			std::ifstream fs(_filename);
+			int nbRois;
+			bool ok;
+
+			std::string s;
+			std::getline(fs, s);
+			std::istringstream is(s);
+
+			is >> nbRois;
+			for (int n = 0; n < nbRois; n++) {
+				std::getline(fs, s);
+				std::istringstream is2(s);
+				poca::core::ROIInterface* ROI = getROIFromType(s);
+				ROI->load(fs);
+				ROI->setName("r" + n);
+				ROI->applyCalibrationXY(_calibrationXY);
+				m_ROIs.push_back(ROI);
+			}
+			fs.close();
+		}
 	}
 
 	void MyObject::saveROIs(const std::string& _filename)

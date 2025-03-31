@@ -30,25 +30,30 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <algorithm>
-
 #include "MyData.hpp"
-#include "Histogram.hpp"
 
 namespace poca::core {
-	MyData::MyData(const std::vector < float >& _data) :m_histogram(nullptr), m_logHistogram(nullptr), m_log(false)
+	MyData::MyData() :m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(false)
 	{
-		m_histogram = new Histogram(_data, _data.size(), false);
-
-		std::vector <float> logData;
-		std::transform(_data.begin(), _data.end(), std::back_inserter(logData), [](auto i) { return  log10(i); });
-		m_logHistogram = new Histogram(logData, logData.size(), true);
 	}
 
-	MyData::MyData(const MyData& _o) : m_log(_o.m_log)
+	MyData::MyData(HistogramInterface* _hist, HistogramInterface* _logHist): m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(false)
 	{
-		m_histogram = new Histogram(*_o.m_histogram);
-		m_logHistogram = new Histogram(*_o.m_logHistogram);
+		m_histogram = _hist;
+		m_logHistogram = _logHist;
+	}
+
+	MyData::MyData(HistogramInterface* _hist, const bool _computeLogHisto): m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(_computeLogHisto)
+	{
+		m_histogram = _hist;
+		if(m_computeLog)
+			m_logHistogram = m_histogram->computeLogHistogram();
+	}
+
+	MyData::MyData(const MyData& _o)
+	{
+		m_histogram = _o.m_histogram;
+		m_logHistogram = _o.m_logHistogram;
 	}
 
 	MyData::~MyData()
@@ -60,34 +65,21 @@ namespace poca::core {
 		m_histogram = m_logHistogram = nullptr;
 	}
 
-	const std::vector < float >& MyData::getOriginalData() const
+	void MyData::finalizeData()
 	{
-		return m_histogram->getValues();
-	}
-
-	std::vector < float >& MyData::getOriginalData()
-	{
-		return m_histogram->getValues();
-	}
-
-	const std::vector < float >& MyData::getData() const
-	{
-		return m_log ? m_logHistogram->getValues() : m_histogram->getValues();
-	}
-
-	std::vector < float >& MyData::getData()
-	{
-		return m_log ? m_logHistogram->getValues() : m_histogram->getValues();
+		m_histogram->setHistogram(false);
+		if (m_computeLog) 
+			m_logHistogram = m_histogram->computeLogHistogram();
 	}
 
 	const size_t MyData::nbElements() const
 	{
-		return m_histogram->getValues().size();
+		return m_histogram->nbElements();
 	}
 
 	void MyData::setLog(const bool _val) {
-		Histogram* current = m_log ? m_logHistogram : m_histogram;
-		Histogram* other = !m_log ? m_logHistogram : m_histogram;
+		HistogramInterface* current = m_log ? m_logHistogram : m_histogram;
+		HistogramInterface* other = !m_log ? m_logHistogram : m_histogram;
 		float minV = current->getCurrentMin(), maxV = current->getCurrentMax();
 		float modified_min = (float)(m_log ? pow(10, minV) : log10(minV));
 		float modified_max = (float)(m_log ? pow(10, maxV) : log10(maxV));

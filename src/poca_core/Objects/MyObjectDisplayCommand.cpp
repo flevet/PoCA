@@ -35,7 +35,7 @@
 #include <gl/GLU.h>
 #include <fstream>
 
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "MyObjectDisplayCommand.hpp"
 #include "MyObject.hpp"
@@ -98,8 +98,8 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 {
 	m_object = _obj;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "zoomFactor", 0.1f));
 	addCommandInfo(poca::core::CommandInfo(false, "currentZoom", 1.f));
 	addCommandInfo(poca::core::CommandInfo(false, "continuousZoom", false));

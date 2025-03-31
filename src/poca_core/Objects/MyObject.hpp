@@ -39,7 +39,7 @@
 #include "../DesignPatterns/Subject.hpp"
 #include "../General/CommandableObject.hpp"
 #include "../Interfaces/MyObjectInterface.hpp"
-#include "../General/BasicComponent.hpp"
+#include "../Interfaces/BasicComponentInterface.hpp"
 #include "../General/Command.hpp"
 
 namespace poca::core {
@@ -65,26 +65,22 @@ namespace poca::core {
 		inline void setName(const std::string& _name) { m_name = _name; }
 		inline const std::string& getName() const { return m_name; }
 
-		bool hasBasicComponent(poca::core::BasicComponent*);
-		void addBasicComponent(poca::core::BasicComponent*);
+		bool hasBasicComponent(poca::core::BasicComponentInterface*);
+		void addBasicComponent(poca::core::BasicComponentInterface*);
 		size_t nbBasicComponents() const { return m_components.size(); }
-		poca::core::BasicComponent* getBasicComponent(const size_t) const;
-		poca::core::BasicComponent* getBasicComponent(const std::string&) const;
-		poca::core::BasicComponent* getLastAddedBasicComponent() const;
+		poca::core::BasicComponentInterface* getBasicComponent(const size_t) const;
+		poca::core::BasicComponentInterface* getBasicComponent(const std::string&) const;
+		poca::core::BasicComponentInterface* getLastAddedBasicComponent() const;
 		virtual poca::core::stringList getNameBasicComponents() const;
 		void executeCommand(poca::core::CommandInfo*);
+		poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
+		void removeBasicComponent(const std::string&);
 
 		inline const unsigned int currentInternalId() const { return m_internalId; }
 		inline void setInternalId(const unsigned int _val) { m_internalId = _val; }
 
-		inline const std::vector < poca::core::BasicComponent* >& getComponents() const { return m_components; }
+		inline const std::vector < poca::core::BasicComponentInterface* >& getComponents() const { return m_components; }
 
-		virtual void getDataCurrentHistogram(const std::string&, std::vector <float>&);
-		virtual void getBinsCurrentHistogram(const std::string&, std::vector <float>&);
-		virtual void getTsCurrentHistogram(const std::string&, std::vector <float>&);
-		virtual void getDataHistogram(const std::string&, const std::string&, std::vector <float>&);
-		virtual void getBinsHistogram(const std::string&, const std::string&, std::vector <float>&);
-		virtual void getTsHistogram(const std::string&, const std::string&, std::vector <float>&);
 		virtual bool hasBasicComponent(const std::string&);
 		virtual poca::core::stringList getNameData(const std::string&) const;
 
@@ -131,7 +127,7 @@ namespace poca::core {
 		virtual void addROI(poca::core::ROIInterface* _ROI) { m_ROIs.push_back(_ROI); notify("addOneROI"); }
 		virtual void clearROIs();
 		virtual void resetROIsSelection();
-		virtual void loadROIs(const std::string&);
+		virtual void loadROIs(const std::string&, const float = 1.f);
 		virtual void saveROIs(const std::string&);
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
@@ -145,7 +141,7 @@ namespace poca::core {
 		std::string m_dir, m_name;
 		uint32_t m_internalId, m_dimension;
 
-		std::vector < poca::core::BasicComponent* > m_components;
+		std::vector < poca::core::BasicComponentInterface* > m_components;
 		std::vector <poca::core::ROIInterface*> m_ROIs;
 	};
 }

@@ -1,9 +1,9 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      PluginList.hpp
+* File:      FactoryInterface.hpp
 *
-* Copyright: Florian Levet (2020-2022)
+* Copyright: Florian Levet (2020-2021)
 *
 * License:   LGPL v3
 *
@@ -30,30 +30,20 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef PluginListSingleton_h__
-#define PluginListSingleton_h__
+#ifndef FactoryInterface_h__
+#define FactoryInterface_h__
 
 #include <vector>
+#include <string>
 
-#include "../../include/PluginInterface.hpp"
+#include "../Interfaces/BasicComponent.hpp"
 
 namespace poca::core {
-	class PluginList {
+	class FactoryInterface {
 	public:
-		PluginList();
-		~PluginList();
+		virtual ~FactoryInterface() = default;
 
-		inline void addPlugin(PluginInterface* _plugin) { m_plugins.push_back(_plugin); }
-		const std::vector <PluginInterface*>& getPlugins() const { return m_plugins; }
-
-		void addGUI(poca::core::MediatorWObjectFWidgetInterface*, QTabWidget*);
-		poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*);
-		void addCommands(poca::core::CommandableObject*);
-		void setSingletons(poca::core::Engine*);
-		void execute(poca::core::CommandInfo*);
-
-	protected:
-		std::vector <PluginInterface*> m_plugins;
+		virtual BasicComponent* createBasicComponent() = 0;
 	};
 }
 

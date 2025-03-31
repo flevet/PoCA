@@ -37,123 +37,102 @@
 #include <map>
 #include <any>
 
+#include "../Interfaces/BasicComponentInterface.hpp"
 #include "../DesignPatterns/Subject.hpp"
-#include "../General/CommandableObject.hpp"
-#include "../General/Vec3.hpp"
-#include "../General/Vec4.hpp"
-#include "../General/Vec6.hpp"
 
 namespace poca::core {
-
-	class MyData;
-	class Palette;
-	class HistogramInterface;
-	class PaletteInterface;
-
-	typedef std::vector <std::string> stringList;
-
-	class BasicComponent : public CommandableObject {
+	class BasicComponent : public BasicComponentInterface {
 	public:
 		virtual ~BasicComponent();
 
-		void forceRegenerateSelection();
-
-		inline void setName(const std::string& _name) { m_nameComponent = _name; }
-		inline const std::string& getName() const { return m_nameComponent; }
-
-		virtual void setData(const std::map <std::string, std::vector <float>>&);
-		virtual void addFeature(const std::string&, MyData*);
-
-		inline void setBoundingBox(const BoundingBox& _bbox) { m_bbox = _bbox; }
-		inline void setBoundingBox(const float _x, const float _y, const float _z, const float _w, const float _h, const float _t) { m_bbox = { _x, _y, _z, _w, _h, _t }; }
-		inline const BoundingBox& boundingBox() const { return m_bbox; }
-		inline void setWidth(const float _w) { m_bbox.setWidth(_w); }
-		inline void setHeight(const float _h) { m_bbox.setHeight(_h); }
-		inline void setThick(const float _t) { m_bbox.setThick(_t); }
-
-		MyData* getMyData(const std::string&);
-		void deleteFeature(const std::string&);
-
-		std::vector <float>& getData(const std::string&);
-		const std::vector <float>& getData(const std::string&) const;
-		float* getDataPtr(const std::string&);
-		const float* getDataPtr(const std::string&) const;
-
-		std::vector <float>& getOriginalData(const std::string&);
-		const std::vector <float>& getOriginalData(const std::string&) const;
-		float* getOriginalDataPtr(const std::string&);
-		const float* getOriginalDataPtr(const std::string&) const;
-
-		const std::map <std::string, MyData*>& getData() const;
-		std::map <std::string, MyData*>& getData();
-
-		const bool hasData(const std::string&);
-		const bool hasData(const std::string&) const;
-
-		void executeCommand(CommandInfo*);
-		CommandInfo createCommand(const std::string&, const nlohmann::json&);
-
-		virtual inline void setSelected(const bool _selected) { m_selected = _selected; }
-		virtual inline const bool isSelected() const { return m_selected; }
-
-		virtual inline void setHiLow(const bool _selected) { m_hilow = _selected; }
-		virtual inline const bool isHiLow() const { return m_hilow; }
-
-		virtual inline const std::vector <bool>& getSelection() const { return m_selection; }
-		virtual inline std::vector <bool>& getSelection() { return m_selection; }
-		virtual inline void setSelection(const std::vector <bool>& _vals) { if (m_selection.size() != _vals.size()) return; m_selection = _vals; }
-		virtual const unsigned int getNbSelection() const { return m_nbSelection; }
-
-		virtual const unsigned int memorySize() const;
-
-		virtual BasicComponent* copy() = 0;
-
-		virtual void setPalette(Palette*);
-
+		//For BasicComponentInterface
+		virtual stringList getNameData() const;
+		stringList getNameData(const std::string&) const;
+		
 		HistogramInterface* getHistogram(const std::string&);
 		HistogramInterface* getHistogram(const std::string&) const;
 		const bool isLogHistogram(const std::string&) const;
 		HistogramInterface* getOriginalHistogram(const std::string&);
 		HistogramInterface* getOriginalHistogram(const std::string&) const;
 		const bool isCurrentHistogram(const std::string&);
-		virtual const Color4uc getColor(const float) const;
-		virtual PaletteInterface* getPalette() const;
-
+		const bool hasData(const std::string&);
+		const bool hasData(const std::string&) const;
 		virtual const std::string currentHistogramType() const;
 		virtual void setCurrentHistogramType(const std::string);
 		virtual HistogramInterface* getCurrentHistogram();
+		virtual inline void setSelected(const bool _selected) { m_selected = _selected; }
+		virtual inline const bool isSelected() const { return m_selected; }
 
-		virtual stringList getNameData() const;
-		stringList getNameData(const std::string&) const;
+		virtual const Color4uc getColor(const float) const;
+		virtual PaletteInterface* getPalette() const;
 
-		const bool hasParameter(const std::string& _nameCommand) { return poca::core::CommandableObject::hasParameter(_nameCommand); }
-		const bool hasParameter(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::hasParameter(_nameCommand, _nameParameter); }
+		inline void setName(const std::string& _name) { m_nameComponent = _name; }
+		inline const std::string& getName() const { return m_nameComponent; }
+		virtual void setData(const std::map <std::string, std::vector <float>>&);
 
-		template <typename T>
-		T getParameter(const std::string& _nameCommand) { return poca::core::CommandableObject::getParameter<T>(_nameCommand); }
+		template <class T>
+		std::vector <T>& getData(const std::string&);
+		template <class T>
+		const std::vector <T>& getData(const std::string&) const;
+		template <class T>
+		T* getDataPtr(const std::string&);
+		template <class T>
+		const T* getDataPtr(const std::string&) const;
 
-		template <typename T>
-		T getParameter(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::getParameter<T>(_nameCommand, _nameParameter); }
+		template <class T>
+		std::vector <T>& getOriginalData(const std::string&);
+		template <class T>
+		const std::vector <T>& getOriginalData(const std::string&) const;
+		template <class T>
+		T* getOriginalDataPtr(const std::string&);
+		template <class T>
+		const T* getOriginalDataPtr(const std::string&) const;
 
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand) { return poca::core::CommandableObject::getParameterPtr<T>(_nameCommand); }
+		virtual inline const std::vector <bool>& getSelection() const { return m_selection; }
+		virtual inline std::vector <bool>& getSelection() { return m_selection; }
+		virtual inline void setSelection(const std::vector <bool>& _vals) { if (m_selection.size() != _vals.size()) return; m_selection = _vals; m_nbSelection = std::count(m_selection.begin(), m_selection.end(), true);}
 
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::getParameterPtr<T>(_nameCommand, _nameParameter); }
+		virtual BasicComponentInterface* copy() = 0;
+		virtual const uint32_t dimension() const = 0;
 
-		const size_t nbCommands() const { return CommandableObject::nbCommands(); }
-		
-		void executeCommand(const bool _record, const std::string& _name){ CommandableObject::executeCommand(_record, _name); }
-		template<typename T>
-		void executeCommand(const bool _record, const std::string& _name, const T& _param) { CommandableObject::executeCommand(_record, _name, _param); }
-		template<typename T>
-		void executeCommand(const bool _record, const std::string& _name, T* _param) { CommandableObject::executeCommand(_record, _name, _param); }
-		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) { CommandableObject::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
-		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { CommandableObject::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
+		inline void setBoundingBox(const float _x, const float _y, const float _z, const float _w, const float _h, const float _t) { m_bbox = { _x, _y, _z, _w, _h, _t }; }
+		inline const BoundingBox& boundingBox() const { return m_bbox; }
+		inline void setWidth(const float _w) { m_bbox.setWidth(_w); }
+		inline void setHeight(const float _h) { m_bbox.setHeight(_h); }
+		inline void setThick(const float _t) { m_bbox.setThick(_t); }
 
 		const size_t nbElements() const { return m_selection.size(); }
+		const size_t nbComponents() const { return 1; }
+		virtual const bool hasComponent(BasicComponentInterface* _bci) const { return this == _bci; }
+
+		void executeCommand(CommandInfo*);
+		CommandInfo createCommand(const std::string&, const nlohmann::json&);
+		
+		//Others
+		void forceRegenerateSelection();
+		virtual void addFeature(const std::string&, MyData*);
+		MyData* getMyData(const std::string&);
+		MyData* getCurrentMyData();
+		void deleteFeature(const std::string&);
+		const std::map <std::string, MyData*>& getData() const;
+		std::map <std::string, MyData*>& getData();
+		virtual const unsigned int memorySize() const;
+		virtual void setPalette(Palette*);
+
+		inline void setBoundingBox(const BoundingBox& _bbox) { m_bbox = _bbox; }
+		virtual inline void setHiLow(const bool _selected) { m_hilow = _selected; }
+		virtual inline const bool isHiLow() const { return m_hilow; }
+		virtual const unsigned int getNbSelection() const { return m_nbSelection; }
+
+		void executeCommand(const bool _record, const std::string& _name) { BasicComponentInterface::executeCommand(_record, _name); }
+		template<typename T>
+		void executeCommand(const bool _record, const std::string& _name, const T& _param) { BasicComponentInterface::executeCommand(_record, _name, _param); }
+		template<typename T>
+		void executeCommand(const bool _record, const std::string& _name, T* _param) { BasicComponentInterface::executeCommand(_record, _name, _param); }
+		template<typename T, typename... Args>
+		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
+		template<typename T, typename... Args>
+		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 
 	protected:
 		BasicComponent(const std::string&);
@@ -171,6 +150,60 @@ namespace poca::core {
 		std::vector <bool> m_selection;
 		unsigned int m_nbSelection;
 	};
+
+	template <class T>
+	std::vector <T>& BasicComponent::getData(const std::string& _type)
+	{
+		return m_data[_type]->getData<T>();
+	}
+
+	template <class T>
+	const std::vector <T>& BasicComponent::getData(const std::string& _type) const
+	{
+		return m_data.at(_type)->getData<T>();
+	}
+
+	template <class T>
+	T* BasicComponent::getDataPtr(const std::string& _type)
+	{
+		return hasData(_type) ? m_data[_type]->getData<T>().data() : nullptr;
+	}
+
+	template <class T>
+	const T* BasicComponent::getDataPtr(const std::string& _type) const
+	{
+		return hasData(_type) ? m_data.at(_type)->getData<T>().data() : nullptr;
+	}
+
+	template <class T>
+	std::vector <T>& BasicComponent::getOriginalData(const std::string& _type)
+	{
+		if (hasData(_type))
+			return m_data.at(_type)->getOriginalHistogram()->getValues();
+		else
+			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
+	}
+
+	template <class T>
+	const std::vector <T>& BasicComponent::getOriginalData(const std::string& _type) const
+	{
+		if (hasData(_type))
+			return m_data.at(_type)->getOriginalHistogram()->getValues();
+		else
+			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
+	}
+
+	template <class T>
+	T* BasicComponent::getOriginalDataPtr(const std::string& _type)
+	{
+		return hasData(_type) ? m_data[_type]->getOriginalData().data() : nullptr;
+	}
+
+	template <class T>
+	const T* BasicComponent::getOriginalDataPtr(const std::string& _type) const
+	{
+		return hasData(_type) ? m_data.at(_type)->getOriginalData().data() : nullptr;
+	}
 }
 
 #endif // BasicComponent_h__

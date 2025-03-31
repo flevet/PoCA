@@ -44,7 +44,7 @@ namespace poca::core {
 
 	class HistogramInterface;
 	class CommandableObjectInterface;
-	class BasicComponent;
+	class BasicComponentInterface;
 	class ROIInterface;
 
 	typedef std::vector <std::string> stringList;
@@ -53,23 +53,19 @@ namespace poca::core {
 	public:
 		virtual ~MyObjectInterface() = default;
 
-		virtual void getDataCurrentHistogram(const std::string&, std::vector <float>&) = 0;
-		virtual void getBinsCurrentHistogram(const std::string&, std::vector <float>&) = 0;
-		virtual void getTsCurrentHistogram(const std::string&, std::vector <float>&) = 0;
-		virtual void getDataHistogram(const std::string&, const std::string&, std::vector <float>&) = 0;
-		virtual void getBinsHistogram(const std::string&, const std::string&, std::vector <float>&) = 0;
-		virtual void getTsHistogram(const std::string&, const std::string&, std::vector <float>&) = 0;
 		virtual bool hasBasicComponent(const std::string&) = 0;
 		virtual stringList getNameData(const std::string&) const = 0;
 		virtual HistogramInterface* getHistogram(const std::string&, const std::string&) = 0;
 
-		virtual void addBasicComponent(BasicComponent*) = 0;
-		virtual bool hasBasicComponent(BasicComponent*) = 0;
+		virtual void addBasicComponent(BasicComponentInterface*) = 0;
+		virtual bool hasBasicComponent(BasicComponentInterface*) = 0;
 		virtual size_t nbBasicComponents() const = 0;
-		virtual BasicComponent* getBasicComponent(const size_t) const = 0;
-		virtual BasicComponent* getBasicComponent(const std::string&) const = 0;
-		virtual BasicComponent* getLastAddedBasicComponent() const = 0;
+		virtual BasicComponentInterface* getBasicComponent(const size_t) const = 0;
+		virtual BasicComponentInterface* getBasicComponent(const std::string&) const = 0;
+		virtual BasicComponentInterface* getLastAddedBasicComponent() const = 0;
 		virtual stringList getNameBasicComponents() const = 0;
+		virtual const std::vector < poca::core::BasicComponentInterface* >& getComponents() const = 0;
+		virtual void removeBasicComponent(const std::string&) = 0;
 
 		virtual void attach(Observer*, const CommandInfo&) = 0;
 		virtual void detach(Observer*) = 0;
@@ -115,7 +111,7 @@ namespace poca::core {
 		virtual void addROI(ROIInterface*) = 0;
 		virtual void clearROIs() = 0;
 		virtual void resetROIsSelection() = 0;
-		virtual void loadROIs(const std::string&) = 0;
+		virtual void loadROIs(const std::string&, const float = 1.f) = 0;
 		virtual void saveROIs(const std::string&) = 0;
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, CommandInfo*) = 0;

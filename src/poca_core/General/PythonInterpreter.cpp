@@ -32,6 +32,10 @@
 
 #ifndef NO_PYTHON
 
+#if defined(_MSC_VER) && (_MSC_VER >= 1930)
+#include <corecrt.h>
+#endif
+
 #ifdef _DEBUG
 #undef _DEBUG
 #include <python.h>
@@ -44,9 +48,10 @@
 #include <QtWidgets/QMessageBox>
 #include <iostream>
 
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "../General/PythonInterpreter.hpp"
+#include "../General/Misc.h"
 
 namespace poca::core {
 #if PY_MAJOR_VERSION >= 3 
@@ -63,7 +68,7 @@ namespace poca::core {
 	}
 #endif 
 
-	const std::size_t ENV_BUF_SIZE = 2048; // Enough for your PATH?
+	/*const std::size_t ENV_BUF_SIZE = 2048; // Enough for your PATH?
 
 	void PrintFullPath(const char* partialPath)
 	{
@@ -73,7 +78,7 @@ namespace poca::core {
 			printf("Full path is: %s\n", full);
 		else
 			printf("Invalid path\n");
-	}
+	}*/
 
 	PythonInterpreter* PythonInterpreter::m_instance = 0;
 
@@ -111,8 +116,8 @@ namespace poca::core {
 		if (m_initialized)
 			return EXIT_SUCCESS;
 
-		poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-		nlohmann::json& parameters = sss->getParameters();
+		
+		nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 		std::vector <std::string> names = { "python_path", "python_dll_path", "python_lib_path", "python_packages_path", "python_scripts_path" };
 		std::vector <std::string> paths(names.size());
 		if (!parameters.contains("PythonParameters")) {
@@ -131,13 +136,14 @@ namespace poca::core {
 			}
 
 		// Get current directory
-		PrintFullPath(".\\");
+		poca::core::PrintFullPath(".\\");
 
 		//Add needed path to environment variable PATH
 		char buf[ENV_BUF_SIZE];
 		std::size_t bufsize = ENV_BUF_SIZE;
 		std::string pathToPython = paths[0];
 		int e = getenv_s(&bufsize, buf, bufsize, "PATH");
+		printf("value of PATH: %.*s\n", (int)sizeof(buf), buf);
 		if (e) {
 			//std::cerr << "`getenv_s` failed, returned " << e << '\n';
 			//exit(EXIT_FAILURE);

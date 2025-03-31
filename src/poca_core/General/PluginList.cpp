@@ -70,10 +70,10 @@ namespace poca::core {
 			plugin->addCommands(_bci);
 	}
 
-	void PluginList::setSingletons(const std::map <std::string, std::any>& _list)
+	void PluginList::setSingletons(poca::core::Engine* _engine)
 	{
 		for (PluginInterface* plugin : m_plugins)
-			plugin->setSingletons(_list);
+			plugin->setSingletons(_engine);
 	}
 
 	void PluginList::execute(poca::core::CommandInfo* _ci)

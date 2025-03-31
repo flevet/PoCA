@@ -41,8 +41,6 @@ namespace poca::core {
 	public:
 		virtual ~HistogramInterface() = default;
 
-		virtual const std::vector <float>& getValues() const = 0;
-		virtual std::vector <float>& getValues() = 0;
 		virtual const std::vector <float>& getBins() const = 0;
 		virtual std::vector <float>& getBins() = 0;
 		virtual const std::vector <float>& getTs() const = 0;
@@ -65,6 +63,12 @@ namespace poca::core {
 		virtual const float getMaxY() const = 0;
 
 		virtual void changeHistogramBounds(const float, const float) = 0;
+
+		virtual void setHistogram(const bool, const int = 100, const bool = false, const float = 0., const bool = false, const float = 0.) = 0;
+		virtual void setSelection(std::vector <bool>&) = 0;
+		virtual void saveValues(std::ofstream&) const = 0;
+		virtual HistogramInterface* computeLogHistogram() const = 0;
+		virtual const size_t nbElements() const = 0;
 	};
 }
 

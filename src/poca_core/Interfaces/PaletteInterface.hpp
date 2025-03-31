@@ -59,6 +59,9 @@ namespace poca::core {
 		virtual void setHiLow(const bool) = 0;
 		virtual const bool isHiLow() const = 0;
 
+		virtual void setThreshold(const bool) = 0;
+		virtual const bool isThreshold() const = 0;
+
 		virtual const std::string& getName() const = 0;
 		virtual void setName(const std::string&) = 0;
 

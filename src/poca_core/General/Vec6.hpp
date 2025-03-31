@@ -138,6 +138,7 @@ namespace poca::core {
 		const T smallestSide() const;
 
 		const Vec6 intersect(const Vec6<T>& rhs) const;
+		const bool inside(const T, const T, const T) const;
 
 	private:
 
@@ -641,6 +642,11 @@ namespace poca::core {
 		if (_y > _e[4]) _e[4] = _y;
 		if (_z < _e[2]) _e[2] = _z;
 		if (_z > _e[5]) _e[5] = _z;
+	}
+
+	template< class T >
+	inline const bool Vec6<T>::inside(const T _x, const T _y, const T _z) const {
+		return _e[0] < _x && _x < _e[3] && _e[1] < _y && _y < _e[4] && _e[2] < _z && _z < _e[5];
 	}
 
 	template< class T >
