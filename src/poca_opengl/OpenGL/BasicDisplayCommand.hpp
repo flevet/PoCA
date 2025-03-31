@@ -45,7 +45,7 @@ namespace poca::opengl {
 
 	class BasicDisplayCommand : public poca::core::Command {
 	public:
-		BasicDisplayCommand(poca::core::BasicComponent*, const std::string&);
+		BasicDisplayCommand(poca::core::BasicComponentInterface*, const std::string&);
 		BasicDisplayCommand(const BasicDisplayCommand&);
 		~BasicDisplayCommand();
 
@@ -59,7 +59,7 @@ namespace poca::opengl {
 		void pick(const int, const int, const bool);
 
 	protected:
-		poca::core::BasicComponent* m_component;
+		poca::core::BasicComponentInterface* m_component;
 
 		QOpenGLFramebufferObject* m_pickFBO;
 		int m_wImage, m_hImage, m_idSelection;

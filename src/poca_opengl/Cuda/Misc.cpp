@@ -34,7 +34,9 @@
 #include <numeric>
 #include <algorithm>
 #include <iostream>
+#ifndef NO_CUDA
 #include <cuda_runtime.h>
+#endif
 
 #include "Misc.h"
 

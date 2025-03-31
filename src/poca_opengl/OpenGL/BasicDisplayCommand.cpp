@@ -40,7 +40,7 @@
 
 namespace poca::opengl {
 
-	BasicDisplayCommand::BasicDisplayCommand(poca::core::BasicComponent* _component, const std::string& _name) : poca::core::Command(_name), m_pickFBO(NULL), m_wImage(0), m_hImage(0), m_idSelection(-1), m_pickingEnabled(true)
+	BasicDisplayCommand::BasicDisplayCommand(poca::core::BasicComponentInterface* _component, const std::string& _name) : poca::core::Command(_name), m_pickFBO(NULL), m_wImage(0), m_hImage(0), m_idSelection(-1), m_pickingEnabled(true)
 	{
 		m_component = _component;
 	}

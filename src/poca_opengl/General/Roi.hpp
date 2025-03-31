@@ -37,6 +37,8 @@
 #include <vector>
 
 #include <General/Vec2.hpp>
+#include <General/Vec3.hpp>
+#include <General/Vec6.hpp>
 #include <Interfaces/ROIInterface.hpp>
 
 #include "../OpenGL/GLBuffer.hpp"
@@ -52,12 +54,17 @@ namespace poca::core {
 		virtual void onMove(const float, const float, const float = 0.f, const bool = false) = 0;
 		virtual void finalize(const float, const float, const float = 0.f, const bool = false) = 0;
 		virtual float getFeature(const std::string&) const = 0;
+		virtual const BoundingBox boundingBox() const = 0;
 
 		virtual void save(std::ofstream&) const = 0;
 		virtual void load(std::ifstream&) = 0;
 		virtual const std::string toStdString() const = 0;
 
 		virtual ROIInterface* copy() const = 0;
+
+		void load(const std::vector<std::array<float, 2>>&);
+
+		void applyCalibrationXY(const float = 1.f){}
 
 		inline void setName(const std::string& _name) { m_name = _name; }
 		inline const std::string& getName() const { return m_name; }
@@ -93,6 +100,7 @@ namespace poca::core {
 		virtual void load(std::ifstream&);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 	protected:
 		Vec2mf m_pts[2];
@@ -116,6 +124,7 @@ namespace poca::core {
 		virtual void load(std::ifstream&);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 		inline const Vec2mf& getCenter() const { return m_center; }
 		inline const float& getRadius() const { return m_radius; }
@@ -139,11 +148,13 @@ namespace poca::core {
 		virtual void onMove(const float, const float, const float = 0.f, const bool = false);
 		virtual void finalize(const float, const float, const float = 0.f, const bool = false);
 		virtual float getFeature(const std::string&) const;
+		void applyCalibrationXY(const float = 1.f);
 		virtual void save(std::ofstream&) const;
 		virtual void load(std::ifstream&);
 		void load(std::ifstream&, const unsigned int);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 		inline const std::vector < Vec2mf >& getPoints() const { return m_pts; }
 		inline const std::size_t nbPoints() const { return m_pts.size(); }
@@ -170,6 +181,7 @@ namespace poca::core {
 		virtual void load(std::ifstream&);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 		inline const float getWidth() const { return m_pts[0].x() - m_pts[1].x(); }
 		inline const float getHeight() const { return m_pts[0].y() - m_pts[1].y(); }
@@ -196,6 +208,7 @@ namespace poca::core {
 		virtual void load(std::ifstream&);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 	protected:
 		Vec2mf m_pts[3];
@@ -219,6 +232,7 @@ namespace poca::core {
 		virtual void load(std::ifstream&);
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
 
 		inline const Vec3mf& getCenter() const { return m_center; }
 		inline const float& getRadius() const { return m_radius; }
@@ -228,6 +242,75 @@ namespace poca::core {
 		float m_radius;
 		poca::opengl::PointSingleGLBuffer <Vec3mf> m_centerBuffer;
 		poca::opengl::FeatureSingleGLBuffer <float> m_radiusBuffer;
+	};
+
+	class PlaneROI : public ROI {
+	public:
+		PlaneROI(const std::string&);
+		PlaneROI(const PlaneROI&);
+		~PlaneROI();
+
+		virtual void updateDisplay();
+		virtual void draw(poca::opengl::Camera*, const std::array <float, 4>&, const float = 5.f, const float = 1.f);
+		virtual bool inside(const float, const float, const float = 0.f) const;
+		virtual void onClick(const float, const float, const float = 0.f, const bool = false);
+		virtual void onMove(const float, const float, const float = 0.f, const bool = false);
+		virtual void finalize(const float, const float, const float = 0.f, const bool = false);
+		virtual float getFeature(const std::string&) const;
+		virtual void save(std::ofstream&) const;
+		virtual void load(std::ifstream&);
+		virtual const std::string toStdString() const;
+		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
+
+		void addFinalPoint(const Vec3mf&);
+
+		inline const Vec3mf& getPoint(const int _id) const { return m_pts[_id]; }
+		inline const Vec3mf& getFinalPoint(const int _id) const { return m_finalPoints[_id]; }
+
+	protected:
+		Vec3mf m_pts[2];
+		std::vector <Vec3mf> m_finalPoints;
+		poca::opengl::LineSingleGLBuffer <Vec3mf> m_buffer;
+		poca::opengl::LineGLBuffer <Vec3mf> m_lineBuffer;
+		poca::opengl::TriangleSingleGLBuffer<Vec3mf> m_triangleBuffer;
+	};
+
+	class PolyplaneROI : public ROI {
+	public:
+		PolyplaneROI(const std::string&);
+		PolyplaneROI(const PolyplaneROI&);
+		~PolyplaneROI();
+
+		virtual void updateDisplay();
+		virtual void draw(poca::opengl::Camera*, const std::array <float, 4>&, const float = 5.f, const float = 1.f);
+		virtual bool inside(const float, const float, const float = 0.f) const;
+		virtual void onClick(const float, const float, const float = 0.f, const bool = false);
+		virtual void onMove(const float, const float, const float = 0.f, const bool = false);
+		virtual void finalize(const float, const float, const float = 0.f, const bool = false);
+		virtual float getFeature(const std::string&) const;
+		virtual void save(std::ofstream&) const;
+		virtual void load(std::ifstream&);
+		void load(std::ifstream&, const unsigned int);
+		virtual const std::string toStdString() const;
+		virtual ROIInterface* copy() const;
+		virtual const BoundingBox boundingBox() const;
+
+		void addFinalPoint(const Vec3mf&);
+
+		inline const std::vector < Vec3mf >& getPoints() const { return m_pts; }
+		inline const std::vector < Vec3mf >& getFinalPoints() const { return m_finalPoints; }
+		inline const Vec3mf& getFinalPoint(const int _id) const { return m_finalPoints[_id]; }
+		inline const std::size_t nbPoints() const { return m_pts.size(); }
+		inline const std::size_t nbFinalPoints() const { return m_finalPoints.size(); }
+
+	protected:
+		std::vector < Vec3mf > m_pts;
+		Vec3mf m_addedPointRendering;
+		std::vector <Vec3mf> m_finalPoints;
+		poca::opengl::LineStripAdjacencySingleGLBuffer <Vec3mf> m_buffer;
+		poca::opengl::LineSingleGLBuffer <Vec3mf> m_outlineBuffer;
+		poca::opengl::TriangleSingleGLBuffer<Vec3mf> m_triangleBuffer;
 	};
 }
 

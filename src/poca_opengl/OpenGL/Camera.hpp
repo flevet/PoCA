@@ -84,6 +84,7 @@ namespace poca::opengl {
 		glm::vec3 m_eye;
 		glm::mat4 m_matrix;
 		glm::vec3 m_up;
+		glm::vec3 m_translationModel;
 	};
 
 	class InfosObjectImages {
@@ -116,9 +117,11 @@ namespace poca::opengl {
 			Square2DRoiDefinition = 3,
 			Triangle2DRoiDefinition = 4,
 			Ellipse2DRoiDefinition = 5,
-			Sphere3DRoiDefinition = 6,
-			ModifyRoi = 7,
-			Crop = 8
+			PolyPlaneRoiDefinition = 6,
+			Sphere3DRoiDefinition = 7,
+			PlaneRoiDefinition = 8,
+			ModifyRoi = 9,
+			Crop = 10,
 		};
 		enum PlaneType
 		{
@@ -133,10 +136,8 @@ namespace poca::opengl {
 		virtual const glm::mat4& getProjectionMatrix() const { return m_matrixProjection; }
 		virtual const glm::mat4& getViewMatrix() const { return m_stateCamera.m_matrixView; }
 		virtual const glm::mat4& getModelMatrix() const { return m_matrixModel; }
-		virtual const glm::mat4& getTranslationMatrix() const { return m_translationMatrix; }
+		virtual const glm::vec3& getTranslationModel() const { return m_stateCamera.m_translationModel; }
 		virtual const glm::mat4& getRotationMatrix() const { return m_rotationMatrix; }
-
-		virtual void setTranslationMatrix(const glm::mat4 _mat) { m_translationMatrix = _mat; }
 
 		virtual const glm::vec4& getClipPlaneX() const { return m_clip[0]; }
 		virtual const glm::vec4& getClipPlaneY() const { return m_clip[1]; }
@@ -154,7 +155,6 @@ namespace poca::opengl {
 		virtual poca::core::MyObjectInterface* getObject() { return m_object; }
 		virtual void update() { QOpenGLWidget::update(); }
 		virtual void makeCurrent() { QOpenGLWidget::makeCurrent(); }
-		virtual void setDeleteObject(const bool _val) { m_deleteObject = _val; }
 
 		const poca::core::BoundingBox& getCurrentCrop() const { return m_currentCrop; }
 		void setCurrentCrop(const poca::core::BoundingBox& _crop) { m_currentCrop = _crop; }
@@ -204,10 +204,16 @@ namespace poca::opengl {
 
 		void fixPlane(const int, const bool);
 
+		void animateCameraPath(const std::array <poca::opengl::StateCamera, 2>&, const std::array <float, 2>&, const float, const bool, const bool);
+		void animateCameraPath(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, const bool, const bool);
+
 		inline const float getDistanceOrtho() const { return m_distanceOrtho; }
 		inline const float getOriginalDistanceOrtho() const { return m_originalDistanceOrtho; }
 		inline void setDistanceOrtho(const float _val) { m_distanceOrtho = _val; }
 		inline void setOriginalDistanceOrtho(const float _val) { m_originalDistanceOrtho = _val; }
+		inline const bool isCropped() const { return !m_resetedProj; }
+
+		inline const std::vector <QImage>& getMovieFrames() const { return m_movieFrames; }
 
 
 		template < class T, class M >
@@ -248,6 +254,9 @@ namespace poca::opengl {
 
 		template < class T, class M >
 		void drawSimpleShaderWithColor(const GLBuffer<T>&, const GLBuffer<M>&);
+
+		template < class T, class M >
+		void drawSimpleShaderWithColor(const SingleGLBuffer<T>&, const SingleGLBuffer<M>&);
 			
 		template < class T, class M >
 		void drawPickingShader(const GLBuffer<T>&, const GLBuffer<M>&, const GLBuffer<M>&, const GLfloat);
@@ -303,9 +312,11 @@ namespace poca::opengl {
 
 	protected slots:
 		void animateRotation();
+		void animateCameraPath();
 
 	signals:
 		void clickInsideWindow();
+		void askForMovieCreation();
 
 	protected:
 		size_t m_dimension;
@@ -315,7 +326,7 @@ namespace poca::opengl {
 		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho;
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid;
-		bool m_deleteObject, m_alreadyInitialized;
+		bool m_alreadyInitialized;
 		bool m_cullFace, m_fillPolygon;
 
 		StateCamera m_stateCamera;
@@ -352,11 +363,9 @@ namespace poca::opengl {
 		float m_distanceOrthoSaved, m_multAnimation;
 		glm::mat4 m_matrixModelSaved, m_matrixViewSaved;
 
-		glm::vec3 m_translationModel;
-
 		size_t m_leftFace, m_rightFace, m_upFace;
 
-		QTimer* m_timer;
+		QTimer* m_timer, * m_timerCameraPath;
 
 		glm::uvec4 m_viewportThumbnailFrame;
 		glm::mat4 m_matrixProjectionThumbnailFrame;
@@ -383,7 +392,17 @@ namespace poca::opengl {
 		poca::core::Vec3mf m_cropPointBegin, m_cropPointEnd;
 		int m_cropPlane;
 
+		uint32_t m_nbImagesCameraPath, m_currentStepPath;
+		float m_stepDistanceCameraPath, m_angleRotation, m_stepPath;
+		glm::vec3 m_stepTranslationCameraPath;
+		bool m_saveImagesCameraPath, m_travelingCameraPath;
+		std::array <poca::opengl::StateCamera, 2> m_statesPath;
+
+		std::vector <std::tuple<float, glm::vec3, glm::quat>> m_pathIterations;
+
 		SsaoShader m_ssaoShader;
+
+		std::vector <QImage> m_movieFrames;
 	};
 
 	template < class T, class M >
@@ -488,6 +507,7 @@ namespace poca::opengl {
 	template < class T, class M >
 	void Camera::drawPickingShader(const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferId, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF)
 	{
+		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferId.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = getShader("pickShader");
 
@@ -529,6 +549,7 @@ namespace poca::opengl {
 		glDisableVertexAttribArray(2);
 
 		shader->release();
+		GL_CHECK_ERRORS();
 	}
 
 	template < class T, class M >
@@ -811,6 +832,10 @@ namespace poca::opengl {
 				sizeGL = comObj->getParameter<uint32_t>("pointSizeGL");
 				glPointSize(sizeGL);
 			}
+			if (comObj->hasParameter("lineWidthGL")) {
+				sizeGL = comObj->getParameter<uint32_t>("lineWidthGL");
+				glLineWidth(sizeGL);
+			}
 		}
 		
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
@@ -1087,6 +1112,48 @@ namespace poca::opengl {
 			_bufferColor.bindBuffer(chunk, 3);
 			glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(3);
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		shader->release();
+		GL_CHECK_ERRORS();
+	}
+
+	template < class T, class M >
+	void Camera::drawSimpleShaderWithColor(const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferColor)
+	{
+		if (_bufferVertex.empty() || _bufferColor.empty()) return;
+		uint32_t sizeGL = 1, widthLineGL = 1;
+		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
+		if (comObj) {
+			if (comObj->hasParameter("pointSizeGL"))
+				sizeGL = comObj->getParameter<uint32_t>("pointSizeGL");
+			if (comObj->hasParameter("lineWidthGL"))
+				widthLineGL = comObj->getParameter<uint32_t>("lineWidthGL");
+		}
+
+		glPointSize(sizeGL);
+		glLineWidth(widthLineGL);
+
+		poca::opengl::Shader* shader = getShader("simpleShader");
+
+		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
+		shader->use();
+		shader->setMat4("MVP", proj * view * model);
+		shader->setFloat("useSpecialColors", 1);
+		shader->setVec4("clipPlaneX", getClipPlaneX());
+		shader->setVec4("clipPlaneY", getClipPlaneY());
+		shader->setVec4("clipPlaneZ", getClipPlaneZ());
+		shader->setVec4("clipPlaneW", getClipPlaneW());
+		shader->setVec4("clipPlaneH", getClipPlaneH());
+		shader->setVec4("clipPlaneT", getClipPlaneT());
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(3);
+		_bufferVertex.bindBuffer(0);
+		_bufferColor.bindBuffer(3);
+		glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
 

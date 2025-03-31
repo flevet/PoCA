@@ -47,6 +47,7 @@
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtCore/qmath.h>
 #include <QtWidgets/QFileDialog>
+#include <CGAL/intersections.h>
 
 #include <General/Command.hpp>
 #include <General/CommandableObject.hpp>
@@ -57,6 +58,7 @@
 #include <General/Vec2.hpp>
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
+#include <Geometry/CGAL_includes.hpp>
 
 #include "Camera.hpp"
 #include "Shader.hpp"
@@ -107,10 +109,12 @@ char* fs = "#version 330 core\n"
 "void main() {\n"
 "	if (activatedCulling) {\n"
 "		float res = dot(cameraForward, normal); \n"
-"		if (res < 0.f)\n"
+"		if (res > 0.f)\n"
 "			discard; \n"
 "	}\n"
 "	if (useSpecialColors) {\n"
+"		if (colorIn.a == 0.)\n"
+"			discard;\n"
 "		color = colorIn;\n"
 "	}\n"
 "	else {\n"
@@ -169,7 +173,7 @@ char* fsUniformColor = "#version 330 core\n"
 "void main() {\n"
 "	if (activatedCulling) {\n"
 "		float res = dot(cameraForward, normal); \n"
-"		if (res < 0.f)\n"
+"		if (res > 0.f)\n"
 "			discard; \n"
 "	}\n"
 "	color = singleColor;\n"
@@ -426,7 +430,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_deleteObject(true), m_alreadyInitialized(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_resetedProj(true)
 	{
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
@@ -455,10 +459,6 @@ namespace poca::opengl {
 		if (m_offscreenFBO != NULL)
 			delete m_offscreenFBO;
 		m_offscreenFBO = NULL;
-
-		//May have to be modified if we want to be able to keep objects after the camera is closed
-		if(m_deleteObject)
-			delete m_object;
 	}
 
 	void Camera::initializeGL()
@@ -635,7 +635,7 @@ namespace poca::opengl {
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		poca::core::Color4D color = poca::core::contrastColor(poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
 		color *= 255.f;
-		m_matrixModel = glm::translate(glm::mat4(1.f), m_translationModel);
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		glDisable(GL_DEPTH_TEST);
 		if (m_displayGrid)
@@ -735,7 +735,7 @@ namespace poca::opengl {
 		color *= 255.f;
 		GL_CHECK_ERRORS();
 
-		m_matrixModel = glm::translate(glm::mat4(1.f), m_translationModel);
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		GL_CHECK_ERRORS();
 
@@ -751,6 +751,7 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 
 		glEnable(GL_DEPTH_TEST);
+		glLineWidth(thickness);
 
 		bool ssao = false;
 		if (comObj->hasParameter("useSSAO"))
@@ -772,10 +773,10 @@ namespace poca::opengl {
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_CLIP_DISTANCE0);
 		glDisable(GL_CLIP_DISTANCE1);
-		glDisable(GL_CLIP_DISTANCE2);
+		//glDisable(GL_CLIP_DISTANCE2);
 		glDisable(GL_CLIP_DISTANCE3);
 		glDisable(GL_CLIP_DISTANCE4);
-		glDisable(GL_CLIP_DISTANCE5);
+		//glDisable(GL_CLIP_DISTANCE5);
 
 		bool displayROIs = true;
 
@@ -858,10 +859,10 @@ namespace poca::opengl {
 		glClear(GL_DEPTH_BUFFER_BIT);
 		glDisable(GL_CLIP_DISTANCE0);
 		glDisable(GL_CLIP_DISTANCE1);
-		glDisable(GL_CLIP_DISTANCE2);
+		//glDisable(GL_CLIP_DISTANCE2);
 		glDisable(GL_CLIP_DISTANCE3);
 		glDisable(GL_CLIP_DISTANCE4);
-		glDisable(GL_CLIP_DISTANCE5);
+		//glDisable(GL_CLIP_DISTANCE5);
 		displayArrowsFrame();
 
 		glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
@@ -920,13 +921,12 @@ namespace poca::opengl {
 
 			QImage fboImage(m_offscreenFBO->toImage(true));
 			QImage image(fboImage.constBits(), fboImage.width(), fboImage.height(), QImage::Format_RGB32);
-			bool res = image.save(QString("e:/poca_%1.png").arg(cptAnimation));
-			if (!res)
-				std::cout << "Problem with saving" << std::endl;
+			m_movieFrames.push_back(image.copy(0, 0, image.width(), image.height()));
 		}
 
 		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
-	}
+		GL_CHECK_ERRORS();
+}
 
 	void Camera::drawSSAO(QOpenGLFramebufferObject* _buffOffscreen) {
 		const SsaoShader& classShaderSSAO = m_ssaoShader;
@@ -1428,6 +1428,16 @@ namespace poca::opengl {
 					m_ROI = poca::core::getROIFromType(m_currentInteractionMode);
 				std::cout << "[" << x << ", " << y << ", " << z << "]" << std::endl;
 			}
+			else if (m_currentInteractionMode == poca::opengl::Camera::PlaneRoiDefinition || m_currentInteractionMode == poca::opengl::Camera::PolyPlaneRoiDefinition) {
+				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
+				if (m_ROI == NULL)
+					m_ROI = poca::core::getROIFromType(m_currentInteractionMode);
+				if (m_ROI != NULL) {
+					x = coords[0];
+					y = coords[1];
+					z = coords[2];
+				}
+			}
 			else if(poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::Ellipse2DRoiDefinition){
 				if (m_ROI == NULL)
 					m_ROI = poca::core::getROIFromType(m_currentInteractionMode);
@@ -1537,6 +1547,12 @@ namespace poca::opengl {
 					m_ROI->onMove(coords[0], coords[1]);
 				}
 			}
+			if (m_currentInteractionMode == poca::opengl::Camera::PolyPlaneRoiDefinition) {
+				if (m_ROI != NULL) {
+					glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
+					m_ROI->onMove(coords[0], coords[1], coords[2]);
+				}
+			}
 		}
 		else {
 			if (m_currentInteractionMode != poca::opengl::Camera::None) {
@@ -1581,7 +1597,7 @@ namespace poca::opengl {
 					glm::vec3 rightVector = -glm::proj(diff, right);
 					glm::vec3 upVector = glm::proj(diff, m_stateCamera.m_up);
 					m_translation = m_translation + rightVector + upVector;
-					m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+					m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
 
 				}
 			}
@@ -1597,8 +1613,8 @@ namespace poca::opengl {
 		{
 		case Qt::LeftButton:
 		{
-			if (poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::Sphere3DRoiDefinition) {
-				if (m_currentInteractionMode != poca::opengl::Camera::Polyline2DRoiDefinition) {
+			if (poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::PlaneRoiDefinition) {
+				if (m_currentInteractionMode != poca::opengl::Camera::Polyline2DRoiDefinition && m_currentInteractionMode != poca::opengl::Camera::PolyPlaneRoiDefinition) {
 					if (m_ROI != NULL) {
 						if (m_currentInteractionMode == poca::opengl::Camera::Sphere3DRoiDefinition) {
 							poca::core::SphereROI* roi = (poca::core::SphereROI*)m_ROI;
@@ -1613,6 +1629,41 @@ namespace poca::opengl {
 							glm::vec3 point(center + rightVector + upVector);
 							m_ROI->finalize(point[0], point[1], point[2]);
 							std::cout << m_ROI->toStdString() << std::endl;
+						}
+						else if (m_currentInteractionMode == poca::opengl::Camera::PlaneRoiDefinition) {
+							poca::core::PlaneROI* proi = dynamic_cast<poca::core::PlaneROI*>(m_ROI);
+							glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
+							m_ROI->finalize(coords[0], coords[1], coords[2]);
+							poca::core::Vec3mf p1 = proi->getPoint(0);
+
+							Kernel::Plane_3 plane(Point_3_double(p1[0], p1[1], p1[2]), Point_3_double(coords[0], coords[1], coords[2]), Point_3_double(p1[0] + m_stateCamera.m_eye[0] * 10.f, p1[1] + m_stateCamera.m_eye[1] * 10.f, p1[2] + m_stateCamera.m_eye[2] * 10.f));
+							Kernel::Iso_cuboid_3 cube(Point_3_double(m_currentCrop[0], m_currentCrop[1], m_currentCrop[2]), Point_3_double(m_currentCrop[3], m_currentCrop[4], m_currentCrop[5]));
+							const auto result = CGAL::intersection(cube, plane);
+							if (result) {
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+								if (const Kernel::Triangle_3* t = std::get_if<Kernel::Triangle_3>(&*result)) {
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(0).x(), t->vertex(0).y(), t->vertex(0).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(1).x(), t->vertex(1).y(), t->vertex(1).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(2).x(), t->vertex(2).y(), t->vertex(2).z()));
+								}
+								if (const std::vector < Point_3_double > *s = std::get_if<std::vector < Point_3_double >>(&*result)) {
+									for (const auto& p : *s) {
+										proi->addFinalPoint(poca::core::Vec3mf(p.x(), p.y(), p.z()));
+									}
+								}
+#else
+								if (const Kernel::Triangle_3* t = boost::get<Kernel::Triangle_3>(&*result)) {
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(0).x(), t->vertex(0).y(), t->vertex(0).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(1).x(), t->vertex(1).y(), t->vertex(1).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(t->vertex(2).x(), t->vertex(2).y(), t->vertex(2).z()));
+								}
+								if (const std::vector < Point_3_double >* s = boost::get<std::vector < Point_3_double >>(&*result)) {
+									for (const auto& p : *s) {
+										proi->addFinalPoint(poca::core::Vec3mf(p.x(), p.y(), p.z()));
+									}
+								}
+#endif
+							}
 						}
 						else {
 							glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
@@ -1642,7 +1693,9 @@ namespace poca::opengl {
 				glm::vec3 wrldCoordsEnd = getWorldCoordinates(glm::vec2(m_cropPointEnd.x(), m_cropPointEnd.y()));
 				cropBox.addPointBBox(wrldCoordsBegin.x, wrldCoordsBegin.y, wrldCoordsBegin.z);
 				cropBox.addPointBBox(wrldCoordsEnd.x, wrldCoordsEnd.y, wrldCoordsEnd.z);
+				std::cout << "CropBox = " << cropBox << std::endl;
 				m_currentCrop = m_currentCrop.intersect(cropBox);
+				std::cout << "m_currentCrop = " << cropBox << std::endl;
 				zoomToBoundingBox(m_currentCrop);
 			}
 			if (m_leftButtonOn && !m_scaling)
@@ -1663,7 +1716,7 @@ namespace poca::opengl {
 			for (std::string info : listInfos)
 				m_infoPicking.push_back(QString::fromStdString(info));
 
-			ci = poca::core::CommandInfo(true, "boundingBoxSelectedObject", "camera", this);
+			ci = poca::core::CommandInfo(true, "doubleClickCamera", "camera", this);
 			m_object->executeCommandOnSpecificComponent("ObjectList", &ci);
 			if (ci.hasParameter("bbox")) {
 				poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
@@ -1704,6 +1757,41 @@ namespace poca::opengl {
 						m_ROI = NULL;
 					}
 				}
+				else if (m_currentInteractionMode == poca::opengl::Camera::PolyPlaneRoiDefinition) {
+					poca::core::PolyplaneROI* proi = dynamic_cast<poca::core::PolyplaneROI*>(m_ROI);
+					if (proi != NULL) {
+						glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
+						m_ROI->finalize(coords[0], coords[1], coords[2]);
+						const std::vector<poca::core::Vec3mf>& points = proi->getPoints();
+
+						for (const auto& pt : points) {
+							Kernel::Line_3 line(Point_3_double(pt[0], pt[1], pt[2]), Kernel::Direction_3(m_stateCamera.m_eye[0], m_stateCamera.m_eye[1], m_stateCamera.m_eye[2]));
+							Kernel::Iso_cuboid_3 cube(Point_3_double(m_currentCrop[0], m_currentCrop[1], m_currentCrop[2]), Point_3_double(m_currentCrop[3], m_currentCrop[4], m_currentCrop[5]));
+							const auto result = CGAL::intersection(line, cube);
+							if (result) {
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+								if (const Kernel::Segment_3* s = std::get_if<Kernel::Segment_3>(&*result)) {
+									proi->addFinalPoint(poca::core::Vec3mf(s->vertex(0).x(), s->vertex(0).y(), s->vertex(0).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(s->vertex(1).x(), s->vertex(1).y(), s->vertex(1).z()));
+								}
+								if (const Kernel::Point_3* p = std::get_if<Kernel::Point_3>(&*result)) {
+									std::cout << "Point " << p->x() << ", " << p->y() << ", " << p->z() << std::endl;
+								}
+#else
+								if (const Kernel::Segment_3* s = boost::get<Kernel::Segment_3>(&*result)) {
+									proi->addFinalPoint(poca::core::Vec3mf(s->vertex(0).x(), s->vertex(0).y(), s->vertex(0).z()));
+									proi->addFinalPoint(poca::core::Vec3mf(s->vertex(1).x(), s->vertex(1).y(), s->vertex(1).z()));
+								}
+								if (const Kernel::Point_3* p = boost::get<Kernel::Point_3>(&*result)) {
+									std::cout << "Point " << p->x() << ", " << p->y() << ", " << p->z() << std::endl;
+								}
+#endif
+							}
+						}
+						m_object->addROI(m_ROI);
+						m_ROI = NULL;
+					}
+				}
 				return;
 			}
 			m_insidePatchId = -1;
@@ -1713,7 +1801,7 @@ namespace poca::opengl {
 			}
 			poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
 			if (m_insidePatchId == -1) {
-				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "boundingBoxSelectedObject", "camera", this);
+				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this);
 				m_object->executeGlobalCommand(&ci);
 				if (ci.hasParameter("bbox")) {
 					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
@@ -1873,6 +1961,26 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "alphaBlending") {
+			Shader* shader = new Shader("./shaders/alpha_blending.vert", "./shaders/alpha_blending.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "maximumProjection") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection.vert", "./shaders/maximum_intensity_projection.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "isosurface") {
+			Shader* shader = new Shader("./shaders/isosurface.vert", "./shaders/isosurface.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "labelRendering") {
+			Shader* shader = new Shader("./shaders/label_rendering.vert", "./shaders/label_rendering.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		return nullptr;
 	}
 
@@ -1884,12 +1992,13 @@ namespace poca::opengl {
 		if (_recomputeOrthoD) {
 			m_distanceOrtho = w > h ? w / 2 : h / 2;
 			m_distanceOrtho = m_distanceOrtho > t ? m_distanceOrtho : t;
-		}
-		m_translation.x = _bbox[0] + (_bbox[3] - _bbox[0]) / 2.f;
-		m_translation.y = _bbox[1] + (_bbox[4] - _bbox[1]) / 2.f;
-		m_translation.z = _bbox[2] + (_bbox[5] - _bbox[2]) / 2.f;
+			
+			m_translation.x = _bbox[0] + (_bbox[3] - _bbox[0]) / 2.f;
+			m_translation.y = _bbox[1] + (_bbox[4] - _bbox[1]) / 2.f;
+			m_translation.z = _bbox[2] + (_bbox[5] - _bbox[2]) / 2.f;
 
-		m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+			m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+		}
 
 		recalcModelView();
 
@@ -1901,7 +2010,8 @@ namespace poca::opengl {
 		m_clip[5] = glm::vec4(0, 0, -1, _bbox[5]);
 		m_currentCrop = _bbox;
 
-		paintGL();
+		//paintGL();
+		repaint();
 	}
 
 	void Camera::resetProjection()
@@ -1967,6 +2077,8 @@ namespace poca::opengl {
 	{
 		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
 		if (!comObj) return;
+
+		const poca::core::BoundingBox& bboxObject = m_object->boundingBox();
 
 		testWhichFaceFrontCamera();
 
@@ -2166,12 +2278,19 @@ namespace poca::opengl {
 						float dotX = nv.dot(poca::core::Vec3mf(1.f, 0.f, 0.f));
 						float dotY = nv.dot(poca::core::Vec3mf(0.f, 1.f, 0.f));
 						float dotZ = nv.dot(poca::core::Vec3mf(0.f, 0.f, 1.f));
-						if (dotX == 1.f || dotX == -1.f)
+						float startingPoint = 0.f;
+						if (dotX == 1.f || dotX == -1.f) {
 							stepGrid = stepGridX;
-						if (dotY == 1.f || dotY == -1.f)
+							startingPoint = bboxObject.x();
+						}
+						if (dotY == 1.f || dotY == -1.f) {
 							stepGrid = stepGridY;
-						if (dotZ == 1.f || dotZ == -1.f)
+							startingPoint = bboxObject.y();
+						}
+						if (dotZ == 1.f || dotZ == -1.f) {
 							stepGrid = stepGridZ;
+							startingPoint = bboxObject.z();
+						}
 
 						cur = stepGrid;
 						float lengthVec = vects[k].length(), curLength = cur;
@@ -2185,7 +2304,7 @@ namespace poca::opengl {
 							glm::vec2 p1(worldToScreenCoordinates(proj, view, model, m_viewport, glm::vec3(tmp2[0], tmp2[1], tmp2[2])));
 							glm::vec2 vecPix = glm::normalize(p1 - p0);
 							glm::vec2 posTxt = p0 + vecPix * 25.f;//25 pixels
-							m_frameTexts.push_back(std::make_pair(poca::core::Vec3mf(posTxt[0], this->height() - posTxt[1], 0.f), std::to_string((uint32_t)curLength)));
+							m_frameTexts.push_back(std::make_pair(poca::core::Vec3mf(posTxt[0], this->height() - posTxt[1], 0.f), std::to_string((uint32_t)(startingPoint + curLength))));
 						}
 					}
 				}
@@ -2672,6 +2791,113 @@ namespace poca::opengl {
 		updateCameraEyeUp(true, true);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		repaint();
+	}
+
+	void Camera::animateCameraPath(const std::array <poca::opengl::StateCamera, 2>& _states, const std::array <float, 2>& _distances, const float _duration, const bool _saveImages, const bool _traveling)
+	{
+		m_statesPath = _states;
+
+		if (m_timerCameraPath == NULL) {
+			m_timerCameraPath = new QTimer(this);
+			connect(m_timerCameraPath, SIGNAL(timeout()), this, SLOT(animateCameraPath()));
+		}
+
+		m_saveImagesCameraPath = _saveImages;
+		m_travelingCameraPath = _traveling;
+		float nbs = _duration * 25.f;
+		m_currentStepPath = m_stepPath = 1.f / nbs;
+		m_stepDistanceCameraPath = (_distances[1] - _distances[0]) / nbs;
+		m_stepTranslationCameraPath = _states[1].m_translationModel - _states[0].m_translationModel;
+		m_stepTranslationCameraPath = m_stepTranslationCameraPath / nbs;
+		m_nbImagesCameraPath = (uint32_t)nbs;
+		m_angleRotation = (2 * M_PI) / nbs;
+
+		if (m_travelingCameraPath) {
+			m_distanceOrtho = _distances[0];
+			m_stateCamera = _states[0];
+			//m_stateCamera.m_translationModel = _states[0].m_translationModel;
+		}
+
+		m_timerCameraPath->start(10);
+	}
+
+	void Camera::animateCameraPath(const std::vector <std::tuple<float, glm::vec3, glm::quat>>& _iterations, const bool _saveImages, const bool _traveling) {
+		m_pathIterations = _iterations;
+		m_saveImagesCameraPath = _saveImages;
+		m_travelingCameraPath = _traveling;
+		m_currentStepPath = 0;
+		m_angleRotation = (2 * M_PI) / (float)_iterations.size();
+		if (m_timerCameraPath == NULL) {
+			m_timerCameraPath = new QTimer(this);
+			connect(m_timerCameraPath, SIGNAL(timeout()), this, SLOT(animateCameraPath()));
+		}
+		m_movieFrames.clear();
+		m_timerCameraPath->start(10);
+	}
+
+	void Camera::animateCameraPath()
+	{
+		if (m_travelingCameraPath) {
+			const std::tuple<float, glm::vec3, glm::quat>& current = m_pathIterations[m_currentStepPath];
+			m_distanceOrtho = std::get<0>(current);
+			m_stateCamera.m_translationModel = std::get<1>(current);
+			m_stateCamera.m_rotationSum = std::get<2>(current);
+		}
+		else {
+			glm::vec3 axis = glm::vec3(0, 1, 0);
+			m_stateCamera.m_rotation = glm::angleAxis(m_angleRotation, axis);
+			// Reverse so scene moves with cursor and not away due to camera model.
+			m_stateCamera.m_rotation = glm::inverse(m_stateCamera.m_rotation);
+			m_stateCamera.m_rotationSum *= m_stateCamera.m_rotation; // Accumulate quaternions.
+		}
+		updateCameraEyeUp(true, true);
+		makeCurrent();
+		recalcModelView();
+		if (m_saveImagesCameraPath)
+			drawElements(m_offscreenFBO);
+		else
+			drawElements();
+		repaint();
+		cptAnimation++;
+		m_currentStepPath++;
+
+		if (m_currentStepPath >= m_pathIterations.size() && m_timerCameraPath->isActive()) {
+			m_timerCameraPath->stop();
+
+			if (m_movieFrames.size() > 24)
+				emit(askForMovieCreation());
+		}
+		/*if (m_travelingCameraPath) {
+			m_distanceOrtho += m_stepDistanceCameraPath;
+
+			auto stepTranslation = (m_statesPath[1].m_translationModel - m_statesPath[0].m_translationModel) / (float)m_nbImagesCameraPath;
+			m_stateCamera.m_translationModel = m_stateCamera.m_translationModel + stepTranslation;
+
+			m_stateCamera.m_rotationSum = glm::mix(m_statesPath[0].m_rotationSum, m_statesPath[1].m_rotationSum, m_currentStepPath);
+			//m_stateCamera.m_matrixView = glm::mix(m_statesPath[0].m_matrixView, m_statesPath[1].m_matrixView, m_currentStepPath);
+			updateCameraEyeUp(true, true);
+		}
+		else {
+			glm::vec3 axis = glm::vec3(0, 1, 0);
+			m_stateCamera.m_rotation = glm::angleAxis(m_angleRotation, axis);
+			// Reverse so scene moves with cursor and not away due to camera model.
+			m_stateCamera.m_rotation = glm::inverse(m_stateCamera.m_rotation);
+			m_stateCamera.m_rotationSum *= m_stateCamera.m_rotation; // Accumulate quaternions.
+			updateCameraEyeUp(true, true);
+		}
+		m_currentStepPath += m_stepPath;
+
+		makeCurrent();
+		recalcModelView();
+		if(m_saveImagesCameraPath)
+			drawElements(m_offscreenFBO);
+		else
+			drawElements();
+		repaint();
+		cptAnimation++;
+
+		if(m_currentStepPath > 1.f && m_timerCameraPath->isActive())
+			m_timerCameraPath->stop();*/
 	}
 }
 

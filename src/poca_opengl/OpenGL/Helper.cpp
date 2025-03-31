@@ -93,7 +93,7 @@ namespace poca::opengl {
 			return textureLutID;
 		}
 		else if (_pal->getName() == "Random") {
-			unsigned int sizeLut = 512;
+			unsigned int sizeLut = 10000;
 			unsigned int cpt = 0;
 			std::vector <float> lutValues(sizeLut * 4);
 			float stepLut = 1. / (float)(sizeLut - 1);

@@ -49,7 +49,7 @@ namespace poca::opengl {
 		virtual const glm::mat4& getProjectionMatrix() const = 0;
 		virtual const glm::mat4& getViewMatrix() const = 0;
 		virtual const glm::mat4& getModelMatrix() const = 0;
-		virtual const glm::mat4& getTranslationMatrix() const = 0;
+		//virtual const glm::mat4& getTranslationMatrix() const = 0;
 		virtual const glm::mat4& getRotationMatrix() const = 0;
 
 		virtual const glm::vec4& getClipPlaneX() const = 0;
@@ -58,6 +58,15 @@ namespace poca::opengl {
 		virtual const glm::vec4& getClipPlaneW() const = 0;
 		virtual const glm::vec4& getClipPlaneH() const = 0;
 		virtual const glm::vec4& getClipPlaneT() const = 0;
+
+		virtual const glm::vec3& getCenter() = 0;
+		virtual const glm::vec3& getEye() = 0;
+		virtual const glm::vec3& getUp() = 0;
+		virtual const glm::quat getRotationSum() const = 0;
+		virtual const float getOriginalDistanceOrtho() const = 0;
+
+		virtual glm::vec3 getWorldCoordinates(const glm::vec2&) = 0;
+		virtual glm::vec2 worldToScreenCoordinates(const glm::vec3&) const = 0;
 
 		virtual void resizeWindow(const int, const int, const int, const int) = 0;
 		virtual std::array<int, 2> sizeHintInterface() const = 0;
@@ -71,7 +80,9 @@ namespace poca::opengl {
 		virtual int getHeight() const = 0;
 
 		virtual void makeCurrent() = 0;
-		virtual void setDeleteObject(const bool) = 0;
+
+	protected:
+		bool m_sizeChanged{ false };
 	};
 }
 

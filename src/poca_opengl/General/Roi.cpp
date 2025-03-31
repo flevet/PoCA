@@ -35,6 +35,7 @@
 #include <gl/GL.h>
 #include <QtCore/qmath.h>
 #include <glm/gtx/string_cast.hpp>
+#include <algorithm>
 
 #include <General/Vec3.hpp>
 #include <General/Misc.h>
@@ -70,6 +71,10 @@ namespace poca::core {
 			return new PolylineROI("PolylineROI");
 		else if (_type == poca::opengl::Camera::Sphere3DRoiDefinition)
 			return new SphereROI("SphereROI");
+		else if (_type == poca::opengl::Camera::PlaneRoiDefinition)
+			return new PlaneROI("PlaneROI");
+		else if (_type == poca::opengl::Camera::PolyPlaneRoiDefinition)
+			return new PolyplaneROI("PolyplaneROI");
 		return NULL;
 	}
 
@@ -85,7 +90,20 @@ namespace poca::core {
 			return new SquareROI("SquareROI");
 		else if (_type == "TriangleROI")
 			return new TriangleROI("TriangleROI");
+		else if (_type == "SphereROI")
+			return new SphereROI("SphereROI");
+		else if (_type == "PlaneROI")
+			return new PlaneROI("PlaneROI");
+		else if (_type == "PolyplaneROI")
+			return new PolyplaneROI("PolyplaneROI");
 		return NULL;
+	}
+
+	void ROI::load(const std::vector<std::array<float, 2>>& _pts)
+	{
+		for (auto n = 0; n < _pts.size() - 1; n++)
+			this->onClick(_pts[n][0], _pts[n][1]);
+		this->finalize(_pts.back()[0], _pts.back()[1]);
 	}
 
 	LineROI::LineROI(const std::string& _type) :ROI(_type)
@@ -192,6 +210,16 @@ namespace poca::core {
 			"[" + std::to_string(m_pts[0].x()) + ", " + std::to_string(m_pts[0].y()) + "]" +
 			"[" + std::to_string(m_pts[1].x()) + ", " + std::to_string(m_pts[2].y()) + "]");
 		return text;
+	}
+
+	const BoundingBox LineROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		bbox[0] = std::min(m_pts[0].x(), m_pts[1].x());
+		bbox[1] = std::min(m_pts[0].y(), m_pts[1].y());
+		bbox[3] = std::max(m_pts[0].x(), m_pts[1].x());
+		bbox[4] = std::max(m_pts[0].y(), m_pts[1].y());
+		return bbox;
 	}
 
 	ROIInterface* LineROI::copy() const
@@ -313,6 +341,17 @@ namespace poca::core {
 			"[" + std::to_string(m_center.x()) + ", " + std::to_string(m_center.y()) + "]" +
 			", radius = " + std::to_string(m_radius));
 		return text;
+	}
+
+	const BoundingBox CircleROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		float halfRadius = m_radius / 2.f;
+		bbox[0] = m_center.x() - halfRadius;
+		bbox[1] = m_center.y() - halfRadius;
+		bbox[3] = m_center.x() + halfRadius;
+		bbox[4] = m_center.y() + halfRadius;
+		return bbox;
 	}
 
 	PolylineROI::PolylineROI(const std::string& _type) :ROI(_type)
@@ -457,6 +496,13 @@ namespace poca::core {
 		return std::numeric_limits <float>::max();
 	}
 
+	void PolylineROI::applyCalibrationXY(const float _cal)
+	{
+		for (auto n = 0; n < m_pts.size(); n++) {
+			m_pts[n] = m_pts[n] * _cal;
+		}
+	}
+
 	void PolylineROI::save(std::ofstream& _fs) const
 	{
 		_fs << "PolygonROI" << std::endl;
@@ -511,6 +557,21 @@ namespace poca::core {
 		for (std::vector < Vec2mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++)
 			text.append("[" + std::to_string(it->x()) + ", " + std::to_string(it->y()) + "]\n");
 		return text;
+	}
+
+	const BoundingBox PolylineROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		std::vector <float> xs, ys;
+		for (const auto& point : m_pts) {
+			xs.push_back(point.x());
+			ys.push_back(point.y());
+		}
+		bbox[0] = *std::min_element(xs.begin(), xs.end());
+		bbox[1] = *std::min_element(ys.begin(), ys.end());
+		bbox[3] = *std::max_element(xs.begin(), xs.end());
+		bbox[4] = *std::max_element(ys.begin(), ys.end());
+		return bbox;
 	}
 
 	ROIInterface* PolylineROI::copy() const
@@ -650,6 +711,16 @@ namespace poca::core {
 			"[" + std::to_string(m_pts[0].x()) + ", " + std::to_string(m_pts[0].y()) + "]" +
 			"[" + std::to_string(m_pts[1].x()) + ", " + std::to_string(m_pts[1].y()) + "]");
 		return text;
+	}
+
+	const BoundingBox SquareROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		bbox[0] = std::min(m_pts[0].x(), m_pts[1].x());
+		bbox[1] = std::min(m_pts[0].y(), m_pts[1].y());
+		bbox[3] = std::max(m_pts[0].x(), m_pts[1].x());
+		bbox[4] = std::max(m_pts[0].y(), m_pts[1].y());
+		return bbox;
 	}
 
 	ROIInterface* SquareROI::copy() const
@@ -826,6 +897,17 @@ namespace poca::core {
 		return text;
 	}
 
+	const BoundingBox TriangleROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		std::vector<float> xs = { m_pts[0].x(), m_pts[1].x() , m_pts[2].x() }, ys = { m_pts[0].y(), m_pts[1].y() , m_pts[2].y() };
+		bbox[0] = *std::min_element(xs.begin(), xs.end());
+		bbox[1] = *std::min_element(ys.begin(), ys.end());
+		bbox[3] = *std::max_element(xs.begin(), xs.end());
+		bbox[4] = *std::max_element(ys.begin(), ys.end());
+		return bbox;
+	}
+
 	ROIInterface* TriangleROI::copy() const
 	{
 		return new TriangleROI(*this);
@@ -934,8 +1016,8 @@ namespace poca::core {
 
 	void SphereROI::save(std::ofstream& _fs) const
 	{
-		_fs << "CircleROI" << std::endl;
-		_fs << m_center.x() << " " << m_center.y() << " " << m_radius << std::endl;
+		_fs << "SphereROI" << std::endl;
+		_fs << m_center.x() << " " << m_center.y() << " " << m_center.z() << " " << m_radius << std::endl;
 	}
 
 	void SphereROI::load(std::ifstream& _fs)
@@ -962,5 +1044,569 @@ namespace poca::core {
 		return text;
 	}
 
+	const BoundingBox SphereROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		float halfRadius = m_radius / 2.f;
+		bbox[0] = m_center.x() - halfRadius;
+		bbox[1] = m_center.y() - halfRadius;
+		bbox[2] = m_center.z() - halfRadius;
+		bbox[3] = m_center.x() + halfRadius;
+		bbox[4] = m_center.y() + halfRadius;
+		bbox[5] = m_center.z() + halfRadius;
+		return bbox;
+	}
+
+	PlaneROI::PlaneROI(const std::string& _type) :ROI(_type)
+	{
+	}
+
+	PlaneROI::PlaneROI(const PlaneROI& _o) : ROI(_o)
+	{
+		std::copy(&_o.m_pts[0], &_o.m_pts[0] + 1, &m_pts[0]);
+	}
+
+	PlaneROI::~PlaneROI()
+	{
+		m_buffer.freeGPUMemory();
+	}
+
+	void PlaneROI::updateDisplay()
+	{
+		if (m_finalPoints.empty()) {
+			if (m_lineBuffer.empty())
+				m_lineBuffer.generateBuffer(2, 512 * 512, 3, GL_FLOAT);
+			std::vector <poca::core::Vec3mf> pts = { poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), m_pts[0].z()),
+						poca::core::Vec3mf(m_pts[1].x(), m_pts[1].y(), m_pts[1].z()) };
+			m_lineBuffer.updateBuffer(pts);
+		}
+		else {
+			const auto nb = m_finalPoints.size();
+			if (m_buffer.empty())
+				m_buffer.generateBuffer(nb * 2, 3, GL_FLOAT);
+			if(m_triangleBuffer.empty())
+				m_triangleBuffer.generateBuffer((nb - 2) * 3, 3, GL_FLOAT);
+			std::vector <poca::core::Vec3mf> pts;
+			for (auto n = 0; n < m_finalPoints.size(); n++) {
+				auto next = (n + 1) % m_finalPoints.size();
+				pts.push_back(m_finalPoints[n]);
+				pts.push_back(m_finalPoints[next]);
+			}
+			m_buffer.updateBuffer(pts);
+			if(nb == 3)
+				m_triangleBuffer.updateBuffer(m_finalPoints);
+			else {
+				pts.clear();
+				for (auto n = 2; n <= m_finalPoints.size(); n+=2) {
+					uint32_t i_2 = n - 2, i_1 = n - 1, i = n % m_finalPoints.size();
+					pts.push_back(m_finalPoints[i_2]);
+					pts.push_back(m_finalPoints[i_1]);
+					pts.push_back(m_finalPoints[i]);
+				}
+				m_triangleBuffer.updateBuffer(pts);
+			}
+		}
+		m_changed = false;
+
+		/*if (m_buffer.empty())
+			m_buffer.generateBuffer(8, 3, GL_FLOAT);
+		std::vector <poca::core::Vec3mf> pts;
+		Vec3mf p1 = m_pts[1] - m_direction * m_scale, p2 = m_pts[0] + m_direction * m_scale;
+		pts.push_back(m_pts[0]);
+		pts.push_back(p1);
+		pts.push_back(p1);
+		pts.push_back(m_pts[1]);
+		pts.push_back(m_pts[1]);
+		pts.push_back(p2);
+		pts.push_back(p2);
+		pts.push_back(m_pts[0]);
+
+		m_buffer.updateBuffer(pts);*/
+
+		m_changed = false;
+	}
+
+	void PlaneROI::draw(poca::opengl::Camera* _cam, const std::array <float, 4>& _color, const float _thickness, const float _antialias)
+	{
+		if (m_changed)
+			updateDisplay();
+
+		/*glCullFace(GL_BACK);
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		poca::opengl::Shader* shader = _cam->getShader("polyline2DShader");
+		const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+		shader->use();
+		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("projection", proj);
+		shader->setUVec4("viewport", _cam->getViewport());
+		shader->setVec2("resolution", _cam->width(), _cam->height());
+		shader->setFloat("thickness", _thickness);
+		shader->setFloat("antialias", _antialias);
+		shader->setFloat("miter_limit", 1.f);
+		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
+		glEnableVertexAttribArray(0);
+		m_buffer.bindBuffer(0);
+		if (m_buffer.getBufferIndices() != 0) {
+			glDrawElements(m_buffer.getMode(), m_buffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+		}
+		else
+			glDrawArrays(m_buffer.getMode(), 0, m_buffer.getNbElements());
+		glDisableVertexAttribArray(0);
+		shader->release();*/
+		if (m_finalPoints.empty()) {
+			glCullFace(GL_BACK);
+			glDisable(GL_DEPTH_TEST);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			poca::opengl::Shader* shader = _cam->getShader("line2DShader");
+			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+			shader->use();
+			shader->setMat4("MVP", proj * view * model);
+			shader->setUVec4("viewport", _cam->getViewport());
+			shader->setVec2("resolution", _cam->width(), _cam->height());
+			shader->setFloat("thickness", _thickness * 2.f);
+			shader->setFloat("antialias", _antialias);
+			shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
+			shader->setBool("useSingleColor", true);
+			glEnableVertexAttribArray(0);
+			m_lineBuffer.bindBuffer(0, 0);
+			glDrawArrays(m_lineBuffer.getMode(), 0, m_lineBuffer.getSizeBuffers()[0]);
+			glDisableVertexAttribArray(0);
+			shader->release();
+		}
+		else {
+			poca::core::Color4D color(1.f, 0.f, 0.f, 0.3f);
+
+			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+			poca::opengl::Shader* shader = _cam->getShader("uniformColorShader");
+			shader->use();
+			shader->setMat4("MVP", proj * view * model);
+			shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
+			shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
+			shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
+			shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
+			shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
+			shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+			shader->setBool("activatedCulling", false);
+
+			GLboolean isCullingActivated;
+			glGetBooleanv(GL_CULL_FACE, &isCullingActivated);
+
+			glEnable(GL_DEPTH_TEST);
+			glDisable(GL_CULL_FACE);
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glEnable(GL_BLEND);
+			shader->setVec4("singleColor", 1.f, 0.f, 0.f, 0.3f);
+			glEnableVertexAttribArray(0);
+			m_triangleBuffer.bindBuffer(0);
+			glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+			glDisableVertexAttribArray(0);
+			glDisable(GL_BLEND);
+
+			glDisable(GL_DEPTH_TEST);
+			shader->setVec4("singleColor", 1.f, 1.f, 1.f, 1.f);
+			glEnableVertexAttribArray(0);
+			m_buffer.bindBuffer(0);
+			glDrawArrays(m_buffer.getMode(), 0, m_buffer.getNbElements());
+			glDisableVertexAttribArray(0);
+
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			shader->release();
+
+			if(isCullingActivated)
+				glEnable(GL_CULL_FACE);
+		}
+	}
+
+	bool PlaneROI::inside(const float _x, const float _y, const float _z) const
+	{
+		return false;
+	}
+
+	void PlaneROI::onClick(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_pts[0] = Vec3mf(_x, _y, _z);
+		m_pts[1] = Vec3mf(_x, _y, _z);
+	}
+
+	void PlaneROI::onMove(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_pts[1] = Vec3mf(_x, _y, _z);
+	}
+
+	void PlaneROI::finalize(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_pts[1] = Vec3mf(_x, _y, _z);
+	}
+
+	float PlaneROI::getFeature(const std::string& _typeFeature) const
+	{
+		if (_typeFeature == "perimeter")
+			return m_pts[0].distance(m_pts[1]);
+		return std::numeric_limits <float>::max();
+	}
+
+	void PlaneROI::save(std::ofstream& _fs) const
+	{
+		_fs << "PlaneROI" << std::endl;
+		_fs << m_pts[0].x() << " " << m_pts[0].y() << " " << m_pts[0].z() << " " << m_pts[1].x() << " " << m_pts[1].y() << " " << m_pts[1].z() << std::endl;
+	}
+
+	void PlaneROI::load(std::ifstream& _fs)
+	{
+		std::string s;
+		std::getline(_fs, s);
+		std::istringstream is2(s);
+		float x0, y0, z0, x1, y1, z1;
+		is2 >> x0 >> y0 >> z0 >> x1 >> y1 >> z1;
+		this->onClick(x0, y0, z0);
+		this->finalize(x1, y1, z1);
+	}
+
+	const std::string PlaneROI::toStdString() const
+	{
+		std::string text("PlaneROI, " + m_name + "\n" +
+			"[" + std::to_string(m_pts[0].x()) + ", " + std::to_string(m_pts[0].y()) + ", " + std::to_string(m_pts[0].z()) + "]" +
+			"[" + std::to_string(m_pts[1].x()) + ", " + std::to_string(m_pts[1].y()) + ", " + std::to_string(m_pts[1].z()) + "]");
+		return text;
+	}
+
+	const BoundingBox PlaneROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		bbox[0] = std::min(m_pts[0].x(), m_pts[1].x());
+		bbox[1] = std::min(m_pts[0].y(), m_pts[1].y());
+		bbox[2] = std::min(m_pts[0].z(), m_pts[1].z());
+		bbox[3] = std::max(m_pts[0].x(), m_pts[1].x());
+		bbox[4] = std::max(m_pts[0].y(), m_pts[1].y());
+		bbox[5] = std::max(m_pts[0].z(), m_pts[1].z());
+		return bbox;
+	}
+
+	ROIInterface* PlaneROI::copy() const
+	{
+		return new PlaneROI(*this);
+	}
+
+	void PlaneROI::addFinalPoint(const Vec3mf& _p)
+	{
+		m_finalPoints.push_back(_p);
+		m_changed = true;
+	}
+
+	PolyplaneROI::PolyplaneROI(const std::string& _type) :ROI(_type)
+	{
+
+	}
+
+	PolyplaneROI::PolyplaneROI(const PolyplaneROI& _o) : ROI(_o)
+	{
+		m_pts.resize(_o.m_pts.size());
+		std::copy(_o.m_pts.begin(), _o.m_pts.end(), m_pts.begin());
+		m_finalPoints.resize(_o.m_finalPoints.size());
+		std::copy(_o.m_finalPoints.begin(), _o.m_finalPoints.end(), m_finalPoints.begin());
+		m_changed = true;
+	}
+
+	PolyplaneROI::~PolyplaneROI()
+	{
+		m_pts.clear();
+		m_finalPoints.clear();
+	}
+
+	void PolyplaneROI::updateDisplay()
+	{
+		if (m_finalPoints.empty()) {
+			if (m_buffer.empty())
+				m_buffer.generateBuffer(m_pts.size() + 1, 3, GL_FLOAT);
+
+			std::vector<Vec3mf> pts(m_pts);
+			pts.push_back(m_addedPointRendering);
+
+			std::vector <uint32_t> indices(m_pts.size());
+			std::iota(std::begin(indices), std::end(indices), 0);
+			indices.insert(indices.begin(), indices[indices.size() - 1]);
+			indices.push_back(indices[0]);
+
+			m_buffer.updateBuffer(m_pts);
+			m_buffer.updateIndices(indices);
+		}
+		else {
+			//The polyplane is composed of several planes
+			//Each plane is defined by fours points
+			const auto nb = m_finalPoints.size();
+			if (m_triangleBuffer.empty())
+				m_triangleBuffer.generateBuffer((nb / 4) * 6, 3, GL_FLOAT);
+			if (m_outlineBuffer.empty())
+				m_outlineBuffer.generateBuffer(((nb - 1) * 2) * 2 + 4, 3, GL_FLOAT);
+			std::vector <poca::core::Vec3mf> pts, outPts;
+			outPts.push_back(m_finalPoints[0]);
+			outPts.push_back(m_finalPoints[1]);
+			for (auto n = 3; n < m_finalPoints.size(); n+=2) {
+				const auto& ray1_1 = m_finalPoints[n - 3], ray1_2 = m_finalPoints[n - 2];
+				const auto& ray2_1 = m_finalPoints[n - 1], ray2_2 = m_finalPoints[n];
+				pts.push_back(ray1_1);
+				pts.push_back(ray2_1);
+				pts.push_back(ray1_2);
+				pts.push_back(ray2_1);
+				pts.push_back(ray2_2);
+				pts.push_back(ray1_2);
+
+				outPts.push_back(ray1_1);
+				outPts.push_back(ray2_1);
+				outPts.push_back(ray1_2);
+				outPts.push_back(ray2_2);
+			}
+			outPts.push_back(m_finalPoints[nb - 1]);
+			outPts.push_back(m_finalPoints[nb - 2]);
+			m_triangleBuffer.updateBuffer(pts);
+			m_outlineBuffer.updateBuffer(outPts);
+		}
+
+		m_changed = false;
+	}
+
+	void PolyplaneROI::draw(poca::opengl::Camera* _cam, const std::array <float, 4>& _color, const float _thickness, const float _antialias)
+	{
+		if (m_changed)
+			updateDisplay();
+
+		if (m_finalPoints.empty()) {
+			glCullFace(GL_BACK);
+			glDisable(GL_DEPTH_TEST);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			poca::opengl::Shader* shader = _cam->getShader("polyline2DShader");
+			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+			shader->use();
+			shader->setMat4("MVP", proj * view * model);
+			shader->setMat4("projection", proj);
+			shader->setUVec4("viewport", _cam->getViewport());
+			shader->setVec2("resolution", _cam->width(), _cam->height());
+			shader->setFloat("thickness", _thickness);
+			shader->setFloat("antialias", _antialias);
+			shader->setFloat("miter_limit", 1.f);
+			shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
+			glEnableVertexAttribArray(0);
+			m_buffer.bindBuffer(0);
+			if (m_buffer.getBufferIndices() != 0) {
+				glDrawElements(m_buffer.getMode(), m_buffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			}
+			else
+				glDrawArrays(m_buffer.getMode(), 0, m_buffer.getNbElements());
+			glDisableVertexAttribArray(0);
+			shader->release();
+		}
+		else {
+			poca::core::Color4D color(1.f, 0.f, 0.f, 0.3f);
+
+			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+			poca::opengl::Shader* shader = _cam->getShader("uniformColorShader");
+			shader->use();
+			shader->setMat4("MVP", proj * view * model);
+			shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
+			shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
+			shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
+			shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
+			shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
+			shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+			shader->setBool("activatedCulling", false);
+
+			GLboolean isCullingActivated;
+			glGetBooleanv(GL_CULL_FACE, &isCullingActivated);
+
+			glEnable(GL_DEPTH_TEST);
+			glDisable(GL_CULL_FACE);
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glEnable(GL_BLEND);
+			shader->setVec4("singleColor", 1.f, 0.f, 0.f, 0.3f);
+			glEnableVertexAttribArray(0);
+			m_triangleBuffer.bindBuffer(0);
+			glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+			glDisableVertexAttribArray(0);
+			glDisable(GL_BLEND);
+
+			glDisable(GL_DEPTH_TEST);
+			shader->setVec4("singleColor", 1.f, 1.f, 1.f, 1.f);
+			glEnableVertexAttribArray(0);
+			m_outlineBuffer.bindBuffer(0);
+			glDrawArrays(m_outlineBuffer.getMode(), 0, m_outlineBuffer.getNbElements());
+			glDisableVertexAttribArray(0);
+
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			shader->release();
+
+			if (isCullingActivated)
+				glEnable(GL_CULL_FACE);
+		}
+	}
+
+	bool PolyplaneROI::inside(const float _x, const float _y, const float _z) const
+	{
+		/*float epsilon = 0.00001;
+		for (std::vector < Vec2mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++) {
+			float d = poca::geometry::distance(_x, _y, it->x(), it->y());
+			if (d < epsilon)
+				return true;
+		}
+
+		int cn = 0;// the  crossing number counter
+
+		std::vector < Vec2mf >::const_iterator prec = m_pts.end();
+		prec--;
+		// loop through all edges of the polygon
+		for (std::vector < Vec2mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
+			if (((prec->y() <= _y) && (current->y() > _y))     // an upward crossing
+				|| ((prec->y() > _y) && (current->y() <= _y))) { // a downward crossing
+				// compute  the actual edge-ray intersect x-coordinate
+				float vt = (float)(_y - prec->y()) / (current->y() - prec->y());
+				if (_x < prec->x() + vt * (current->x() - prec->x())) // P.x < intersect
+					++cn;   // a valid crossing of y=P.y right of P.x
+			}
+			prec = current;
+		}
+		return (cn & 1) == 1;    // 0 if even (out), and 1 if  odd (in)*/
+		return false;
+	}
+
+	void PolyplaneROI::onClick(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_pts.push_back(Vec3md(_x, _y, _z));
+		m_addedPointRendering.set(_x, _y, _z);
+	}
+
+	void PolyplaneROI::onMove(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_addedPointRendering.set(_x, _y, _z);
+	}
+
+	void PolyplaneROI::finalize(const float _x, const float _y, const float _z, const bool _modify)
+	{
+		m_changed = true;
+		m_pts.back().set(_x, _y, _z);
+	}
+
+	float PolyplaneROI::getFeature(const std::string& _typeFeature) const
+	{
+		if (_typeFeature == "perimeter") {
+			float perimeter = 0.;
+			std::vector < Vec3mf >::const_iterator prec = m_finalPoints.end();
+			prec--;
+			// loop through all edges of the polygon
+			for (std::vector < Vec3mf >::const_iterator current = m_finalPoints.begin(); current != m_finalPoints.end(); current++) {
+				perimeter += prec->distance(*current);
+				prec = current;
+			}
+			return perimeter;
+		}
+		/*else if (_typeFeature == "area") {
+			float totalArea = 0;
+			std::vector < Vec2mf >::const_iterator prec = m_pts.end();
+			prec--;
+			// loop through all edges of the polygon
+			for (std::vector < Vec2mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
+				totalArea += ((prec->x() - current->x()) * (current->y() + (prec->y() - current->y()) / 2));
+				prec = current;
+			}
+			return abs(totalArea);
+		}*/
+		return std::numeric_limits <float>::max();
+	}
+
+	void PolyplaneROI::save(std::ofstream& _fs) const
+	{
+		_fs << "PolygonROI" << std::endl;
+		_fs << this->nbPoints() << std::endl;
+		const std::vector < Vec3mf >& points = this->getFinalPoints();
+		for (std::vector < Vec3mf >::const_iterator it = points.begin(); it != points.end(); it++)
+			_fs << it->x() << " " << it->y() << " " << it->z() << std::endl;
+	}
+
+	void PolyplaneROI::load(std::ifstream& _fs)
+	{
+		std::string s;
+		std::getline(_fs, s);
+		std::istringstream is2(s);
+		float x, y, z;
+		unsigned int nbPoints;
+		is2 >> nbPoints;
+		std::vector<Vec3mf> pts(nbPoints);
+		for (std::size_t n2 = 0; n2 < nbPoints - 1; n2++) {
+			std::getline(_fs, s);
+			std::istringstream is3(s);
+			is3 >> x >> y >> z;
+			pts[n2].set(x, y, z);
+		}
+		std::getline(_fs, s);
+		std::istringstream is3(s);
+		is3 >> x >> y >> z;
+		pts.back().set(x, y, z);
+		m_finalPoints = pts;
+		m_changed = true;
+	}
+
+	void PolyplaneROI::load(std::ifstream& _fs, const unsigned int _nb)
+	{
+		std::string s;
+		float x, y, z;
+		unsigned int nbPoints = _nb;
+		std::vector<Vec3mf> pts(nbPoints);
+		for (std::size_t n2 = 0; n2 < nbPoints - 1; n2++) {
+			std::getline(_fs, s);
+			std::istringstream is3(s);
+			is3 >> x >> y;
+			pts[n2].set(x, y, z);
+		}
+		std::getline(_fs, s);
+		std::istringstream is3(s);
+		is3 >> x >> y;
+		pts.back().set(x, y, z);
+		m_finalPoints = pts;
+		m_changed = true;
+	}
+
+	const std::string PolyplaneROI::toStdString() const
+	{
+		std::string text("PolyplaneROI, " + m_name + "\n# points = " + std::to_string(this->nbFinalPoints()) + "\n");
+		for (std::vector < Vec3mf >::const_iterator it = m_finalPoints.begin(); it != m_finalPoints.end(); it++)
+			text.append("[" + std::to_string(it->x()) + ", " + std::to_string(it->y()) + ", " + std::to_string(it->z()) + "]\n");
+		return text;
+	}
+
+	const BoundingBox PolyplaneROI::boundingBox() const
+	{
+		BoundingBox bbox;
+		std::vector <float> xs, ys, zs;
+		for (const auto& point : m_finalPoints) {
+			xs.push_back(point.x());
+			ys.push_back(point.y());
+			zs.push_back(point.z());
+		}
+		bbox[0] = *std::min_element(xs.begin(), xs.end());
+		bbox[1] = *std::min_element(ys.begin(), ys.end());
+		bbox[2] = *std::min_element(zs.begin(), zs.end());
+		bbox[3] = *std::max_element(xs.begin(), xs.end());
+		bbox[4] = *std::max_element(ys.begin(), ys.end());
+		bbox[5] = *std::max_element(zs.begin(), zs.end());
+		return bbox;
+	}
+
+	ROIInterface* PolyplaneROI::copy() const
+	{
+		return new PolyplaneROI(*this);
+	}
+
+	void PolyplaneROI::addFinalPoint(const Vec3mf& _p)
+	{
+		m_finalPoints.push_back(_p);
+		m_changed = true;
+	}
 }
 
