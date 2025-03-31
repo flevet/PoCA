@@ -126,7 +126,7 @@ KRipleyWidget::~KRipleyWidget()
 void KRipleyWidget::actionNeeded()
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -157,12 +157,13 @@ void KRipleyWidget::update(poca::core::SubjectInterface* _subject, const poca::c
 
 	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("DetectionSet"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
-
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsKRipleyWidget") {
 
-		poca::core::BasicComponent* bci = obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
 		if (!bci) return;
 		setKripleyCurveDisplay();
 	}

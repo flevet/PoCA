@@ -37,7 +37,8 @@
 #include <General/Misc.h>
 #include <Geometry/BasicComputation.hpp>
 #include <Interfaces/HistogramInterface.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/MyData.hpp>
 
 #include "KRipley.hpp"
 
@@ -52,8 +53,8 @@ KRipleyCommand::KRipleyCommand(poca::geometry::DetectionSet* _ds) :poca::core::C
 	m_w = bbox[3];
 	m_h = bbox[4];
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "kripley", "minRadius", 10.f, "maxRadius", 200.f, "step", 10.f));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
@@ -175,8 +176,8 @@ const float KRipleyCommand::computeRipleyFunction(const float _r)
 {
 	double res = 0., divisor = m_density, r2 = _r * _r;
 	double meanNbNeighbors = 0, nbP = m_dset->nbPoints(), trueMean = 0.;
-	const std::vector <float>& xs = m_dset->getOriginalHistogram("x")->getValues();
-	const std::vector <float>& ys = m_dset->getOriginalHistogram("y")->getValues();
+	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
 	const double search_radius = static_cast<double>(r2);
 	std::vector<std::pair<std::size_t, double> > ret_matches;
 	nanoflann::SearchParams params;

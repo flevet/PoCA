@@ -63,13 +63,51 @@ foreach(source IN LISTS source_list)
     source_group("${source_path_msvc}" FILES "${source}")
 endforeach()
 
+find_package(CGAL REQUIRED COMPONENTS Core)
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_LESS "6.0")
+	message("CGAL version 5")
+	include(${CGAL_USE_FILE})
+    	message("CGAL thing: ${CGAL_USE_FILE}")
+
+    	message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
+    	add_definitions(${CGAL_CXX_GLAFS_INIT})
+
+    	message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
+    	message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
+    endif()
+else()
+    message(FATAL_ERROR "CGAL is required.")
+endif()
+
 add_definitions(-DNOMINMAX)
 add_definitions(-DQT_NO_WARNING_OUTPUT)
+
+find_package(CUDA QUIET)
+
 find_package(Qt5 COMPONENTS Core Widgets Gui PrintSupport OpenGL REQUIRED)
 qt5_wrap_cpp (FOO_MOC_OUTFILES ${FOO_MOC_HEADERS})
 message("MOC: ${FOO_MOC_OUTFILES}")
 
 add_library(${targetname} SHARED ${header_list} ${source_list} ${FOO_MOC_OUTFILES})
+
+if(CUDA_FOUND)
+  message("CUDA was found")
+  message("CUDA flags: ${CMAKE_CUDA_FLAGS}")
+  enable_language(CUDA)
+  target_link_libraries(${targetname} ${CUDA_cudart_static_LIBRARY})
+else()
+  add_definitions(-DNO_CUDA)
+endif()
+
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_GREATER_EQUAL "6.0")
+	message("CGAL version 6")
+	target_link_libraries(${targetname} CGAL::CGAL)
+    endif()
+endif()
 
 set_target_properties(${targetname} PROPERTIES OUTPUT_NAME "${targetname}$<$<CONFIG:Debug>:d>")
 
@@ -81,6 +119,66 @@ set_target_properties( ${targetname} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
 set_property(TARGET ${targetname} PROPERTY CXX_STANDARD 17)
 
 target_link_libraries(${targetname} Qt5::Widgets Qt5::Core Qt5::Gui Qt5::OpenGL Qt5::PrintSupport Qt5::WinMain)
+
+find_package(OpenGL REQUIRED)
+include_directories(${OPENGL_INCLUDE_DIRS})
+target_link_libraries(${targetname} ${OPENGL_LIBRARIES})
+
+find_package(GLEW REQUIRED)
+include_directories(${GLEW_INCLUDE_DIR})
+target_link_libraries(${targetname} ${GLEW_STATIC_LIBRARIES})
+
+find_package(GLM REQUIRED)
+message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
+include_directories(${GLM_INCLUDE_DIR})
+
+find_package(TBB COMPONENTS tbb tbbmalloc)
+if(TBB_FOUND)
+  include_directories(PRIVATE ${TBB_INCLUDE_DIRS})
+  target_compile_definitions(${targetname} PRIVATE ${TBB_DEFINITIONS})
+  target_link_libraries(${targetname} ${TBB_IMPORTED_TARGETS})
+  target_link_libraries(${targetname} debug ${TBB_tbb_LIBRARY_DEBUG} debug ${TBB_tbbmalloc_LIBRARY_DEBUG})
+  target_link_libraries(${targetname} optimized ${TBB_tbb_LIBRARY_RELEASE} optimized ${TBB_tbbmalloc_LIBRARY_RELEASE})
+  add_definitions(-DCGAL_LINKED_WITH_TBB)
+  message("TBB: ${TBB_tbb_LIBRARY_DEBUG}")
+  message("TBB: ${TBB_tbbmalloc_LIBRARY_DEBUG}")
+  message("TBB: ${TBB_tbb_LIBRARY_RELEASE}")
+  message("TBB: ${TBB_tbbmalloc_LIBRARY_RELEASE}")
+  message("TBB: ${TBB_INCLUDE_DIRS}")
+  message("TBB: ${TBB_IMPORTED_TARGETS}")
+  #message("TBB2: ${TBB_tbb_LIBRARY_DEBUG}")
+endif()
+
+if(ADD_PYTHON)
+	#Add Python
+	find_package(PythonInterp)
+	find_package(PythonLibs)
+	set(HAS_PYTHON True)
+	# require at least python 2.6
+	if(PYTHON_VERSION_STRING VERSION_LESS 2.7)
+	  message(WARNING "Python version less than 2.7: \"${PYTHON_VERSION_STRING}\".")
+	  set(HAS_PYTHON False)
+	endif()
+
+	# check for version mismatch.
+	if(PYTHONLIBS_FOUND AND PYTHONINTERP_FOUND
+		AND NOT(PYTHON_VERSION_STRING VERSION_EQUAL PYTHONLIBS_VERSION_STRING))
+	  message(WARNING "Python executable (\"${PYTHON_VERSION_STRING}\") and library (\"${PYTHONLIBS_VERSION_STRING}\") version mismatch.")
+	  set(HAS_PYTHON False)
+	endif()
+	if(HAS_PYTHON)
+	  include_directories(${PYTHON_INCLUDE_DIRS})
+	  target_link_libraries(${targetname} ${PYTHON_LIBRARIES})
+	  find_package(NUMPY)
+	  if(PYTHON_NUMPY_FOUND)
+	    include_directories(${PYTHON_NUMPY_INCLUDE_DIR})
+	  endif()
+	else()
+	  add_definitions(-DNO_PYTHON)
+	endif()
+else()
+	add_definitions(-DNO_PYTHON)
+endif()
 
 target_link_libraries(${targetname} debug poca_cored.lib)
 target_link_libraries(${targetname} optimized poca_core.lib)

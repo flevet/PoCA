@@ -37,6 +37,7 @@
 #include <General/Misc.h>
 #include <Geometry/DetectionSet.hpp>
 #include <General/PluginList.hpp>
+#include <General/Engine.hpp>
 
 #include "KRipleyPlugin.hpp"
 #include "KRipleyWidget.hpp"
@@ -83,8 +84,8 @@ void KRipleyPlugin::addCommands(poca::core::CommandableObject* _bc)
 	}
 }
 
-void KRipleyPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void KRipleyPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
