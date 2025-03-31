@@ -1,7 +1,7 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      ObjectListBasicCommands.hpp
+* File:      ObjectListsCommands.hpp
 *
 * Copyright: Florian Levet (2020-2022)
 *
@@ -16,8 +16,8 @@
 *
 * The algorithms that underlie PoCA have required considerable
 * development. They are described in the original SR-Tesseler paper,
-* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization, 
-* manipulation, quantification) towards a scientific publication, please include 
+* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization,
+* manipulation, quantification) towards a scientific publication, please include
 * a citation to the original paper.
 *
 * This program is distributed in the hope that it will be useful,
@@ -30,18 +30,18 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef ObjectListBasicCommands_h__
-#define ObjectListBasicCommands_h__
+#ifndef ObjectListsCommands_h__
+#define ObjectListsCommands_h__
 
 #include <General/Command.hpp>
-#include <Interfaces/ObjectListInterface.hpp>
+#include <Geometry/ObjectLists.hpp>
 
-class ObjectListBasicCommands: public poca::core::Command
+class ObjectListsCommands : public poca::core::Command
 {
 public:
-	ObjectListBasicCommands(poca::geometry::ObjectListInterface*);
-	ObjectListBasicCommands(const ObjectListBasicCommands&);
-	~ObjectListBasicCommands();
+	ObjectListsCommands(poca::geometry::ObjectLists*);
+	ObjectListsCommands(const ObjectListsCommands&);
+	~ObjectListsCommands();
 
 	void execute(poca::core::CommandInfo*);
 	poca::core::Command* copy();
@@ -49,21 +49,11 @@ public:
 		return poca::core::CommandInfos();
 	}
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
-	//void saveCommands(nlohmann::json&);
 
 protected:
-	void saveStatsObj(const std::string&, const std::string&) const;
-	void saveLocsObj(const std::string&, const std::string&) const;
-	void saveOutlineLocsObj(const std::string&, const std::string&) const;
-	poca::core::MyObjectInterface* duplicateCentroids() const;
-	poca::core::MyObjectInterface* duplicateSelectedObjects(const std::set<int>&) const;
-	void saveSelectedObjectsForVectorHeat(const std::set<int>&) const;
-	void saveAsSVG(const QString&) const;
-	void saveAsOBJ(const QString&) const;
 
 protected:
-	poca::geometry::ObjectListInterface* m_objects;
+	poca::geometry::ObjectLists* m_objects;
 };
 
 #endif
-

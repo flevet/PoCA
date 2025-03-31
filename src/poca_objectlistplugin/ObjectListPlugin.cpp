@@ -34,17 +34,20 @@
 
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
-#include <DesignPatterns/GlobalParametersSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Geometry/VoronoiDiagram.hpp>
 #include <Geometry/DetectionSet.hpp>
 #include <Interfaces/ObjectListFactoryInterface.hpp>
+#include <General/BasicComponentList.hpp>
+#include <General/Engine.hpp>
 
 #include "ObjectListPlugin.hpp"
 #include "ObjectListBasicCommands.hpp"
 #include "ObjectListDisplayCommand.hpp"
-#include "ObjectListWidget.hpp"
+#include "ObjectListsCommands.hpp"
+#include "ObjectListsWidget.hpp"
 #include "ObjectListParamDialog.hpp"
 
 nlohmann::json ObjectListPlugin::m_parameters;
@@ -54,28 +57,44 @@ void ObjectListPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _medi
 	std::string nameStr = name().toLatin1().data();
 	std::string type = "triangulation";
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(nameStr)) {
 		nlohmann::json param = parameters[nameStr];
 		if (param.contains("typeObject"))
 			type = param["typeObject"].get<std::string>();
 	}
 	m_parameters[nameStr]["typeObject"] = type;
-	poca::core::GlobalParametersSingleton::instance()->m_parameters["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
+	poca::core::Engine::instance()->getGlobalParameters()["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
 
-	m_parent = _parent->findChild <QTabWidget*>("ObjectList");
+	/*m_parent = _parent->findChild <QTabWidget*>("ObjectLists");
 	if (m_parent == NULL) {
-		int pos = _parent->addTab(new QTabWidget, QObject::tr("ObjectList"));
+		int pos = _parent->addTab(new QTabWidget, QObject::tr("ObjectLists"));
 		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
 	}
-	m_widget = new ObjectListWidget(_mediator, m_parent);
+	m_widget = new ObjectListsWidget(_mediator, m_parent);
 	_mediator->addWidget(m_widget);
 	QObject::connect(m_widget, SIGNAL(transferNewObjectCreated(poca::core::MyObjectInterface*)), _parent->parentWidget(), SLOT(createWidget(poca::core::MyObjectInterface*)));
 	int index = m_parent->addTab(m_widget, QObject::tr("Filtering/Display"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 	m_parent->setTabVisible(index, false);
+#endif*/
+	int pos = -1;
+	for (int n = 0; n < _parent->count(); n++)
+		if (_parent->tabText(n) == "ObjectLists")
+			pos = n;
+	if (pos != -1)
+		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
+	else
+		m_parent = _parent;
+	m_widget = new ObjectListsWidget(_mediator, m_parent);
+	_mediator->addWidget(m_widget);
+	int index = m_parent->insertTab(0, m_widget, QObject::tr("Filtering/Display"));
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	m_parent->setTabVisible(index, false);
 #endif
+	QObject::connect(m_widget, SIGNAL(transferNewObjectCreated(poca::core::MyObjectInterface*)), _parent->parentWidget(), SLOT(createWidget(poca::core::MyObjectInterface*)));
+
 }
 
 std::vector <std::pair<QAction*, QString>> ObjectListPlugin::getActions()
@@ -99,7 +118,7 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 		if (dial->exec() == QDialog::Accepted) {
 			std::string type = dial->typeObject();
 			m_parameters[nameStr]["typeObject"] = type;
-			poca::core::GlobalParametersSingleton::instance()->m_parameters["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
+			poca::core::Engine::instance()->getGlobalParameters()["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
 		}
 		delete dial;
 	}
@@ -108,19 +127,20 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 
 void ObjectListPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
-	poca::geometry::ObjectList* objs = dynamic_cast <poca::geometry::ObjectList*>(_bc);
+	poca::geometry::ObjectListInterface* objs = dynamic_cast <poca::geometry::ObjectListInterface*>(_bc);
 	if (objs) {
 		objs->addCommand(new ObjectListDisplayCommand(objs));
 		objs->addCommand(new ObjectListBasicCommands(objs));
 	}
+
+	poca::geometry::ObjectLists* objsList = dynamic_cast <poca::geometry::ObjectLists*>(_bc);
+	if (objsList)
+		objsList->addCommand(new ObjectListsCommands(objsList));
 }
 
-void ObjectListPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void ObjectListPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
 void ObjectListPlugin::execute(poca::core::CommandInfo* _com)

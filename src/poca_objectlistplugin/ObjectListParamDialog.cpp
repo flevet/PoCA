@@ -37,7 +37,6 @@
 #include <QtCore/QString>
 #include <QtWidgets/QGroupBox>
 
-#include <Geometry/ObjectList.hpp>
 #include <Interfaces/ObjectListFactoryInterface.hpp>
 
 #include "ObjectListParamDialog.hpp"

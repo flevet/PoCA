@@ -37,7 +37,7 @@
 #include <QtGui/QImage>
 #include <glm/gtx/string_cast.hpp>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 #include <General/Palette.hpp>
 #include <General/Histogram.hpp>
 #include <General/MyData.hpp>
@@ -47,10 +47,11 @@
 #include <OpenGL/Shader.hpp>
 #include <Interfaces/ObjectFeaturesFactoryInterface.hpp>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Geometry/DetectionSet.hpp>
 #include <Objects/MyObject.hpp>
 #include <OpenGL/Helper.h>
+#include <Geometry/ObjectListMesh.hpp>
 
 #include "ObjectListDisplayCommand.hpp"
 
@@ -73,7 +74,7 @@ char* vsLight = "#version 330 core\n"
 "void main() {\n"
 "	vec4 pos = vec4(aPos, 1.0);\n"
 "	FragPos = vec3(model * pos);\n"
-"	Normal = mat3(transpose(inverse(model))) * -aNormal;\n"
+"	Normal = mat3(transpose(inverse(model))) * aNormal;\n"
 "	gl_Position = projection * view * vec4(FragPos, 1.0);\n"
 "	feature = vertexFeature;\n"
 "	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
@@ -169,13 +170,13 @@ char* fsLightSSAO = "#version 330 core\n"
 "}";
 
 
-ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectList* _objs) : poca::opengl::BasicDisplayCommand(_objs, "ObjectListDisplayCommand"), m_fill(true), m_textureLutID(0)
+ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInterface* _objs) : poca::opengl::BasicDisplayCommand(_objs, "ObjectListDisplayCommand"), m_fill(true), m_textureLutID(0)
 {
 	m_objects = _objs;
 	m_pickOneObject = NULL;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "fill", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "outlinePointRendering", true));
@@ -183,6 +184,9 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectList* _
 	addCommandInfo(poca::core::CommandInfo(false, "bboxSelection", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
 	addCommandInfo(poca::core::CommandInfo(false, "ellipsoidRendering", true));
+	addCommandInfo(poca::core::CommandInfo(false, "cullFaceType", std::string("front")));
+	addCommandInfo(poca::core::CommandInfo(false, "skeletonRendering", true));
+	addCommandInfo(poca::core::CommandInfo(false, "linkRendering", true));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if(param.contains("fill"))
@@ -199,6 +203,12 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectList* _
 			loadParameters(poca::core::CommandInfo(false, "pointSizeGL", param["pointSizeGL"].get<uint32_t>()));
 		if (param.contains("ellipsoidRendering"))
 			loadParameters(poca::core::CommandInfo(false, "ellipsoidRendering", param["ellipsoidRendering"].get<bool>()));
+		if (param.contains("cullFaceType"))
+			loadParameters(poca::core::CommandInfo(false, "cullFaceType", param["cullFaceType"].get <std::string>()));
+		if (param.contains("skeletonRendering"))
+			loadParameters(poca::core::CommandInfo(false, "centroidRendering", param["centroidRendering"].get<bool>()));
+		if (param.contains("linkRendering"))
+			loadParameters(poca::core::CommandInfo(false, "shapeRendering", param["shapeRendering"].get<bool>()));
 	}
 }
 
@@ -248,7 +258,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 			}
 		}
 	}
-	else if (_infos->nameCommand == "boundingBoxSelectedObject") {
+	else if (_infos->nameCommand == "doubleClickCamera") {
 		size_t idSelection = m_idSelection;
 		if (_infos->hasParameter("objectID"))
 			idSelection = _infos->getParameter<size_t>("objectID");
@@ -348,6 +358,9 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	bool fill = getParameter<bool>("fill");
 	bool displayBboxSelection = getParameter<bool>("bboxSelection");
 	bool cullFaceActivated = _cam->cullFaceActivated();
+	std::string cullFaceType = getParameter<std::string>("cullFaceType");
+	bool skeletonRendering = getParameter<bool>("skeletonRendering");
+	bool linkRendering = getParameter<bool>("linkRendering");
 
 	const poca::core::BoundingBox bbox = m_objects->boundingBox();
 	glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
@@ -361,7 +374,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		glDisable(GL_CULL_FACE);
 
 	glDisable(GL_BLEND);
-	glCullFace(GL_FRONT);
+	glCullFace(GL_BACK);
 	if (pointRendering) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
@@ -374,7 +387,11 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_outlinePointBuffer, m_outlineLocsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
 	}
 
-	glCullFace(GL_FRONT);
+	if (cullFaceType == "front")
+		glCullFace(GL_FRONT);
+	else
+		glCullFace(GL_BACK);
+
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
 	glDisable(GL_BLEND);
 	if (shapeRendering) {
@@ -437,6 +454,18 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
 	}
 	GL_CHECK_ERRORS();
+
+	if (m_objects->hasSkeletons()) {
+		if (m_skeletonBuffer.empty())
+			createDisplaySkeleton();
+
+		if (skeletonRendering && !m_skeletonBuffer.empty())
+			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_skeletonBuffer, m_colorSkeletonBuffer);
+
+		if (linkRendering && !m_linksBuffer.empty())
+			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_linksBuffer, m_colorLinksBuffer);
+	}
+	//m_skeletonBuffer
 
 	drawEllipsoid(_cam);
 	GL_CHECK_ERRORS();
@@ -581,7 +610,7 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 		glEnable(GL_CULL_FACE);
 	else
 		glDisable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
+	glCullFace(GL_FRONT);
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
 
 	glLineWidth(4.f);
@@ -739,34 +768,68 @@ void ObjectListDisplayCommand::createDisplay()
 	}
 
 	if (m_objects->dimension() == 3) {
-		const std::vector < std::array<poca::core::Vec3mf, 3>>& axisPCA = m_objects->getAxisObjects();
-		const std::vector<float>& major = m_objects->getData("major");
-		const std::vector<float>& minor = m_objects->getData("minor");
-		const std::vector<float>& minor2 = m_objects->getData("minor2");
+		if (m_objects->hasData("major")) {
+			const std::vector < std::array<poca::core::Vec3mf, 3>>& axisPCA = m_objects->getAxisObjects();
+			const std::vector<float>& major = m_objects->getMyData("major")->getData<float>();
+			const std::vector<float>& minor = m_objects->getMyData("minor")->getData<float>();
+			const std::vector<float>& minor2 = m_objects->getMyData("minor2")->getData<float>();
 
-		std::vector <glm::mat4> matrices(m_objects->nbElements());
-		for (unsigned int n = 0; n < m_objects->nbElements(); n++) {
-			matrices[n] = glm::mat4(1);
+			std::vector <glm::mat4> matrices(m_objects->nbElements());
+			for (unsigned int n = 0; n < m_objects->nbElements(); n++) {
+				matrices[n] = glm::mat4(1);
 
-			glm::mat3 rotation = glm::mat3(axisPCA[n][0].x(), axisPCA[n][0].y(), axisPCA[n][0].z(), axisPCA[n][1].x(), axisPCA[n][1].y(), axisPCA[n][1].z(), axisPCA[n][2].x(), axisPCA[n][2].y(), axisPCA[n][2].z());
+				glm::mat3 rotation = glm::mat3(axisPCA[n][0].x(), axisPCA[n][0].y(), axisPCA[n][0].z(), axisPCA[n][1].x(), axisPCA[n][1].y(), axisPCA[n][1].z(), axisPCA[n][2].x(), axisPCA[n][2].y(), axisPCA[n][2].z());
 
-			poca::core::Vec3mf centroidTmp = m_objects->computeBarycenterElement(n);
-			const glm::vec3& centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);// m_centroidEllipsoid[n];
+				poca::core::Vec3mf centroidTmp = m_objects->computeBarycenterElement(n);
+				const glm::vec3& centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);// m_centroidEllipsoid[n];
 
-			glm::vec3 values = glm::vec3(major[n] / 2.f, minor[n] / 2.f, minor2[n] / 2.f);
-			matrices[n] = glm::translate(matrices[n], centroid);
-			matrices[n] *= glm::mat4(rotation);
-			matrices[n] = glm::scale(matrices[n], values);
+				glm::vec3 values = glm::vec3(major[n] / 2.f, minor[n] / 2.f, minor2[n] / 2.f);
+				matrices[n] = glm::translate(matrices[n], centroid);
+				matrices[n] *= glm::mat4(rotation);
+				matrices[n] = glm::scale(matrices[n], values);
+			}
+
+			m_ellipsoidTransformBuffer.generateBuffer(matrices.size(), 4, GL_FLOAT);
+			m_ellipsoidTransformBuffer.updateBuffer(matrices.data());
+
+			m_ellipsoidFeatureBuffer.generateBuffer(major.size(), 1, GL_FLOAT);
 		}
-
-		m_ellipsoidTransformBuffer.generateBuffer(matrices.size(), 4, GL_FLOAT);
-		m_ellipsoidTransformBuffer.updateBuffer(matrices.data());
-
-		m_ellipsoidFeatureBuffer.generateBuffer(major.size(), 1, GL_FLOAT);
 	}
 
 	poca::core::HistogramInterface* hist = m_objects->getCurrentHistogram();
 	generateFeatureBuffer(hist);
+}
+
+void ObjectListDisplayCommand::createDisplaySkeleton()
+{
+	if (!m_objects->hasSkeletons()) return;
+	poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(m_objects);
+	const poca::core::MyArrayVec3mf& skeletons = omesh->getSkeletons();
+	const poca::core::MyArrayVec3mf& links = omesh->getLinks();
+
+	const auto& skeletonsId = skeletons.getFirstElements();
+	const auto& linksId = links.getFirstElements();
+
+	std::vector<poca::core::Color4D> colorSkeletons(skeletons.nbData()), colorLinks(links.nbData());
+	for (size_t n = 0; n < skeletonsId.size() - 1; n++) {
+		poca::core::Color4D color(((float)rand()) / ((float)RAND_MAX), ((float)rand()) / ((float)RAND_MAX), ((float)rand()) / ((float)RAND_MAX), 1.f);
+
+		for (size_t idx = skeletonsId[n]; idx < skeletonsId[n + 1]; idx++)
+			colorSkeletons[idx] = color;
+
+		for (size_t idx = linksId[n]; idx < linksId[n + 1]; idx++)
+			colorLinks[idx] = color;
+	}
+
+	m_skeletonBuffer.generateBuffer(skeletons.nbData(), 3, GL_FLOAT);
+	m_skeletonBuffer.updateBuffer(skeletons.allElements());
+	m_colorSkeletonBuffer.generateBuffer(colorSkeletons.size(), 4, GL_FLOAT);
+	m_colorSkeletonBuffer.updateBuffer(colorSkeletons.data());
+
+	m_linksBuffer.generateBuffer(links.nbData(), 3, GL_FLOAT);
+	m_linksBuffer.updateBuffer(links.allElements());
+	m_colorLinksBuffer.generateBuffer(colorLinks.size(), 4, GL_FLOAT);
+	m_colorLinksBuffer.updateBuffer(colorLinks.data());
 }
 
 void ObjectListDisplayCommand::freeGPUMemory()
@@ -798,7 +861,8 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 {
 	if (_histogram == NULL)
 		_histogram = m_objects->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
+	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(_histogram);
+	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_objects->getSelection();
 	m_minOriginalFeature = _histogram->getMin();
 	m_maxOriginalFeature = _histogram->getMax();
@@ -845,7 +909,7 @@ QString ObjectListDisplayCommand::getInfosTriangle(const int _id) const
 		text.append(QString("Object id: %1").arg(_id + 1));
 		poca::core::stringList nameData = m_objects->getNameData();
 		for (std::string type : nameData) {
-			float val = m_objects->getOriginalHistogram(type)->getValues()[_id];
+			float val = m_objects->getMyData(type)->getData<float>()[_id];
 			text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
 		}
 	}

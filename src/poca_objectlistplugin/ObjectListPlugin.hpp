@@ -38,14 +38,13 @@
 #include <vector>
 
 #include <Interfaces/MyObjectInterface.hpp>
-#include <General/BasicComponent.hpp>
 #include <Interfaces/HistogramInterface.hpp>
-#include "DesignPatterns/ListDatasetsSingleton.hpp"
+
 
 #include "../../include/PluginInterface.hpp"
 
 //! [0]
-class ObjectListWidget;
+class ObjectListsWidget;
 
 class ObjectListPlugin : public QObject, PluginInterface
 {
@@ -59,7 +58,7 @@ public:
     poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*) override;
     void addCommands(poca::core::CommandableObject*);
     void setPlugins(poca::core::PluginList* _plugins) { m_plugins = _plugins; }
-    void setSingletons(const std::map <std::string, std::any>&);
+    void setSingletons(poca::core::Engine*);
     void execute(poca::core::CommandInfo*);
 
     QString name() const { return "ObjectListPlugin"; }
@@ -69,7 +68,7 @@ protected:
 
     std::vector <std::pair<QAction*, QString>> m_actions;
     poca::core::PluginList* m_plugins;
-    ObjectListWidget* m_widget;
+    ObjectListsWidget* m_widget;
 
 public:
     static nlohmann::json m_parameters;

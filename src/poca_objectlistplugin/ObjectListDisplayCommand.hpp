@@ -30,8 +30,8 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef VoronoiDiagramDisplayCommand_h__
-#define VoronoiDiagramDisplayCommand_h__
+#ifndef ObjectListDisplayCommand_h__
+#define ObjectListDisplayCommand_h__
 
 #include <General/Vec3.hpp>
 #include <General/Palette.hpp>
@@ -39,13 +39,13 @@
 #include <OpenGL/Camera.hpp>
 #include <OpenGL/GLBuffer.hpp>
 #include <OpenGL/BasicDisplayCommand.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Interfaces/ObjectListInterface.hpp>
 
 class QOpenGLFramebufferObject;
 
 class ObjectListDisplayCommand : public poca::opengl::BasicDisplayCommand {
 public:
-	ObjectListDisplayCommand(poca::geometry::ObjectList*);
+	ObjectListDisplayCommand(poca::geometry::ObjectListInterface*);
 	ObjectListDisplayCommand(const ObjectListDisplayCommand&);
 	~ObjectListDisplayCommand();
 
@@ -67,10 +67,11 @@ protected:
 
 	void displayZoomToBBox(poca::opengl::Camera*, const poca::core::BoundingBox&);
 	void createDisplay();
+	void createDisplaySkeleton();
 	void sortWrtCameraPosition(const glm::vec3&, const glm::vec3&);
 
 protected:
-	poca::geometry::ObjectList* m_objects;
+	poca::geometry::ObjectListInterface* m_objects;
 
 	GLuint m_textureLutID;
 	GLfloat m_minOriginalFeature, m_maxOriginalFeature, m_actualValueFeature, m_alphaValue;
@@ -89,6 +90,10 @@ protected:
 	//Only used with 2D objects, to display the outline in openGL line mode
 	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
 	poca::opengl::LineSingleGLBuffer <float> m_lineFeatureBuffer;
+
+	//For now only for ObjectMesh
+	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_skeletonBuffer, m_linksBuffer;
+	poca::opengl::LineSingleGLBuffer <poca::core::Color4D> m_colorSkeletonBuffer, m_colorLinksBuffer;
 
 	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_boundingBoxSelection;
 
