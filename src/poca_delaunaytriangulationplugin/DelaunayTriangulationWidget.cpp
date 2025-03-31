@@ -204,7 +204,7 @@ DelaunayTriangulationWidget::~DelaunayTriangulationWidget()
 void DelaunayTriangulationWidget::actionNeeded()
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DelaunayTriangulation");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DelaunayTriangulation");
 	if (!bc) return;
 	poca::core::CommandableObject* delaunay = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -244,7 +244,15 @@ void DelaunayTriangulationWidget::actionNeeded()
 				"minLocs", minLocs, "maxLocs", maxLocs,
 				"minArea", minArea, "maxArea", maxArea,
 				"cutDistance", cutD, "inROIs", inROIs);
-		delaunay->executeCommand(true, "createFilteredObjects");
+		delaunay->executeCommand(true, "createFilteredObjects",
+			"useDistance", m_cboxApplyCutDistance->isChecked(),
+			"useMinLocs", m_cboxApplyMinLocs->isChecked(),
+			"useMaxLocs", m_cboxApplyMaxLocs->isChecked(),
+			"useMinArea", m_cboxApplyMinArea->isChecked(),
+			"useMaxArea", m_cboxApplyMaxArea->isChecked(),
+			"minLocs", minLocs, "maxLocs", maxLocs,
+			"minArea", minArea, "maxArea", maxArea,
+			"cutDistance", cutD, "inROIs", inROIs);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
@@ -268,7 +276,7 @@ void DelaunayTriangulationWidget::actionNeeded()
 void DelaunayTriangulationWidget::actionNeeded(bool _val)
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DelaunayTriangulation");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DelaunayTriangulation");
 	if (!bc) return;
 	poca::core::CommandableObject* delau = dynamic_cast <poca::core::CommandableObject*>(bc);
 	QObject* sender = QObject::sender();
@@ -302,7 +310,7 @@ void DelaunayTriangulationWidget::performAction(poca::core::MyObjectInterface* _
 			if (action == "save")
 				_ci->addParameter("dir", obj->getDir());
 		}	
-		poca::core::BasicComponent* bc = obj->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DelaunayTriangulation");
 		bc->executeCommand(_ci);
 		actionDone = true;
 	}
@@ -321,17 +329,19 @@ void DelaunayTriangulationWidget::update(poca::core::SubjectInterface* _subject,
 	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("DelaunayTriangulation"));
 	//Delaunay is always created, but may not have commands attached to it, if no commands attached, don't show the widget
 	if (visible) {
-		poca::core::BasicComponent* bci = objOneColor->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = objOneColor->getBasicComponent("DelaunayTriangulation");
 		visible = bci->nbCommands() != 0;
 	}
 	
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsDelaunayTriangulationWidget") {
 
-		poca::core::BasicComponent* bci = objOneColor->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = objOneColor->getBasicComponent("DelaunayTriangulation");
 		if (!bci) return;
 		poca::core::stringList nameData = bci->getNameData();
 

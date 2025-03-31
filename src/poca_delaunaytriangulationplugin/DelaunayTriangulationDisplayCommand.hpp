@@ -51,6 +51,7 @@ public:
 
 	void execute(poca::core::CommandInfo*);
 	poca::core::Command* copy();
+	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 	void freeGPUMemory();
 	void generateFeatureBuffer(poca::core::HistogramInterface* = NULL);

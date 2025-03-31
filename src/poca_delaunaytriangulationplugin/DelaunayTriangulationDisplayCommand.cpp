@@ -43,7 +43,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <OpenGL/Helper.h>
 
 #include "DelaunayTriangulationDisplayCommand.hpp"
@@ -53,8 +53,8 @@ DelaunayTriangulationDisplayCommand::DelaunayTriangulationDisplayCommand(poca::g
 {
 	m_delaunay = _delau;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "fill", true));
 	addCommandInfo(poca::core::CommandInfo(false, "bboxSelection", true));
 	if (parameters.contains(name())) {
@@ -116,6 +116,26 @@ void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _info
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
 	}
+	else if (_infos->nameCommand == "selectedBorderTriangles") {
+		std::vector <bool> selection(m_delaunay->nbFaces(), false);
+		const poca::core::MyArrayUInt32& neighbors = m_delaunay->getNeighbors();
+		for (auto n = 0; n < m_delaunay->nbFaces(); n++) {
+			for (size_t i = 0; i < neighbors.nbElementsObject(n) && !selection[n]; i++) {
+				uint32_t indexNeigh = neighbors.elementIObject(n, i);
+				selection[n] = indexNeigh == std::numeric_limits<std::uint32_t>::max();
+			}
+		}
+		m_delaunay->setSelection(selection);
+		m_delaunay->executeCommand(false, "updateFeature");
+	}
+}
+
+poca::core::CommandInfo DelaunayTriangulationDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
+{
+	if (_nameCommand == "selectedBorderTriangles") {
+		return poca::core::CommandInfo(false, _nameCommand);
+	}
+	return poca::core::CommandInfo();
 }
 
 poca::core::Command* DelaunayTriangulationDisplayCommand::copy()
@@ -232,7 +252,8 @@ void DelaunayTriangulationDisplayCommand::generateFeatureBuffer(poca::core::Hist
 {
 	if (_histogram == NULL)
 		_histogram = m_delaunay->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
+	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(_histogram);
+	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_delaunay->getSelection();
 	m_minOriginalFeature = _histogram->getMin();
 	m_maxOriginalFeature = _histogram->getMax();
@@ -252,7 +273,7 @@ QString DelaunayTriangulationDisplayCommand::getInfosTriangle(const int _id) con
 		text.append(QString("Triangle id: %1").arg(_id));
 		poca::core::stringList nameData = m_delaunay->getNameData();
 		for (std::string type : nameData) {
-			float val = m_delaunay->getOriginalHistogram(type)->getValues()[_id];
+			float val = m_delaunay->getMyData(type)->getData<float>()[_id];
 			text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
 		}
 	}

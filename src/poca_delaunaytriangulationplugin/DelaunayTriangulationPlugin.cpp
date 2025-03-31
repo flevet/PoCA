@@ -35,13 +35,14 @@
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <General/PluginList.hpp>
 #include <Plot/Icons.hpp>
 #include <Interfaces/DelaunayTriangulationFactoryInterface.hpp>
 #include <General/PythonInterpreter.hpp>
+#include <General/Engine.hpp>
+#include <General/MyData.hpp>
 
 #include "DelaunayTriangulationPlugin.hpp"
 #include "DelaunayTriangulationDisplayCommand.hpp"
@@ -68,9 +69,9 @@ void DelaunayTriangulationConstructionCommand::execute(poca::core::CommandInfo* 
 {
 	if (m_dset == NULL) return;
 	if (_ci->nameCommand == "computeDelaunay") {
-		poca::core::MyObjectInterface* obj = poca::core::ListDatasetsSingleton::instance()->getObject(m_dset);
+		poca::core::MyObjectInterface* obj = poca::core::Engine::instance()->getObject(m_dset);
 		poca::core::MyObjectInterface* oneColorObj = obj->currentObject();
-		poca::core::BasicComponent* bci = oneColorObj->getBasicComponent("DelaunayTriangulation");
+		poca::core::BasicComponentInterface* bci = oneColorObj->getBasicComponent("DelaunayTriangulation");
 		bool onSphere = _ci->hasParameter("onSphere") && _ci->getParameter<bool>("onSphere");
 		if (bci != NULL && !onSphere){
 			if (bci->nbCommands() == 0)
@@ -85,9 +86,9 @@ void DelaunayTriangulationConstructionCommand::execute(poca::core::CommandInfo* 
 			delau = factory->createDelaunayTriangulation(oneColorObj, DelaunayTriangulationPlugin::m_plugins);
 		else {
 #ifndef NO_PYTHON
-			const std::vector <float>& xs = m_dset->getData("x");
-			const std::vector <float>& ys = m_dset->getData("y");
-			const std::vector <float>& zs = m_dset->getData("z");
+			const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+			const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+			const std::vector <float>& zs = m_dset->getMyData("z")->getData<float>();
 
 			QVector <QVector <double>> coordinates;
 			coordinates.resize(3);
@@ -150,8 +151,8 @@ void DelaunayTriangulationPlugin::addGUI(poca::core::MediatorWObjectFWidgetInter
 	m_parameters[nameStr]["delaunayOnSphere"] = false;
 
 #ifndef NO_PYTHON
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(nameStr)) {
 		nlohmann::json param = parameters[nameStr];
 		if (param.contains("delaunay3D"))
@@ -228,16 +229,12 @@ void DelaunayTriangulationPlugin::addCommands(poca::core::CommandableObject* _bc
 		dset->addCommand(new DelaunayTriangulationConstructionCommand(dset));
 }
 
-void DelaunayTriangulationPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void DelaunayTriangulationPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 #ifndef NO_PYTHON
-	if (_list.find("PythonInterpreter") != _list.end()) {
-		poca::core::PythonInterpreter::setPythonInterpreterSingleton(std::any_cast <poca::core::PythonInterpreter*>(_list.at("PythonInterpreter")));
-	}
+	poca::core::PythonInterpreter* python = std::any_cast <poca::core::PythonInterpreter*>(_engine->getSingleton("PythonInterpreter"));
+	poca::core::PythonInterpreter::setPythonInterpreterSingleton(python);
 #endif
 }
 

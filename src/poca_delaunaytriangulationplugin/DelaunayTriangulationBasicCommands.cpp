@@ -36,27 +36,29 @@
 #include <QtCore/QString>
 #include <QtWidgets/QMessageBox>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
-#include <Interfaces/HistogramInterface.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <General/PluginList.hpp>
+#include <General/Histogram.hpp>
 #include <Interfaces/PaletteInterface.hpp>
 #include <General/Misc.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "DelaunayTriangulationBasicCommands.hpp"
+#include "DelaunayTriangulationPlugin.hpp"
 
 DelaunayTriangulationBasicCommands::DelaunayTriangulationBasicCommands(poca::geometry::DelaunayTriangulationInterface* _delau) :poca::core::Command("DelaunayTriangulationBasicCommands")
 {
 	m_delaunay = _delau;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
+	
 	bool useDistance = true, useMinLocs = true, useMaxLocs = false, useMinArea = false, useMaxArea = false;
 	size_t minLocs = 3, maxLocs = 500;
 	float cutDistance = 50.f, minArea = 0.f, maxArea = 1000.f;
 	bool inROIs = false;
 
-	const nlohmann::json& parameters = sss->getParameters();
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(name())){
 		nlohmann::json param = parameters[name()];
 		if (param.contains("objectCreationParameters")) {
@@ -106,21 +108,54 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 		loadParameters(*_infos);
 	}
 	else if (_infos->nameCommand == "createFilteredObjects") {
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_delaunay);
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_delaunay);
 		if (obj == NULL) return;
 
-		bool useDistance = hasParameter("objectCreationParameters", "useDistance") ? getParameter<bool>("objectCreationParameters", "useDistance") : true;
-		bool useMinLocs = hasParameter("objectCreationParameters", "useMinLocs") ? getParameter<bool>("objectCreationParameters", "useMinLocs") : true;
-		bool useMaxLocs = hasParameter("objectCreationParameters", "useMaxLocs") ? getParameter<bool>("objectCreationParameters", "useMaxLocs") : false;
-		bool useMinArea = hasParameter("objectCreationParameters", "useMinArea") ? getParameter<bool>("objectCreationParameters", "useMinArea") : false;
-		bool useMaxArea = hasParameter("objectCreationParameters", "useMaxArea") ? getParameter<bool>("objectCreationParameters", "useMaxArea") : false;
-		size_t minLocs = hasParameter("objectCreationParameters", "minLocs") ? getParameter<size_t>("objectCreationParameters", "minLocs") : 3;
-		size_t maxLocs = hasParameter("objectCreationParameters", "maxLocs") ? getParameter<size_t>("objectCreationParameters", "maxLocs") : 500;
-		float minArea = hasParameter("objectCreationParameters", "minArea") ? getParameter<float>("objectCreationParameters", "minArea") : 0.f;
-		float maxArea = hasParameter("objectCreationParameters", "maxArea") ? getParameter<float>("objectCreationParameters", "maxArea") : 1000.f;
-		float cutDistance = hasParameter("objectCreationParameters", "cutDistance") ? getParameter<float>("objectCreationParameters", "cutDistance") : 50.f;
-		bool inROIs = hasParameter("objectCreationParameters", "inROIs") ? getParameter<bool>("objectCreationParameters", "inROIs") : false;
+		size_t minLocs = 3, maxLocs = std::numeric_limits <size_t>::max();
+		float minArea = 0.f, maxArea = std::numeric_limits < float >::max(), cutDistance = std::numeric_limits < float >::max();
+		bool inROIs = false, useDistance = true, useMinLocs = true, useMaxLocs = false, useMinArea = false, useMaxArea = false;
+
+		if (_infos->nbParameters() == 0) {
+			useDistance = hasParameter("objectCreationParameters", "useDistance") ? getParameter<bool>("objectCreationParameters", "useDistance") : true;
+			useMinLocs = hasParameter("objectCreationParameters", "useMinLocs") ? getParameter<bool>("objectCreationParameters", "useMinLocs") : true;
+			useMaxLocs = hasParameter("objectCreationParameters", "useMaxLocs") ? getParameter<bool>("objectCreationParameters", "useMaxLocs") : false;
+			useMinArea = hasParameter("objectCreationParameters", "useMinArea") ? getParameter<bool>("objectCreationParameters", "useMinArea") : false;
+			useMaxArea = hasParameter("objectCreationParameters", "useMaxArea") ? getParameter<bool>("objectCreationParameters", "useMaxArea") : false;
+			minLocs = hasParameter("objectCreationParameters", "minLocs") ? getParameter<size_t>("objectCreationParameters", "minLocs") : minLocs;
+			maxLocs = hasParameter("objectCreationParameters", "maxLocs") ? getParameter<size_t>("objectCreationParameters", "maxLocs") : maxLocs;
+			minArea = hasParameter("objectCreationParameters", "minArea") ? getParameter<float>("objectCreationParameters", "minArea") : minArea;
+			maxArea = hasParameter("objectCreationParameters", "maxArea") ? getParameter<float>("objectCreationParameters", "maxArea") : maxArea;
+			cutDistance = hasParameter("objectCreationParameters", "cutDistance") ? getParameter<float>("objectCreationParameters", "cutDistance") : cutDistance;
+			inROIs = hasParameter("objectCreationParameters", "inROIs") ? getParameter<bool>("objectCreationParameters", "inROIs") : inROIs;
+		}
+		else {
+			useDistance = _infos->hasParameter("useDistance") ? _infos->getParameter<bool>("useDistance") : true;
+			useMinLocs = _infos->hasParameter("useMinLocs") ? _infos->getParameter<bool>("useMinLocs") : true;
+			useMaxLocs = _infos->hasParameter("useMaxLocs") ? _infos->getParameter<bool>("useMaxLocs") : false;
+			useMinArea = _infos->hasParameter("useMinArea") ? _infos->getParameter<bool>("useMinArea") : false;
+			useMaxArea = _infos->hasParameter("useMaxArea") ? _infos->getParameter<bool>("useMaxArea") : false;
+			minLocs = _infos->hasParameter("minLocs") ? _infos->getParameter<size_t>("minLocs") : minLocs;
+			maxLocs = _infos->hasParameter("maxLocs") ? _infos->getParameter<size_t>("maxLocs") : maxLocs;
+			minArea = _infos->hasParameter("minArea") ? _infos->getParameter<float>("minArea") : minArea;
+			maxArea = _infos->hasParameter("maxArea") ? _infos->getParameter<float>("maxArea") : maxArea;
+			cutDistance = _infos->hasParameter("cutDistance") ? _infos->getParameter<float>("cutDistance") : cutDistance;
+			inROIs = _infos->hasParameter("inROIs") ? _infos->getParameter<bool>("inROIs") : inROIs;
+
+			poca::core::CommandInfo ci(true, "objectCreationParameters",
+				"useDistance", useDistance, 
+				"useMinLocs", useMinLocs, 
+				"useMaxLocs", useMaxLocs,
+				"useMinArea", useMinArea, 
+				"useMaxArea", useMaxArea, 
+				"cutDistance", cutDistance,
+				"minLocs", minLocs,
+				"maxLocs", maxLocs,
+				"minArea", minArea,
+				"maxArea", maxArea,
+				"inROIs", inROIs);
+			loadParameters(ci);
+		}
 		
 		if (!useMinLocs) minLocs = 3;
 		if (!useMaxLocs) maxLocs = std::numeric_limits <size_t>::max();
@@ -130,7 +165,7 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 
 		const std::vector <bool>& selection = m_delaunay->getSelection();
 		poca::geometry::ObjectListFactory factory;
-		poca::geometry::ObjectList* objects = factory.createObjectListFromDelaunay(obj, selection, cutDistance, minLocs, maxLocs, minArea, maxArea, inROIs);
+		poca::geometry::ObjectListInterface* objects = factory.createObjectListFromDelaunay(obj, selection, cutDistance, minLocs, maxLocs, minArea, maxArea, inROIs);
 		if (objects == NULL) {
 			QMessageBox msgBox;
 			msgBox.setText("No object was created.");
@@ -138,8 +173,22 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 			return;
 		}
 		objects->setBoundingBox(m_delaunay->boundingBox());
-		obj->addBasicComponent(objects);
-		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponent*)objects));
+		DelaunayTriangulationPlugin::m_plugins->addCommands(objects);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objects, *_infos, "DelaunayTriangulationPlugin");
+			DelaunayTriangulationPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(objects, *_infos, "DelaunayTriangulationPlugin");
+			std::cout << text << std::endl;
+		}
+		obj->notify("LoadObjCharacteristicsAllWidgets");
+		//obj->addBasicComponent(objects);
+		//obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponentInterface*)objects));
 	}
 	else if (_infos->nameCommand == "saveAsSVG") {
 		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
@@ -189,7 +238,7 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 
 poca::core::CommandInfo DelaunayTriangulationBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "objectCreationParameters") {
+	if (_nameCommand == "objectCreationParameters" || _nameCommand == "createFilteredObjects") {
 		poca::core::CommandInfo ci(false, _nameCommand);
 		if (_parameters.contains("useDistance"))
 			ci.addParameter("useDistance", _parameters["useDistance"].get<bool>());
@@ -221,7 +270,7 @@ poca::core::CommandInfo DelaunayTriangulationBasicCommands::createCommand(const 
 			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
 		}
 	}
-	else if (_nameCommand == "createFilteredObjects" || _nameCommand  == "applyCutDistance" || _nameCommand == "invertSelection") {
+	else if (_nameCommand  == "applyCutDistance" || _nameCommand == "invertSelection") {
 		return poca::core::CommandInfo(false, _nameCommand);
 	}
 	return poca::core::CommandInfo();
@@ -248,7 +297,7 @@ void DelaunayTriangulationBasicCommands::saveAsSVG(const QString& _filename) con
 
 	std::vector <poca::core::Vec3mf> triangles;
 	m_delaunay->generateTriangles(triangles);
-	poca::core::HistogramInterface* histogram = m_delaunay->getCurrentHistogram();
+	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(m_delaunay->getCurrentHistogram());
 	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_delaunay->getSelection();
 	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;

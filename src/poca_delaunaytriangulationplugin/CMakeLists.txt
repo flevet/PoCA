@@ -68,29 +68,52 @@ foreach(source IN LISTS source_list)
     source_group("${source_path_msvc}" FILES "${source}")
 endforeach()
 
-add_definitions(-DNOMINMAX)
-add_definitions(-DQT_NO_WARNING_OUTPUT)
-
 find_package(CGAL REQUIRED COMPONENTS Core)
 if(CGAL_FOUND)
     message("Found CGAL.")
-    include(${CGAL_USE_FILE})
+    if(CGAL_VERSION VERSION_LESS "6.0")
+	message("CGAL version 5")
+	include(${CGAL_USE_FILE})
+    	message("CGAL thing: ${CGAL_USE_FILE}")
 
-    message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
-    add_definitions(${CGAL_CXX_GLAFS_INIT})
+    	message("CGAL_CXX_FLAGS_INIT: ${CGAL_CXX_FLAGS_INIT}")
+    	add_definitions(${CGAL_CXX_GLAFS_INIT})
 
-    message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
-    message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
-    #target_link_libraries(OpenSMLM ${CGAL_LIBRARY_DIRS} ${CGAL_3RD_PARTY_LIBRARIES_DIRS})
+    	message("CGAL_LIBRARIES: ${CGAL_LIBRARY_DIRS}")
+    	message("CGAL_3RD_PARTY_LIBRARIES: ${CGAL_3RD_PARTY_LIBRARIES_DIRS}")
+    endif()
 else()
     message(FATAL_ERROR "CGAL is required.")
 endif()
+
+add_definitions(-DNOMINMAX)
+add_definitions(-DQT_NO_WARNING_OUTPUT)
+
+find_package(CUDA QUIET)
 
 find_package(Qt5 COMPONENTS Core Widgets Gui PrintSupport OpenGL REQUIRED)
 qt5_wrap_cpp (FOO_MOC_OUTFILES ${FOO_MOC_HEADERS})
 message("MOC: ${FOO_MOC_OUTFILES}")
 
 add_library(${targetname} SHARED ${header_list} ${source_list} ${FOO_MOC_OUTFILES})
+
+if(CUDA_FOUND)
+  message("CUDA was found")
+  message("CUDA flags: ${CMAKE_CUDA_FLAGS}")
+  enable_language(CUDA)
+  target_link_libraries(${targetname} ${CUDA_cudart_static_LIBRARY})
+else()
+  add_definitions(-DNO_CUDA)
+endif()
+
+if(CGAL_FOUND)
+    message("Found CGAL.")
+    if(CGAL_VERSION VERSION_GREATER_EQUAL "6.0")
+	message("CGAL version 6")
+	target_link_libraries(${targetname} CGAL::CGAL)
+    endif()
+endif()
+
 set_target_properties(${targetname} PROPERTIES OUTPUT_NAME "${targetname}$<$<CONFIG:Debug>:d>")
 
 set(youroutputdirectory "${CMAKE_SOURCE_DIR}/../bin/plugins")
