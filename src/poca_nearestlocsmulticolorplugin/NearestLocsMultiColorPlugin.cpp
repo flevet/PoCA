@@ -34,10 +34,11 @@
 
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <General/Engine.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <General/PluginList.hpp>
 #include <Objects/MyObject.hpp>
+#include <General/Engine.hpp>
 
 #include "NearestLocsMultiColorPlugin.hpp"
 #include "NearestLocsMultiColorCommands.hpp"
@@ -73,9 +74,9 @@ void NearestLocsMultiColorPlugin::addCommands(poca::core::CommandableObject* _bc
 	}
 }
 
-void NearestLocsMultiColorPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void NearestLocsMultiColorPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
 

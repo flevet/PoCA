@@ -35,10 +35,10 @@
 #include <gl/GL.h>
 #include <QtGui/QOpenGLFramebufferObject>
 
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Geometry/DelaunayTriangulation.hpp>
 #include <OpenGL/Shader.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
 #include <Objects/MyObject.hpp>
@@ -55,8 +55,8 @@ NearestLocsMultiColorCommands::NearestLocsMultiColorCommands(poca::core::MyObjec
 	m_displayToCentroids = m_displayToOutlines = true;
 	float maxD = FLT_MAX;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "computeNearestNeighMulticolor", "inROIs", true, "reference", (uint32_t)1, "maxDistance", maxD));
 	addCommandInfo(poca::core::CommandInfo(false, "displayCentroidsNearestNeighMulticolor", true));
 	addCommandInfo(poca::core::CommandInfo(false, "displayOutlinesNearestNeighMulticolor", true));
@@ -208,15 +208,16 @@ void NearestLocsMultiColorCommands::drawElements(poca::opengl::Camera* _cam)
 void NearestLocsMultiColorCommands::computeNearestLocMulticolor(const bool _inROIs, const uint32_t _referenceId, const float _maxD)
 {
 	m_referenceId = _referenceId;
-	poca::geometry::ObjectList* objs[2] = { NULL, NULL };
+	poca::geometry::ObjectListInterface* objs[2] = { NULL, NULL };
 	for (auto n = 0; n < 2; n++) {
 		poca::core::MyObjectInterface* obj = m_obj->getObject(n);
-		poca::core::BasicComponent* bc = obj->getBasicComponent("ObjectList");
-		objs[n] = dynamic_cast <poca::geometry::ObjectList*>(bc);
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
+		poca::geometry::ObjectLists* tmp = dynamic_cast <poca::geometry::ObjectLists*>(bc);
+		objs[n] = tmp == NULL ? NULL : tmp->currentObjectList();
 	}
 	if (objs[0] == NULL || objs[1] == NULL) return;
 
-	poca::geometry::ObjectList* reference = objs[m_referenceId], * objects = objs[(m_referenceId + 1) % 2];
+	poca::geometry::ObjectListInterface* reference = objs[m_referenceId], * objects = objs[(m_referenceId + 1) % 2];
 
 	m_selectedObjects.resize(objects->nbElements());
 	std::fill(m_selectedObjects.begin(), m_selectedObjects.end(), true);
@@ -313,8 +314,8 @@ void NearestLocsMultiColorCommands::computeNearestLocMulticolor(const bool _inRO
 
 void NearestLocsMultiColorCommands::transferObjects() const
 {
-	 poca::core::BasicComponent* bc = m_obj->getObject((m_referenceId + 1) % 2)->getBasicComponent("ObjectList");
-	 poca::geometry::ObjectList* objs = dynamic_cast <poca::geometry::ObjectList*>(bc);
+	 poca::core::BasicComponentInterface * bc = m_obj->getObject((m_referenceId + 1) % 2)->getBasicComponent("ObjectList");
+	 poca::geometry::ObjectListInterface* objs = dynamic_cast <poca::geometry::ObjectListInterface*>(bc);
 	 if (objs == NULL) return;
 
 	 std::vector <bool> selection(objs->nbElements(), false);

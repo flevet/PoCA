@@ -41,7 +41,7 @@
 #include <General/BasicComponent.hpp>
 #include <Factory/ObjectListFactory.hpp>
 #include <General/CommandableObject.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
 
@@ -181,11 +181,11 @@ void NearestLocsMultiColorWidget::actionNeeded()
 {
 	if (m_object && m_object->nbColors() == 1)
 		return;
-	poca::geometry::ObjectList* objs[2] = { NULL, NULL };
+	poca::geometry::ObjectLists* objs[2] = { NULL, NULL };
 	for (auto n = 0; n < 2; n++) {
 		poca::core::MyObjectInterface* obj = m_object->getObject(n);
-		poca::core::BasicComponent* bc = obj->getBasicComponent("ObjectList");
-		objs[n] = dynamic_cast <poca::geometry::ObjectList*>(bc);
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
+		objs[n] = dynamic_cast <poca::geometry::ObjectLists*>(bc);
 	}
 	if (objs[0] == NULL || objs[1] == NULL) {
 		QMessageBox msgBox;
