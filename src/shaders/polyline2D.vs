@@ -14,6 +14,6 @@ vec2 wrldToScreen(vec3 coord) {
 
 void main()
 {
-	vec4 pos = vec4(wrldToScreen(vec3(points.xy, 0.f)), 0., 1.);
+	vec4 pos = vec4(wrldToScreen(vec3(points.xyz)), 0., 1.);
 	gl_Position = pos;
 }
