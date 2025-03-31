@@ -30,12 +30,13 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <General/Misc.h>
+#include <General/MyData.hpp>
 
 #include "VoronoiDiagramCharacteristicsCommands.hpp"
 
@@ -48,12 +49,12 @@ VoronoiDiagramCharacteristicsCommands::VoronoiDiagramCharacteristicsCommands(poc
 	m_bbox = m_voronoi->boundingBox();
 	m_nbFaces = m_voronoi->nbElements();
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
+	
 	float env = 0.999;
 	uint32_t nbBins = 100, degreePolynome = 3;
 	bool onROIs = false;
 
-	const nlohmann::json& parameters = sss->getParameters();
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if (param.contains("voronoiCharacteristics")) {
@@ -85,8 +86,8 @@ void VoronoiDiagramCharacteristicsCommands::execute(poca::core::CommandInfo* _in
 		loadParameters(*_infos);
 	}
 	else if (_infos->nameCommand == "voronoiCharacteristics") {
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_voronoi);
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_voronoi);
 		if (obj == NULL) return;
 
 		float env = _infos->hasParameter("env") ? _infos->getParameter<float>("env") : getParameter<float>("voronoiCharacteristics", "env");
@@ -157,9 +158,9 @@ void VoronoiDiagramCharacteristicsCommands::computeCharacteristics(const float _
 
 	std::vector <float> valTmp;
 	if (m_voronoi->hasData("volume"))
-		valTmp = m_voronoi->getData("volume");
+		valTmp = m_voronoi->getMyData("volume")->getData<float>();
 	if (m_voronoi->hasData("area"))
-		valTmp = m_voronoi->getData("area");
+		valTmp = m_voronoi->getMyData("area")->getData<float>();
 	if (valTmp.empty()) return;
 
 	//Then only select the 95% emveloppe of the areas, to discard extrem values from very big cells
@@ -173,9 +174,9 @@ void VoronoiDiagramCharacteristicsCommands::computeCharacteristics(const float _
 	std::cout << "Normalization by " << m_normalization << " versus " << poca::core::median(valTmp) << std::endl;
 
 	//create histogram
-	m_hist = poca::core::Histogram(valTmp, valTmp.size(), false, m_nbBins, true, 0.00000001);
+	m_hist = poca::core::Histogram<float>(valTmp, false, m_nbBins, true, 0.00000001);
 
-	std::vector<float>& xsH = m_hist.getTs(), &vals = m_hist.getBins();
+	const std::vector<float>& xsH = m_hist.getTs(), &vals = m_hist.getBins();
 	for (unsigned int n = 0; n < m_hist.getNbBins(); n++){
 		m_xs.push_back(xsH[n]);
 		m_ysPdfExp.push_back(vals[n]);

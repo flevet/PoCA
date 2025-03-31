@@ -75,7 +75,7 @@ protected:
 	float m_normalization;
 	double* m_monteCarloBinsMeans, * m_monteCarloBinsStdDev;
 
-	poca::core::Histogram m_hist;
+	poca::core::Histogram<float> m_hist;
 	std::vector <float> m_xs, m_ysPdfExp, m_ysCdfExp, m_ysPdfAna, m_ysCdfAna;
 	std::vector <float> m_coeffsPolynome, m_ysPdfPolynome, m_ysCdfPolynome;
 

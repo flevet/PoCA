@@ -43,7 +43,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <OpenGL/Helper.h>
 
 #include "VoronoiDiagramDisplayCommand.hpp"
@@ -53,8 +53,8 @@ VoronoiDiagramDisplayCommand::VoronoiDiagramDisplayCommand(poca::geometry::Voron
 {
 	m_voronoi = _voro;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "fill", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "polytopeRendering", true));
@@ -147,6 +147,10 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 			factor = _infos->getParameter<float>("factor");
 		explodeDiagram(factor);
 	}
+	else if (_infos->nameCommand == "selectedBorderCells") {
+		m_voronoi->setSelection(m_voronoi->borderLocalizations());
+		m_voronoi->executeCommand(false, "updateFeature");
+	}
 }
 
 poca::core::CommandInfo VoronoiDiagramDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -163,6 +167,9 @@ poca::core::CommandInfo VoronoiDiagramDisplayCommand::createCommand(const std::s
 		poca::core::CommandInfo ci(false, _nameCommand);
 		ci.addParameter("factor", _parameters.contains("factor") ? _parameters["factor"].get<float>() : 1.f);
 		return ci;
+	}
+	else if (_nameCommand == "selectedBorderCells") {
+		return poca::core::CommandInfo(false, _nameCommand);
 	}
 	return poca::opengl::BasicDisplayCommand::createCommand(_nameCommand, _parameters);
 }
@@ -223,6 +230,8 @@ void VoronoiDiagramDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 			else {
 				glDisable(GL_DEPTH_TEST);
 				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+				if(m_lineNormalBuffer.empty())
+					glDisable(GL_CULL_FACE);
 				_cam->drawLineShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_lineNormalBuffer, m_minOriginalFeature, m_maxOriginalFeature, 1.f);
 			}
 		}
@@ -363,7 +372,8 @@ void VoronoiDiagramDisplayCommand::generateFeatureBuffer(poca::core::HistogramIn
 
 	if (_histogram == NULL)
 		_histogram = m_voronoi->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
+	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(_histogram);
+	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_voronoi->getSelection();
 	m_minOriginalFeature = _histogram->getMin();
 	m_maxOriginalFeature = _histogram->getMax();
@@ -392,7 +402,7 @@ QString VoronoiDiagramDisplayCommand::getInfosTriangle(const int _id) const
 		text.append(QString("Voronoi diagram id: %1").arg(_id));
 		poca::core::stringList nameData = m_voronoi->getNameData();
 		for (std::string type : nameData) {
-			float val = m_voronoi->getOriginalHistogram(type)->getValues()[_id];
+			float val = m_voronoi->getMyData(type)->getData<float>()[_id];
 			text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
 		}
 	}

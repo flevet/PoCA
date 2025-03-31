@@ -40,7 +40,7 @@
 #include <Interfaces/MyObjectInterface.hpp>
 #include <General/BasicComponent.hpp>
 #include <Interfaces/HistogramInterface.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
+#include <General/Engine.hpp>
 #include <General/Command.hpp>
 #include <Geometry/DetectionSet.hpp>
 
@@ -78,7 +78,7 @@ public:
     poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*) override;
     void addCommands(poca::core::CommandableObject*);
     void setPlugins(poca::core::PluginList* _plugins) { m_plugins = _plugins; }
-    void setSingletons(const std::map <std::string, std::any>&);
+    void setSingletons(poca::core::Engine*);
     void execute(poca::core::CommandInfo*);
 
     void computeVoronoi(poca::core::MyObjectInterface*);

@@ -35,12 +35,13 @@
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
 #include <Geometry/VoronoiDiagram.hpp>
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <General/PluginList.hpp>
 #include <Plot/Icons.hpp>
 #include <Interfaces/VoronoiDiagramFactoryInterface.hpp>
+#include <General/Engine.hpp>
 
 #include "VoronoiDiagramPlugin.hpp"
 #include "VoronoiDiagramDisplayCommand.hpp"
@@ -67,9 +68,9 @@ void VoronoiDiagramConstructionCommand::execute(poca::core::CommandInfo* _ci)
 {
 	if (m_dset == NULL) return;
 	if (_ci->nameCommand == "computeVoronoi") {
-		poca::core::MyObjectInterface* obj = poca::core::ListDatasetsSingleton::instance()->getObject(m_dset);
+		poca::core::MyObjectInterface* obj = poca::core::Engine::instance()->getObject(m_dset);
 		poca::core::MyObjectInterface* oneColorObj = obj->currentObject();
-		poca::core::BasicComponent* bci = oneColorObj->getBasicComponent("VoronoiDiagram");
+		poca::core::BasicComponentInterface* bci = oneColorObj->getBasicComponent("VoronoiDiagram");
 		bool onSphere = _ci->hasParameter("onSphere") && _ci->getParameter<bool>("onSphere");
 		if (bci != NULL && !onSphere) {
 			if (bci->nbCommands() == 0)
@@ -115,8 +116,8 @@ void VoronoiDiagramPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _
 	m_parameters[nameStr]["showTab"] = true;
 	m_parameters[nameStr]["voronoiOnSphere"] = false;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if(parameters.contains(nameStr)) {
 		nlohmann::json param = parameters[nameStr];
 		if(param.contains("createCells"))
@@ -129,14 +130,22 @@ void VoronoiDiagramPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _
 #endif
 	}
 
-	m_parent = _parent->findChild <QTabWidget*>("Voronoi");
-	if (m_parent == NULL) {
-		int pos = _parent->addTab(new QTabWidget, QObject::tr("Voronoi"));
+	int pos = -1;
+	for (int n = 0; n < _parent->count(); n++) {
+		std::cout << n << " -> " << _parent->tabText(n).toStdString() << std::endl;
+		if (_parent->tabText(n) == "Voronoi")
+			pos = n;
+	}
+	if (pos != -1)
+		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
+	else {
+		pos = _parent->addTab(new QTabWidget, QObject::tr("Voronoi"));
 		m_parent = static_cast <QTabWidget*>(_parent->widget(pos));
 	}
 	m_widget = new VoronoiDiagramWidget(_mediator, m_parent);
 	_mediator->addWidget(m_widget);
-	int index = m_parent->addTab(m_widget, QObject::tr("Filtering/Display"));
+	int index = m_parent->insertTab(0, m_widget, QObject::tr("Filtering/Display"));
+	m_parent->setCurrentIndex(0);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 	m_parent->setTabVisible(index, false);
 #endif
@@ -201,12 +210,9 @@ void VoronoiDiagramPlugin::addCommands(poca::core::CommandableObject* _bc)
 		dset->addCommand(new VoronoiDiagramConstructionCommand(dset));
 }
 
-void VoronoiDiagramPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void VoronoiDiagramPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
 
 void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com)
@@ -229,7 +235,7 @@ void VoronoiDiagramPlugin::computeVoronoi(poca::core::MyObjectInterface* _obj)
 	if (_obj == NULL) return;
 	std::string nameStr = name().toLatin1().data();
 	poca::core::MyObjectInterface* oneColorObj = _obj->currentObject();
-	poca::core::BasicComponent* bci = oneColorObj->getBasicComponent("VoronoiDiagram");
+	poca::core::BasicComponentInterface* bci = oneColorObj->getBasicComponent("VoronoiDiagram");
 	if (bci != NULL) {
 		if (bci->nbCommands() == 0)
 			m_plugins->addCommands(bci);

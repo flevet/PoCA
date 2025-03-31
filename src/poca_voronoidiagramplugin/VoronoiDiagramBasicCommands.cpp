@@ -34,26 +34,30 @@
 #include <fstream>
 #include <filesystem>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <Factory/ObjectListFactory.hpp>
-#include <Geometry/ObjectList.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <General/PluginList.hpp>
 #include <General/Misc.h>
-#include <Interfaces/HistogramInterface.hpp>
+#include <General/Histogram.hpp>
 #include <Interfaces/PaletteInterface.hpp>
+#include <General/MyData.hpp>
+#include <OpenGL/Camera.hpp>
 
 #include "VoronoiDiagramBasicCommands.hpp"
+#include "VoronoiDiagramPlugin.hpp"
 
 VoronoiDiagramBasicCommands::VoronoiDiagramBasicCommands(poca::geometry::VoronoiDiagram* _voro) :poca::core::Command("VoronoiDiagramBasicCommands")
 {
 	m_voronoi = _voro;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
+	
 	float cutDistance = std::numeric_limits < float >::max(), minArea = 0.f, maxArea = std::numeric_limits < float >::max();
 	size_t minLocs = 3, maxLocs = std::numeric_limits <size_t>::max();
 	bool inROIs = false;
 
-	const nlohmann::json& parameters = sss->getParameters();
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if (param.contains("objectCreationParameters")) {
@@ -92,31 +96,66 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		loadParameters(*_infos);
 	}
 	else if (_infos->nameCommand == "createFilteredObjects") {
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_voronoi);
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_voronoi);
 		if (obj == NULL) return;
 
-		size_t minLocs = hasParameter("objectCreationParameters", "minLocs") ? getParameter<size_t>("objectCreationParameters", "minLocs") : 3;
-		size_t maxLocs = hasParameter("objectCreationParameters", "maxLocs") ? getParameter<size_t>("objectCreationParameters", "maxLocs") : std::numeric_limits <size_t>::max();
-		float minArea = hasParameter("objectCreationParameters", "minArea") ? getParameter<float>("objectCreationParameters", "minArea") : 0.f;
-		float maxArea = hasParameter("objectCreationParameters", "maxArea") ? getParameter<float>("objectCreationParameters", "maxArea") : std::numeric_limits < float >::max();
-		float cutDistance = hasParameter("objectCreationParameters", "cutDistance") ? getParameter<float>("objectCreationParameters", "cutDistance") : std::numeric_limits < float >::max();
-		bool inROIs = hasParameter("objectCreationParameters", "inROIs") ? getParameter<bool>("objectCreationParameters", "inROIs") : false;
+		size_t minLocs = 3, maxLocs = std::numeric_limits <size_t>::max();
+		float minArea = 0.f, maxArea = std::numeric_limits < float >::max(), cutDistance = std::numeric_limits < float >::max();
+		bool inROIs = false;
+
+		if (_infos->nbParameters() == 0) {
+			minLocs = hasParameter("objectCreationParameters", "minLocs") ? getParameter<size_t>("objectCreationParameters", "minLocs") : minLocs;
+			maxLocs = hasParameter("objectCreationParameters", "maxLocs") ? getParameter<size_t>("objectCreationParameters", "maxLocs") : maxLocs;
+			minArea = hasParameter("objectCreationParameters", "minArea") ? getParameter<float>("objectCreationParameters", "minArea") : minArea;
+			maxArea = hasParameter("objectCreationParameters", "maxArea") ? getParameter<float>("objectCreationParameters", "maxArea") : maxArea;
+			cutDistance = hasParameter("objectCreationParameters", "cutDistance") ? getParameter<float>("objectCreationParameters", "cutDistance") : cutDistance;
+			inROIs = hasParameter("objectCreationParameters", "inROIs") ? getParameter<bool>("objectCreationParameters", "inROIs") : inROIs;
+		}
+		else {
+			minLocs = _infos->hasParameter("minLocs") ? _infos->getParameter<size_t>("minLocs") : minLocs;
+			maxLocs = _infos->hasParameter("maxLocs") ? _infos->getParameter<size_t>("maxLocs") : maxLocs;
+			minArea = _infos->hasParameter("minArea") ? _infos->getParameter<float>("minArea") : minArea;
+			maxArea = _infos->hasParameter("maxArea") ? _infos->getParameter<float>("maxArea") : maxArea;
+			cutDistance = _infos->hasParameter("cutDistance") ? _infos->getParameter<float>("cutDistance") : cutDistance;
+			inROIs = _infos->hasParameter("inROIs") ? _infos->getParameter<bool>("inROIs") : inROIs;
+		
+			poca::core::CommandInfo ci(true, "objectCreationParameters",
+				"cutDistance", cutDistance,
+				"minLocs", minLocs,
+				"maxLocs", maxLocs,
+				"minArea", minArea,
+				"maxArea", maxArea,
+				"inROIs", inROIs);
+			loadParameters(ci);
+		}
 
 		const std::vector <bool>& selection = m_voronoi->getSelection();
 		poca::geometry::ObjectListFactory factory;
-		poca::geometry::ObjectList* objects = factory.createObjectList(obj, selection, cutDistance, minLocs, maxLocs, minArea, maxArea, inROIs);
+		poca::geometry::ObjectListInterface* objects = factory.createObjectList(obj, selection, cutDistance, minLocs, maxLocs, minArea, maxArea, inROIs);
 		if (objects == NULL) return;
 		objects->setBoundingBox(m_voronoi->boundingBox());
-		obj->addBasicComponent(objects);
-		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponent*)objects));
+		VoronoiDiagramPlugin::m_plugins->addCommands(objects);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objects, *_infos, "VoronoiDiagramPlugin");
+			VoronoiDiagramPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(objects, *_infos, "VoronoiDiagramPlugin");
+			std::cout << text << std::endl;
+		}
+		obj->notify("LoadObjCharacteristicsAllWidgets");
 	}
 	else if (_infos->nameCommand == "densityFactor") {
 		float factor = _infos->getParameter<float>("factor");
 
 		poca::core::BoundingBox bbox = m_voronoi->boundingBox();
 		float meanD = m_voronoi->averageDensity();
-		const std::vector <float>& feature = m_voronoi->getOriginalHistogram("density")->getValues();
+		const std::vector <float>& feature = m_voronoi->getMyData("density")->getData<float>();
 		std::vector <bool>& selection = m_voronoi->getSelection();
 
 		for (size_t n = 0; n < feature.size(); n++)
@@ -152,9 +191,9 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		_infos->addParameter("newObject", dset);
 	}
 	else if (_infos->nameCommand == "clustersForChallenge") {
-		poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-		poca::core::MyObjectInterface* obj = lds->getObject(m_voronoi);
-		poca::core::BasicComponent* dset = obj->getBasicComponent("DetectionSet");
+		 poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_voronoi);
+		poca::core::BasicComponentInterface* dset = obj->getBasicComponent("DetectionSet");
 		if (dset == NULL)
 			return;
 
@@ -172,10 +211,18 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 			step = _infos->getParameter<float>("step");
 
 		int n = 1;
+		clock_t t1, t2;
+		t1 = clock();
 		for (auto factor = from; factor <= to; factor += step, n++) {
 			execute(&poca::core::CommandInfo(false, "densityFactor", "factor", factor));
-			dset->executeCommand(false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n);
+			dset->executeCommand(false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n, "object", obj);
 		}
+		t2 = clock();
+		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
+
+		std::ofstream fs("e:/timings.txt", std::fstream::out | std::fstream::app);
+		fs << elapsed << std::endl;
+		fs.close();
 	}
 	else if (_infos->nameCommand == "saveAsSVG") {
 		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
@@ -186,7 +233,7 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "objectCreationParameters") {
+	if (_nameCommand == "objectCreationParameters" || _nameCommand == "createFilteredObjects") {
 		poca::core::CommandInfo ci(false, _nameCommand);
 		if (_parameters.contains("minLocs"))
 			ci.addParameter("minLocs", _parameters["minLocs"].get<size_t>());
@@ -208,7 +255,7 @@ poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::st
 			return poca::core::CommandInfo(false, _nameCommand, "factor", val);
 		}
 	}
-	else if (_nameCommand == "createFilteredObjects" || _nameCommand == "invertSelection" || _nameCommand == "randomPointOnTheSphere") {
+	else if (_nameCommand == "invertSelection" || _nameCommand == "randomPointOnTheSphere") {
 		return poca::core::CommandInfo(false, _nameCommand);
 	}
 	else if (_nameCommand == "clustersForChallenge") {
@@ -241,6 +288,10 @@ poca::core::Command* VoronoiDiagramBasicCommands::copy()
 
 void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::opengl::CameraInterface* cam = engine->getCamera(m_voronoi);
+	poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
+
 	poca::core::BoundingBox bbox = m_voronoi->boundingBox();
 	std::ofstream fs(_filename.toLatin1().data());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
@@ -253,9 +304,9 @@ void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
 	fs << "<defs>\n";
 	fs << "</defs>\n";
 
-	std::vector <poca::core::Vec3mf> lines;
+	/*std::vector <poca::core::Vec3mf> lines;
 	m_voronoi->generateLines(lines);
-	poca::core::HistogramInterface* histogram = m_voronoi->getCurrentHistogram();
+	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(m_voronoi->getCurrentHistogram());
 	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_voronoi->getSelection();
 	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
@@ -276,6 +327,64 @@ void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
 		fs << lines[n].y() << "\" x2=\"";
 		fs << lines[n+1].x() << "\" y2=\"";
 		fs << lines[n+1].y() << "\" stroke=\"" << col << "\" stroke-width=\"1\"/>\n";
+	}
+	fs.close();*/
+	bool fill = false;
+	if (m_voronoi->hasParameter("fill"))
+		fill = m_voronoi->getParameter<bool>("fill");
+
+	std::vector <poca::core::Vec3mf> cells;
+	if(fill)
+		m_voronoi->generateTriangles(cells);
+	else
+		m_voronoi->generateLines(cells);
+	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(m_voronoi->getCurrentHistogram());
+	const std::vector<float>& values = histogram->getValues();
+	const std::vector<bool>& selection = m_voronoi->getSelection();
+	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
+
+	std::vector <float> featureValues;
+	m_voronoi->getFeatureInSelection(featureValues, values, selection, std::numeric_limits <float>::max(), !fill);
+
+
+	char col[32];
+	poca::core::PaletteInterface* pal = m_voronoi->getPalette();
+	if (fill) {
+		for (size_t n = 0; n < cells.size(); n += 3) {
+			if (featureValues[n] == std::numeric_limits <float>::max()) continue;
+			float valPal = (featureValues[n] - minH) / interH;
+			poca::core::Color4uc c = pal->getColor(valPal);
+			unsigned char r = c[0], g = c[1], b = c[2];
+			poca::core::getColorStringUC(r, g, b, col);
+			glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(cells[n].x(), cells[n].y(), cells[n].z()));
+			glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(cells[n + 1].x(), cells[n + 1].y(), cells[n + 1].z()));
+			glm::vec2 p3 = cam->worldToScreenCoordinates(glm::vec3(cells[n + 2].x(), cells[n + 2].y(), cells[n + 2].z()));
+
+			fs << "<polygon points =\"";
+			fs << p1.x << ",";
+			fs << p1.y << " ";
+			fs << p2.x << ",";
+			fs << p2.y << " ";
+			fs << p3.x << ",";
+			fs << p3.y << "\" stroke=\"" << col << "\" fill=\"" << col << "\" stroke-width=\"0.1\"/>\n";
+		}
+	}
+	else {
+		for (size_t n = 0; n < cells.size(); n += 2) {
+			if (featureValues[n] == std::numeric_limits <float>::max()) continue;
+			float valPal = (featureValues[n] - minH) / interH;
+			poca::core::Color4uc c = pal->getColor(valPal);
+			unsigned char r = c[0], g = c[1], b = c[2];
+			poca::core::getColorStringUC(r, g, b, col);
+			glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(cells[n].x(), cells[n].y(), cells[n].z()));
+			glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(cells[n + 1].x(), cells[n + 1].y(), cells[n + 1].z()));
+
+			fs << "<line x1 =\"";
+			fs << p1.x << "\" y1=\"";
+			fs << p1.y << "\" x2=\"";
+			fs << p2.x << "\" y2=\"";
+			fs << p2.y << "\" stroke=\"" << col << "\" stroke-width=\"1\"/>\n";
+		}
 	}
 	fs.close();
 }

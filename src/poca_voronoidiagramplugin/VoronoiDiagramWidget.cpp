@@ -244,6 +244,9 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	m_cboxROIsCharacteristics = new QCheckBox("In ROIs");
 	m_cboxROIsCharacteristics->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_cboxROIsCharacteristics->setChecked(false);
+	m_bntBorderLocs = new QPushButton("Select border locs");
+	m_bntBorderLocs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	QObject::connect(m_bntBorderLocs, SIGNAL(clicked()), this, SLOT(actionNeeded()));
 	QLabel* lblEnv = new QLabel("Feature enveloppe [0-1]:");
 	lblEnv->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_leditEnveloppeFeature = new QLineEdit("0.999");
@@ -266,6 +269,7 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	layoutVoronoiCharacteristics->addWidget(m_btnApplyCharacteristics, 0, 0, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_cboxCumulativeCurves, 0, 1, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_cboxROIsCharacteristics, 0, 2, 1, 1);
+	layoutVoronoiCharacteristics->addWidget(m_bntBorderLocs, 0, 3, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(lblEnv, 1, 0, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_leditEnveloppeFeature, 1, 1, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(lblDegreePoly, 1, 2, 1, 1);
@@ -297,7 +301,7 @@ VoronoiDiagramWidget::~VoronoiDiagramWidget()
 void VoronoiDiagramWidget::actionNeeded()
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("VoronoiDiagram");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
 	poca::core::CommandableObject* voro = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -329,14 +333,20 @@ void VoronoiDiagramWidget::actionNeeded()
 		if (ok && m_cboxApplyMaxArea->isChecked())	maxArea = val;
 		bool inROIs = m_cboxInROIs->isChecked();
 
-		voro->executeCommand(true, "objectCreationParameters",
+		/*voro->executeCommand(true, "objectCreationParameters",
+			"cutDistance", cutD,
+			"minLocs", minLocs,
+			"maxLocs", maxLocs,
+			"minArea", minArea,
+			"maxArea", maxArea,
+			"inROIs", inROIs);*/
+		voro->executeCommand(true, "createFilteredObjects",
 			"cutDistance", cutD,
 			"minLocs", minLocs,
 			"maxLocs", maxLocs,
 			"minArea", minArea,
 			"maxArea", maxArea,
 			"inROIs", inROIs);
-		voro->executeCommand(true, "createFilteredObjects");
 
 		m_object->notifyAll("updateDisplay");
 		return;
@@ -364,12 +374,20 @@ void VoronoiDiagramWidget::actionNeeded()
 		m_object->notify("LoadObjCharacteristicsVoronoiDiagramWidget");
 		m_object->notifyAll("updateDisplay");
 	}
+	else if (sender == m_bntBorderLocs) {
+		poca::geometry::VoronoiDiagram* voro = (poca::geometry::VoronoiDiagram*)bc;
+		const std::vector <bool>& selection = voro->borderLocalizations();
+		auto count = std::count(selection.begin(), selection.end(), true);
+		std::cout << "# of border cells: " << count << " / " << voro->nbFaces() << std::endl;
+		voro->setSelection(selection);
+		voro->executeCommand(false, "updateFeature");
+	}
 }
 
 void VoronoiDiagramWidget::actionNeeded(bool _val)
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("VoronoiDiagram");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
 	poca::core::CommandableObject* voro = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -404,7 +422,7 @@ void VoronoiDiagramWidget::actionNeeded(bool _val)
 void VoronoiDiagramWidget::actionNeeded(int _val)
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("VoronoiDiagram");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
 	poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -430,7 +448,7 @@ void VoronoiDiagramWidget::performAction(poca::core::MyObjectInterface* _obj, po
 			if (action == "save")
 				_ci->addParameter("dir", obj->getDir());
 		}	
-		poca::core::BasicComponent* bc = obj->getBasicComponent("VoronoiDiagram");
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 		bc->executeCommand(_ci);
 		actionDone = true;
 	}
@@ -449,12 +467,14 @@ void VoronoiDiagramWidget::update(poca::core::SubjectInterface* _subject, const 
 
 	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("VoronoiDiagram"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsVoronoiDiagramWidget") {
 
-		poca::core::BasicComponent* bci = objOneColor->getBasicComponent("VoronoiDiagram");
+		poca::core::BasicComponentInterface* bci = objOneColor->getBasicComponent("VoronoiDiagram");
 		if (!bci) return;
 		poca::core::stringList nameData = bci->getNameData();
 

@@ -85,7 +85,7 @@ protected:
 
 	QDockWidget* m_dockVoronoiCharateristics;
 	QCustomPlot* m_customPlotVoronoiCharacteristics;
-	QPushButton* m_btnApplyCharacteristics, * m_btnRecomputeMonteCarlo, * m_bntRecomputeAnalytic;
+	QPushButton* m_btnApplyCharacteristics, * m_btnRecomputeMonteCarlo, * m_bntRecomputeAnalytic, * m_bntBorderLocs;
 	QCheckBox* m_cboxCumulativeCurves, * m_cboxROIsCharacteristics;
 	QLineEdit* m_leditB, * m_leditC, * m_leditNbIterationsMonteCarlo, * m_leditEnveloppeFeature, * m_leditNbBinsCharacteristics, * m_leditDegreePolynome;
 
