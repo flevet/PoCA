@@ -42,7 +42,7 @@
 #include <General/Palette.hpp>
 #include <General/MyData.hpp>
 #include <OpenGL/Shader.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "HeatMapDisplayCommand.hpp"
 #include "DetectionSetDisplayCommand.hpp"
@@ -51,8 +51,8 @@ HeatMapDisplayCommand::HeatMapDisplayCommand(poca::geometry::DetectionSet* _ds) 
 {
 	m_dset = _ds;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (!parameters.contains(name())) {
 		
 		addCommandInfo(poca::core::CommandInfo(false, "displayHeatmap", false));
@@ -168,11 +168,11 @@ void HeatMapDisplayCommand::createDisplay()
 		GL_CHECK_ERRORS();
 
 		if (!m_dc) {
-			const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData();
+			const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>(), & ys = m_dset->getMyData("y")->getData<float>();
 			m_minX = *std::min_element(xs.begin(), xs.end());
 			std::vector <poca::core::Vec3mf> points(xs.size());
 			if (m_dset->hasData("z")) {
-				const std::vector <float>& zs = m_dset->getMyData("z")->getOriginalData();
+				const std::vector <float>& zs = m_dset->getMyData("z")->getData<float>();
 				for (size_t n = 0; n < xs.size(); n++)
 					points[n].set(xs[n], ys[n], zs[n]);
 			}
@@ -284,6 +284,7 @@ void HeatMapDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offs
 	bool success = m_fbo->bind();
 	if (!success) std::cout << "Problem with binding" << std::endl;
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_CULL_FACE);
 
 	_cam->enableClippingPlanes();
 	_cam->drawHeatmap<poca::core::Vec3mf, float>(m_dc ? m_dc->getPointBuffer() : m_pointBuffer, m_selectedPointBuffer, intensityHeatmap, radiusHeatmap, screenRadius, m_minX);

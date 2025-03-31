@@ -82,6 +82,7 @@ protected:
 	poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_pointBuffer, m_uncertaintiesBuffer, m_normalBuffer;
 	poca::opengl::PointSingleGLBuffer <float> m_idBuffer;
 	poca::opengl::FeatureSingleGLBuffer <float> m_featureBuffer;
+	poca::opengl::PointSingleGLBuffer <poca::core::Color4D> m_colorBuffer;
 
 #ifdef DEBUG_NORMAL
 	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_normalDebugBuffer;

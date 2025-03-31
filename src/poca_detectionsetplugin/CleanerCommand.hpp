@@ -68,6 +68,7 @@ protected:
 	void display(poca::opengl::Camera*, const bool);
 	void createDisplay();
 	poca::core::MyObjectInterface* cleanDetectionSet(const float, const uint32_t, const bool);
+	void saveFramesMergedLocs() const;
 
 	size_t computeNbLocsCorrectedSpecifiedDT(const uint32_t, const float);
 	uint32_t computeAnalysisParameters(const uint32_t, const float);

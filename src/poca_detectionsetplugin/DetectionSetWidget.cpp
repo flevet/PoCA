@@ -135,6 +135,14 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_buttonGroup->addButton(m_heatmapButton);
 	m_buttonGroup->addButton(m_gaussianButton);
 
+	m_creationObjectsOnLabelsButton = new QPushButton();
+	m_creationObjectsOnLabelsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_creationObjectsOnLabelsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_creationObjectsOnLabelsButton->setIcon(QIcon(QPixmap(poca::plot::objectIcon)));
+	m_creationObjectsOnLabelsButton->setToolTip("Create objects");
+	layoutLuts->addWidget(m_creationObjectsOnLabelsButton, 0, Qt::AlignRight);
+	QObject::connect(m_creationObjectsOnLabelsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+
 	m_displayButton = new QPushButton();
 	m_displayButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_displayButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -359,6 +367,12 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_displayCleanButton->setCheckable(true);
 	m_displayCleanButton->setChecked(true);
 	QObject::connect(m_displayCleanButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_saveFramesButton = new QPushButton();
+	m_saveFramesButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_saveFramesButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_saveFramesButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
+	m_saveFramesButton->setToolTip("Save frames merged locs");
+	QObject::connect(m_saveFramesButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QHBoxLayout* layoutCleanParam = new QHBoxLayout;
 	layoutCleanParam->addWidget(radiusCleanerLbl);
 	layoutCleanParam->addWidget(m_radiusCleanerEdit);
@@ -368,6 +382,7 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	layoutCleanParam->addWidget(m_cleanButton);
 	layoutCleanParam->addWidget(emptyCleanParamW);
 	layoutCleanParam->addWidget(m_displayCleanButton, 0, Qt::AlignRight);
+	layoutCleanParam->addWidget(m_saveFramesButton, 0, Qt::AlignRight);
 	groupBoxCleanerParams->setLayout(layoutCleanParam);
 	QWidget* emptyWidgetClean = new QWidget;
 	emptyWidgetClean->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -437,7 +452,7 @@ DetectionSetWidget::~DetectionSetWidget()
 void DetectionSetWidget::actionNeeded()
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -500,6 +515,9 @@ void DetectionSetWidget::actionNeeded()
 			emit(transferNewObjectCreated(obj));
 		}
 	}
+	if (sender == m_saveFramesButton) {
+		dset->executeCommand(true, "saveFramesMergedLocs");
+	}
 	if (sender == m_saveDetectionsButton) {
 		QString name = m_object->getName().c_str(), filename(m_object->getDir().c_str());
 		if(!filename.endsWith("/"))
@@ -508,20 +526,13 @@ void DetectionSetWidget::actionNeeded()
 		QString extension = name.indexOf(".") != -1 ? name.right(name.size() - name.indexOf(".")) : ".csv";
 		filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save detections..."), filename, QString("Stats files (*" + extension + ")"), 0, QFileDialog::DontUseNativeDialog);
 		if (filename.isEmpty()) return;
-		std::ofstream fs(filename.toLatin1().data());
-		if (!fs) {
-			std::cout << "System failed to open " << filename.toLatin1().data() << std::endl;
-			return;
-		}
-		else
-			std::cout << "Saving detections in file " << filename.toLatin1().data() << std::endl;
-
-		poca::core::BasicComponent* bc = m_object->getBasicComponent("DetectionSet");
-		if (bc == NULL) return;
-		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bc);
-		if (dset == NULL) return;
-		dset->saveDetections(fs);
-		fs.close();
+		dset->executeCommand(true, "saveLocalizations", "path", filename.toStdString());
+	}
+	if (sender == m_creationObjectsOnLabelsButton) {
+		//m_object->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(true, "createDBSCANObjects",
+		//	"myObject", m_object));
+		dset->executeCommand(true, "createObjectsOnLabels");
+		m_object->notifyAll("updateDisplay");
 	}
 }
 
@@ -529,7 +540,7 @@ void DetectionSetWidget::actionNeeded(bool _val)
 {
 	if (m_object == NULL) return;
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -584,7 +595,7 @@ void DetectionSetWidget::actionNeeded(bool _val)
 void DetectionSetWidget::actionNeeded(int _val)
 {
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponent* bc = obj->getBasicComponent("DetectionSet");
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
@@ -633,7 +644,7 @@ void DetectionSetWidget::performAction(poca::core::MyObjectInterface* _obj, poca
 			if (action == "save")
 				_ci->addParameter("dir", _obj->getDir());
 		}
-		poca::core::BasicComponent* bc = obj->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 		bc->executeCommand(_ci);
 		actionDone = true;
 	}
@@ -652,13 +663,15 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("DetectionSet"));
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	auto index = m_parentTab->currentIndex();
 	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
 	m_parentTab->setTabVisible(m_parentTab->indexOf(m_cleanerWidget), visible);
+	m_parentTab->setCurrentIndex(index);
 #endif
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets" || _aspect == "LoadObjCharacteristicsDetectionSetWidget") {
 
-		poca::core::BasicComponent* bci = objOneColor->getBasicComponent("DetectionSet");
+		poca::core::BasicComponentInterface* bci = objOneColor->getBasicComponent("DetectionSet");
 		if (!bci) return;
 		poca::core::stringList nameData = bci->getNameData();
 
@@ -705,7 +718,7 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 		m_displayButton->setChecked(selected);
 		m_displayButton->blockSignals(false);
 
-		if (m_object->nbColors() == 1 && bci->hasParameter("displayHeatmap")) {
+		if (m_object->nbColors() < 5 && bci->hasParameter("displayHeatmap")) {
 			bool val = bci->getParameter<bool>("displayHeatmap");
 			m_heatmapButton->setEnabled(true);
 			m_heatmapButton->blockSignals(true);
@@ -746,7 +759,7 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 			m_heatmapButton->blockSignals(false);
 		}
 
-		if (m_object->nbColors() == 1 && bci->hasParameter("displayGaussian")) {
+		if (m_object->nbColors() < 5 && bci->hasParameter("displayGaussian")) {
 			if (bci->hasParameter("alphaGaussian")) {
 				float val = bci->getParameter<float>("alphaGaussian");
 				m_alphaValueLbl->blockSignals(true);

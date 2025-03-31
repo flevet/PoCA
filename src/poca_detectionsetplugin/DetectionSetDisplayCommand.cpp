@@ -45,8 +45,9 @@
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 #include <Cuda/Misc.h>
+#include <General/Misc.h>
 
 #include "DetectionSetDisplayCommand.hpp"
 
@@ -56,8 +57,8 @@ DetectionSetDisplayCommand::DetectionSetDisplayCommand(poca::geometry::Detection
 	m_dset = _ds;
 	const poca::core::BoundingBox bbox = m_dset->boundingBox();
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "pointRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
 	if (parameters.contains(name())) {
@@ -84,6 +85,8 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
 	}
+	if (_infos->nameCommand == "regenerateDisplay")
+		createDisplay();
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = _infos->getParameterPtr<poca::opengl::Camera>("camera");
 		bool offscrean = false, ssao = false;
@@ -107,9 +110,9 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 		_infos->addParameter("infos", listInfos);
 		if (m_idSelection >= 0 && _infos->hasParameter("pickedPoints")) {
 			std::vector <poca::core::Vec3mf> pickedPoints = _infos->getParameter< std::vector <poca::core::Vec3mf>>("pickedPoints");
-			float x = m_dset->getOriginalHistogram("x")->getValues()[m_idSelection];
-			float y = m_dset->getOriginalHistogram("y")->getValues()[m_idSelection];
-			float z = m_dset->dimension() == 3 ? m_dset->getOriginalHistogram("z")->getValues()[m_idSelection] : 0.f;
+			float x = m_dset->getMyData("x")->getData<float>()[m_idSelection];
+			float y = m_dset->getMyData("y")->getData<float>()[m_idSelection];
+			float z = m_dset->dimension() == 3 ? m_dset->getMyData("z")->getData<float>()[m_idSelection] : 0.f;
 			pickedPoints.push_back(poca::core::Vec3mf(x, y, z));
 			_infos->addParameter("pickedPoints", pickedPoints);
 		}
@@ -138,10 +141,9 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 			ny[n] = (*normals)[n].y();
 			nz[n] = (*normals)[n].z();
 		}
-		m_dset->addFeature("nx", new poca::core::MyData(nx));
-		m_dset->addFeature("ny", new poca::core::MyData(ny));
-		m_dset->addFeature("nz", new poca::core::MyData(nz));
-
+		m_dset->addFeature("nx", poca::core::generateDataWithLog(nx));
+		m_dset->addFeature("ny", poca::core::generateDataWithLog(ny));
+		m_dset->addFeature("nz", poca::core::generateDataWithLog(nz));
 #ifdef DEBUG_NORMAL
 		const std::vector<float> xs = m_dset->getOriginalHistogram("x")->getValues();
 		const std::vector<float> ys = m_dset->getOriginalHistogram("y")->getValues();
@@ -185,11 +187,14 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 	GL_CHECK_ERRORS();
 	glEnable(GL_DEPTH_TEST);
 	GL_CHECK_ERRORS();
+	glDisable(GL_CULL_FACE);
 	glCullFace(GL_FRONT);
 	GL_CHECK_ERRORS();
 
 	uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
-	if(m_normalBuffer.empty())
+	if (!m_colorBuffer.empty())
+		_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
+	else if(m_normalBuffer.empty())
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
 	else
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
@@ -198,10 +203,12 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 	if (!m_normalDebugBuffer.empty())
 		_cam->drawUniformShader(m_normalDebugBuffer, poca::core::Color4D(0.f, 0.f, 0.f, 1.f));
 #endif
+	GL_CHECK_ERRORS();
 }
 
 void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	GL_CHECK_ERRORS();
 	if (m_pickFBO == NULL) return;
 
 	glEnable(GL_DEPTH_TEST);
@@ -210,15 +217,20 @@ void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glDisable(GL_CULL_FACE);
 
+	GL_CHECK_ERRORS();
 	GLfloat bkColor[4];
 	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 	glClearColor(0.f, 0.f, 0.f, 0.f);
 	bool success = m_pickFBO->bind();
+	GL_CHECK_ERRORS();
 	if (!success) std::cout << "Problem with binding" << std::endl;
+	GL_CHECK_ERRORS();
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	GL_CHECK_ERRORS();
 	_cam->drawPickingShader<poca::core::Vec3mf, float>(m_pointBuffer, m_idBuffer, m_featureBuffer, m_minOriginalFeature);
 	success = m_pickFBO->release();
 	if (!success) std::cout << "Problem with releasing" << std::endl;
+	GL_CHECK_ERRORS();
 	glBindFramebuffer(GL_FRAMEBUFFER, _cam->defaultFramebufferObject());
 	glClearColor(bkColor[0], bkColor[1], bkColor[2], bkColor[3]);
 	GL_CHECK_ERRORS();
@@ -232,12 +244,12 @@ void DetectionSetDisplayCommand::createDisplay()
 
 	try {
 		GL_CHECK_ERRORS();
-		const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData();
+		const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>(), & ys = m_dset->getMyData("y")->getData<float>();
 		m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(m_dset->getPalette());
 
 		std::vector <poca::core::Vec3mf> points(xs.size());
 		if (m_dset->hasData("z")) {
-			const std::vector <float>& zs = m_dset->getMyData("z")->getOriginalData();
+			const std::vector <float>& zs = m_dset->getMyData("z")->getData<float>();
 			for (size_t n = 0; n < xs.size(); n++)
 				points[n].set(xs[n], ys[n], zs[n]);
 		}
@@ -248,12 +260,21 @@ void DetectionSetDisplayCommand::createDisplay()
 		std::iota(std::begin(ids), std::end(ids), 1);
 
 		if (m_dset->hasData("nx") && m_dset->hasData("ny") && m_dset->hasData("nz")) {
-			const std::vector <float>& nxs = m_dset->getMyData("nx")->getOriginalData(), & nys = m_dset->getMyData("ny")->getOriginalData(), & nzs = m_dset->getMyData("nz")->getOriginalData();
+			const std::vector <float>& nxs = m_dset->getMyData("nx")->getData<float>(), & nys = m_dset->getMyData("ny")->getData<float>(), & nzs = m_dset->getMyData("nz")->getData<float>();
 			std::vector <poca::core::Vec3mf> normals(nxs.size());
 			for (size_t n = 0; n < nxs.size(); n++)
 				normals[n].set(nxs[n], nys[n], nzs[n]);
 			m_normalBuffer.generateBuffer(normals.size(), 3, GL_FLOAT);
 			m_normalBuffer.updateBuffer(normals.data());
+		}
+
+		if (m_dset->hasData("r") && m_dset->hasData("g") && m_dset->hasData("b")) {
+			const std::vector <float>& rs = m_dset->getMyData("r")->getData<float>(), & gs = m_dset->getMyData("g")->getData<float>(), & bs = m_dset->getMyData("b")->getData<float>();
+			std::vector <poca::core::Color4D> colors(rs.size());
+			for (size_t n = 0; n < rs.size(); n++)
+				colors[n].set(rs[n] / 255.f, gs[n] / 255.f, bs[n] / 255.f, 1.f);
+			m_colorBuffer.generateBuffer(colors.size(), 4, GL_FLOAT);
+			m_colorBuffer.updateBuffer(colors.data());
 		}
 
 		m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
@@ -292,16 +313,38 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 {
 	if (_histogram == NULL)
 		_histogram = m_dset->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
-	const std::vector<bool>& selection = m_dset->getSelection();
-	m_minOriginalFeature = _histogram->getMin();
-	m_maxOriginalFeature = _histogram->getMax();
-	m_actualValueFeature = m_maxOriginalFeature;
+	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(_histogram);
+	bool normalBehavior = true;
+	if (normalBehavior) {
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = m_dset->getSelection();
+		m_minOriginalFeature = histogram->getMin();
+		m_maxOriginalFeature = histogram->getMax();
+		m_actualValueFeature = m_maxOriginalFeature;
 
-	std::vector <float> feature(values.size());
-	for(size_t n = 0; n < values.size(); n++)
-		feature[n] = selection[n] ? values[n] : -10000.f;
-	m_featureBuffer.updateBuffer(feature);
+		std::vector <float> feature(values.size());
+		for (size_t n = 0; n < values.size(); n++)
+			feature[n] = selection[n] ? values[n] : -10000.f;
+		m_featureBuffer.updateBuffer(feature);
+	}
+	else {
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = m_dset->getSelection();
+		m_minOriginalFeature = histogram->getCurrentMin();
+		m_maxOriginalFeature = histogram->getCurrentMax();
+		m_actualValueFeature = m_maxOriginalFeature;
+
+		std::vector <float> feature(values.size());
+		for (size_t n = 0; n < values.size(); n++) {
+			if (values[n] < m_minOriginalFeature)
+				feature[n] = m_minOriginalFeature;
+			else if (values[n] > m_maxOriginalFeature)
+				feature[n] = m_maxOriginalFeature;
+			else
+				feature[n] = values[n];
+		}
+		m_featureBuffer.updateBuffer(feature);
+	}
 }
 
 QString DetectionSetDisplayCommand::getInfosLocalization(const int _id) const
@@ -309,18 +352,18 @@ QString DetectionSetDisplayCommand::getInfosLocalization(const int _id) const
 	QString text;
 	if (_id >= 0) {
 		poca::core::stringList nameData = m_dset->getNameData();
-		float x = m_dset->getOriginalHistogram("x")->getValues()[_id];
-		float y = m_dset->getOriginalHistogram("y")->getValues()[_id];
+		float x = m_dset->getMyData("x")->getData<float>()[_id];
+		float y = m_dset->getMyData("y")->getData<float>()[_id];
 		text.append(QString("Localization id: %1\n").arg(_id));
 		text.append(QString("Coords: [x=%1,y=%2").arg(x).arg(y));
 		if (m_dset->hasData("z")) {
-			float z = m_dset->getOriginalHistogram("z")->getValues()[_id];
+			float z = m_dset->getMyData("z")->getData<float>()[_id];
 			text.append(QString(",z=%1").arg(z));
 		}
 		text.append("]");
 		for (std::string type : nameData) {
 			if (type == "x" || type == "y" || type == "z") continue;
-			float val = m_dset->getOriginalHistogram(type)->getValues()[_id];
+			float val = m_dset->getMyData(type)->getData<float>()[_id];
 			text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
 		}
 	}
@@ -332,7 +375,7 @@ void DetectionSetDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraP
 	try {
 		if (m_dset->dimension() == 2) return;
 
-		const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData(), & zs = m_dset->getMyData("z")->getOriginalData();
+		const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>(), & ys = m_dset->getMyData("y")->getData<float>(), & zs = m_dset->getMyData("z")->getData<float>();
 		std::vector <uint32_t> indices(xs.size());
 		std::iota(std::begin(indices), std::end(indices), 0);
 

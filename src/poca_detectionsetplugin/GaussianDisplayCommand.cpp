@@ -44,7 +44,7 @@
 #include <General/Histogram.hpp>
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/Helper.h>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
 
 #include "GaussianDisplayCommand.hpp"
 #include "DetectionSetDisplayCommand.hpp"
@@ -54,8 +54,8 @@ GaussianDisplayCommand::GaussianDisplayCommand(poca::geometry::DetectionSet* _ds
 {
 	m_dset = _ds;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "displayGaussian", false));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 25u));
 	addCommandInfo(poca::core::CommandInfo(false, "alphaGaussian", 0.1f));
@@ -135,10 +135,10 @@ void GaussianDisplayCommand::createDisplay()
 
 		m_dc = m_dset->getCommand<DetectionSetDisplayCommand>();
 		if (!m_dc) {
-			const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData();
+			const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>(), & ys = m_dset->getMyData("y")->getData<float>();
 			std::vector <poca::core::Vec3mf> points(xs.size());
 			if (m_dset->hasData("z")) {
-				const std::vector <float>& zs = m_dset->getMyData("z")->getOriginalData();
+				const std::vector <float>& zs = m_dset->getMyData("z")->getData<float>();
 				for (size_t n = 0; n < xs.size(); n++)
 					points[n].set(xs[n], ys[n], zs[n]);
 			}
@@ -148,8 +148,8 @@ void GaussianDisplayCommand::createDisplay()
 
 			std::vector <poca::core::Vec3mf> sigmas;
 			if (m_dset->hasData(m_nameSigmaXY)) {
-				const std::vector <float>& sigXY = m_dset->getMyData(m_nameSigmaXY)->getOriginalData();
-				const std::vector <float>& sigZ = m_dset->dimension() == 3 && m_dset->hasData(m_nameSigmaZ) ? m_dset->getMyData(m_nameSigmaZ)->getOriginalData() : std::vector <float>();
+				const std::vector <float>& sigXY = m_dset->getMyData(m_nameSigmaXY)->getData<float>();
+				const std::vector <float>& sigZ = m_dset->dimension() == 3 && m_dset->hasData(m_nameSigmaZ) ? m_dset->getMyData(m_nameSigmaZ)->getData<float>() : std::vector <float>();
 				sigmas.resize(sigXY.size());
 				for (size_t n = 0; n < xs.size(); n++)
 					sigmas[n].set(3.f * sigXY[n], 3.f * sigXY[n], sigZ.empty() ? 3.f * sigXY[n] : 3.f * sigZ[n]);
@@ -196,6 +196,8 @@ void GaussianDisplayCommand::display(poca::opengl::Camera* _cam, const bool _off
 	float alpha = getParameter<float>("alphaGaussian");
 	bool fixedSize = getParameter<bool>("fixedSizeGaussian");
 
+	glDisable(GL_CULL_FACE);
+
 	if (!displayGaussian) return;
 
 	if(!m_dc)
@@ -210,10 +212,11 @@ void GaussianDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterfac
 {
 	if (_histogram == NULL)
 		_histogram = m_dset->getCurrentHistogram();
-	const std::vector<float>& values = _histogram->getValues();
+	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(_histogram);
+	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_dset->getSelection();
-	m_minOriginalFeature = _histogram->getMin();
-	m_maxOriginalFeature = _histogram->getMax();
+	m_minOriginalFeature = histogram->getMin();
+	m_maxOriginalFeature = histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
 	std::vector <float> feature(values.size());
@@ -226,7 +229,7 @@ void GaussianDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPosit
 {
 	try {
 		if (m_dset->dimension() == 2) return;
-		const std::vector <float>& xs = m_dset->getMyData("x")->getOriginalData(), & ys = m_dset->getMyData("y")->getOriginalData(), & zs = m_dset->getMyData("z")->getOriginalData();
+		const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>(), & ys = m_dset->getMyData("y")->getData<float>(), & zs = m_dset->getMyData("z")->getData<float>();
 		std::vector <uint32_t> indices(xs.size());
 		std::iota(std::begin(indices), std::end(indices), 0);
 

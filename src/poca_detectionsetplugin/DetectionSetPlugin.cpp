@@ -35,6 +35,7 @@
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
 #include <Geometry/DetectionSet.hpp>
+#include <General/Engine.hpp>
 
 #include "DetectionSetPlugin.hpp"
 #include "DetectionSetWidget.hpp"
@@ -43,6 +44,8 @@
 #include "CleanerCommand.hpp"
 #include "DetectionSetBasicCommands.hpp"
 #include "GaussianDisplayCommand.hpp"
+
+poca::core::PluginList* DetectionSetPlugin::m_plugins = NULL;
 
 void DetectionSetPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _mediator, QTabWidget* _parent)
 {
@@ -90,11 +93,7 @@ void DetectionSetPlugin::addCommands(poca::core::CommandableObject* _bc)
 	}
 }
 
-void DetectionSetPlugin::setSingletons(const std::map <std::string, std::any>& _list)
+void DetectionSetPlugin::setSingletons(poca::core::Engine* _engine)
 {
-	poca::core::setAllSingletons(_list);
-	if (_list.find("HelperSingleton") != _list.end()) {
-		poca::opengl::HelperSingleton::setHelperSingleton(std::any_cast <poca::opengl::HelperSingleton*>(_list.at("HelperSingleton")));
-	}
+	poca::core::Engine::instance()->setEngineSingleton(_engine); poca::core::Engine::instance()->setAllSingletons();
 }
-

@@ -55,6 +55,9 @@ public:
 
 protected:
 	void saveAsSVG(const QString&) const;
+	void rotateLocsXY(const float);
+	void rescaleFromGNN(const QString&);
+	poca::geometry::DetectionSet* keepPercentageOfLocalizations(const float) const;
 
 protected:
 	poca::geometry::DetectionSet* m_dset;

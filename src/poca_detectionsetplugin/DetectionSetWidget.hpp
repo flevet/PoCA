@@ -83,7 +83,7 @@ protected:
 	QWidget* m_lutsWidget, * m_detectionSetFilteringWidget, *m_emptyWidget, * m_line2Widget;
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons, m_lutHeatmapButtons;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
-	QPushButton * m_displayButton, * m_heatmapButton, * m_pointRenderButton, * m_saveDetectionsButton, * m_gaussianButton, * m_parametersButton;
+	QPushButton * m_displayButton, * m_heatmapButton, * m_pointRenderButton, * m_saveDetectionsButton, * m_gaussianButton, * m_parametersButton, * m_creationObjectsOnLabelsButton;
 	QLineEdit* m_minRadiusEdit, * m_maxRadiusEdit, * m_currentRadiusEdit, * m_intensityEdit;
 	QSlider* m_radiusSlider, * m_intensitySlider;
 	QCheckBox* m_radiusScreenHeatCbox, * m_radiusWorldHeatCbox, * m_interpolateLUTHeatmapCbox;
@@ -101,7 +101,7 @@ protected:
 	//Cleaner
 	QLineEdit* m_radiusCleanerEdit, * m_maxDarkTEdit;
 	QCheckBox* m_fixedDarkTcbox;
-	QPushButton* m_cleanButton, * m_displayCleanButton;
+	QPushButton* m_cleanButton, * m_displayCleanButton, * m_saveFramesButton;
 	QCustomPlot* m_plotBlinks, * m_plotTOns, * m_plotToffs;
 	QGroupBox* m_groupBoxCleanerPlots;
 	QPlainTextEdit* m_statsTEdit;

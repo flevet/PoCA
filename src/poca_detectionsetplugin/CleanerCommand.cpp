@@ -34,13 +34,16 @@
 #include <gl/glew.h>
 #include <gl/GL.h>
 #include <ctime>
+#include <QtWidgets/QFileDialog>
+#include <QtWidgets/QMessageBox>
 
-#include <DesignPatterns/ListDatasetsSingleton.hpp>
-#include <DesignPatterns/StateSoftwareSingleton.hpp>
+#include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <General/EquationFit.hpp>
 #include <OpenGL/Camera.hpp>
 #include <OpenGL/Shader.hpp>
 #include <Objects/MyObject.hpp>
+#include <General/MyData.hpp>
 
 #include "CleanerCommand.hpp"
 
@@ -49,8 +52,8 @@ CleanerCommand::CleanerCommand(poca::geometry::DetectionSet* _dset) :poca::core:
 	m_dset = _dset;
 	m_eqnBlinks = m_eqnTOffs = m_eqnTOns = NULL;
 
-	poca::core::StateSoftwareSingleton* sss = poca::core::StateSoftwareSingleton::instance();
-	const nlohmann::json& parameters = sss->getParameters();
+	
+	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	if (!parameters.contains(name())) {
 		addCommandInfo(poca::core::CommandInfo(false, "clean", "radius", 50.f, "maxDarkTime", (uint32_t)10, "fixedDarkTime", false));
 		addCommandInfo(poca::core::CommandInfo(false, "displayCleanedLocs", true));
@@ -114,6 +117,9 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos)
 			"nbUncorrectedLocs", m_nbUncorrectedLocs,
 			"darkTime", m_darkTime);
 	}
+	else if (_infos->nameCommand == "saveFramesMergedLocs") {
+		saveFramesMergedLocs();
+	}
 }
 
 poca::core::CommandInfo CleanerCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -160,7 +166,7 @@ poca::core::MyObjectInterface* CleanerCommand::cleanDetectionSet(const float _ra
 
 	std::cout << "Nb time -> " << nbFrames << std::endl;
 	if (!m_dset->hasData("frame")) return NULL;
-	const std::vector <float>& times = m_dset->getData("frame");
+	const std::vector <float>& times = m_dset->getMyData("frame")->getData<float>();
 	m_nbOriginalLocs = times.size();
 
 	m_darkTime = _maxDT;
@@ -197,10 +203,10 @@ poca::core::MyObjectInterface* CleanerCommand::cleanDetectionSet(const float _ra
 	nb = computeNbLocsCorrectedSpecifiedDT(m_darkTime, _radius);
 
 	bool hasZ = m_dset->dimension() == 3;
-	const std::vector <float>& xs = m_dset->getData("x");
-	const std::vector <float>& ys = m_dset->getData("y");
-	const std::vector <float>& zs = hasZ ? m_dset->getData("z") : std::vector <float>(xs.size(), 0.f);
-	const std::vector <float>& intensities = m_dset->hasData("intensity") ? m_dset->getData("intensity") : std::vector <float>();
+	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& zs = hasZ ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
+	const std::vector <float>& intensities = m_dset->hasData("intensity") ? m_dset->getMyData("intensity")->getData<float>() : std::vector <float>();
 
 	std::vector <float> newXs(nb), newYs(nb), newZs(hasZ ? nb : 0), newTimes(nb), newIntensities(intensities.empty() ? 0 : nb), lengthes(nb), lifetimes(nb), blinks(nb), nbSeqOFF(nb), totalOFFs(nb), nbSeqON(nb);
 	for (size_t n = 0; n < m_firstsMerged.size() - 1; n++) {
@@ -255,8 +261,8 @@ poca::core::MyObjectInterface* CleanerCommand::cleanDetectionSet(const float _ra
 
 	poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
 
-	poca::core::ListDatasetsSingleton* lds = poca::core::ListDatasetsSingleton::instance();
-	poca::core::MyObjectInterface* obj = lds->getObject(m_dset);
+	 poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
 	const std::string& dir = obj->getDir(), name = obj->getName();
 	QString newName(name.c_str());
 	int index = newName.lastIndexOf(".");
@@ -275,10 +281,10 @@ poca::core::MyObjectInterface* CleanerCommand::cleanDetectionSet(const float _ra
 
 size_t CleanerCommand::computeNbLocsCorrectedSpecifiedDT(const uint32_t _maxDarkTime, const float _radius)
 {
-	const std::vector <float>& xs = m_dset->getData("x");
-	const std::vector <float>& ys = m_dset->getData("y");
-	const std::vector <float>& zs = m_dset->dimension() == 3 ? m_dset->getData("z") : std::vector <float>(xs.size(), 0.f);
-	const std::vector <float>& times = m_dset->getData("frame");
+	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& zs = m_dset->dimension() == 3 ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
+	const std::vector <float>& times = m_dset->getMyData("frame")->getData<float>();
 	std::vector <bool> pointsDone(m_dset->nbPoints(), false);
 	for (size_t t = 0; t < m_pointsPerFrame.size() - 2; t++) {//We use -2 because m_pointsPerFrame has one value more than the number of frames, and we stop at the avant dernier frame
 		for (uint32_t origPoint = m_pointsPerFrame[t]; origPoint < m_pointsPerFrame[t + 1]; origPoint++) {
@@ -366,10 +372,10 @@ uint32_t CleanerCommand::computeAnalysisParameters(const uint32_t _maxDarkTime, 
 	std::vector<double> tons(nbFrames, 0.);
 	std::vector<double> toffs(_maxDarkTime + 1, 0.);
 
-	const std::vector <float>& xs = m_dset->getData("x");
-	const std::vector <float>& ys = m_dset->getData("y");
-	const std::vector <float>& zs = m_dset->dimension() == 3 ? m_dset->getData("z") : std::vector <float>(xs.size(), 0.f);
-	const std::vector <float>& times = m_dset->getData("frame");
+	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& zs = m_dset->dimension() == 3 ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
+	const std::vector <float>& times = m_dset->getMyData("frame")->getData<float>();
 	std::vector <bool> pointsDone(m_dset->nbPoints(), false);
 	for (size_t t = 0; t < m_pointsPerFrame.size() - 1; t++) {
 		for (uint32_t origPoint = m_pointsPerFrame[t]; origPoint < m_pointsPerFrame[t + 1]; origPoint++) {
@@ -464,9 +470,9 @@ void CleanerCommand::createDisplay()
 		points[n].set(xs[n], ys[n], zs[n]);
 
 	const std::vector <float>& lengthes = m_featuresCorrectedLocs["lifetime"];
-	const std::vector <float>& origXs = m_dset->getData("x");
-	const std::vector <float>& origYs = m_dset->getData("y");
-	const std::vector <float>& origZs = m_dset->dimension() == 3 ? m_dset->getData("z") : std::vector <float>(origXs.size(), 0.f);
+	const std::vector <float>& origXs = m_dset->getMyData("x")->getData<float>();
+	const std::vector <float>& origYs = m_dset->getMyData("y")->getData<float>();
+	const std::vector <float>& origZs = m_dset->dimension() == 3 ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(origXs.size(), 0.f);
 	std::vector <poca::core::Vec3mf> lines;
 	for (size_t n = 0; n < xs.size(); n++) {
 		poca::core::Vec3mf barycenter(xs[n], ys[n], zs[n]);
@@ -495,6 +501,7 @@ void CleanerCommand::display(poca::opengl::Camera* _cam, const bool _offscreen)
 
 	if (!hasParameter("displayCleanedLocs")) return;
 	bool displayClean = getParameter<bool>("displayCleanedLocs");
+	if (!displayClean) return;
 
 	glDisable(GL_BLEND);
 	glEnable(GL_DEPTH_TEST);
@@ -503,3 +510,45 @@ void CleanerCommand::display(poca::opengl::Camera* _cam, const bool _offscreen)
 	glDisable(GL_BLEND);
 }
 
+void CleanerCommand::saveFramesMergedLocs() const
+{
+	if(m_firstsMerged.empty()){
+		QMessageBox msgBox;
+		msgBox.setText("No cleaning was performed.");
+		msgBox.exec();
+		return;
+	}
+
+	 poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
+	std::string dir = obj->getDir();
+	QString saveDir = QFileDialog::getExistingDirectory(NULL, QObject::tr("Save in directory..."), dir.c_str(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+	if (saveDir.isEmpty()) return;
+	
+	if (!saveDir.endsWith('/'))
+		saveDir.append("/");
+	const std::vector <float>& frames = m_dset->getMyData("frame")->getData<float>();
+	const auto& datas = m_dset->getData();
+	for (auto it = datas.begin(); it != datas.end(); it++) {
+		QString filename(saveDir + QString(it->first.c_str()) + QString(".csv"));
+		std::ofstream fs(filename.toStdString());
+		const std::vector <float>& values = m_dset->getMyData(it->first)->getData<float>();
+		for (size_t n = 0; n < m_firstsMerged.size() - 1; n++) {
+			fs << (n + 1);
+			for (uint32_t currentLoc = m_firstsMerged[n]; currentLoc < m_firstsMerged[n + 1]; currentLoc++)
+				fs << "," << values[m_mergedPoints[currentLoc]];
+			fs << std::endl;
+		}
+		fs.close();
+	}
+
+	QString filename(saveDir + QString("indices.csv"));
+	std::ofstream fs(filename.toStdString());
+	for (size_t n = 0; n < m_firstsMerged.size() - 1; n++) {
+		fs << (n + 1);
+		for (uint32_t currentLoc = m_firstsMerged[n]; currentLoc < m_firstsMerged[n + 1]; currentLoc++)
+			fs << "," << m_mergedPoints[currentLoc];
+		fs << std::endl;
+	}
+	fs.close();
+}
