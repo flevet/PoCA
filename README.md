@@ -1,5 +1,9 @@
 # PoCA: Point Cloud Analyst
 
+## News
+
+I'm currently changing quite a few things in PoCA and will finally use versionning. So, there will be a lot more updates of the source code in the future.
+
 ## Introduction
 PoCA is a a powerful stand-alone software designed to ease the manipulation and quantification of multidimensional and multicolor SMLM point cloud data. It is built around a custom-made Open-GL-based rendering engine that provides full user interactive control of SMLM point cloud data, both for visualization and manipulation. It combines the strengths of both C++ and Python programming languages, providing access to efficient and optimized C++ computer graphics algorithms and Python ecosystem. It is designed for improving users and developers’ experience, by integrating a user-friendly GUI, a macro recorder, and the capability to execute Python code easily. PoCA is the result of a decade of developments and the legacy of SR-Tesseler and Coloc-Tesseler, software solutions that were swiftly adopted by the community.
 
