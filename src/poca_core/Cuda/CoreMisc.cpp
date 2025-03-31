@@ -1,7 +1,7 @@
 /*
 * Software:  PoCA: Point Cloud Analyst
 *
-* File:      ListDatasetsSingleton.hpp
+* File:      CoreMisc.cpp
 *
 * Copyright: Florian Levet (2020-2022)
 *
@@ -16,8 +16,8 @@
 *
 * The algorithms that underlie PoCA have required considerable
 * development. They are described in the original SR-Tesseler paper,
-* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization, 
-* manipulation, quantification) towards a scientific publication, please include 
+* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization,
+* manipulation, quantification) towards a scientific publication, please include
 * a citation to the original paper.
 *
 * This program is distributed in the hope that it will be useful,
@@ -30,38 +30,13 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef ListDatasetsSingleton_h__
-#define ListDatasetsSingleton_h__
-
-#include <vector>
-
-namespace poca::core {
-	class MyObjectInterface;
-	class BasicComponent;
-
-	class ListDatasetsSingleton {
-	public:
-		static ListDatasetsSingleton* instance();
-		static void deleteInstance();
-		static void setListDatasetsSingleton(poca::core::ListDatasetsSingleton*);
-		~ListDatasetsSingleton();
-
-		void Register(MyObjectInterface*);
-		void Unregister(MyObjectInterface*);
-
-		MyObjectInterface* getObject(BasicComponent*);
-		MyObjectInterface* getObject(MyObjectInterface*);
-
-		const std::vector <MyObjectInterface*>& getDatasets() const { return m_datasets; }
-
-	protected:
-		ListDatasetsSingleton();
-
-	private:
-		static ListDatasetsSingleton* m_instance;
-
-		std::vector <MyObjectInterface*> m_datasets;;
-	};
-}
+#include <stdexcept>
+#include <numeric>
+#include <algorithm>
+#include <iostream>
+#ifndef NO_CUDA
+#include <cuda_runtime.h>
 #endif
+
+#include "CoreMisc.h"
 
