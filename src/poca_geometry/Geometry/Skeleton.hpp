@@ -48,9 +48,9 @@ namespace poca::geometry {
 
 		BasicComponentInterface* copy();
 
-		const poca::core::MyArrayVec3mf& getTracks() const { return m_segments; }
+		const poca::core::MyArrayVec3mf& getSegments() const { return m_segments; }
 
-		const uint32_t nbTracks() const { return m_segments.nbElements(); }
+		const uint32_t nbSegments() const { return m_segments.nbElements(); }
 
 		void generateSegments(std::vector <poca::core::Vec3mf>&) const;
 		void generatePickingIndicesSegments(std::vector <float>&) const;
@@ -71,7 +71,7 @@ namespace poca::geometry {
 		poca::core::MyArrayVec3mf m_segments;
 		uint32_t m_dimension;
 
-		std::vector <uint32_t> m_segmentToSkeleton;
+		std::vector <float> m_segmentToSkeleton;
 		std::vector <std::set <uint32_t>> m_skeletons;
 
 		std::vector <poca::core::BoundingBox> m_bboxSegments, m_bboxSkeletons;

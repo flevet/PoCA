@@ -65,6 +65,7 @@ namespace poca::geometry {
 		}
 
 		mergeSegmentsToSkeletons();
+		computeBBoxes();
 
 		m_data["lengthes"] = poca::core::generateDataWithLog(lengthes);
 		m_data["ids"] = poca::core::generateDataWithLog(ids);
@@ -151,15 +152,17 @@ namespace poca::geometry {
 		std::fill(m_bboxSkeletons.begin(), m_bboxSkeletons.end(), poca::core::BoundingBox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX));
 		const auto& firsts = m_segments.getFirstElements();
 		const auto& points = m_segments.getData();
-		for (auto n = 0; n < m_segments.nbElements(); n++) {
-			poca::core::BoundingBox& bbox = m_bboxSegments[n];
-			bbox[0] = points[n].x() < bbox[0] ? points[n].x() : bbox[0];
-			bbox[1] = points[n].y() < bbox[1] ? points[n].y() : bbox[1];
-			bbox[2] = points[n].z() < bbox[2] ? points[n].z() : bbox[2];
+		for (auto cur = 0; cur < m_segments.nbElements(); cur++) {
+			poca::core::BoundingBox& bbox = m_bboxSegments[cur];
+			for (unsigned int n = firsts[cur]; n < firsts[cur + 1]; n++) {
+				bbox[0] = points[n].x() < bbox[0] ? points[n].x() : bbox[0];
+				bbox[1] = points[n].y() < bbox[1] ? points[n].y() : bbox[1];
+				bbox[2] = points[n].z() < bbox[2] ? points[n].z() : bbox[2];
 
-			bbox[3] = points[n].x() > bbox[3] ? points[n].x() : bbox[3];
-			bbox[4] = points[n].y() > bbox[4] ? points[n].y() : bbox[4];
-			bbox[5] = points[n].z() > bbox[5] ? points[n].z() : bbox[5];
+				bbox[3] = points[n].x() > bbox[3] ? points[n].x() : bbox[3];
+				bbox[4] = points[n].y() > bbox[4] ? points[n].y() : bbox[4];
+				bbox[5] = points[n].z() > bbox[5] ? points[n].z() : bbox[5];
+			}
 		}
 
 		for (auto n = 0; n < m_skeletons.size(); n++) {
@@ -205,7 +208,7 @@ namespace poca::geometry {
 
 	void Skeleton::generatePickingIndicesSkeletons(std::vector <float>& _ids) const
 	{
-		const std::vector <float>& ids = this->getData<float>("ids");
+		const std::vector <float>& ids = this->getData<float>("skeletonIds");
 		generatePickingIndices(_ids, ids);
 	}
 
