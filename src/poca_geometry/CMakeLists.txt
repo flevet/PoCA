@@ -57,6 +57,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/ObjectListDelaunay.hpp
   Geometry/ObjectListMesh.hpp
   Geometry/StraightLine.hpp
+  Geometry/Skeleton.hpp
   Geometry/VoronoiDiagram.hpp
   Geometry/CGAL_includes.hpp
   Geometry/delaunator.hpp
@@ -76,6 +77,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/ObjectListDelaunay.cpp
   Geometry/ObjectListMesh.cpp
   Geometry/StraightLine.cpp  
+  Geometry/Skeleton.cpp
   Geometry/VoronoiDiagram.cpp
   Geometry/delaunator.cpp  
   Geometry/voronator.cpp
