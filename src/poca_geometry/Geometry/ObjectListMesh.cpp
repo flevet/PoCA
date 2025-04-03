@@ -79,8 +79,10 @@ namespace poca::geometry {
 		clock_t t1 = clock(), t2;
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
+			std::cout << __LINE__ << std::endl;
 			std::vector < Point_3_double> points(_allVertices[n].size());
 			std::transform(std::execution::par, _allVertices[n].begin(), _allVertices[n].end(), points.begin(), [](const auto& value) {return Point_3_double(value[0], value[1], value[2]);});
+			std::cout << __LINE__ << std::endl;
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size()  << " vertices";
 			addObjectMesh(points, _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
@@ -167,6 +169,7 @@ namespace poca::geometry {
 		clock_t t1 = clock(), t2;
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
+			std::cout << __LINE__ << std::endl;
 			addObjectMesh(_allVertices[n], _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
@@ -259,28 +262,29 @@ namespace poca::geometry {
 	{
 		if (_vertices.size() < 5)
 			return false;
+		std::cout << __LINE__ << std::endl;
 		PMP::repair_polygon_soup(_vertices, _triangles, CGAL::parameters::erase_all_duplicates(true).require_same_orientation(true));
 		if (!PMP::orient_polygon_soup(_vertices, _triangles))
 		{
 			std::cerr << "Some duplication happened during polygon soup orientation" << std::endl;
 		}
-
+		std::cout << __LINE__ << std::endl;
 		if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
 		{
 			std::cerr << "Warning: polygon soup does not describe a polygon mesh" << std::endl;
 			return false;
 		}
-
+		std::cout << __LINE__ << std::endl;
 		m_meshes.push_back(Surface_mesh_3_double());
 		Surface_mesh_3_double& mesh = m_meshes.back();
 		PMP::polygon_soup_to_polygon_mesh(_vertices, _triangles, mesh);
-
+		std::cout << __LINE__ << std::endl;
 		PMP::keep_large_connected_components(mesh, 10);
-
+		std::cout << __LINE__ << std::endl;
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 		PMP::remove_almost_degenerate_faces(mesh);
 #endif
-
+		std::cout << __LINE__ << std::endl;
 		/*double target_edge_length = 4;
 		unsigned int nb_iter = 1;
 		std::cout << "Start smoothing (" << num_faces(mesh) << " faces)..." << std::endl;
@@ -302,13 +306,16 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf>& _linksSkeleton, std::vector <std::uint32_t>& _nbLinks,
 		std::vector <float>& _volumes)
 	{
+		std::cout << __LINE__ << std::endl;
 		if (!CGAL::is_triangle_mesh(_mesh)) {
 			std::cout << "Not a triangle mesh" << std::endl;
 			return false;
 		}
+		std::cout << __LINE__ << std::endl;
 
 		if (!CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh))
 			CGAL::Polygon_mesh_processing::reverse_face_orientations(_mesh);
+		std::cout << __LINE__ << std::endl;
 
 		if (m_applyRemeshing) {
 			double target_edge_length = 1.;
@@ -317,10 +324,12 @@ namespace poca::geometry {
 			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations));
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
+		std::cout << __LINE__ << std::endl;
 		float volume = PMP::volume(_mesh);
 		if (volume < 0.f) {
 			return false;
 		}
+		std::cout << __LINE__ << std::endl;
 
 		//std::cout << "Orientation mesh - " << CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh) << std::endl;
 
@@ -336,6 +345,7 @@ namespace poca::geometry {
 				_trianglesPoCA.push_back(poca::core::Vec3mf(p.x(), p.y(), p.z()));
 			}
 		}
+		std::cout << __LINE__ << std::endl;
 		_nbTriPoCA.push_back(_trianglesPoCA.size());
 		_volumes.push_back(volume);
 
