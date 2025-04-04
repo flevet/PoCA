@@ -35,8 +35,11 @@
 
 #include <vector>
 
+#include <General/Vec3.hpp>
+
 #ifndef NO_CUDA
 	void sortArrayWRTKeys_GPU(std::vector <float>&, std::vector <uint32_t>&);
+	void sortArrayWRTPoint_GPU(const float*, const float*, const float*, const size_t, const poca::core::Vec3mf&, std::vector <uint32_t>&);
 #endif
 
 	void sortArrayWRTKeys_CPU(std::vector <float>&, std::vector <uint32_t>&);
