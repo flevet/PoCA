@@ -325,7 +325,7 @@ namespace poca::geometry {
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
 		std::cout << __LINE__ << std::endl;
-		float volume = PMP::volume(_mesh);
+		float volume = fabs(PMP::volume(_mesh));
 		if (volume < 0.f) {
 			return false;
 		}
