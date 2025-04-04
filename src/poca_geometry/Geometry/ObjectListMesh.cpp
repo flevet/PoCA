@@ -694,7 +694,7 @@ namespace poca::geometry {
 
 	void ObjectListMesh::saveAsOBJ(const std::string& _filename) const
 	{
-		std::ofstream fs(_filename);
+		/*std::ofstream fs(_filename);
 
 		uint32_t curMesh = 0, countPoints = 0;
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
@@ -713,11 +713,33 @@ namespace poca::geometry {
 				CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
 				fs << "f";
 				for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
-					fs << " " << (/*nbPts[curMesh]*/ + (*vbegin) + 1);
+					fs << " " << ((*vbegin) + 1);
 				}
 				fs << " " << curMesh << std::endl;
 			}
 			curMesh++;
+		}*/
+		std::ofstream fs(_filename, std::ifstream::binary);
+		size_t nb = m_meshes.size();
+		fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+		for (const auto& mesh : m_meshes) {
+			std::vector <poca::core::Vec3mf> vertices;
+			for (const auto& point : mesh.points())
+				vertices.push_back(poca::core::Vec3mf(point.x(), point.y(), point.z()));
+			std::vector <size_t> triangles;
+			for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
+				CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
+				for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
+					triangles.push_back(*vbegin);
+				}
+			}
+			nb = vertices.size();
+			fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+			fs.write(reinterpret_cast<char*>(vertices.data()), nb * sizeof(poca::core::Vec3mf));
+			nb = triangles.size();
+			fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+			fs.write(reinterpret_cast<char*>(triangles.data()), nb * sizeof(size_t));
 		}
+		fs.close();
 	}
 }
