@@ -45,8 +45,8 @@
 namespace poca::geometry {
 	class ObjectListMesh : public poca::geometry::ObjectListInterface {
 	public:
-		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = false, const double = 1., const uint32_t = 1);
-		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = false, const double = 1., const uint32_t = 1);
+		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
+		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		~ObjectListMesh();
 
 		poca::core::BasicComponentInterface* copy();
@@ -109,6 +109,7 @@ namespace poca::geometry {
 		//For now duplicate information about the points for compatibility with ObjectListInterface and existing plugins
 		std::vector <float> m_xs, m_ys, m_zs;
 
+		bool m_repair{ true };
 		bool m_applyRemeshing{ false };
 		double m_targetLength{ 1. };
 		int32_t m_iterations{ 1 };

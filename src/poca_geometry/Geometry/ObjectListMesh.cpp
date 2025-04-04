@@ -69,8 +69,8 @@ typedef Surface_mesh_3_double::Property_map<vertex_descriptor, Kernel::Vector_3>
 typedef Surface_mesh_3_double::Property_map<face_descriptor, Kernel::Vector_3> Facet_vector_3_map;
 
 namespace poca::geometry {
-	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _applyRemeshing, const double _target, const uint32_t _it)
-		:ObjectListInterface("ObjectListMesh"), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
+	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
+		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
@@ -159,8 +159,8 @@ namespace poca::geometry {
 		forceRegenerateSelection();
 	}
 
-	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _applyRemeshing, const double _target, const uint32_t _it)
-		:ObjectListInterface("ObjectListMesh"), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
+	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
+		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
@@ -263,28 +263,32 @@ namespace poca::geometry {
 		if (_vertices.size() < 5)
 			return false;
 		std::cout << __LINE__ << std::endl;
-		PMP::repair_polygon_soup(_vertices, _triangles, CGAL::parameters::erase_all_duplicates(true).require_same_orientation(true));
-		if (!PMP::orient_polygon_soup(_vertices, _triangles))
-		{
-			std::cerr << "Some duplication happened during polygon soup orientation" << std::endl;
-		}
-		std::cout << __LINE__ << std::endl;
-		if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
-		{
-			std::cerr << "Warning: polygon soup does not describe a polygon mesh" << std::endl;
-			return false;
+		if (m_repair) {
+			PMP::repair_polygon_soup(_vertices, _triangles, CGAL::parameters::erase_all_duplicates(true).require_same_orientation(true));
+			if (!PMP::orient_polygon_soup(_vertices, _triangles))
+			{
+				std::cerr << "Some duplication happened during polygon soup orientation" << std::endl;
+			}
+			std::cout << __LINE__ << std::endl;
+			if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
+			{
+				std::cerr << "Warning: polygon soup does not describe a polygon mesh" << std::endl;
+				return false;
+			}
 		}
 		std::cout << __LINE__ << std::endl;
 		m_meshes.push_back(Surface_mesh_3_double());
 		Surface_mesh_3_double& mesh = m_meshes.back();
 		PMP::polygon_soup_to_polygon_mesh(_vertices, _triangles, mesh);
 		std::cout << __LINE__ << std::endl;
-		PMP::keep_large_connected_components(mesh, 10);
-		std::cout << __LINE__ << std::endl;
+		if (m_repair) {
+			PMP::keep_large_connected_components(mesh, 10);
+			std::cout << __LINE__ << std::endl;
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
-		PMP::remove_almost_degenerate_faces(mesh);
+			PMP::remove_almost_degenerate_faces(mesh);
 #endif
-		std::cout << __LINE__ << std::endl;
+			std::cout << __LINE__ << std::endl;
+		}
 		/*double target_edge_length = 4;
 		unsigned int nb_iter = 1;
 		std::cout << "Start smoothing (" << num_faces(mesh) << " faces)..." << std::endl;
@@ -306,16 +310,18 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf>& _linksSkeleton, std::vector <std::uint32_t>& _nbLinks,
 		std::vector <float>& _volumes)
 	{
-		std::cout << __LINE__ << std::endl;
-		if (!CGAL::is_triangle_mesh(_mesh)) {
-			std::cout << "Not a triangle mesh" << std::endl;
-			return false;
-		}
-		std::cout << __LINE__ << std::endl;
+		if (m_repair) {
+			std::cout << __LINE__ << std::endl;
+			if (!CGAL::is_triangle_mesh(_mesh)) {
+				std::cout << "Not a triangle mesh" << std::endl;
+				return false;
+			}
+			std::cout << __LINE__ << std::endl;
 
-		if (!CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh))
-			CGAL::Polygon_mesh_processing::reverse_face_orientations(_mesh);
-		std::cout << __LINE__ << std::endl;
+			if (!CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh))
+				CGAL::Polygon_mesh_processing::reverse_face_orientations(_mesh);
+			std::cout << __LINE__ << std::endl;
+		}
 
 		if (m_applyRemeshing) {
 			double target_edge_length = 1.;
@@ -349,14 +355,17 @@ namespace poca::geometry {
 		_nbTriPoCA.push_back(_trianglesPoCA.size());
 		_volumes.push_back(volume);
 
+		std::cout << __LINE__ << std::endl;
 		Kernel::Iso_cuboid_3 bbox = CGAL::bounding_box(_mesh.points().begin(), _mesh.points().end());
 		m_bboxMeshes.push_back(poca::core::BoundingBox(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax(), bbox.ymax(), bbox.zmax()));
 
+		std::cout << __LINE__ << std::endl;
 		Facet_vector_3_map facetNormals = _mesh.add_property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
 		PMP::compute_face_normals(_mesh, facetNormals);
 
 		//std::cout << "Done creating normal per vertex" << std::endl;
 
+		std::cout << __LINE__ << std::endl;
 		Vertex_vector_3_map vertexNormals = _mesh.add_property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
 		PMP::compute_vertex_normals(_mesh, vertexNormals);
 
