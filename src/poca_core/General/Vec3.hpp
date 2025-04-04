@@ -210,7 +210,7 @@ namespace poca::core {
     template< class T >
     inline const T* Vec3<T>::getArray() const
     {
-        return _e;
+        return _e.data();
     }
 
     //------------------------------------------------------------------------------
@@ -218,7 +218,7 @@ namespace poca::core {
     template< class T >
     inline const T* Vec3<T>::getValues() const
     {
-        return _e;
+        return _e.data();
     }
     //------------------------------------------------------------------------------
     //!
