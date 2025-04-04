@@ -170,9 +170,9 @@ namespace poca::geometry {
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
 			std::cout << __LINE__ << std::endl;
-			addObjectMesh(_allVertices[n], _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
+			addObjectMesh(_allVertices[n], _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
 		}
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
