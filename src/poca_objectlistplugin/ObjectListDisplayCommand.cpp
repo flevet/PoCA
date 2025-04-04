@@ -52,6 +52,7 @@
 #include <Objects/MyObject.hpp>
 #include <OpenGL/Helper.h>
 #include <Geometry/ObjectListMesh.hpp>
+#include <Cuda/Misc.h>
 
 #include "ObjectListDisplayCommand.hpp"
 
@@ -932,6 +933,7 @@ void ObjectListDisplayCommand::generateBoundingBoxSelection(const int _idx)
 void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPosition, const glm::vec3& _cameraForwardVec)
 {
 	if (m_objects->dimension() == 2) return;
+#ifdef NO_CUDA
 	const std::vector <uint32_t>& locs = m_objects->getLocsObjects().getData();
 	const float* xs = m_objects->getXs(), * ys = m_objects->getXs(), * zs = m_objects->getXs();
 	std::vector <uint32_t> indices(locs.size());
@@ -949,5 +951,26 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 			return distances[A] < distances[B];
 		});
 	m_pointBuffer.updateIndices(indices);
+#else
+	size_t numData = m_objects->getLocsObjects().nbData();
+	std::vector <uint32_t> indices(numData);
+	std::iota(std::begin(indices), std::end(indices), 0);
+	const float* xs = m_objects->getXs(), * ys = m_objects->getXs(), * zs = m_objects->getXs();
+	if (static_cast <poca::geometry::ObjectListMesh*>(m_objects) != NULL) {
+		sortArrayWRTPoint_GPU(xs, ys, zs, numData, poca::core::Vec3mf(_cameraPosition.x, _cameraPosition.y, _cameraPosition.z), indices);
+	}
+	else {
+		const std::vector <uint32_t>& locs = m_objects->getLocsObjects().getData();
+		//Compute a vector of distances of the points to the camera position
+		std::vector <float> distances(locs.size());
+#pragma omp parallel for
+		for (size_t n = 0; n < locs.size(); n++) {
+			uint32_t index = locs[n];
+			distances[n] = glm::dot(glm::vec3(xs[index], ys[index], zs[index]) - _cameraPosition, _cameraForwardVec);
+		}
+		sortArrayWRTKeys(distances, indices);
+	}
+	m_pointBuffer.updateIndices(indices);
+#endif
 }
 
