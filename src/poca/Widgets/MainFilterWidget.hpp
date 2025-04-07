@@ -104,9 +104,6 @@ protected slots:
 signals:
 	void savePosition(QString);
 	void loadPosition(QString);
-	void pathCamera(QString, QString, float, bool, bool);
-	void pathCamera2(nlohmann::json, nlohmann::json, float, bool, bool);
-	void pathCameraAll(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool);
 	void getCurrentCamera();
 
 protected:
@@ -137,14 +134,6 @@ protected:
 	QDockWidget* m_dockCameraPosition;
 	QPushButton* m_savePositionBtn, * m_loadPositionBtn;
 	QCheckBox* m_cboxViewCamera, * m_cboxRotationCamera, * m_cboxTranslationCamera, * m_cboxZoomCamera, * m_cboxCropCamera;
-
-	//For camera path
-	QDockWidget* m_dockCameraPath;
-	QPushButton * m_btnPaths;
-	QCheckBox* m_cboxSaveImagesCameraPath, * m_cboxTravelingCameraPath;
-	QPushButton* m_btnScreenShot;
-	QVBoxLayout* m_layoutCamPath;
-	std::vector <nlohmann::json> m_positions;
 
 	QGroupBox * m_groupFirstImage;
 	QDockWidget * m_dockGeneral, * m_dockInfoDataset, * m_dockGrid, * m_dockSSAO;
