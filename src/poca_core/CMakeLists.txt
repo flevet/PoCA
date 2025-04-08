@@ -143,8 +143,7 @@ set(source_list
 set(cuda_list
   Cuda/CoreMisc.cu
   Cuda/BasicOperationsImage.cu
-  Cuda/2DConnectedComponents.cu
-  Cuda/3DConnectedComponents.cu
+  Cuda/ConnectedComponents.cu
   )
   
 foreach(source IN LISTS header_list)
