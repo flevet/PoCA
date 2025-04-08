@@ -31,6 +31,7 @@ link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(MISC_HEADER_FILES
   Cuda/CoreMisc.h
+  Cuda/BasicOperationsImage.h
   Cuda/ConnectedComponents.h
   )
 
@@ -141,7 +142,9 @@ set(source_list
 
 set(cuda_list
   Cuda/CoreMisc.cu
-  Cuda/ConnectedComponents.cu
+  Cuda/BasicOperationsImage.cu
+  Cuda/2DConnectedComponents.cu
+  Cuda/3DConnectedComponents.cu
   )
   
 foreach(source IN LISTS header_list)
