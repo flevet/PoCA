@@ -3,6 +3,7 @@ in float feature;
 in vec3 Normal;
 in vec3 NormalSSAO;
 in vec3 FragPos;
+in float vclipDistance;
 out vec4 color;
 uniform mat4 view;
 uniform sampler1D lutTexture;
@@ -13,8 +14,12 @@ uniform vec3 viewPos;
 uniform vec3 lightColor;
 uniform bool applyIllumination;
 uniform vec3 light_position;
+uniform bool clip;
 
 void main() {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if (feature < minFeatureValue)
 		discard;
 	float inter = maxFeatureValue - minFeatureValue;

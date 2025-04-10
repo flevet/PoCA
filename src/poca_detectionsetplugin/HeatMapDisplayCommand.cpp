@@ -286,9 +286,9 @@ void HeatMapDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offs
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDisable(GL_CULL_FACE);
 
-	_cam->enableClippingPlanes();
+	_cam->setClip(true);
 	_cam->drawHeatmap<poca::core::Vec3mf, float>(m_dc ? m_dc->getPointBuffer() : m_pointBuffer, m_selectedPointBuffer, intensityHeatmap, radiusHeatmap, screenRadius, m_minX);
-	_cam->disableClippingPlanes();
+	_cam->setClip(false);
 	success = m_fbo->release();
 	if (!success) std::cout << "Problem with releasing" << std::endl;
 	GL_CHECK_ERRORS();

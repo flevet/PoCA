@@ -956,12 +956,9 @@ namespace poca::core {
 		shader->setMat4("projection", proj);
 		shader->setMat4("view", view);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
-		shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-		shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-		shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-		shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-		shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-		shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+		shader->setBool("clip", _cam->clip());
 
 		glm::vec3 lightColor(1., 1., 1.);
 		const float linear = 0.09;
@@ -1183,12 +1180,9 @@ namespace poca::core {
 			poca::opengl::Shader* shader = _cam->getShader("uniformColorShader");
 			shader->use();
 			shader->setMat4("MVP", proj * view * model);
-			shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-			shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-			shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-			shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-			shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-			shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+			shader->setBool("clip", _cam->clip());
 			shader->setBool("activatedCulling", false);
 
 			GLboolean isCullingActivated;
@@ -1409,12 +1403,9 @@ namespace poca::core {
 			poca::opengl::Shader* shader = _cam->getShader("uniformColorShader");
 			shader->use();
 			shader->setMat4("MVP", proj * view * model);
-			shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-			shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-			shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-			shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-			shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-			shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+			shader->setBool("clip", _cam->clip());
 			shader->setBool("activatedCulling", false);
 
 			GLboolean isCullingActivated;

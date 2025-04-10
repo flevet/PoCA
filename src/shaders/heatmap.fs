@@ -2,9 +2,14 @@
 layout (location = 0) out float gColor;
 in vec2 TexCoords_GS;
 in vec3 center;
+in float vclipDistance;
 uniform highp float u_intensity;
+uniform bool clip;
 #define GAUSS_COEF 0.3989422804014327
 void main() {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	vec2 texC =  ( TexCoords_GS - 0.5 ) * 2;
 	float d = dot(texC, texC);
 	if (d > 1.0f) {

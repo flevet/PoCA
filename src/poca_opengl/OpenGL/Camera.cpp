@@ -71,33 +71,31 @@ char* vs = "#version 330 core\n"
 "layout(location = 3) in vec4 vertexColor;\n"
 "layout(location = 4) in vec3 vertexNormal;\n"
 "uniform mat4 MVP;\n"
-"uniform vec4 clipPlaneX;\n"
-"uniform vec4 clipPlaneY;\n"
-"uniform vec4 clipPlaneZ;\n"
-"uniform vec4 clipPlaneW;\n"
-"uniform vec4 clipPlaneH;\n"
-"uniform vec4 clipPlaneT;\n"
+"const int MAX_CLIPPING_PLANES = 50;\n"
+"uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
+"uniform int nbClipPlanes;\n"
 "out float feature;\n"
 "out vec4 colorIn;\n"
 "out vec3 normal;\n"
+"out float vclipDistance;\n"
 "void main() {\n"
 "	vec4 pos = vec4(vertexPosition_modelspace, 1);\n"
 "	gl_Position = MVP * pos;\n"
 "	feature = vertexFeature;\n"
 "	colorIn = vertexColor;\n"
 "	normal = vertexNormal;\n"
-"	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
-"	gl_ClipDistance[1] = dot(pos, clipPlaneY);\n"
-"	gl_ClipDistance[2] = dot(pos, clipPlaneZ);\n"
-"	gl_ClipDistance[3] = dot(pos, clipPlaneW);\n"
-"	gl_ClipDistance[4] = dot(pos, clipPlaneH);\n"
-"	gl_ClipDistance[5] = dot(pos, clipPlaneT);\n"
+"	vclipDistance = 3.402823466e+38;\n"
+"	for(int n = 0; n < nbClipPlanes; n++){\n"
+"		float d = dot(pos, clipPlanes[n]);\n"
+"		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
+"	}\n"
 "}";
 
 char* fs = "#version 330 core\n"
 "in float feature;\n"
 "in vec4 colorIn;\n"
 "in vec3 normal;\n"
+"in float vclipDistance;\n"
 "out vec4 color;\n"
 "uniform sampler1D lutTexture;\n"
 "uniform float minFeatureValue;\n"
@@ -106,7 +104,10 @@ char* fs = "#version 330 core\n"
 "uniform bool useSpecialColors;\n"
 "uniform bool activatedCulling; \n"
 "uniform vec3 cameraForward; \n"
+"uniform bool clip;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if (activatedCulling) {\n"
 "		float res = dot(cameraForward, normal); \n"
 "		if (res > 0.f)\n"
@@ -131,34 +132,35 @@ char* vsPick = "#version 330 core\n"
 "layout(location = 2) in float vertexFeature;\n"
 "#define FLT_MAX 3.402823466e+38;\n"
 "uniform mat4 MVP;\n"
-"uniform vec4 clipPlaneX;\n"
-"uniform vec4 clipPlaneY;\n"
-"uniform vec4 clipPlaneZ;\n"
-"uniform vec4 clipPlaneW;\n"
-"uniform vec4 clipPlaneH;\n"
-"uniform vec4 clipPlaneT;\n"
 "uniform bool hasFeature;\n"
+"const int MAX_CLIPPING_PLANES = 50;\n"
+"uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
+"uniform int nbClipPlanes;\n"
 "out float id;\n"
 "out float feature;\n"
+"out float vclipDistance;\n"
 "void main() {\n"
 "	vec4 pos = vec4(vertexPosition_modelspace, 1);\n"
 "	gl_Position = MVP * pos;\n"
 "	id = vertexIndex;\n"
 "	feature = hasFeature ? vertexFeature : FLT_MAX;\n"
-"	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
-"	gl_ClipDistance[1] = dot(pos, clipPlaneY);\n"
-"	gl_ClipDistance[2] = dot(pos, clipPlaneZ);\n"
-"	gl_ClipDistance[3] = dot(pos, clipPlaneW);\n"
-"	gl_ClipDistance[4] = dot(pos, clipPlaneH);\n"
-"	gl_ClipDistance[5] = dot(pos, clipPlaneT);\n"
+"	vclipDistance = 3.402823466e+38;\n"
+"	for(int n = 0; n < nbClipPlanes; n++){\n"
+"		float d = dot(pos, clipPlanes[n]);\n"
+"		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
+"	}\n"
 "}";
 
 char* fsPick = "#version 330 core\n"
 "layout (location = 0) out float gIndex;\n"
 "uniform float minFeatureValue;\n"
+"uniform bool clip;\n"
 "in float id;\n"
 "in float feature;\n"
+"in float vclipDistance;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if(feature < minFeatureValue)\n"
 "		discard;\n"
 "	gIndex = id;\n"
@@ -167,10 +169,14 @@ char* fsPick = "#version 330 core\n"
 char* fsUniformColor = "#version 330 core\n"
 "out vec4 color;\n"
 "in vec3 normal;\n"
+"in float vclipDistance;\n"
 "uniform vec4 singleColor;\n"
 "uniform bool activatedCulling; \n"
 "uniform vec3 cameraForward; \n"
+"uniform bool clip;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if (activatedCulling) {\n"
 "		float res = dot(cameraForward, normal); \n"
 "		if (res > 0.f)\n"
@@ -183,37 +189,37 @@ char* vsStipple = "#version 330\n"
 "layout(location = 0) in vec3 inPos;\n"
 "flat out vec3 startPos;\n"
 "out vec3 vertPos;\n"
+"out float vclipDistance;\n"
 "uniform mat4 MVP;\n"
-"uniform vec4 clipPlaneX;\n"
-"uniform vec4 clipPlaneY;\n"
-"uniform vec4 clipPlaneZ;\n"
-"uniform vec4 clipPlaneW;\n"
-"uniform vec4 clipPlaneH;\n"
-"uniform vec4 clipPlaneT;\n"
+"const int MAX_CLIPPING_PLANES = 50;\n"
+"uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
+"uniform int nbClipPlanes;\n"
 "void main()\n"
 "{\n"
 "	vec4 pos = MVP * vec4(inPos, 1.0);\n"
 "	gl_Position = pos;\n"
 "	vertPos = pos.xyz / pos.w;\n"
 "	startPos = vertPos;\n"
-"	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
-"	gl_ClipDistance[1] = dot(pos, clipPlaneY);\n"
-"	gl_ClipDistance[2] = dot(pos, clipPlaneZ);\n"
-"	gl_ClipDistance[3] = dot(pos, clipPlaneW);\n"
-"	gl_ClipDistance[4] = dot(pos, clipPlaneH);\n"
-"	gl_ClipDistance[5] = dot(pos, clipPlaneT);\n"
-"}";
+"	vclipDistance = 3.402823466e+38;\n"
+"	for(int n = 0; n < nbClipPlanes; n++){\n"
+"		float d = dot(pos, clipPlanes[n]);\n"
+"		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
+"	}\n""}";
 
 char* fsStipple = "#version 330\n"
 "flat in vec3 startPos;\n"
 "in vec3 vertPos;\n"
+"in float vclipDistance;\n"
 "out vec4 fragColor;\n"
 "uniform vec4 singleColor;\n"
 "uniform vec2  u_resolution;\n"
 "uniform float u_dashSize;\n"
 "uniform float u_gapSize;\n"
+"uniform bool clip;\n"
 "void main()\n"
 "{"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	vec2  dir = (vertPos.xy - startPos.xy) * u_resolution / 2.0;\n"
 "	float dist = length(dir);\n"
 "	if (fract(dist / (u_dashSize + u_gapSize)) > u_dashSize / (u_dashSize + u_gapSize))\n"
@@ -256,39 +262,40 @@ char* vsPointRenderingRotation = "#version 330 core\n"
 "layout(location = 2) in float vertexFeature;\n"
 "layout(location = 3) in vec4 vertexColor;\n"
 "uniform mat4 MVP;\n"
-"uniform vec4 clipPlaneX;\n"
-"uniform vec4 clipPlaneY;\n"
-"uniform vec4 clipPlaneZ;\n"
-"uniform vec4 clipPlaneW;\n"
-"uniform vec4 clipPlaneH;\n"
-"uniform vec4 clipPlaneT;\n"
+"const int MAX_CLIPPING_PLANES = 50;\n"
+"uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
+"uniform int nbClipPlanes;\n"
 "uniform float sizePoints;\n"
 "uniform float antialias;\n"
 "out float feature;\n"
 "out vec4 colorIn;\n"
+"out float vclipDistance;\n"
 "void main() {\n"
 "	vec4 pos = vec4(vertexPosition_modelspace, 1);\n"
 "	gl_Position = MVP * pos;\n"
 "	gl_PointSize = sizePoints;\n"
 "	feature = vertexFeature;\n"
 "	colorIn = vertexColor;\n"
-"	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
-"	gl_ClipDistance[1] = dot(pos, clipPlaneY);\n"
-"	gl_ClipDistance[2] = dot(pos, clipPlaneZ);\n"
-"	gl_ClipDistance[3] = dot(pos, clipPlaneW);\n"
-"	gl_ClipDistance[4] = dot(pos, clipPlaneH);\n"
-"	gl_ClipDistance[5] = dot(pos, clipPlaneT);\n"
+"	vclipDistance = 3.402823466e+38;\n"
+"	for(int n = 0; n < nbClipPlanes; n++){\n"
+"		float d = dot(pos, clipPlanes[n]);\n"
+"		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
+"	}\n"
 "}";
 
 char* fsPointRenderingRotation = "#version 330 core\n"
 "in float feature;\n"
 "in vec4 colorIn;\n"
+"in float vclipDistance;\n"
 "out vec4 color;\n"
 "uniform sampler1D lutTexture;\n"
 "uniform float minFeatureValue;\n"
 "uniform float maxFeatureValue;\n"
 "uniform bool useSpecialColors;\n"
+"uniform bool clip;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if (useSpecialColors) {\n"
 "		color = vec4(colorIn.rgb, 1.0);\n"
 "	}\n"
@@ -437,6 +444,8 @@ namespace poca::opengl {
 		this->addActionToObserve("updateDisplay");
 		this->setWindowTitle(_obj->getName().c_str());
 
+		m_clip.resize(6);
+
 		m_offscreenFBO = NULL;
 		m_texDisplayer = NULL;
 		m_stateCamera.m_rotation = glm::quat(1.f, 0, 0, 0);
@@ -471,7 +480,7 @@ namespace poca::opengl {
 
 		glDepthRange(0., 1.);
 
-		enableClippingPlanes();
+		m_applyClippingPlanes = true;
 
 		GLenum estado = glewInit();
 		if (estado != GLEW_OK)
@@ -628,9 +637,9 @@ namespace poca::opengl {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		if (m_resetedProj)
-			disableClippingPlanes();
+			m_applyClippingPlanes = false;
 		else
-			enableClippingPlanes();
+			m_applyClippingPlanes = true;
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		poca::core::Color4D color = poca::core::contrastColor(poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
@@ -685,7 +694,7 @@ namespace poca::opengl {
 		std::array <uint8_t, 4> colorBack{ 0, 0, 0, 255 }, colorFont{ 255, 255, 255, 255 };
 		std::array <float, 4> colorSelectedROIs{ 1.f, 0.f, 1.f, 1.f }, colorUnselectedROIs{ 1.f, 0.f, 0.f, 1.f };
 		uint32_t thickness = 5, pointSizeGL = 1;
-		bool displayFont = true, clip = true;
+		bool displayFont = true;
 		float fontSize = 20.f, antialias = 1.f;
 		GL_CHECK_ERRORS();
 
@@ -707,7 +716,7 @@ namespace poca::opengl {
 		if (comObj->hasParameter("fillPolygon"))
 			m_fillPolygon = comObj->getParameter<bool>("fillPolygon");
 		if (comObj->hasParameter("clip"))
-			clip = comObj->getParameter<bool>("clip");
+			m_applyClippingPlanes = comObj->getParameter<bool>("clip");
 		if (comObj->hasParameter("pointSizeGL"))
 			pointSizeGL = comObj->getParameter<uint32_t>("pointSizeGL");
 
@@ -721,12 +730,6 @@ namespace poca::opengl {
 			colorFont = { 255, 255, 255, 255 }; // dark colors - white font
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		GL_CHECK_ERRORS();
-
-		if (clip)
-			enableClippingPlanes();
-		else
-			disableClippingPlanes();
 		GL_CHECK_ERRORS();
 
 		GLfloat bkColor[4];
@@ -977,7 +980,7 @@ namespace poca::opengl {
 		uint32_t thickness = 5;
 		if (comObj->hasParameter("lineWidthGL"))
 			thickness = comObj->getParameter<uint32_t>("lineWidthGL");
-		enableClippingPlanes();
+		m_applyClippingPlanes = true;
 		glDisable(GL_DEPTH_TEST);
 		displayGrid();
 		displayBoundingBox(thickness, 1);
@@ -1219,12 +1222,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setVec4("singleColor", colorGrid[0], colorGrid[1], colorGrid[2], colorGrid[3]);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		GL_CHECK_ERRORS();
 
 		float valueColor = a < 0.5 ? 242.f : 45.f;
@@ -2746,26 +2746,6 @@ namespace poca::opengl {
 		bool displayFont = comObj->getParameter<bool>("fontDisplay");
 		displayFont = !displayFont;
 		m_object->executeCommand(&poca::core::CommandInfo(true, "fontDisplay", displayFont));
-	}
-
-	void Camera::enableClippingPlanes()
-	{
-		glEnable(GL_CLIP_DISTANCE0);
-		glEnable(GL_CLIP_DISTANCE1);
-		glEnable(GL_CLIP_DISTANCE2);
-		glEnable(GL_CLIP_DISTANCE3);
-		glEnable(GL_CLIP_DISTANCE4);
-		glEnable(GL_CLIP_DISTANCE5);
-	}
-
-	void Camera::disableClippingPlanes()
-	{
-		glDisable(GL_CLIP_DISTANCE0);
-		glDisable(GL_CLIP_DISTANCE1);
-		glDisable(GL_CLIP_DISTANCE2);
-		glDisable(GL_CLIP_DISTANCE3);
-		glDisable(GL_CLIP_DISTANCE4);
-		glDisable(GL_CLIP_DISTANCE5);
 	}
 
 	void Camera::fixPlane(const int _type, const bool _on)

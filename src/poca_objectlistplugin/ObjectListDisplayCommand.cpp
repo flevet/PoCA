@@ -63,33 +63,31 @@ char* vsLight = "#version 330 core\n"
 "uniform mat4 model;\n"
 "uniform mat4 view;\n"
 "uniform mat4 projection;\n"
-"uniform vec4 clipPlaneX;\n"
-"uniform vec4 clipPlaneY;\n"
-"uniform vec4 clipPlaneZ;\n"
-"uniform vec4 clipPlaneW;\n"
-"uniform vec4 clipPlaneH;\n"
-"uniform vec4 clipPlaneT;\n"
+"const int MAX_CLIPPING_PLANES = 50;\n"
+"uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
+"uniform int nbClipPlanes;\n"
 "out float feature;\n"
 "out vec3 FragPos;\n"
 "out vec3 Normal;\n"
+"out float vclipDistance;\n"
 "void main() {\n"
 "	vec4 pos = vec4(aPos, 1.0);\n"
 "	FragPos = vec3(model * pos);\n"
 "	Normal = mat3(transpose(inverse(model))) * aNormal;\n"
 "	gl_Position = projection * view * vec4(FragPos, 1.0);\n"
 "	feature = vertexFeature;\n"
-"	gl_ClipDistance[0] = dot(pos, clipPlaneX);\n"
-"	gl_ClipDistance[1] = dot(pos, clipPlaneY);\n"
-"	gl_ClipDistance[2] = dot(pos, clipPlaneZ);\n"
-"	gl_ClipDistance[3] = dot(pos, clipPlaneW);\n"
-"	gl_ClipDistance[4] = dot(pos, clipPlaneH);\n"
-"	gl_ClipDistance[5] = dot(pos, clipPlaneT);\n"
+"	vclipDistance = 3.402823466e+38;\n"
+"	for(int n = 0; n < nbClipPlanes; n++){\n"
+"		float d = dot(pos, clipPlanes[n]);\n"
+"		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
+"	}\n"
 "}";
 
 char* fsLight = "#version 330 core\n"
 "in float feature;\n"
 "in vec3 Normal;\n"
 "in vec3 FragPos;\n"
+"in float vclipDistance;\n"
 "out vec4 color;\n"
 "uniform mat4 view;\n"
 "uniform sampler1D lutTexture;\n"
@@ -99,7 +97,10 @@ char* fsLight = "#version 330 core\n"
 "uniform vec3 viewPos;\n"
 "uniform vec3 lightColor;\n"
 "uniform bool applyIllumination;\n"
+"uniform bool clip;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if (feature < minFeatureValue)\n"
 "		discard;\n"
 "	float inter = maxFeatureValue - minFeatureValue;\n"
@@ -133,6 +134,7 @@ char* fsLightSSAO = "#version 330 core\n"
 "in float feature;\n"
 "in vec3 Normal;\n"
 "in vec3 FragPos;\n"
+"in float vclipDistance;\n"
 "uniform mat4 view;\n"
 "uniform sampler1D lutTexture;\n"
 "uniform float minFeatureValue;\n"
@@ -141,7 +143,10 @@ char* fsLightSSAO = "#version 330 core\n"
 "uniform vec3 viewPos;\n"
 "uniform vec3 lightColor;\n"
 "uniform bool applyIllumination;\n"
+"uniform bool clip;\n"
 "void main() {\n"
+"	if (clip && vclipDistance < 0.f)\n"
+"		discard;\n"
 "	if (feature < minFeatureValue)\n"
 "		discard;\n"
 "	float inter = maxFeatureValue - minFeatureValue;\n"
@@ -405,12 +410,10 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			shader->setInt("lutTexture", 0);
 			shader->setFloat("minFeatureValue", m_minOriginalFeature);
 			shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
-			shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-			shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-			shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-			shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-			shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-			shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+			shader->setBool("clip", _cam->clip());
+
 			shader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 			shader->setVec3("lightPos", pos);
 			shader->setVec3("viewPos", pos);
@@ -493,12 +496,9 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 	shader->setFloat("minFeatureValue", m_minOriginalFeature);
 	shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
 
-	shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-	shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-	shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-	shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-	shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-	shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+	shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+	shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+	shader->setBool("clip", _cam->clip());
 
 	poca::opengl::HelperSingleton* helper = poca::opengl::HelperSingleton::instance();
 	poca::opengl::QuadSingleGLBuffer <float>& ellipsoidBuffer = helper->getEllipsoidBuffer();
@@ -630,12 +630,9 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", m_minOriginalFeature);
 		shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
-		shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-		shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-		shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-		shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-		shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-		shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+		shader->setBool("clip", _cam->clip());
 		shader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
 		shader->setVec3("lightPos", pos);
 		shader->setVec3("viewPos", pos);
@@ -669,12 +666,9 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 		shader->setFloat("minFeatureValue", m_minOriginalFeature);
 		shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
 		shader->setFloat("useSpecialColors", 0);
-		shader->setVec4("clipPlaneX", _cam->getClipPlaneX());
-		shader->setVec4("clipPlaneY", _cam->getClipPlaneY());
-		shader->setVec4("clipPlaneZ", _cam->getClipPlaneZ());
-		shader->setVec4("clipPlaneW", _cam->getClipPlaneW());
-		shader->setVec4("clipPlaneH", _cam->getClipPlaneH());
-		shader->setVec4("clipPlaneT", _cam->getClipPlaneT());
+		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+		shader->setBool("clip", _cam->clip());
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, m_textureLutID);

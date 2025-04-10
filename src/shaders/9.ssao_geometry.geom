@@ -8,11 +8,13 @@ uniform float radius;
 
 in vec3 v_color[];
 in float v_feature[];
+in float v_clipDistance[];
 
 out vec2 TexCoords_GS;
 out vec3 center;
 out vec3 vcolor;
 out float vfeature;
+out float vclipDistance;
 
 const vec2 uv[4] = vec2[4](vec2(1,1),
 					vec2(1,0),
@@ -34,12 +36,7 @@ void main() {
 			vfeature = v_feature[0];
 			vcolor = v_color[0];
 			gl_PrimitiveID = gl_PrimitiveIDIn + 1;
-			gl_ClipDistance[0] = gl_in[0].gl_ClipDistance[0];
-			gl_ClipDistance[1] = gl_in[0].gl_ClipDistance[1];
-			gl_ClipDistance[2] = gl_in[0].gl_ClipDistance[2];
-			gl_ClipDistance[3] = gl_in[0].gl_ClipDistance[3];
-			gl_ClipDistance[4] = gl_in[0].gl_ClipDistance[4];
-			gl_ClipDistance[5] = gl_in[0].gl_ClipDistance[5];
+			vclipDistance = v_clipDistance[0];
 			EmitVertex();
 		}
     EndPrimitive();

@@ -9,12 +9,17 @@ uniform sampler1D lutTexture;
 uniform float minFeatureValue;
 uniform float maxFeatureValue;
 uniform vec4 singleColor;
+uniform bool clip;
 in float linelength;
 in vec2 uv;
 in float thick;
 in vec3 normal;
 in float feature;
+in float vclipDistance;
 void main() {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if(activatedCulling){
 		float res = dot(cameraForward, normal);
 		if(res < 0.f)

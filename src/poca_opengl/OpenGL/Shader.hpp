@@ -263,6 +263,10 @@ namespace poca::opengl {
 		{
 			glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, glm::value_ptr(value));
 		}
+		void setVec4v(const std::string& name, std::vector<glm::vec4>& value) const
+		{
+			glUniform4fv(glGetUniformLocation(ID, name.c_str()), value.size(), reinterpret_cast<GLfloat*>(value.data()));
+		}
 		void setVec4(const std::string& name, float x, float y, float z, float w)
 		{
 			glUniform4f(glGetUniformLocation(ID, name.c_str()), x, y, z, w);

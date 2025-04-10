@@ -6,27 +6,24 @@ layout(location = 5) in mat4 model_matrix;
 
 uniform mat4 MVP;
 
-uniform vec4 clipPlaneX;
-uniform vec4 clipPlaneY;
-uniform vec4 clipPlaneZ;
-uniform vec4 clipPlaneW;
-uniform vec4 clipPlaneH;
-uniform vec4 clipPlaneT;
+const int MAX_CLIPPING_PLANES = 50;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform int nbClipPlanes;
 
 out float vfeature;
+out float vclipDistance;
 
 void main(){
 	vec4 pos = model_matrix * vec4(unitCirclePosition, 1);
 
-    gl_Position = MVP * pos;
+    	gl_Position = MVP * pos;
 
 	vfeature = feature;
 
-	gl_ClipDistance[0] = dot(pos, clipPlaneX);
-	gl_ClipDistance[1] = dot(pos, clipPlaneY);
-	gl_ClipDistance[2] = dot(pos, clipPlaneZ);
-	gl_ClipDistance[3] = dot(pos, clipPlaneW);
-	gl_ClipDistance[4] = dot(pos, clipPlaneH);
-	gl_ClipDistance[5] = dot(pos, clipPlaneT);
+	vclipDistance = 3.402823466e+38;
+	for(int n = 0; n < nbClipPlanes; n++){
+		float d = dot(pos, clipPlanes[n]);
+		vclipDistance = d < vclipDistance ? d : vclipDistance;
+	}
 }
 

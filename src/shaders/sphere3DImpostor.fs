@@ -13,16 +13,21 @@ struct Light {
 uniform Light light;
 uniform bool activatedCulling;
 uniform vec3 cameraForward;
+uniform bool clip;
 
 in vec2 texC;
 in vec3 center;
 in float radius;
 in vec3 normal;
+in float vclipDistance;
 
 out vec4 color;
 
 void main()
 {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if(activatedCulling){
 		float res = dot(cameraForward, normal);
 		if(res < 0.f)

@@ -10,6 +10,7 @@ uniform float nbPoints;
 
 uniform bool useSpecialColors;
 uniform vec3 light_position;
+uniform bool clip;
 
 uniform bool activatedCulling;
 uniform vec3 cameraForward;
@@ -19,6 +20,7 @@ in vec3 center;
 in float vfeature;
 in vec3 vcolor;
 in vec3 vnormal;
+in float vclipDistance;
 
 out vec4 color_out;
 
@@ -41,6 +43,9 @@ vec4 outline(float distance, float linewidth, float antialias, vec4 stroke, vec4
 
 void main()
 {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if(activatedCulling){
 		float res = dot(cameraForward, vnormal);
 		if(res < 0.f)

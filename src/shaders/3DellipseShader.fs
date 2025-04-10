@@ -3,6 +3,7 @@ in vec3 TexCoords_GS;
 in vec3 spot_sigma;
 in float spot_feature;
 in vec4 spot_position;
+in float vclipDistance;
 
 uniform sampler1D lutTexture;
 uniform vec3 cameraPos;
@@ -11,6 +12,7 @@ uniform float maxFeatureValue;
 uniform float globalAlpha;
 uniform float radius;
 uniform bool fixedRadius;
+uniform bool clip;
 
 out vec4 color;
 
@@ -26,6 +28,9 @@ void distanceToEllipsoidCenterSigma(in vec3 position, out float d){
 
 void main()
 {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if(spot_feature < minFeatureValue) 
 		discard;
 

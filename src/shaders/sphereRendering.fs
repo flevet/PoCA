@@ -4,6 +4,7 @@ in vec3 v_color;
 in float v_size;
 in vec4 v_eye_position;
 in vec3 v_light_direction;
+in float vclipDistance;
 out vec4 color_out;
 uniform sampler1D lutTexture;
 uniform float minFeatureValue;
@@ -11,6 +12,7 @@ uniform float maxFeatureValue;
 uniform bool useSpecialColors;
 uniform float radius;
 uniform mat4 projection;
+uniform bool clip;
 
 vec4 outline(float distance, float linewidth, float antialias, vec4 stroke, vec4 fill)
 {
@@ -30,6 +32,9 @@ vec4 outline(float distance, float linewidth, float antialias, vec4 stroke, vec4
 }
 
 void main() {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	vec2 P = gl_PointCoord.xy - vec2(0.5,0.5);
     float point_size = v_size  + 5.0;
     float distance = length(P*point_size) - v_size/2;

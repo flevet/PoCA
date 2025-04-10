@@ -52,12 +52,11 @@ namespace poca::opengl {
 		//virtual const glm::mat4& getTranslationMatrix() const = 0;
 		virtual const glm::mat4& getRotationMatrix() const = 0;
 
-		virtual const glm::vec4& getClipPlaneX() const = 0;
-		virtual const glm::vec4& getClipPlaneY() const = 0;
-		virtual const glm::vec4& getClipPlaneZ() const = 0;
-		virtual const glm::vec4& getClipPlaneW() const = 0;
-		virtual const glm::vec4& getClipPlaneH() const = 0;
-		virtual const glm::vec4& getClipPlaneT() const = 0;
+		virtual const std::vector<glm::vec4>& getClipPlanes() const = 0;
+		virtual std::vector<glm::vec4>& getClipPlanes() = 0;
+		virtual bool clip() const = 0;
+		virtual size_t nbClippingPlanes() const = 0;
+		virtual void setClip(const bool) = 0;
 
 		virtual const glm::vec3& getCenter() = 0;
 		virtual const glm::vec3& getEye() = 0;

@@ -4,12 +4,9 @@ layout(location = 1) in vec3 vertexNormal;
 layout(location = 2) in float vertexFeature;
 layout(location = 3) in vec4 vertexColor;
 uniform mat4 MVP;
-uniform vec4 clipPlaneX;
-uniform vec4 clipPlaneY;
-uniform vec4 clipPlaneZ;
-uniform vec4 clipPlaneW;
-uniform vec4 clipPlaneH;
-uniform vec4 clipPlaneT;
+const int MAX_CLIPPING_PLANES = 50;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform int nbClipPlanes;
 uniform uvec4 viewport;
 uniform float sizePoints;
 uniform bool activatedAntialias;
@@ -18,6 +15,7 @@ out float feature;
 out vec4 colorIn;
 out vec2 v_center;
 out vec3 v_normal;
+out float vclipDistance;
 vec2 wrldToScreen(vec3 coord) {
   vec4 clipSpacePos = MVP * vec4(coord, 1.f);
   vec3 ndcSpacePos = vec3(clipSpacePos.x, clipSpacePos.y, clipSpacePos.z) / clipSpacePos.w;
@@ -35,10 +33,9 @@ void main() {
 	feature = vertexFeature;
 	colorIn = vertexColor;
 	v_normal = vertexNormal;//(MVP * vec4(vertexNormal, 1)).xyz;
-	gl_ClipDistance[0] = dot(pos, clipPlaneX);
-	gl_ClipDistance[1] = dot(pos, clipPlaneY);
-	gl_ClipDistance[2] = dot(pos, clipPlaneZ);
-	gl_ClipDistance[3] = dot(pos, clipPlaneW);
-	gl_ClipDistance[4] = dot(pos, clipPlaneH);
-	gl_ClipDistance[5] = dot(pos, clipPlaneT);
+	vclipDistance= 3.402823466e+38;
+	for(int n = 0; n < nbClipPlanes; n++){
+		float d = dot(pos, clipPlanes[n]);
+		vclipDistance = d < vclipDistance ? d : vclipDistance;
+	}
 }

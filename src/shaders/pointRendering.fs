@@ -3,6 +3,7 @@ in float feature;
 in vec4 colorIn;
 in vec2 v_center;
 in vec3 v_normal;
+in float vclipDistance;
 out vec4 color;
 uniform sampler1D lutTexture;
 uniform float minFeatureValue;
@@ -13,7 +14,11 @@ uniform bool activatedAntialias;
 uniform bool activatedCulling;
 uniform float antialias;
 uniform vec3 cameraForward;
+uniform bool clip;
 void main() {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	if(activatedCulling){
 		float res = dot(cameraForward, v_normal);
 		if(res < 0.f)

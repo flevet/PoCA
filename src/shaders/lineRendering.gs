@@ -7,11 +7,13 @@ uniform float thickness;
 uniform float antialias;
 in vec3 v_normal[];
 in float v_feature[];
+in float v_clipDistance[];
 out vec2 uv;
 out float linelength;
 out float thick;
 out vec3 normal;
 out float feature;
+out float vclipDistance;
 void main() {
 	vec2 p0 = vec2(gl_in[0].gl_Position.xy), p1 = vec2(gl_in[1].gl_Position.xy);
 	float lengthL = length(p1-p0);
@@ -53,12 +55,7 @@ void main() {
 		linelength = lengthL;
 		normal = norms[i];
 		feature = feats[i];
-		gl_ClipDistance[0] = gl_in[0].gl_ClipDistance[0];
-		gl_ClipDistance[1] = gl_in[0].gl_ClipDistance[1];
-		gl_ClipDistance[2] = gl_in[0].gl_ClipDistance[2];
-		gl_ClipDistance[3] = gl_in[0].gl_ClipDistance[3];
-		gl_ClipDistance[4] = gl_in[0].gl_ClipDistance[4];
-		gl_ClipDistance[5] = gl_in[0].gl_ClipDistance[5];
+		vclipDistance = v_clipDistance[0];
 		EmitVertex();
 	}
 	EndPrimitive();

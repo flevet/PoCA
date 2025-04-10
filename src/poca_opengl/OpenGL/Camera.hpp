@@ -103,6 +103,8 @@ namespace poca::opengl {
 		int m_id;
 	};
 
+	const int MAX_CLIPPING_PLANES = 50;
+
 	class Camera : public QOpenGLWidget, public CameraInterface, public poca::core::Observer {
 		Q_OBJECT
 
@@ -139,12 +141,11 @@ namespace poca::opengl {
 		virtual const glm::vec3& getTranslationModel() const { return m_stateCamera.m_translationModel; }
 		virtual const glm::mat4& getRotationMatrix() const { return m_rotationMatrix; }
 
-		virtual const glm::vec4& getClipPlaneX() const { return m_clip[0]; }
-		virtual const glm::vec4& getClipPlaneY() const { return m_clip[1]; }
-		virtual const glm::vec4& getClipPlaneZ() const { return m_clip[2]; }
-		virtual const glm::vec4& getClipPlaneW() const { return m_clip[3]; }
-		virtual const glm::vec4& getClipPlaneH() const { return m_clip[4]; }
-		virtual const glm::vec4& getClipPlaneT() const { return m_clip[5]; }
+		virtual const std::vector<glm::vec4>& getClipPlanes() const { return m_clip; }
+		virtual std::vector<glm::vec4>& getClipPlanes() { return m_clip; }
+		virtual bool clip() const { return m_applyClippingPlanes; }
+		virtual size_t nbClippingPlanes() const { return m_clip.size(); }
+		virtual void setClip(const bool _val) { m_applyClippingPlanes = _val; }
 
 		virtual const glm::uvec4& getViewport() const { return m_viewport; }
 
@@ -198,9 +199,6 @@ namespace poca::opengl {
 
 		glm::vec3 getWorldCoordinates(const glm::vec2&);
 		glm::vec2 worldToScreenCoordinates(const glm::vec3&) const;
-
-		void enableClippingPlanes();
-		void disableClippingPlanes();
 
 		void fixPlane(const int, const bool);
 
@@ -322,7 +320,10 @@ namespace poca::opengl {
 		size_t m_dimension;
 		glm::mat4 m_matrixProjection, m_matrixModel, m_translationMatrix, m_rotationMatrix;
 		glm::uvec4 m_viewport;
-		glm::vec4 m_clip[6];
+		
+		std::vector <glm::vec4> m_clip;
+		bool m_applyClippingPlanes{ true };
+
 		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho;
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid;
@@ -419,12 +420,9 @@ namespace poca::opengl {
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setFloat("alpha", _alpha);
 		shader->setBool("useSpecialColors", false);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glm::vec3 frwd = getEye();
 		frwd = glm::normalize(frwd);
@@ -469,12 +467,9 @@ namespace poca::opengl {
 		shader->setMat4("MVP", proj * view * model);
 		shader->setFloat("alpha", _alpha);
 		shader->setBool("useSpecialColors", true);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glm::vec3 frwd = getEye();
 		frwd = glm::normalize(frwd);
@@ -527,12 +522,9 @@ namespace poca::opengl {
 		shader->setMat4("MVP", proj * view * model);
 		shader->setBool("hasFeature", true);
 		shader->setFloat("minFeatureValue", _minF);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -574,12 +566,9 @@ namespace poca::opengl {
 		shader->setMat4("MVP", proj * view * model);
 		shader->setBool("hasFeature", false);
 		shader->setFloat("minFeatureValue", 0.f);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -642,12 +631,9 @@ namespace poca::opengl {
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setBool("useSpecialColors", false);
 		shader->setFloat("radius", _radius);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		shader->setFloat("nbPoints", _bufferVertex.getNbElements());
 		shader->setVec3("light_position", getEye());
 
@@ -712,12 +698,9 @@ namespace poca::opengl {
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setBool("useSpecialColors", false);
 		shader->setFloat("radius", _radius);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		shader->setFloat("nbPoints", _bufferVertex.getNbElements());
 		shader->setVec3("light_position", getEye());
 		shader->setBool("activatedCulling", cullFaceActivated());
@@ -788,12 +771,9 @@ namespace poca::opengl {
 		shader->setFloat("radius", _pointSize);
 		shader->setBool("fixedRadius", _fixedSize);
 		shader->setFloat("alpha", _alpha);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, _textureLutID);
 
@@ -843,12 +823,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glm::vec3 frwd = getEye();
 		frwd = glm::normalize(frwd);
@@ -883,12 +860,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glEnableVertexAttribArray(0);
 		const std::vector <size_t>& sizeStridesLocs = _buffer.getSizeBuffers();
@@ -933,12 +907,9 @@ namespace poca::opengl {
 		shader->setBool("activatedCulling", cullFaceActivated() && !_normals.empty());
 		shader->setBool("useSingleColor", true);
 		shader->setFloat("minFeatureValue", _minF);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		glEnableVertexAttribArray(0);
 		_buffer.bindBuffer(0);
 		if (!_normals.empty()) {
@@ -988,12 +959,9 @@ namespace poca::opengl {
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, _textureLutID);
@@ -1046,12 +1014,9 @@ namespace poca::opengl {
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setFloat("alpha", _alpha);
 		shader->setBool("useSpecialColors", false);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, _textureLutID);
@@ -1096,12 +1061,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setFloat("useSpecialColors", 1);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		const std::vector <size_t>& sizeStrides = _bufferVertex.getSizeBuffers();
 		glEnableVertexAttribArray(0);
@@ -1142,12 +1104,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setFloat("useSpecialColors", 1);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(3);
@@ -1173,12 +1132,9 @@ namespace poca::opengl {
 		shader->setMat4("MVP", proj * view * model);
 		shader->setBool("hasFeature", true);
 		shader->setFloat("minFeatureValue", _minF);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 
 		const std::vector <size_t>& sizeStrides = _bufferVertex.getSizeBuffers();
 		glEnableVertexAttribArray(0);
@@ -1209,12 +1165,9 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setMat4("projection", proj);
-		shader->setVec4("clipPlaneX", getClipPlaneX());
-		shader->setVec4("clipPlaneY", getClipPlaneY());
-		shader->setVec4("clipPlaneZ", getClipPlaneZ());
-		shader->setVec4("clipPlaneW", getClipPlaneW());
-		shader->setVec4("clipPlaneH", getClipPlaneH());
-		shader->setVec4("clipPlaneT", getClipPlaneT());
+		shader->setVec4v("clipPlanes", m_clip);
+		shader->setInt("nbClipPlanes", nbClippingPlanes());
+		shader->setBool("clip", m_applyClippingPlanes);
 		shader->setFloat("u_intensity", _intensity);
 		shader->setFloat("radius", _radius);
 		shader->setBool("screenRadius", _screenRadius);

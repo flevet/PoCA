@@ -3,6 +3,7 @@ uniform sampler1D lutTexture;
 uniform float minFeatureValue;
 uniform float maxFeatureValue;
 uniform float alpha;
+uniform bool clip;
 
 uniform bool useSpecialColors;
 
@@ -12,6 +13,7 @@ in float vfeature;
 in vec3 vcolor;
 in vec3 vsigma;
 in float vradius;
+in float vclipDistance;
 
 out vec4 color_out;
 
@@ -36,6 +38,9 @@ float gauss(float arg, float sx){
 
 void main()
 {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	float d = dot(texC, texC);
 	//if (d > 1.0f)
 	//	discard;

@@ -6,8 +6,10 @@ uniform mat4 projection;
 uniform float radius;
 uniform vec2 pixelSize;
 uniform bool screenRadius;
+in float v_clipDistance[];
 out vec2 TexCoords_GS;
 out vec3 center;
+out float vclipDistance;
 const vec2 uv[4] = vec2[4](vec2(1,1), vec2(1,0), vec2(0,1),	vec2(0,0));
 void main() {
 	vec4 vc[4];
@@ -20,12 +22,7 @@ void main() {
 		gl_Position = screenRadius ? (MVP * gl_in[0].gl_Position) + (vc[i] * vec4(pixelSize, 0.f, 0.f)) : (MVP * gl_in[0].gl_Position) + (projection * vc[i]);
 		TexCoords_GS = uv[i];
 		center = gl_in[0].gl_Position.xyz;
-		gl_ClipDistance[0] = gl_in[0].gl_ClipDistance[0];
-		gl_ClipDistance[1] = gl_in[0].gl_ClipDistance[1];
-		gl_ClipDistance[2] = gl_in[0].gl_ClipDistance[2];
-		gl_ClipDistance[3] = gl_in[0].gl_ClipDistance[3];
-		gl_ClipDistance[4] = gl_in[0].gl_ClipDistance[4];
-		gl_ClipDistance[5] = gl_in[0].gl_ClipDistance[5];
+		vclipDistance = v_clipDistance[0];
 		EmitVertex();
 	}
 	EndPrimitive();

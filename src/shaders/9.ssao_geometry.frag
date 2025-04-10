@@ -18,11 +18,13 @@ uniform float nbPoints;
 
 uniform bool useSpecialColors;
 uniform vec3 light_position;
+uniform bool clip;
 
 in vec2 TexCoords_GS;
 in vec3 center;
 in float vfeature;
 in vec3 vcolor;
+in float vclipDistance;
 
 // 'colorImage' is a sampler2D with the depth image
 // read from the current depth buffer bound to it.
@@ -36,6 +38,9 @@ float LinearizeDepth(in float depth)
 
 void main()
 {
+	if(clip && vclipDistance < 0.f)
+		discard;
+		
 	vec3 colorTmp;
 	if (useSpecialColors) {
 		colorTmp = vec3(vcolor);

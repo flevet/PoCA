@@ -7,12 +7,9 @@ uniform mat4 MVP;
 uniform mat4 view;
 uniform mat4 projection;
 
-uniform vec4 clipPlaneX;
-uniform vec4 clipPlaneY;
-uniform vec4 clipPlaneZ;
-uniform vec4 clipPlaneW;
-uniform vec4 clipPlaneH;
-uniform vec4 clipPlaneT;
+const int MAX_CLIPPING_PLANES = 50;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform int nbClipPlanes;
 
 uniform float radius;
 uniform vec3 light_position;
@@ -22,6 +19,7 @@ out float v_size;
 out vec3 v_color;
 out vec4 v_eye_position;
 out vec3 v_light_direction;
+out float vclipDistance;
 
 void main() {
 	vec4 pos = vec4(vertexPosition, 1);
@@ -37,10 +35,9 @@ void main() {
     v_size = radius;//512.0 * p.x / p.w;
     gl_PointSize = v_size + 5.0;
 	
-	gl_ClipDistance[0] = dot(pos, clipPlaneX);
-	gl_ClipDistance[1] = dot(pos, clipPlaneY);
-	gl_ClipDistance[2] = dot(pos, clipPlaneZ);
-	gl_ClipDistance[3] = dot(pos, clipPlaneW);
-	gl_ClipDistance[4] = dot(pos, clipPlaneH);
-	gl_ClipDistance[5] = dot(pos, clipPlaneT);
+	vclipDistance= 3.402823466e+38;
+	for(int n = 0; n < nbClipPlanes; n++){
+		float d = dot(pos, clipPlanes[n]);
+		vclipDistance = d < vclipDistance ? d : vclipDistance;
+	}
 }

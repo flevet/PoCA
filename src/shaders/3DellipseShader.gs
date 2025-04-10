@@ -4,7 +4,7 @@ layout (triangle_strip, max_vertices = 14) out;
 
 in vec3 sigmas[];
 in float feature[];
-//in float selection[];
+in float v_clipDistance[];
 
 uniform mat4 MVP;
 uniform float radius;
@@ -14,6 +14,7 @@ out vec3 TexCoords_GS;
 out vec3 spot_sigma;
 out float spot_feature;
 out vec4 spot_position;
+out float vclipDistance;
 
 const int indexes[14] = int[14](3, 2, 6, 7, 4, 2, 0, 3, 1, 6, 5, 4, 1, 0);
 
@@ -57,12 +58,7 @@ void main() {
 			gl_Position = MVP * (gl_in[0].gl_Position + vc[indexes[i]]); 
 			spot_position = gl_in[0].gl_Position + vc[indexes[i]];
 			TexCoords_GS = gl_in[0].gl_Position.xyz;
-			gl_ClipDistance[0] = gl_in[0].gl_ClipDistance[0];
-			gl_ClipDistance[1] = gl_in[0].gl_ClipDistance[1];
-			gl_ClipDistance[2] = gl_in[0].gl_ClipDistance[2];
-			gl_ClipDistance[3] = gl_in[0].gl_ClipDistance[3];
-			gl_ClipDistance[4] = gl_in[0].gl_ClipDistance[4];
-			gl_ClipDistance[5] = gl_in[0].gl_ClipDistance[5];
+			vclipDistance = v_clipDistance[0];
 			EmitVertex();
 		}    
     EndPrimitive();
