@@ -863,38 +863,44 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 	m_maxOriginalFeature = _histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
-	std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs, featureEllipsoid(values.size());
-	if (m_objects->isHiLow()) {
-		float inter = m_maxOriginalFeature - m_minOriginalFeature;
-		float selectedValue = m_minOriginalFeature + inter / 4.f;
-		float notSelectedValue = m_minOriginalFeature + inter * (3.f / 4.f);
-		m_objects->getLocsFeatureInSelectionHiLow(featureLocs, selection, selectedValue, notSelectedValue);
-		m_objects->getFeatureInSelectionHiLow(featureValues, selection, selectedValue, notSelectedValue);
-		m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
-		if (!m_lineBuffer.empty())
-			m_objects->getOutlinesFeatureInSelectionHiLow(featureOutlines, selection, selectedValue, notSelectedValue);
+	if (values.size() == selection.size()) {
+		std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs, featureEllipsoid(values.size());
+		if (m_objects->isHiLow()) {
+			float inter = m_maxOriginalFeature - m_minOriginalFeature;
+			float selectedValue = m_minOriginalFeature + inter / 4.f;
+			float notSelectedValue = m_minOriginalFeature + inter * (3.f / 4.f);
+			m_objects->getLocsFeatureInSelectionHiLow(featureLocs, selection, selectedValue, notSelectedValue);
+			m_objects->getFeatureInSelectionHiLow(featureValues, selection, selectedValue, notSelectedValue);
+			m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
+			if (!m_lineBuffer.empty())
+				m_objects->getOutlinesFeatureInSelectionHiLow(featureOutlines, selection, selectedValue, notSelectedValue);
 
-		for (auto n = 0; n < values.size(); n++)
-			featureEllipsoid[n] = selection[n] ? selectedValue : notSelectedValue;
+			for (auto n = 0; n < values.size(); n++)
+				featureEllipsoid[n] = selection[n] ? selectedValue : notSelectedValue;
+		}
+		else {
+			m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			m_objects->getFeatureInSelection(featureValues, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			if (!m_lineBuffer.empty())
+				m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+
+			for (auto n = 0; n < values.size(); n++)
+				featureEllipsoid[n] = selection[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+		}
+		m_locsFeatureBuffer.updateBuffer(featureLocs.data());
+		m_triangleFeatureBuffer.updateBuffer(featureValues.data());
+		m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
+		if (!m_lineBuffer.empty())
+			m_lineFeatureBuffer.updateBuffer(featureOutlines.data());
+
+		if (!m_ellipsoidFeatureBuffer.empty())
+			m_ellipsoidFeatureBuffer.updateBuffer(featureEllipsoid.data());
 	}
 	else {
-		m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		m_objects->getFeatureInSelection(featureValues, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		if (!m_lineBuffer.empty())
-			m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-
-		for (auto n = 0; n < values.size(); n++)
-			featureEllipsoid[n] = selection[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+		//For now the only case of such is when we have added an histogram on the triangles, and not the objects
+		m_triangleFeatureBuffer.updateBuffer(values.data());
 	}
-	m_locsFeatureBuffer.updateBuffer(featureLocs.data());
-	m_triangleFeatureBuffer.updateBuffer(featureValues.data());
-	m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
-	if (!m_lineBuffer.empty())
-		m_lineFeatureBuffer.updateBuffer(featureOutlines.data());
-
-	if (!m_ellipsoidFeatureBuffer.empty())
-		m_ellipsoidFeatureBuffer.updateBuffer(featureEllipsoid.data());
 }
 
 QString ObjectListDisplayCommand::getInfosTriangle(const int _id) const
