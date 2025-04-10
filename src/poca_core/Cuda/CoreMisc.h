@@ -80,7 +80,7 @@
 			computeHistogram_CPU(values, histo, _min, _max);
 		}
 		else {
-			std::cout << "GPU" << std::endl;
+			//std::cout << "GPU" << std::endl;
 			std::string type = typeid(T).name();
 			if (type == "uint8_t" || type == "unsigned char") {
 				const uint8_t* data = (const uint8_t*)values.data();
@@ -135,7 +135,7 @@
 			computeStats_CPU(values, stats);
 		}
 		else {
-			std::cout << "GPU" << std::endl;
+			//std::cout << "GPU" << std::endl;
 			std::string type = typeid(T).name();
 			if (type == "uint8_t" || type == "unsigned char") {
 				const uint8_t* data = (const uint8_t*)values.data();
