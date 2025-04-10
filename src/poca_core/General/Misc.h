@@ -98,6 +98,22 @@ namespace poca::core{
 	}
 
 	template <class T>
+	MyData* generateDataWithLogNoInteraction(const std::vector<T>& _data)
+	{
+		poca::core::Histogram<T>* hist = new poca::core::Histogram<T>(_data, false);
+		hist->setInteraction(false);
+		return new poca::core::MyData(hist, true);
+	}
+
+	template <class T>
+	MyData* generateDataWithoutLogNoInteraction(const std::vector<T>& _data)
+	{
+		poca::core::Histogram<T>* hist = new poca::core::Histogram<T>(_data, false);
+		hist->setInteraction(false);
+		return new poca::core::MyData(hist, false);
+	}
+
+	template <class T>
 	MyData* generateLogData(const std::vector<T>& _data)
 	{
 		return new poca::core::MyData(new poca::core::Histogram<T>(_data, true), false);
