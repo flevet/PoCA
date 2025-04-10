@@ -119,6 +119,7 @@ namespace poca::plot {
 		m_name = _name.toLatin1().data();
 		m_buttonDelete->setEnabled(m_name != "x" && m_name != "y" && m_name != "z");
 		m_customPlot->setInfos(_name, _hist, _palette);
+		m_customPlot->setEnabled(_hist->hasInteraction());
 		m_customPlot->update();
 		double minV = m_customPlot->getCurrentMin();
 		double maxV = m_customPlot->getCurrentMax();
