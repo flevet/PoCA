@@ -1637,6 +1637,7 @@ namespace poca::opengl {
 							poca::core::Vec3mf p1 = proi->getPoint(0);
 
 							Kernel::Plane_3 plane(Point_3_double(p1[0], p1[1], p1[2]), Point_3_double(coords[0], coords[1], coords[2]), Point_3_double(p1[0] + m_stateCamera.m_eye[0] * 10.f, p1[1] + m_stateCamera.m_eye[1] * 10.f, p1[2] + m_stateCamera.m_eye[2] * 10.f));
+							m_clip.push_back(glm::vec4(plane.a(), plane.b(), plane.c(), plane.d()));
 							Kernel::Iso_cuboid_3 cube(Point_3_double(m_currentCrop[0], m_currentCrop[1], m_currentCrop[2]), Point_3_double(m_currentCrop[3], m_currentCrop[4], m_currentCrop[5]));
 							const auto result = CGAL::intersection(cube, plane);
 							if (result) {
@@ -2022,6 +2023,7 @@ namespace poca::opengl {
 		//if the crop is reset we expand a little more the clip plane to be sure to not cut part of the models
 		float smallest = m_currentCrop.smallestSide();
 		float expansion = smallest;
+		m_clip.resize(6);
 		m_clip[0] = glm::vec4(1, 0, 0, -(m_currentCrop[0] - expansion));
 		m_clip[1] = glm::vec4(0, 1, 0, -(m_currentCrop[1] - expansion));
 		m_clip[2] = glm::vec4(0, 0, 1, -(m_currentCrop[2] - expansion));
