@@ -32,10 +32,13 @@
 
 #include <Windows.h>
 #include <QtGui/QIcon>
+#include <QtWidgets/QLayout>
+#include <QtWidgets/QButtonGroup>
 #include <float.h>
 
 #include <OpenGL/Camera.hpp>
 #include <General/Engine.hpp>
+#include <Plot/Icons.hpp>
 
 #include "../Widgets/MdiChild.hpp"
 
@@ -43,9 +46,58 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 {
 	this->setObjectName( "MdiChild" );
 	m_widget = _widget;
+	poca::core::MyObjectInterface* object = m_widget->getObject();
+	const poca::core::BoundingBox& bbox = object->boundingBox();
 	QWidget* w = dynamic_cast <QWidget*>(m_widget);
+	//m_testButton = new QPushButton(QString("Start Game"), w);
+	int maxSize = 50;
+	QHBoxLayout* layoutTop = new QHBoxLayout;
+	m_3DButton = new QPushButton();
+	m_3DButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_3DButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_3DButton->setIcon(QIcon(QPixmap(poca::plot::threeDIcon)));
+	m_3DButton->setToolTip("3D view");
+	m_3DButton->setCheckable(true);
+	m_3DButton->setChecked(true);
+	QObject::connect(m_3DButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	layoutTop->addWidget(m_3DButton);
+	m_2DtButton = new QPushButton();
+	m_2DtButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_2DtButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_2DtButton->setIcon(QIcon(QPixmap(poca::plot::twoDTIcon)));
+	m_2DtButton->setToolTip("2D+t view");
+	m_2DtButton->setCheckable(true);
+	m_2DtButton->setChecked(false);
+	QObject::connect(m_2DtButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	QButtonGroup* bgroup = new QButtonGroup;
+	bgroup->addButton(m_2DtButton);
+	bgroup->addButton(m_3DButton);
+	layoutTop->addWidget(m_2DtButton);
+	m_minT = ceil(bbox[2]);
+	m_maxT = ceil(bbox[5]);
+	m_interval = m_maxT - m_minT;
+	m_tLabel = new QLabel(QString::number(m_minT));
+	layoutTop->addWidget(m_tLabel);
+	m_tSlider = new QSlider(Qt::Horizontal);
+	m_tSlider->setMinimum(0);
+	m_tSlider->setMaximum(m_interval);
+	m_tSlider->setSliderPosition(0);
+	m_tSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_tSlider->setEnabled(false);
+	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
+	layoutTop->addWidget(m_tSlider);
+	m_topW = new QWidget(w);
+	m_topW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_topW->setLayout(layoutTop);
+	m_topW->move(0, 0);
+
+	if (object->dimension() == 2)
+		m_topW->hide();
+	//m_testButton->winId(); // add this
+	//
 	if(w)
 		setWidget(w);
+
 	setAttribute( Qt::WA_DeleteOnClose );
 	setFocusPolicy(Qt::StrongFocus);
 	setMinimumSize( 100, 100 );
@@ -66,9 +118,12 @@ MdiChild::~MdiChild()
 
 void MdiChild::resizeEvent( QResizeEvent * _event )
 {
+	const QSize& size = _event->size();
 	QWidget * wid = this->parentWidget();
 	int x = this->parentWidget()->x(), y = this->parentWidget()->y(), w = this->parentWidget()->width(), h = this->parentWidget()->height();
 	QMdiSubWindow::resizeEvent( _event );
+	m_topW->setGeometry(0, 0, size.width(), 50);
+	m_topW->updateGeometry();
 }
 
 void MdiChild::moveEvent( QMoveEvent * _event )
@@ -128,6 +183,53 @@ void MdiChild::baseWidgetWasClicked()
 	emit(setCurrentMdi( this ) );
 }
 
+void MdiChild::actionNeeded()
+{
+}
+
+void MdiChild::actionNeeded(int _val)
+{
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_widget);
+	if (cam == NULL)
+		return;
+	QObject* sender = QObject::sender();
+	if (sender == m_tSlider) {
+		auto plane = getPlane(_val);
+		poca::core::BoundingBox bbox = cam->getCurrentCrop();
+		bbox[2] = plane - 0.5;
+		bbox[5] = plane + 0.5;
+		cam->zoomToBoundingBox(bbox, false);
+		m_tLabel->setText(QString::number(plane));
+	}
+}
+
+void MdiChild::actionNeeded(bool _val)
+{
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_widget);
+	if (cam == NULL)
+		return;
+	QObject* sender = QObject::sender();
+	if (sender == m_3DButton) {
+		m_tSlider->setEnabled(!_val);
+		cam->fixPlane(poca::opengl::Camera::Plane_XY, false);
+	}
+	else if (sender == m_2DtButton) {
+		m_tSlider->setEnabled(_val);
+		cam->fixPlane(poca::opengl::Camera::Plane_XY, true);
+		auto plane = getPlane(m_tSlider->value());
+		poca::core::BoundingBox bbox = cam->getCurrentCrop();
+		bbox[2] = plane - 0.5;
+		bbox[5] = plane + 0.5;
+		cam->zoomToBoundingBox(bbox, false);
+
+	}
+}
+
+int32_t MdiChild::getPlane(int _val)
+{
+	return m_minT + _val;
+}
+
 MyMdiArea::MyMdiArea( QWidget * _w ):QMdiArea( _w )
 {
 
@@ -142,5 +244,7 @@ bool MyMdiArea::eventFilter( QObject * _receiver, QEvent * _event )
 {
 	return QMdiArea::eventFilter( _receiver, _event );
 }
+
+
 
 

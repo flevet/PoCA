@@ -34,6 +34,9 @@
 #define MdiChild_h__
 
 #include <QtWidgets/QMdiSubWindow>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/Qlabel>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QFocusEvent>
 #include <QtWidgets/QMdiArea>
@@ -67,14 +70,25 @@ public slots:
 	void resizeWindow( const float, const float, const float );
 	void baseWidgetWasClicked();
 
+	void actionNeeded();
+	void actionNeeded(int);
+	void actionNeeded(bool);
+
 protected:
 	void resizeEvent( QResizeEvent * );
 	void moveEvent( QMoveEvent * );
 	bool eventFilter( QObject *, QEvent * );
 	void mousePressEvent( QMouseEvent * );
 
+	int32_t getPlane(int);
+
 protected:
 	poca::opengl::CameraInterface * m_widget;
+	QPushButton* m_2DtButton, * m_3DButton;
+	QSlider* m_tSlider;
+	QWidget* m_topW;
+	QLabel* m_tLabel;
+	int32_t m_minT, m_maxT, m_interval;
 };
 
 #endif // MdiChild_h__
