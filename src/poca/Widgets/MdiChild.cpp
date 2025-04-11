@@ -95,6 +95,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 		m_topW->hide();
 	//m_testButton->winId(); // add this
 	//
+	m_tSlider->hide();
 	if(w)
 		setWidget(w);
 
@@ -212,6 +213,8 @@ void MdiChild::actionNeeded(bool _val)
 	if (sender == m_3DButton) {
 		m_tSlider->setEnabled(!_val);
 		cam->fixPlane(poca::opengl::Camera::Plane_XY, false);
+		cam->zoomToBoundingBox(cam->getObject()->boundingBox(), false);
+		m_tSlider->hide();
 	}
 	else if (sender == m_2DtButton) {
 		m_tSlider->setEnabled(_val);
@@ -221,7 +224,7 @@ void MdiChild::actionNeeded(bool _val)
 		bbox[2] = plane - 0.5;
 		bbox[5] = plane + 0.5;
 		cam->zoomToBoundingBox(bbox, false);
-
+		m_tSlider->show();
 	}
 }
 
