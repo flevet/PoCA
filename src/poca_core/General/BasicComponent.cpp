@@ -152,6 +152,11 @@ namespace poca::core {
 						bool val = _ci->getParameter<bool>("value");
 						data->setLog(val);
 					}
+					else if (action == "scaleLUT") {
+						bool val = _ci->getParameter<bool>("value");
+						HistogramInterface* hist = getHistogram(type);
+						hist->setScaleLUT(val);
+					}
 					else if (action == "changeBoundsCustom") {
 						HistogramInterface* hist = getHistogram(type);
 

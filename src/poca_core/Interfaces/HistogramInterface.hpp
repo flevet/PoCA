@@ -72,6 +72,9 @@ namespace poca::core {
 
 		virtual void setInteraction(const bool) = 0;
 		virtual bool hasInteraction() const = 0;
+
+		virtual void setScaleLUT(const bool) = 0;
+		virtual bool scaleLUT() const = 0;
 	};
 }
 

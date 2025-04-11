@@ -86,6 +86,14 @@ namespace poca::plot {
 		m_buttonDelete->setIcon(QIcon(QPixmap(poca::plot::deleteIcon)));
 		m_buttonDelete->setToolTip("Delete feature");
 
+		m_buttonScaleLUT = new QPushButton();
+		m_buttonScaleLUT->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+		m_buttonScaleLUT->setMaximumSize(QSize(maxSize, maxSize));
+		m_buttonScaleLUT->setIcon(QIcon(QPixmap(poca::plot::scaleLUTIcon)));
+		m_buttonScaleLUT->setCheckable(true);
+		m_buttonScaleLUT->setChecked(false);
+		m_buttonScaleLUT->setToolTip("Scale LUT to filtering");
+
 		QHBoxLayout* layout = new QHBoxLayout;
 		layout->setContentsMargins(5, 0, 5, 0);
 		layout->setSpacing(5);
@@ -96,12 +104,14 @@ namespace poca::plot {
 		layout->addWidget(m_customPlot);
 		layout->addWidget(m_maxLEdit);
 		layout->addWidget(m_buttonDelete);
+		layout->addWidget(m_buttonScaleLUT);
 
 		this->setLayout(layout);
 
 		QObject::connect(m_buttonDisplay, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 		QObject::connect(m_buttonSave, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 		QObject::connect(m_buttonDelete, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+		QObject::connect(m_buttonScaleLUT, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 		QObject::connect(m_cboxLog, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 		QObject::connect(m_customPlot, SIGNAL(actionNeededSignal(const QString&)), this, SLOT(actionNeeded(const QString&)));
 
@@ -194,6 +204,13 @@ namespace poca::plot {
 			poca::core::CommandInfo ci(true, "histogram",
 				"feature", m_name,
 				"action", std::string("log"),
+				"value", _val);
+			m_mediator->actionAsked(m_parent, &ci);
+		}
+		else if (sender == m_buttonScaleLUT) {
+			poca::core::CommandInfo ci(true, "histogram",
+				"feature", m_name,
+				"action", std::string("scaleLUT"),
 				"value", _val);
 			m_mediator->actionAsked(m_parent, &ci);
 		}

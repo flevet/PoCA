@@ -78,7 +78,7 @@ namespace poca::plot {
 		poca::core::MediatorWObjectFWidgetInterface* m_mediator;
 		std::string m_nameComponent;//Name of the component on which commands are applied
 
-		QPushButton* m_buttonDisplay, * m_buttonSave, * m_buttonDelete;
+		QPushButton* m_buttonDisplay, * m_buttonSave, * m_buttonDelete, * m_buttonScaleLUT;
 		QCheckBox* m_cboxLog;
 		QLineEdit* m_minLEdit, * m_maxLEdit;
 

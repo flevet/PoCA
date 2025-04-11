@@ -109,13 +109,16 @@ namespace poca::core {
 		void setInteraction(const bool _val) { m_hasInteraction = _val; }
 		virtual bool hasInteraction() const { return m_hasInteraction; }
 
+		void setScaleLUT(const bool _val) { m_scaleLUT = _val; }
+		virtual bool scaleLUT() const { return m_scaleLUT; }
+
 	protected:
 		std::vector<T> m_values;
 		std::vector<float> m_bins, m_ts;
 		std::size_t m_nbValues{ 0 }, m_nbBins{ 0 };
 		ArrayStatistics m_stats;
 		float m_stepX{ 0.f }, m_maxY{ FLT_MAX }, m_currentMin{ -FLT_MAX }, m_currentMax{ FLT_MAX };
-		bool m_isMinDefined{ false }, m_isMaxDefined{ false }, m_isLog{ false }, m_hasLogHistogram{ true }, m_hasInteraction{ true };
+		bool m_isMinDefined{ false }, m_isMaxDefined{ false }, m_isLog{ false }, m_hasLogHistogram{ true }, m_hasInteraction{ true }, m_scaleLUT{ false };
 		float m_minDefined{ 0.f }, m_maxDefined{ 0.f };
 		//EquationFit * m_eqn;
 	};
