@@ -90,14 +90,11 @@ namespace poca::geometry {
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
 		std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all CGAL meshes ->  " << elapsed << " seconds.                                       " << std::endl;
-		std::cout << "g " << __LINE__ << std::endl;
 		m_edgesSkeleton.initialize(edges, nbEdges);
 		m_linksSkeleton.initialize(links, nbLinks);
 		m_triangles.initialize(triPoCA, nbTriPoCA);
-		std::cout << "g " << __LINE__ << std::endl;
 
 		m_centroids.resize(m_meshes.size());
-		std::cout << "g " << __LINE__ << std::endl;
 
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
@@ -116,12 +113,10 @@ namespace poca::geometry {
 			}
 			nbPts.push_back(m_xs.size());
 		}
-		std::cout << "g " << __LINE__ << std::endl;
 		points.resize(nbPts.back());
 		std::iota(std::begin(points), std::end(points), 0);
 		m_locs.initialize(points, nbPts);
 		m_outlineLocs = m_locs;
-		std::cout << "g " << __LINE__ << std::endl;
 
 		//Create area feature
 		std::vector <float> nbLocs(m_locs.nbElements(), 0.f);
@@ -146,11 +141,9 @@ namespace poca::geometry {
 				poca::core::Vec3mf(resPCA[12], resPCA[13], resPCA[14]) };
 		}
 		delete factory;
-		std::cout << "g " <<__LINE__ << std::endl;
 
 		std::vector <float> ids(m_locs.nbElements());
 		std::iota(std::begin(ids), std::end(ids), 1);
-		std::cout << "g " << __LINE__ << std::endl;
 
 		m_data["volume"] = poca::core::generateDataWithLog(volumes);
 		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
@@ -166,14 +159,10 @@ namespace poca::geometry {
 		for (auto n = 0; n < triPoCA.size(); n++)
 			zs[n] = triPoCA[n].z();
 		m_data["z"] = poca::core::generateDataWithLogNoInteraction(zs);
-		std::cout << "g " << __LINE__ << std::endl;
 
 		m_selection.resize(volumes.size());
-		std::cout << "g " << __LINE__ << std::endl;
 		setCurrentHistogramType("volume");
-		std::cout << "g " << __LINE__ << std::endl;
 		forceRegenerateSelection();
-		std::cout << "g " << __LINE__ << std::endl;
 	}
 
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
@@ -256,17 +245,14 @@ namespace poca::geometry {
 		m_data["minor"] = poca::core::generateDataWithLog(minor);
 		m_data["minor2"] = poca::core::generateDataWithLog(minor2);
 		m_data["minMin2"] = poca::core::generateDataWithLog(minMin2);
-		std::cout << __LINE__ << std::endl;
 		std::vector <float> zs(triPoCA.size());
 		for (auto n = 0; n < triPoCA.size(); n++)
 			zs[n] = triPoCA[n].z();
 		m_data["z"] = poca::core::generateDataWithLogNoInteraction(zs);
-		std::cout << __LINE__ << std::endl;
 
 		m_selection.resize(volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
-		std::cout << __LINE__ << std::endl;
 	}
 
 	ObjectListMesh::~ObjectListMesh()
@@ -286,7 +272,6 @@ namespace poca::geometry {
 	{
 		if (_vertices.size() < 5)
 			return false;
-		std::cout << __LINE__ << std::endl;
 		if (m_repair) {
 			PMP::repair_polygon_soup(_vertices, _triangles, CGAL::parameters::erase_all_duplicates(true).require_same_orientation(true));
 			if (!PMP::orient_polygon_soup(_vertices, _triangles))
@@ -300,18 +285,15 @@ namespace poca::geometry {
 				return false;
 			}
 		}
-		std::cout << __LINE__ << std::endl;
 		m_meshes.push_back(Surface_mesh_3_double());
 		Surface_mesh_3_double& mesh = m_meshes.back();
 		PMP::polygon_soup_to_polygon_mesh(_vertices, _triangles, mesh);
-		std::cout << __LINE__ << std::endl;
 		if (m_repair) {
 			PMP::keep_large_connected_components(mesh, 10);
 			std::cout << __LINE__ << std::endl;
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 			PMP::remove_almost_degenerate_faces(mesh);
 #endif
-			std::cout << __LINE__ << std::endl;
 		}
 		/*double target_edge_length = 4;
 		unsigned int nb_iter = 1;
@@ -340,11 +322,9 @@ namespace poca::geometry {
 				std::cout << "Not a triangle mesh" << std::endl;
 				return false;
 			}
-			std::cout << __LINE__ << std::endl;
 
 			if (!CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh))
 				CGAL::Polygon_mesh_processing::reverse_face_orientations(_mesh);
-			std::cout << __LINE__ << std::endl;
 		}
 
 		if (m_applyRemeshing) {
@@ -354,12 +334,10 @@ namespace poca::geometry {
 			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations));
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
-		std::cout << __LINE__ << std::endl;
 		float volume = fabs(PMP::volume(_mesh));
 		if (volume < 0.f) {
 			return false;
 		}
-		std::cout << __LINE__ << std::endl;
 
 		//std::cout << "Orientation mesh - " << CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh) << std::endl;
 
@@ -375,21 +353,17 @@ namespace poca::geometry {
 				_trianglesPoCA.push_back(poca::core::Vec3mf(p.x(), p.y(), p.z()));
 			}
 		}
-		std::cout << __LINE__ << std::endl;
 		_nbTriPoCA.push_back(_trianglesPoCA.size());
 		_volumes.push_back(volume);
 
-		std::cout << __LINE__ << std::endl;
 		Kernel::Iso_cuboid_3 bbox = CGAL::bounding_box(_mesh.points().begin(), _mesh.points().end());
 		m_bboxMeshes.push_back(poca::core::BoundingBox(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax(), bbox.ymax(), bbox.zmax()));
 
-		std::cout << __LINE__ << std::endl;
 		Facet_vector_3_map facetNormals = _mesh.add_property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
 		PMP::compute_face_normals(_mesh, facetNormals);
 
 		//std::cout << "Done creating normal per vertex" << std::endl;
 
-		std::cout << __LINE__ << std::endl;
 		Vertex_vector_3_map vertexNormals = _mesh.add_property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
 		PMP::compute_vertex_normals(_mesh, vertexNormals);
 
