@@ -89,6 +89,17 @@ template <class T> struct JustGPUBuffer {
     int size;
 };
 
+// this functor converts values of T to M
+// in the actual scenario this method does perform much more useful operations
+template <class T, class M>
+struct Functor : public thrust::unary_function<T, M> {
+    Functor() {}
+
+    __host__ __device__ M operator() (const T& val) const {
+        return M(val);
+    }
+};
+
 template <class T>
 void relabel_kernel_gpu(thrust::device_vector<T>& d_labels)
 {
@@ -104,8 +115,8 @@ void relabel_kernel_gpu(thrust::device_vector<T>& d_labels)
     thrust::lower_bound(d_unique.begin(), end, d_data.begin(), d_data.end(), d_labels.begin());
 }
 
-template <class T, class M>
-void count_occurences_label_kernel_gpu(thrust::device_vector<T>& d_pixels, thrust::device_vector<M>& d_labels, thrust::device_vector<M>& d_counts)
+template <class T>
+void count_occurences_label_kernel_gpu(thrust::device_vector<T>& d_pixels, thrust::device_vector<T>& d_labels, thrust::device_vector<T>& d_counts)
 {
     thrust::sort(thrust::device, d_pixels.begin(), d_pixels.end());
     thrust::device_vector<T> d_unique = d_pixels;
@@ -190,22 +201,22 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
     case poca::core::UINT8:
     {
         poca::core::Image<uint8_t>* casted = static_cast <poca::core::Image<uint8_t>*>(_image);
-        thrust::device_vector<uint8_t> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu<uint8_t, float>(d_pixels, d_labels, d_counts);
+        thrust::device_vector<float> d_pixels(casted->pixels());
+        count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
     }
     break;
     case poca::core::UINT16:
     {
         poca::core::Image<uint16_t>* casted = static_cast <poca::core::Image<uint16_t>*>(_image);
-        thrust::device_vector<uint16_t> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu<uint16_t, float>(d_pixels, d_labels, d_counts);
+        thrust::device_vector<float> d_pixels(casted->pixels());
+        count_occurences_label_kernel_gpu<float>(d_pixels, d_labels, d_counts);
     }
     break;
     case poca::core::UINT32:
     {
         poca::core::Image<uint32_t>* casted = static_cast <poca::core::Image<uint32_t>*>(_image);
-        thrust::device_vector<uint32_t> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu<uint32_t, float>(d_pixels, d_labels, d_counts);
+        thrust::device_vector<float> d_pixels(casted->pixels());
+        count_occurences_label_kernel_gpu<float>(d_pixels, d_labels, d_counts);
     }
     break;
     default:
@@ -291,17 +302,6 @@ poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface* _
     }
     return image;
 }
-
-// this functor converts values of T to M
-// in the actual scenario this method does perform much more useful operations
-template <class T, class M>
-struct Functor : public thrust::unary_function<T, M> {
-    Functor() {}
-
-    __host__ __device__ M operator() (const T& val) const {
-        return M(val);
-    }
-};
 
 template <class T, class M>
 poca::core::ImageInterface* convertAndCreateLabelImage(thrust::device_vector<T>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d)
