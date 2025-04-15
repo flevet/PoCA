@@ -815,16 +815,18 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	_obj->attach(this, "duplicateCleanedData");
 
 	_obj->addCommand(new MyObjectDisplayCommand(_obj));
-	poca::core::BasicComponentInterface* bci = _obj->getLastAddedBasicComponent();
-	if (bci != NULL && bci->nbCommands() == 0)
-		plugins->addCommands(bci);
+	for (auto& bci : _obj->getComponents()) {
+		//poca::core::BasicComponentInterface* bci = _obj->getLastAddedBasicComponent();
+		if (bci != NULL && bci->nbCommands() == 0)
+			plugins->addCommands(bci);
 
-	if (bci != NULL) {
-		poca::core::BasicComponentList* blist = dynamic_cast<poca::core::BasicComponentList*>(bci);
-		if (blist)
-			for (auto bcomp : blist->components())
-				if(bcomp->nbCommands() == 0)
-					plugins->addCommands(bcomp);
+		if (bci != NULL) {
+			poca::core::BasicComponentList* blist = dynamic_cast<poca::core::BasicComponentList*>(bci);
+			if (blist)
+				for (auto bcomp : blist->components())
+					if (bcomp->nbCommands() == 0)
+						plugins->addCommands(bcomp);
+		}
 	}
 
 	MdiChild* child = new MdiChild(cam);
