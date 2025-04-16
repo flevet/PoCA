@@ -74,7 +74,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	bgroup->addButton(m_3DButton);
 	layoutTop->addWidget(m_2DtButton);
 	m_minT = ceil(bbox[2]);
-	m_maxT = ceil(bbox[5]);
+	m_maxT = ceil(bbox[5] - 1);
 	m_interval = m_maxT - m_minT;
 	m_tLabel = new QLabel(QString::number(m_minT));
 	layoutTop->addWidget(m_tLabel);
@@ -197,8 +197,8 @@ void MdiChild::actionNeeded(int _val)
 	if (sender == m_tSlider) {
 		auto plane = getPlane(_val);
 		poca::core::BoundingBox bbox = cam->getCurrentCrop();
-		bbox[2] = plane - 0.5;
-		bbox[5] = plane + 0.5;
+		bbox[2] = plane;
+		bbox[5] = plane;
 		cam->zoomToBoundingBox(bbox, false);
 		m_tLabel->setText(QString::number(plane));
 	}
@@ -221,8 +221,8 @@ void MdiChild::actionNeeded(bool _val)
 		cam->fixPlane(poca::opengl::Camera::Plane_XY, true);
 		auto plane = getPlane(m_tSlider->value());
 		poca::core::BoundingBox bbox = cam->getCurrentCrop();
-		bbox[2] = plane - 0.5;
-		bbox[5] = plane + 0.5;
+		bbox[2] = plane;
+		bbox[5] = plane;
 		cam->zoomToBoundingBox(bbox, false);
 		m_tSlider->show();
 	}
