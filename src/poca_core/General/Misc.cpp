@@ -254,6 +254,27 @@ namespace poca::core {
 }
 
 namespace poca::geometry {
+	void createCubeFromVector(poca::core::Vec3mf* _cubeV, const poca::core::Vec6md& _vector)
+	{
+		poca::core::Vec3mf verticesBBox[8];
+		//Cube -> 6 faces -> 12 lines -> 24 vertices
+
+		double x = _vector[0], y = _vector[1], z = _vector[2], w = _vector[3], h = _vector[4], t = _vector[5];
+		const int indexes[24] = { 0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 1, 5, 0, 4, 2, 6, 3, 7 };
+
+		verticesBBox[0].set(x, y, z);
+		verticesBBox[1].set(x, h, z);
+		verticesBBox[2].set(w, h, z);
+		verticesBBox[3].set(w, y, z);
+		verticesBBox[4].set(x, y, t);
+		verticesBBox[5].set(x, h, t);
+		verticesBBox[6].set(w, h, t);
+		verticesBBox[7].set(w, y, t);
+
+		for (unsigned int n = 0; n < 24; n++)
+			_cubeV[n] = verticesBBox[indexes[n]];
+	}
+
 	void createCubeFromVector(std::vector <poca::core::Vec3mf>& _cubeV, const poca::core::Vec6md& _vector)
 	{
 		poca::core::Vec3mf verticesBBox[8];

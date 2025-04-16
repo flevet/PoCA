@@ -249,6 +249,7 @@ namespace poca::core{
 }
 
 namespace poca::geometry {
+	void createCubeFromVector(poca::core::Vec3mf*, const poca::core::Vec6md&);
 	void createCubeFromVector(std::vector <poca::core::Vec3mf>&, const poca::core::Vec6md&);
 	template <typename T> int sgn(T);
 	float sign(const poca::core::Vec3mf&, const poca::core::Vec3mf&, const poca::core::Vec3mf&);
