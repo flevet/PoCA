@@ -1650,6 +1650,10 @@ void MainWindow::createMovie()
 			std::cout << "Problem with saving" << std::endl;*/
 
 		encoder.submitFrame();
+
+		bool res = _frames[i].save(QString("d:/poca_%1.jpg").arg(QString::number(i + 1).rightJustified(3, '0')));
+		if (!res)
+			std::cout << "Problem with saving" << std::endl;
 	}
 
 	encoder.commit();
