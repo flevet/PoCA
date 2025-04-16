@@ -659,11 +659,11 @@ namespace poca::opengl {
 
 		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
 
-		QImage fboImage(m_offscreenFBO->toImage(false));
+		/*QImage fboImage(m_offscreenFBO->toImage(false));
 		QImage image(fboImage.constBits(), fboImage.width(), fboImage.height(), QImage::Format_RGB32);
 		bool res = image.save(QString("e:/poca_%1.png").arg(cptAnimation));
 		if (!res)
-			std::cout << "Problem with saving" << std::endl;
+			std::cout << "Problem with saving" << std::endl;*/
 	}
 
 	void Camera::paintGL()
@@ -860,13 +860,10 @@ namespace poca::opengl {
 
 		glViewport(m_viewportThumbnailFrame[0], m_viewportThumbnailFrame[1], m_viewportThumbnailFrame[2], m_viewportThumbnailFrame[3]);
 		glClear(GL_DEPTH_BUFFER_BIT);
-		glDisable(GL_CLIP_DISTANCE0);
-		glDisable(GL_CLIP_DISTANCE1);
-		//glDisable(GL_CLIP_DISTANCE2);
-		glDisable(GL_CLIP_DISTANCE3);
-		glDisable(GL_CLIP_DISTANCE4);
-		//glDisable(GL_CLIP_DISTANCE5);
+		auto clippingSave = m_applyClippingPlanes;
+		m_applyClippingPlanes = false;
 		displayArrowsFrame();
+		m_applyClippingPlanes = clippingSave;
 
 		glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
 		projText = glm::ortho(0.f, w, h, 0.f);
@@ -2660,6 +2657,7 @@ namespace poca::opengl {
 		shader->use();
 		shader->setMat4("MVP", proj * view);
 		shader->setVec4("singleColor", colorBack[0], colorBack[1], colorBack[2], colorBack[3]);
+		shader->setBool("clip", clip());
 		glEnableVertexAttribArray(0);
 		m_vertexArrowBuffer.bindBuffer(0, 0);
 		glDrawArrays(m_vertexArrowBuffer.getMode(), 0, m_vertexArrowBuffer.getSizeBuffers()[0]); // Starting from vertex 0; 3 vertices total -> 1 triangle
