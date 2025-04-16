@@ -236,6 +236,23 @@ namespace poca::core {
 		return true;
 	}
 
+	MyObjectInterface* Engine::createObject(const std::string& _dir, const std::string& _name, BasicComponentInterface* _bci)
+	{
+		poca::core::MyObject* wobj = new poca::core::MyObject();
+		wobj->setDir(_dir);
+		wobj->setName(_name);
+		wobj->addCommand(new MyObjectDisplayCommand(wobj));
+		if (_bci != NULL) {
+			addComponentToObject(wobj, _bci);
+			wobj->setDimension(_bci->dimension());
+		}
+		m_plugins->addCommands(wobj);
+
+		m_datasets.push_back(std::make_tuple(wobj, nullptr));
+		m_currentDataset = &m_datasets.back();
+		return wobj;
+	}
+
 	const bool Engine::addComponentToObject(MyObjectInterface* _obj, BasicComponentInterface* _comp)
 	{
 		if (_obj == NULL || _comp == NULL)

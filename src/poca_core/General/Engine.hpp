@@ -81,6 +81,7 @@ namespace poca::core {
 
 		MyObjectInterface* loadDataAndCreateObject(const QString&, poca::core::CommandInfo* = NULL);
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);
+		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);
 		void addCommands(BasicComponentInterface*);
 		BasicComponentInterface* loadData(const QString&, CommandInfo* = NULL, MyObjectInterface* = NULL);
