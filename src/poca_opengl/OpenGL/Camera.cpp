@@ -1989,7 +1989,7 @@ namespace poca::opengl {
 		float w = _bbox[3] - _bbox[0], h = _bbox[4] - _bbox[1], t = _bbox[5] - _bbox[2];
 		if (_recomputeOrthoD) {
 			m_distanceOrtho = w > h ? w / 2 : h / 2;
-			m_distanceOrtho = m_distanceOrtho > t ? m_distanceOrtho : t;
+			//m_distanceOrtho = m_distanceOrtho > t ? m_distanceOrtho : t;
 			
 			m_translation.x = _bbox[0] + (_bbox[3] - _bbox[0]) / 2.f;
 			m_translation.y = _bbox[1] + (_bbox[4] - _bbox[1]) / 2.f;
