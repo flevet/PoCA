@@ -73,6 +73,11 @@ namespace poca::core {
 		inline const float* getBinsPtr() const { return m_bins.data(); }
 		inline const float* getTsPtr() const { return m_ts.data(); }
 
+		float* valuesf();
+		uint8_t* valuesui8();
+		uint16_t* valuesui16();
+		uint32_t* valuesui32();
+
 		const std::vector <T>& getValues() const { return m_values; }
 		std::vector <T>& getValues() { return m_values; }
 		const std::vector <float>& getBins() const { return m_bins; }
@@ -352,6 +357,46 @@ namespace poca::core {
 	const size_t Histogram<T>::nbElements() const
 	{
 		return m_values.size();
+	}
+
+	template <class T>
+	float* Histogram<T>::valuesf()
+	{
+		std::string type = typeid(T).name();
+		if (type == "float")
+			return reinterpret_cast <float*>(m_values.data());
+		else
+			return NULL;
+	}
+
+	template <class T>
+	uint8_t* Histogram<T>::valuesui8()
+	{
+		std::string type = typeid(T).name();
+		if (type == "uint8_t" || type == "unsigned char")
+			return reinterpret_cast <uint8_t*>(m_values.data());
+		else
+			return NULL;
+	}
+
+	template <class T>
+	uint16_t* Histogram<T>::valuesui16()
+	{
+		std::string type = typeid(T).name();
+		if (type == "uint16_t" || type == "unsigned short")
+			return reinterpret_cast <uint16_t*>(m_values.data());
+		else
+			return NULL;
+	}
+
+	template <class T>
+	uint32_t* Histogram<T>::valuesui32()
+	{
+		std::string type = typeid(T).name();
+		if (type == "uint32_t" || type == "unsigned int")
+			return reinterpret_cast <uint32_t*>(m_values.data());
+		else
+			return NULL;
 	}
 }
 #endif // Histogram_h__

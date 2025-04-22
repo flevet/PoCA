@@ -62,6 +62,11 @@ namespace poca::core {
 		virtual const float getStepX() const = 0;
 		virtual const float getMaxY() const = 0;
 
+		virtual float* valuesf() = 0;
+		virtual uint8_t* valuesui8() = 0;
+		virtual uint16_t* valuesui16() = 0;
+		virtual uint32_t* valuesui32() = 0;
+
 		virtual void changeHistogramBounds(const float, const float) = 0;
 
 		virtual void setHistogram(const bool, const int = 100, const bool = false, const float = 0., const bool = false, const float = 0.) = 0;
