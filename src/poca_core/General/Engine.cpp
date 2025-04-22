@@ -469,9 +469,8 @@ namespace poca::core {
 		for (auto data : m_datasets) {
 			auto obj = std::get<0>(data);
 			auto cam = std::get<1>(data);
-			if (obj->nbColors() == 1)
-				if (obj == _obj)
-					return cam;
+			if (obj == _obj)
+				return cam;
 			for (size_t n = 0; n < obj->nbColors(); n++) {
 				MyObjectInterface* obj2 = obj->getObject(n);
 				if (obj2 == _obj)
