@@ -83,6 +83,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_tSlider->setMaximum(m_interval);
 	m_tSlider->setSliderPosition(0);
 	m_tSlider->setSingleStep(1);
+	m_tSlider->setTickInterval(1);
 	m_tSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_tSlider->setEnabled(false);
 	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
