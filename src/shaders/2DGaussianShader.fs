@@ -58,6 +58,11 @@ void main()
 			discard;
 		float inter = maxFeatureValue - minFeatureValue;
 		colorTmp = vec3(texture(lutTexture, ((vfeature - minFeatureValue) / inter)).xyz);
+		/*if (vfeature < minFeatureValue)
+			colorTmp = vec3(0, 0.78, 0);
+		else{
+			colorTmp = vec3(0.5, 0, 0.5);
+		}*/
 	}
 	
     color_out = vec4(colorTmp, amplitude);
