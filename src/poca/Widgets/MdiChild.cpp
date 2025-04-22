@@ -82,6 +82,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_tSlider->setMinimum(0);
 	m_tSlider->setMaximum(m_interval);
 	m_tSlider->setSliderPosition(0);
+	m_tSlider->setSingleStep(1);
 	m_tSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_tSlider->setEnabled(false);
 	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
@@ -196,6 +197,7 @@ void MdiChild::actionNeeded(int _val)
 	QObject* sender = QObject::sender();
 	if (sender == m_tSlider) {
 		auto plane = getPlane(_val);
+		std::cout << _val << " - > " << plane << std::endl;
 		poca::core::BoundingBox bbox = cam->getCurrentCrop();
 		bbox[2] = plane;
 		bbox[5] = plane;
