@@ -1375,6 +1375,7 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		}
 
 		poca::opengl::Camera* cam = new poca::opengl::Camera(wobj, wobj->dimension(), this);
+		engine->addCameraToObject(wobj, cam);
 
 		int indexVoronoiTab = 0;
 
