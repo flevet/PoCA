@@ -240,6 +240,14 @@ namespace poca::opengl {
 		{
 			glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
 		}
+		void setFloatv(const std::string& name, std::vector<float>& value) const
+		{
+			glUniform1fv(glGetUniformLocation(ID, name.c_str()), value.size(), reinterpret_cast<GLfloat*>(value.data()));
+		}
+		void setFloatv(const std::string& name, size_t nb, float* value) const
+		{
+			glUniform1fv(glGetUniformLocation(ID, name.c_str()), nb, value);
+		}
 		// ------------------------------------------------------------------------
 		void setVec2(const std::string& name, const glm::vec2& value) const
 		{
