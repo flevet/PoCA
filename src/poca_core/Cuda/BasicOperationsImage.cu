@@ -229,6 +229,7 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
     cudaMemcpy(volume.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volume.size() * sizeof(float), cudaMemcpyDeviceToHost);
     _image->addFeature("label", poca::core::generateDataWithLog(label));
     _image->addFeature("volume", poca::core::generateDataWithLog(volume));
+    _image->setCurrentHistogramType("label");
 }
 
 template <class T>
