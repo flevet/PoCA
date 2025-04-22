@@ -42,10 +42,15 @@ uniform vec3 light_position;
 uniform int nb_steps;
 uniform bool applyThreshold;
 uniform bool isFloat;
+uniform bool isLabel;
+uniform bool scaleLUT;
+
+uniform float width_feature_texture;
+uniform float height_feature_texture;
 
 uniform sampler2D jitter;
 uniform sampler1D lutTexture;
-uniform sampler1D featureTexture;
+uniform sampler2D featureTexture;
 
 uniform sampler3D volume;
 uniform usampler3D uvolume;
@@ -60,6 +65,8 @@ uniform float current_max;
 uniform float labelBackground;
 uniform float featureTextureSize;
 
+uniform float values_feature;
+
 // Ray
 struct Ray {
     vec3 origin;
@@ -71,6 +78,18 @@ struct AABB {
     vec3 top;
     vec3 bottom;
 };
+
+void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
+	float id = label_id - 1;
+	y = floor(id / w) / (h );
+	x = (id - (y * w)) / (w );
+}
+
+float scaleOffsetVar(float texturesize, float pos){
+	float scale = (texturesize - 1.0) / texturesize;
+	float offset = 1.0 / (2.0 * texturesize);
+	return scale * pos + offset;
+}
 
 // Slab method for ray-box intersection
 void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
@@ -153,11 +172,11 @@ void main()
 
     // Random jitter
 	vec2 viewport_size = viewport.zw;
-    ray_start += ray_step * texture(jitter, gl_FragCoord.xy / viewport_size).r;
+    //ray_start += ray_step * texture(jitter, gl_FragCoord.xy / viewport_size).r;
 
     vec3 position = ray_start;
 	
-	float maximum_intensity = 0.0;
+	float maximum_intensity = -3.402823466e+38;
 	
 	// Ray march until reaching the end of the volume
     for(int n = 0; n < nb_steps; n++){
@@ -171,39 +190,59 @@ void main()
 		if(intensity >= pixel_min){
 			//we retrieve the true pixel value from the pixel
 			//We need to normalize it in order to fetch the lookup table from featureTexture
-			intensity = (intensity - pixel_min) / (pixel_max - pixel_min);
-			float scale = (featureTextureSize - 1.0) / featureTextureSize;
-			float offset = 1.0 / (2.0 * featureTextureSize);
-			intensity = texture(featureTexture, scale * intensity + offset).r;
-				
-			if (intensity >= maximum_intensity && intensity <= current_max) {
-				maximum_intensity = intensity;
+			float x = intensity, y = 0;
+			if(height_feature_texture == 1){
+				x = (intensity - pixel_min) / (pixel_max - pixel_min);
 			}
-		}
+			else{
+				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
+				y = scaleOffsetVar(height_feature_texture, y);
+			}
+			x = scaleOffsetVar(width_feature_texture, x);
+			intensity = texture(featureTexture, vec2(x, y)).r;
+				
+			if(scaleLUT){
+				if (intensity >= maximum_intensity)
+					maximum_intensity = intensity;
+			}
+			else
+				if (intensity >= maximum_intensity && intensity <= current_max)
+					maximum_intensity = intensity;
+			}
 	}
 	
-	//if(maximum_intensity < labelBackground)
-	//	discard;
+	if(scaleLUT){
+		if(maximum_intensity < current_min) maximum_intensity = current_min;
+		if(maximum_intensity > current_max) maximum_intensity = current_max;
+	}
 	
-	if(!applyThreshold && (maximum_intensity < current_min || maximum_intensity > current_max))
+	if(!applyThreshold && !scaleLUT && (maximum_intensity < current_min || maximum_intensity > current_max))
 		discard;
 
 	if(applyThreshold && maximum_intensity > current_min && maximum_intensity < current_max){
 		a_colour = vec4(1, 0, 0, 1);
 	}
 	else{
-		
 		//And we need to normalize a second time to fetch the correct color in lutTexture
 		maximum_intensity = (maximum_intensity - feature_min) / (feature_max - feature_min);
-		vec4 colour = vec4(maximum_intensity, maximum_intensity, maximum_intensity, (exp(maximum_intensity) - 1.0) / (exp(1.0) - 1.0));
+		
+		if(isLabel){
+			float posLut = scaleOffsetVar(512, maximum_intensity);
+			a_colour.rgb = texture(lutTexture, posLut).xyz;
+			a_colour.a = 1.0;
+		}
+		else{
+			vec4 colour = vec4(maximum_intensity, maximum_intensity, maximum_intensity, (exp(maximum_intensity) - 1.0) / (exp(1.0) - 1.0));
 
-		// Blend background
-		colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
-		colour.rgb = texture(lutTexture, colour.r).xyz;
-		colour.a = 1.0;
+			// Blend background
+			colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
+			float posLut = scaleOffsetVar(512, colour.r);
+			colour.rgb = texture(lutTexture, posLut).xyz;
+			colour.a = 1.0;
 
-		// Gamma correction
-		a_colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
-		a_colour.a = colour.a;
+			// Gamma correction
+			a_colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
+			a_colour.a = colour.a;
+		}
 	}
 }
