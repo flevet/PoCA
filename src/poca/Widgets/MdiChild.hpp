@@ -92,7 +92,7 @@ protected:
 	poca::opengl::Camera* m_camera;
 	QPushButton* m_2DtButton, * m_3DButton, * m_playButton;
 	QSlider* m_tSlider;
-	QWidget* m_topW;
+	QWidget* m_topW, * m_emptyForSliderW;
 	QLabel* m_tLabel;
 	QTimer* m_timer{ NULL };
 	int32_t m_minT, m_maxT, m_interval;

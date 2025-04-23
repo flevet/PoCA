@@ -56,7 +56,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	int maxSize = 50;
 	QGridLayout* layoutTop = new QGridLayout;
 	m_3DButton = new QPushButton();
-	m_3DButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_3DButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_3DButton->setMaximumSize(QSize(maxSize, maxSize));
 	m_3DButton->setIcon(QIcon(QPixmap(poca::plot::threeDIcon)));
 	m_3DButton->setToolTip("3D view");
@@ -64,7 +64,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_3DButton->setChecked(true);
 	QObject::connect(m_3DButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	m_2DtButton = new QPushButton();
-	m_2DtButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_2DtButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_2DtButton->setMaximumSize(QSize(maxSize, maxSize));
 	m_2DtButton->setIcon(QIcon(QPixmap(poca::plot::twoDTIcon)));
 	m_2DtButton->setToolTip("2D+t view");
@@ -72,7 +72,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_2DtButton->setChecked(false);
 	QObject::connect(m_2DtButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	m_playButton = new QPushButton();
-	m_playButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_playButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_playButton->setMaximumSize(QSize(maxSize, maxSize));
 	m_playButton->setIcon(QIcon(QPixmap(poca::plot::playIcon)));
 	m_playButton->setToolTip("Play");
@@ -88,14 +88,17 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_maxT = ceil(bbox[5] - 1);
 	m_interval = m_maxT - m_minT;
 	m_tLabel = new QLabel(QString::number(m_minT).rightJustified(5, '0'));
+	m_tLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_tSlider = new QSlider(Qt::Vertical);
 	m_tSlider->setMinimum(0);
 	m_tSlider->setMaximum(m_interval);
 	m_tSlider->setSliderPosition(0);
 	m_tSlider->setSingleStep(1);
 	m_tSlider->setTickInterval(1);
-	m_tSlider->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
+	m_tSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	m_tSlider->setEnabled(false);
+	m_emptyForSliderW = new QWidget;
+	m_emptyForSliderW->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
 	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
 	layoutTop->addWidget(m_3DButton, 0, 0, 1, 1);
 	layoutTop->addWidget(m_2DtButton, 0, 1, 1, 1);
@@ -103,8 +106,14 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	layoutTop->addWidget(emptyWLine, 0, 3, 1, 1);
 	layoutTop->addWidget(m_tLabel, 1, 0, 1, 2);
 	layoutTop->addWidget(m_tSlider, 2, 0, 1, 1);
+	layoutTop->addWidget(m_emptyForSliderW, 3, 0, 1, 1);
+	/*layoutTop->setRowStretch(0, 1);
+	layoutTop->setRowStretch(1, 1);
+	layoutTop->setColumnStretch(0, 1);
+	layoutTop->setColumnStretch(1, 0);
+	layoutTop->setColumnStretch(2, 0);*/
 	m_topW = new QWidget(w);
-	m_topW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_topW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_topW->setLayout(layoutTop);
 	m_topW->move(0, 0);
 
@@ -142,7 +151,7 @@ void MdiChild::resizeEvent( QResizeEvent * _event )
 	QWidget * wid = this->parentWidget();
 	int x = this->parentWidget()->x(), y = this->parentWidget()->y(), w = this->parentWidget()->width(), h = this->parentWidget()->height();
 	QMdiSubWindow::resizeEvent( _event );
-	m_topW->setGeometry(0, 0, size.width(), 50);
+	m_topW->setGeometry(0, 0, size.width(), size.height() - 50);
 	m_topW->updateGeometry();
 }
 
@@ -237,6 +246,7 @@ void MdiChild::actionNeeded(bool _val)
 		m_playButton->hide();
 		m_tLabel->hide();
 		m_tSlider->hide();
+		m_emptyForSliderW->show();
 	}
 	else if (sender == m_2DtButton) {
 		m_tSlider->setEnabled(_val);
@@ -249,6 +259,7 @@ void MdiChild::actionNeeded(bool _val)
 		m_playButton->show();
 		m_tLabel->show();
 		m_tSlider->show();
+		m_emptyForSliderW->hide();
 	}
 	else if (sender == m_playButton) {
 		if (_val) {

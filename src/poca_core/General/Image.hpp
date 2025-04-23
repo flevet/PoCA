@@ -3,7 +3,7 @@
 *
 * File:      Image.hpp
 *
-* Copyright: Florian Levet (2020-2021)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
@@ -50,7 +50,6 @@ namespace poca::core {
 	class Image : public ImageInterface {
 	public:
 		Image(const ImageType = RAW);
-		//Image(const std::vector<float>&, const uint32_t, const uint32_t, const uint32_t);
 		~Image();
 
 		BasicComponentInterface* copy();

@@ -3,7 +3,7 @@
 *
 * File:      BasicComponentInterface.hpp
 *
-* Copyright: Florian Levet (2020-2021)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
