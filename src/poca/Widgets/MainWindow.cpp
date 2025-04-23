@@ -77,7 +77,6 @@
 #include <General/PluginList.hpp>
 #include <General/PythonInterpreter.hpp>
 #include <General/Engine.hpp>
-#include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <Objects/MyObjectDisplayCommand.hpp>
 #include <OpenGL/Helper.h>
