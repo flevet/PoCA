@@ -41,7 +41,7 @@
 #include <QtGui/QFocusEvent>
 #include <QtWidgets/QMdiArea>
 
-#include <Interfaces/CameraInterface.hpp>
+#include <OpenGL/Camera.hpp>
 
 class MyMdiArea: public QMdiArea{
 	Q_OBJECT
@@ -74,6 +74,11 @@ public slots:
 	void actionNeeded(int);
 	void actionNeeded(bool);
 
+	void setFrame(int);
+
+protected slots:
+	void playFrame();
+
 protected:
 	void resizeEvent( QResizeEvent * );
 	void moveEvent( QMoveEvent * );
@@ -84,10 +89,12 @@ protected:
 
 protected:
 	poca::opengl::CameraInterface * m_widget;
-	QPushButton* m_2DtButton, * m_3DButton;
+	poca::opengl::Camera* m_camera;
+	QPushButton* m_2DtButton, * m_3DButton, * m_playButton;
 	QSlider* m_tSlider;
 	QWidget* m_topW;
 	QLabel* m_tLabel;
+	QTimer* m_timer{ NULL };
 	int32_t m_minT, m_maxT, m_interval;
 };
 
