@@ -80,6 +80,9 @@ namespace poca::opengl {
 
 		virtual void makeCurrent() = 0;
 
+		virtual void drawElementsOnscreen() = 0;
+		virtual void drawElementsOffscreen() = 0;
+
 	protected:
 		bool m_sizeChanged{ false };
 	};

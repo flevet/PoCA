@@ -157,6 +157,9 @@ namespace poca::opengl {
 		virtual void update() { QOpenGLWidget::update(); }
 		virtual void makeCurrent() { QOpenGLWidget::makeCurrent(); }
 
+		virtual void drawElementsOnscreen() { drawElements(); }
+		virtual void drawElementsOffscreen() { drawElements(m_offscreenFBO); }
+
 		const poca::core::BoundingBox& getCurrentCrop() const { return m_currentCrop; }
 		void setCurrentCrop(const poca::core::BoundingBox& _crop) { m_currentCrop = _crop; }
 
@@ -211,6 +214,7 @@ namespace poca::opengl {
 		inline void setOriginalDistanceOrtho(const float _val) { m_originalDistanceOrtho = _val; }
 		inline const bool isCropped() const { return !m_resetedProj; }
 
+		inline std::vector <QImage>& getMovieFrames() { return m_movieFrames; }
 		inline const std::vector <QImage>& getMovieFrames() const { return m_movieFrames; }
 
 
