@@ -42,20 +42,29 @@ uniform vec3 light_position;
 uniform int nb_steps;
 uniform bool applyThreshold;
 uniform bool isFloat;
+uniform bool isLabel;
+uniform bool scaleLUT;
 
-uniform sampler2D jitter;
+uniform float width_feature_texture;
+uniform float height_feature_texture;
+
 uniform sampler1D lutTexture;
-uniform sampler1D featureTexture;
+uniform sampler2D featureTexture;
 
 uniform sampler3D volume;
 uniform usampler3D uvolume;
 
 uniform float gamma;
-uniform float histogram_min;
-uniform float histogram_max;
+uniform float pixel_min;
+uniform float pixel_max;
+uniform float feature_min;
+uniform float feature_max;
 uniform float current_min;
 uniform float current_max;
 uniform float labelBackground;
+uniform float featureTextureSize;
+
+uniform float values_feature;
 
 // Ray
 struct Ray {
@@ -68,6 +77,18 @@ struct AABB {
     vec3 top;
     vec3 bottom;
 };
+
+void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
+	float id = label_id - 1;
+	y = floor(id / w) / (h - 1);
+	x = (id - (y * w)) / (w - 1);
+}
+
+float scaleOffsetVar(float texturesize, float pos){
+	float scale = (texturesize - 1.0) / texturesize;
+	float offset = 1.0 / (2.0 * texturesize);
+	return scale * pos + offset;
+}
 
 // Slab method for ray-box intersection
 void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
@@ -101,7 +122,7 @@ void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
 vec4 colour_transfer(float intensity)
 {
     vec3 high = vec3(1.0, 1.0, 1.0);
-    vec3 low = vec3(0.0, 0.0, 0.0);
+    vec3 low = vec3(0., 0., 0.);
 	
 	//float modified_intensity = intensity * maxValue;
 	//modified_intensity = (modified_intensity - histogram_min) / (histogram_max - histogram_min);
@@ -113,12 +134,12 @@ vec4 colour_transfer(float intensity)
 // A very simple colour transfer function
 vec4 my_colour_transfer(float intensity)
 {
-    if(intensity < histogram_min)
+    if(intensity < feature_min)
 		return vec4(0, 0, 0, 1);
-	if(intensity > histogram_max)
+	if(intensity > feature_max)
 		return vec4(1, 1, 1, 1);
 	
-	float modified_intensity = (intensity - histogram_min) / ( histogram_max - histogram_min);
+	float modified_intensity = (intensity - feature_min) / ( feature_max - feature_min);
 	return vec4(modified_intensity, modified_intensity, modified_intensity, (exp(modified_intensity) - 1.0) / (exp(1.0) - 1.0));
 }
 
@@ -156,47 +177,57 @@ void main()
 	
     vec3 ray = ray_stop - ray_start;
     float ray_length = length(ray);
-    //vec3 ray_step = ray * step_length;
-	//int nbs = int(ray_length / step_length);
 	vec3 ray_step = ray / float(nb_steps);
-
-    // Random jitter
-	vec2 viewport_size = viewport.zw;
-    ray_start += ray_step * texture(jitter, gl_FragCoord.xy / viewport_size).r;
 
     vec3 position = ray_start;
 	vec4 colour = vec4(0.0);
 	
-	float maximum_intensity = 0.0;
+	float maximum_intensity = -3.402823466e+38;
 	
     // Ray march until reaching the end of the volume, or colour saturation
-    for(int n = 0; n < nb_steps ; n++){
+	int n = 0;
+    while(n < nb_steps && colour.a < 1.0){
 		position = position + ray_step;
 		float intensity;
 		if(isFloat)
 			intensity = texture(volume, position).r;
 		else
 			intensity = float(texture(uvolume, position).r);
-		
-		if (intensity > maximum_intensity)
-			maximum_intensity = intensity;
-		
-		//We need to normalize it in order to fetch the lookup table from featureTexture
-		intensity = (intensity - histogram_min) / (histogram_max - histogram_min);
-		float scale = (2 - 1.0) / 2;
-		float offset = 1.0 / (2.0 * 2);
-		intensity = texture(featureTexture, scale * intensity + offset).r;
+			
+		if(intensity >= pixel_min){
+			//we retrieve the true pixel value from the pixel
+			//We need to normalize it in order to fetch the lookup table from featureTexture
+			float x = intensity, y = 0;
+			if(height_feature_texture == 1){
+				x = (intensity - pixel_min) / (pixel_max - pixel_min);
+			}
+			else{
+				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
+				y = scaleOffsetVar(height_feature_texture, y);
+			}
+			x = scaleOffsetVar(width_feature_texture, x);
+			intensity = texture(featureTexture, vec2(x, y)).r;
+				
+			if(scaleLUT){
+				if (intensity >= maximum_intensity)
+					maximum_intensity = intensity;
+			}
+			else
+				if (intensity >= maximum_intensity && intensity <= current_max)
+					maximum_intensity = intensity;
+		}
 		//And we need to normalize a second time to fetch the correct color in lutTexture
-		intensity = (intensity - histogram_min) / (histogram_max - histogram_min);
+		intensity = (intensity - feature_min) / (feature_max - feature_min);
 		
         vec4 c = colour_transfer(intensity);
 
         // Alpha-blending
         colour.rgb = c.a * c.rgb + (1 - c.a) * colour.a * colour.rgb;
         colour.a = c.a + (1 - c.a) * colour.a;
+		n = n + 1;
 	}
 	
-	if(!applyThreshold && (maximum_intensity < current_min || maximum_intensity > current_max))
+	if(!applyThreshold && !scaleLUT && (maximum_intensity < current_min || maximum_intensity > current_max))
 		discard;
 
 	if(applyThreshold && maximum_intensity > current_min && maximum_intensity < current_max){

@@ -48,7 +48,6 @@ uniform bool scaleLUT;
 uniform float width_feature_texture;
 uniform float height_feature_texture;
 
-uniform sampler2D jitter;
 uniform sampler1D lutTexture;
 uniform sampler2D featureTexture;
 
@@ -81,8 +80,8 @@ struct AABB {
 
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
-	y = floor(id / w) / (h );
-	x = (id - (y * w)) / (w );
+	y = floor(id / w) / (h - 1);
+	x = (id - (y * w)) / (w - 1);
 }
 
 float scaleOffsetVar(float texturesize, float pos){
@@ -170,10 +169,6 @@ void main()
     /*vec3 ray_step = ray * step_length;
 	int nbs = int(ray_length / step_length);*/
 
-    // Random jitter
-	vec2 viewport_size = viewport.zw;
-    //ray_start += ray_step * texture(jitter, gl_FragCoord.xy / viewport_size).r;
-
     vec3 position = ray_start;
 	
 	float maximum_intensity = -3.402823466e+38;
@@ -208,7 +203,7 @@ void main()
 			else
 				if (intensity >= maximum_intensity && intensity <= current_max)
 					maximum_intensity = intensity;
-			}
+		}
 	}
 	
 	if(scaleLUT){
