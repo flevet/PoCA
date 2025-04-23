@@ -3,7 +3,7 @@
 *
 * File:      CoreMisc.h
 *
-* Copyright: Florian Levet (2020-2022)
+* Copyright: Florian Levet (2020-2025)
 *			 Modified from https://github.com/zsef123/Connected_components_PyTorch/tree/main
 *
 * License:   LGPL v3
