@@ -3,7 +3,7 @@
 *
 * File:      VoronoiDiagramFactory.cpp
 *
-* Copyright: Florian Levet (2020-2022)
+* Copyright: Florian Levet (2020-2025)
 *
 * License:   LGPL v3
 *
