@@ -137,6 +137,8 @@ namespace poca::core {
 		virtual void saveCommands(nlohmann::json&);
 		virtual void loadCommandsParameters(const nlohmann::json&);
 
+		virtual void reorganizeComponents(int, int);
+
 	protected:
 		std::string m_dir, m_name;
 		uint32_t m_internalId, m_dimension;

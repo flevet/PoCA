@@ -120,6 +120,8 @@ namespace poca::core {
 		virtual void saveCommands(const std::string&) = 0;
 		virtual void saveCommands(nlohmann::json&) = 0;
 		virtual void loadCommandsParameters(const nlohmann::json&) = 0;
+
+		virtual void reorganizeComponents(int, int) = 0;
 	};
 }
 

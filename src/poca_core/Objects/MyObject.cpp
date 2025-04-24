@@ -436,5 +436,19 @@ namespace poca::core {
 			roi->save(fs);
 		fs.close();
 	}
+
+	void MyObject::reorganizeComponents(int _oldPosition, int _newPosition)
+	{
+		if (_oldPosition == _newPosition) return; // Nothing to do
+
+		if (_oldPosition < _newPosition) {
+			// Move forward: rotate left
+			std::rotate(m_components.begin() + _oldPosition, m_components.begin() + _oldPosition + 1, m_components.begin() + _newPosition + 1);
+		}
+		else {
+			// Move backward: rotate right
+			std::rotate(m_components.begin() + _newPosition, m_components.begin() + _oldPosition, m_components.begin() + _oldPosition + 1);
+		}
+	}
 }
 
