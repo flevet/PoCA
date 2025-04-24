@@ -224,7 +224,6 @@ void MdiChild::actionNeeded(int _val)
 	QObject* sender = QObject::sender();
 	if (sender == m_tSlider) {
 		auto plane = getPlane(_val);
-		std::cout << _val << " - > " << plane << std::endl;
 		poca::core::BoundingBox bbox = cam->getCurrentCrop();
 		bbox[2] = plane;
 		bbox[5] = plane;
