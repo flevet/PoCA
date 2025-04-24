@@ -139,5 +139,19 @@ namespace poca::core {
 		for (Command* com : m_commands)
 			com->saveCommands(_json[com->name()]);
 	}
+
+	void CommandableObject::reorganizeCommands(int _oldPosition, int _newPosition)
+	{
+		if (_oldPosition == _newPosition) return; // Nothing to do
+
+		if (_oldPosition < _newPosition) {
+			// Move forward: rotate left
+			std::rotate(m_commands.begin() + _oldPosition, m_commands.begin() + _oldPosition + 1, m_commands.begin() + _newPosition + 1);
+		}
+		else {
+			// Move backward: rotate right
+			std::rotate(m_commands.begin() + _newPosition, m_commands.begin() + _oldPosition, m_commands.begin() + _oldPosition + 1);
+		}
+	}
 }
 

@@ -60,6 +60,8 @@ namespace poca::core {
 		virtual const bool hasParameter(const std::string&);
 		virtual const bool hasParameter(const std::string&, const std::string&);
 
+		virtual void reorganizeCommands(int, int);
+
 		inline const std::string& name() const { return m_nameCommandableObject; }
 
 		template <typename T>
