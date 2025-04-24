@@ -99,6 +99,7 @@
 #include "../Widgets/ROIGeneralWidget.hpp"
 #include "../Widgets/MacroWidget.hpp"
 #include "../Widgets/PythonParametersDialog.hpp"
+#include "../Widgets/ReorganizeRenderingWidget.hpp"
 
 #undef max 
 
@@ -186,6 +187,10 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	QObject::connect(m_mfw, SIGNAL(pathCamera2(nlohmann::json, nlohmann::json, float, bool, bool)), this, SLOT(pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool)));
 	QObject::connect(m_mfw, SIGNAL(pathCameraAll(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)), this, SLOT(pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)));
 	QObject::connect(m_mfw, SIGNAL(getCurrentCamera()), this, SLOT(currentCameraForPath()));
+
+	ReorganizeRenderingWidget* rrw = new ReorganizeRenderingWidget(mediator, m_tabWidget);
+	mediator->addWidget(rrw);
+	poca::core::utils::addWidget(m_tabWidget, QString("Misc."), QString("Reorganize rendering"), rrw, false);
 
 	m_macroW = new MacroWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_macroW);
