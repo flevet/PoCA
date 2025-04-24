@@ -61,12 +61,15 @@ DetectionSetDisplayCommand::DetectionSetDisplayCommand(poca::geometry::Detection
 	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "pointRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
+	addCommandInfo(poca::core::CommandInfo(false, "screenCoordinates", false));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if(param.contains("pointRendering"))
 			loadParameters(poca::core::CommandInfo(false, "pointRendering", param["pointRendering"].get<bool>()));
 		if (param.contains("pointSizeGL"))
 			loadParameters(poca::core::CommandInfo(false, "pointSizeGL", param["pointSizeGL"].get<uint32_t>()));
+		if (param.contains("screenCoordinates"))
+			loadParameters(poca::core::CommandInfo(false, "screenCoordinates", param["screenCoordinates"].get<bool>()));
 	}
 }
 
@@ -192,12 +195,13 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 	GL_CHECK_ERRORS();
 
 	uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
+	bool screenCoordinates = getParameter<bool>("screenCoordinates");
 	if (!m_colorBuffer.empty())
 		_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
 	else if(m_normalBuffer.empty())
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
 	else
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
 
 #ifdef DEBUG_NORMAL
 	if (!m_normalDebugBuffer.empty())

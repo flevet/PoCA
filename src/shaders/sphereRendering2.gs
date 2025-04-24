@@ -4,6 +4,8 @@ layout(triangle_strip, max_vertices = 4) out;
 uniform mat4 MVP;
 uniform mat4 projection;
 uniform float radius;
+uniform bool screenRadius;
+uniform vec2 pixelSize;
 
 in vec3 v_color[];
 in vec3 v_normal[];
@@ -28,7 +30,8 @@ void main() {
 	vc[2] = vec4(-radius, radius, 0.0, 0.0);
 	vc[3] = vec4(-radius, -radius, 0.0, 0.0);
 	for (int i = 0; i < 4; i++) {
-		gl_Position = MVP * gl_in[0].gl_Position + projection * vc[i];
+		//gl_Position = MVP * gl_in[0].gl_Position + projection * vc[i];
+		gl_Position = screenRadius ? (MVP * gl_in[0].gl_Position) + (vc[i] * vec4(pixelSize, 0.f, 0.f)) : (MVP * gl_in[0].gl_Position) + (projection * vc[i]);
 		texC = uv[i];
 		center = gl_in[0].gl_Position.xyz;
 		vfeature = v_feature[0];

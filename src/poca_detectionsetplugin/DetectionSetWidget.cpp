@@ -176,6 +176,27 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_parametersButton->setToolTip("Parameter dialog");
 	layoutLine2->addWidget(m_parametersButton, 0, Qt::AlignRight);
 	QObject::connect(m_parametersButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_worldButton = new QPushButton();
+	m_worldButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_worldButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_worldButton->setIcon(QIcon(QPixmap(poca::plot::worldIcon)));
+	m_worldButton->setToolTip("World coordinates");
+	m_worldButton->setCheckable(true);
+	m_worldButton->setChecked(true);
+	layoutLine2->addWidget(m_worldButton, 0, Qt::AlignRight);
+	QObject::connect(m_worldButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
+	m_screenButton = new QPushButton();
+	m_screenButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_screenButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_screenButton->setIcon(QIcon(QPixmap(poca::plot::screenIcon)));
+	m_screenButton->setToolTip("Screen coordinates");
+	m_screenButton->setCheckable(true);
+	m_screenButton->setChecked(false);
+	layoutLine2->addWidget(m_screenButton, 0, Qt::AlignRight);
+	QObject::connect(m_screenButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
+	m_worldScreenbuttonGroup = new QButtonGroup(this);
+	m_worldScreenbuttonGroup->addButton(m_worldButton);
+	m_worldScreenbuttonGroup->addButton(m_screenButton);
 	m_line2Widget->setLayout(layoutLine2);
 
 	m_detectionSetFilteringWidget = new QWidget;
@@ -587,6 +608,16 @@ void DetectionSetWidget::actionNeeded(bool _val)
 	}
 	else if (sender == m_fixedSizeGaussCBox) {
 		dset->executeCommand(true, "fixedSizeGaussian", _val);
+		m_object->notifyAll("updateDisplay");
+		return;
+	}
+	else if (sender == m_worldButton) {
+		dset->executeCommand(true, "screenCoordinates", !_val);
+		m_object->notifyAll("updateDisplay");
+		return;
+	}
+	else if (sender == m_screenButton) {
+		dset->executeCommand(true, "screenCoordinates", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}

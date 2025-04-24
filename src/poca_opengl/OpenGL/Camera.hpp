@@ -240,10 +240,11 @@ namespace poca::opengl {
 		void drawLineShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const SingleGLBuffer<T>&, const GLfloat, const GLfloat, const GLfloat = 1.f);
 		
 		template < class T, class M >
-		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false);
+		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false);
 
 		template < class T, class M >
-		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false);
+		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false);
+
 
 		template < class T, class M >
 		void draw2DGaussianRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const float = 0.1f, const uint32_t = 5, const bool = false);
@@ -590,7 +591,7 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao)
+	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius)
 	{
 		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
@@ -623,6 +624,7 @@ namespace poca::opengl {
 			GL_CHECK_ERRORS();
 		}
 
+		float px = 2.f / (float)this->width(), py = 2.f / (float)this->height();
 		GL_CHECK_ERRORS();
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
@@ -634,6 +636,8 @@ namespace poca::opengl {
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setBool("useSpecialColors", false);
+		shader->setBool("screenRadius", _screenRadius);
+		shader->setVec2("pixelSize", px, py);// px, py);//NDC coordinates are from -1 to 1
 		shader->setFloat("radius", _radius);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -669,7 +673,7 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<T>& _bufferNormal, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao)
+	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<T>& _bufferNormal, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius)
 	{
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = _ssao ? getShader("geometrySSAO") : getShader("sphereRenderingShader");
@@ -691,6 +695,7 @@ namespace poca::opengl {
 			glDisable(GL_CULL_FACE);
 		}
 
+		float px = 2.f / (float)this->width(), py = 2.f / (float)this->height();
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
@@ -701,6 +706,8 @@ namespace poca::opengl {
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
 		shader->setBool("useSpecialColors", false);
+		shader->setBool("screenRadius", _screenRadius);
+		shader->setVec2("pixelSize", px, py);// px, py);//NDC coordinates are from -1 to 1
 		shader->setFloat("radius", _radius);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
