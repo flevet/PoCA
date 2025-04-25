@@ -99,6 +99,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_tSlider->setTickInterval(1);
 	m_tSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	m_tSlider->setEnabled(false);
+	m_tSlider->setInvertedAppearance(true);
 	m_emptyForSliderW = new QWidget;
 	m_emptyForSliderW->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
 	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
