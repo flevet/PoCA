@@ -114,6 +114,7 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_topW->setLayout(layoutTop);
 	m_topW->move(0, 0);
 	m_topW->installEventFilter(this);
+	m_topW->setMouseTracking(true);
 
 	if (object->dimension() == 2)
 		m_topW->hide();
@@ -199,6 +200,7 @@ bool MdiChild::eventFilter( QObject * _obj, QEvent * _event )
 	if (m_camera != NULL && _obj == m_topW && _event->type() == QEvent::MouseMove) {
 		QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(_event);
 		QCoreApplication::sendEvent(m_camera, mouseEvent); // or handle it manually
+		QMdiSubWindow::eventFilter(_obj, _event);
 		return false; // or true if you don't want m_topW to also receive it
 	}
 	return QMdiSubWindow::eventFilter( _obj, _event );
