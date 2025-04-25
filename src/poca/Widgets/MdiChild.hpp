@@ -84,12 +84,13 @@ protected:
 	void moveEvent( QMoveEvent * );
 	bool eventFilter( QObject *, QEvent * );
 	void mousePressEvent( QMouseEvent * );
+	void mouseMoveEvent(QMouseEvent*);
 
 	int32_t getPlane(int);
 
 protected:
 	poca::opengl::CameraInterface * m_widget;
-	poca::opengl::Camera* m_camera;
+	poca::opengl::Camera* m_camera{ NULL };
 	QPushButton* m_2DtButton, * m_3DButton, * m_playButton;
 	QSlider* m_tSlider;
 	QWidget* m_topW, * m_emptyForSliderW;

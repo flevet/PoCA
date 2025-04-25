@@ -35,6 +35,7 @@
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QFileDialog>
+#include <QtCore/QCoreApplication>
 #include <float.h>
 #include <dtv.h>
 
@@ -47,6 +48,7 @@
 MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*= 0*/, Qt::WindowFlags _flags /*= 0 */ ):QMdiSubWindow( _parent, _flags )
 {
 	this->setObjectName( "MdiChild" );
+	this->setMouseTracking(true);
 	m_widget = _widget;
 	m_camera = dynamic_cast<poca::opengl::Camera*>(m_widget);
 	poca::core::MyObjectInterface* object = m_widget->getObject();
@@ -107,15 +109,12 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	layoutTop->addWidget(m_tLabel, 1, 0, 1, 2);
 	layoutTop->addWidget(m_tSlider, 2, 0, 1, 1);
 	layoutTop->addWidget(m_emptyForSliderW, 3, 0, 1, 1);
-	/*layoutTop->setRowStretch(0, 1);
-	layoutTop->setRowStretch(1, 1);
-	layoutTop->setColumnStretch(0, 1);
-	layoutTop->setColumnStretch(1, 0);
-	layoutTop->setColumnStretch(2, 0);*/
 	m_topW = new QWidget(w);
+	m_topW->setAttribute(Qt::WA_TransparentForMouseEvents);
 	m_topW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_topW->setLayout(layoutTop);
 	m_topW->move(0, 0);
+	m_topW->installEventFilter(this);
 
 	if (object->dimension() == 2)
 		m_topW->hide();
@@ -198,6 +197,11 @@ void MdiChild::resizeWindow( const float _factor, const float _maxImageW, const 
 
 bool MdiChild::eventFilter( QObject * _obj, QEvent * _event )
 {
+	if (m_camera != NULL && _obj == m_topW && _event->type() == QEvent::MouseMove) {
+		QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(_event);
+		QCoreApplication::sendEvent(m_camera, mouseEvent); // or handle it manually
+		return false; // or true if you don't want m_topW to also receive it
+	}
 	return QMdiSubWindow::eventFilter( _obj, _event );
 }
 
@@ -205,6 +209,11 @@ void MdiChild::mousePressEvent( QMouseEvent * _event )
 {
 	QMdiSubWindow::mousePressEvent( _event );
 	emit(setCurrentMdi( this ) );
+}
+
+void MdiChild::mouseMoveEvent(QMouseEvent* _event)
+{
+	QMdiSubWindow::mouseMoveEvent(_event);
 }
 
 void MdiChild::baseWidgetWasClicked()
