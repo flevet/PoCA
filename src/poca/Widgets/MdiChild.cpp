@@ -110,7 +110,6 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	layoutTop->addWidget(m_tSlider, 2, 0, 1, 1);
 	layoutTop->addWidget(m_emptyForSliderW, 3, 0, 1, 1);
 	m_topW = new QWidget(w);
-	m_topW->setAttribute(Qt::WA_TransparentForMouseEvents);
 	m_topW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_topW->setLayout(layoutTop);
 	m_topW->move(0, 0);
