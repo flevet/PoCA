@@ -125,10 +125,14 @@ namespace poca::core {
 		virtual inline const bool isHiLow() const { return m_components[m_currentComponent]->isHiLow(); }
 		virtual const unsigned int getNbSelection() const { return m_components[m_currentComponent]->getNbSelection(); }
 
+		virtual void addComponent(BasicComponent* _bci) {
+			m_currentComponent = m_components.size();
+			m_components.push_back(_bci);
+		}
+
 		virtual void copyComponentsPtr(BasicComponentList* _list) {
 			for (auto* comp : _list->m_components)
 				m_components.push_back(comp);
-			m_dontDeleteComponents = true;
 		}
 
 		virtual void copyComponents(BasicComponentList* _list) {
