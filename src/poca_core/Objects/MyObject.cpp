@@ -41,7 +41,7 @@
 #include "../Interfaces/ROIInterface.hpp"
 #include "../General/BasicComponent.hpp"
 #include "../General/Vec3.hpp"
-//#include "../General/BasicComponentList.hpp"
+#include "../General/BasicComponentList.hpp"
 
 #include "MyObject.hpp"
 
@@ -81,12 +81,29 @@ namespace poca::core {
 		for (unsigned int n = 0; n < m_components.size() && !found; n++) {
 			if (m_components[n]->getName() == _bc->getName()) {
 				found = true;
-				poca::core::BasicComponent* bc = dynamic_cast<poca::core::BasicComponent*>(_bc);
-				if (bc) {
-					delete m_components[n];
-					m_components[n] = _bc;
-				}
+				poca::core::BasicComponentList* objComponentList = dynamic_cast<poca::core::BasicComponentList*>(m_components[n]);
+				if (objComponentList) {
+					poca::core::BasicComponentList* blist = dynamic_cast<poca::core::BasicComponentList*>(_bc);
+					if (blist) {
+						objComponentList->copyComponentsPtr(blist);
+						blist->dontDeleteComponents();
+						delete blist;
+					}
+					else {
+						poca::core::BasicComponent* bc = dynamic_cast<poca::core::BasicComponent*>(_bc);
+						if (bc) {
+							objComponentList->addComponent(bc);
+						}
+					}
 
+				}
+				else {
+					poca::core::BasicComponent* bc = dynamic_cast<poca::core::BasicComponent*>(_bc);
+					if (bc) {
+						delete m_components[n];
+						m_components[n] = _bc;
+					}
+				}
 				/* //This is not working because of deleting bcl -> remove for now and this needs to be done on creation of the BasicComponent to be added to BasicComponentList
 				   //In the future it will be better to try to find a better way
 				poca::core::BasicComponentList* bcl = dynamic_cast<poca::core::BasicComponentList*>(_bc);
