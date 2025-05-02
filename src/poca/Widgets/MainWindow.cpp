@@ -897,7 +897,7 @@ void MainWindow::addComponentToCurrentMdi()
 	poca::core::MyObjectInterface* obj = cam->getObject();
 	if (obj == NULL) return;
 
-	QString path = QDir::currentPath();
+	QString path = obj->getDir().c_str();// QDir::currentPath();
 	QString filename = QFileDialog::getOpenFileName(0,
 		QObject::tr("Select one component to add"),
 		path,
