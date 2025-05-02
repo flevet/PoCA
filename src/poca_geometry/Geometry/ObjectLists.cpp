@@ -61,8 +61,7 @@ namespace poca::geometry {
 
 	void ObjectLists::addObjectList(ObjectListInterface* _obj, const poca::core::CommandInfo& _com, const std::string& _plugin, const std::string& _name)
 	{
-		m_currentComponent = m_components.size();
-		m_components.push_back(_obj);
+		addComponent(_obj);
 		m_infos.push_back(std::make_tuple(_com, _plugin, _name));
 	}
 
@@ -86,6 +85,66 @@ namespace poca::geometry {
 		if (m_components.empty()) return;
 		poca::core::BasicComponentList::eraseComponent(_index);
 		m_infos.erase(m_infos.begin() + _index); 
+	}
+
+	const poca::core::CommandInfo& ObjectLists::currentCommand() const
+	{ 
+		if (m_currentComponent < m_components.size())
+			return std::get<0>(m_infos[m_currentComponent]);
+		else
+			return poca::core::CommandInfo();
+	}
+
+	const std::string& ObjectLists::currentPlugin() const
+	{ 
+		if (m_currentComponent < m_components.size())
+			return std::get<1>(m_infos[m_currentComponent]);
+		else
+			return std::string("");
+	}
+
+	const std::string& ObjectLists::currentName() const
+	{ 
+		if (m_currentComponent < m_components.size())
+			return std::get<2>(m_infos[m_currentComponent]);
+		else
+			return std::string("");
+	}
+
+	const poca::core::CommandInfo& ObjectLists::getCommand(const uint32_t _index) const
+	{
+		if (_index < m_components.size())
+			return std::get<0>(m_infos[_index]);
+		else
+			return poca::core::CommandInfo();
+	}
+
+	const std::string& ObjectLists::getPlugin(const uint32_t _index) const
+	{
+		if (_index < m_components.size())
+			return std::get<1>(m_infos[_index]);
+		else
+			return std::string("");
+	}
+
+	const std::string& ObjectLists::getName(const uint32_t _index) const
+	{ 
+		if (_index < m_components.size())
+			return std::get<2>(m_infos[_index]);
+		else
+			return std::string("");
+	}
+
+	void ObjectLists::setName(const uint32_t _index, const std::string& _name)
+	{
+		if (_index < m_components.size())
+			std::get<2>(m_infos[_index]) = _name;
+	}
+
+	void ObjectLists::setCurrentName(const std::string& _name)
+	{
+		if (m_currentComponent < m_components.size())
+			std::get<2>(m_infos[m_currentComponent]) = _name;
 	}
 }
 

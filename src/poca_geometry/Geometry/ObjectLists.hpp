@@ -58,16 +58,16 @@ namespace poca::geometry {
 		void eraseCurrentObjectList() { eraseObjectList(m_currentComponent); }
 		void eraseObjectList(const uint32_t);
 
-		inline const poca::core::CommandInfo& currentCommand() const { return std::get<0>(m_infos[m_currentComponent]); }
-		inline const std::string& currentPlugin() const { return std::get<1>(m_infos[m_currentComponent]); }
-		inline const std::string& currentName() const { return std::get<2>(m_infos[m_currentComponent]); }
+		const poca::core::CommandInfo& currentCommand() const;
+		const std::string& currentPlugin() const;
+		const std::string& currentName() const;
 
-		inline const poca::core::CommandInfo& getCommand(const uint32_t _index) const { return std::get<0>(m_infos[_index]); }
-		inline const std::string& getPlugin(const uint32_t _index) const { return std::get<1>(m_infos[_index]); }
-		inline const std::string& getName(const uint32_t _index) const { return std::get<2>(m_infos[_index]); }
+		const poca::core::CommandInfo& getCommand(const uint32_t _index) const;
+		const std::string& getPlugin(const uint32_t _index) const;
+		const std::string& getName(const uint32_t _index) const;
 
-		inline void setName(const uint32_t _index, const std::string& _name) { std::get<2>(m_infos[_index]) = _name; }
-		inline void setCurrentName(const std::string& _name) { std::get<2>(m_infos[m_currentComponent]) = _name; }
+		void setName(const uint32_t _index, const std::string& _name);
+		void setCurrentName(const std::string& _name);
 
 	protected:
 		std::vector <std::tuple<poca::core::CommandInfo, std::string, std::string>> m_infos;
