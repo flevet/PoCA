@@ -165,6 +165,8 @@ namespace poca::core {
 					m_currentComponent--;
 		}
 
+		inline void dontDeleteComponents() { m_dontDeleteComponents = true; }
+
 		void executeCommand(CommandInfo* _com) { poca::core::BasicComponentInterface::executeCommand(_com); }
 		CommandInfo createCommand(const std::string& _name, const nlohmann::json& _com) { return poca::core::BasicComponentInterface::createCommand(_name, _com); }
 
