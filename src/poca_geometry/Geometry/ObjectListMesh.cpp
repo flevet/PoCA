@@ -85,6 +85,8 @@ namespace poca::geometry {
 			std::cout << __LINE__ << std::endl;
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size()  << " vertices";
+			m_repair = _repair;
+			m_applyRemeshing = _applyRemeshing;
 			addObjectMesh(points, _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
 		}
 		t2 = clock();
@@ -178,6 +180,8 @@ namespace poca::geometry {
 			std::cout << __LINE__ << std::endl;
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
+			m_repair = _repair;
+			m_applyRemeshing = _applyRemeshing;
 			addObjectMesh(_allVertices[n], _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
 		}
 		t2 = clock();
@@ -277,6 +281,8 @@ namespace poca::geometry {
 			if (!PMP::orient_polygon_soup(_vertices, _triangles))
 			{
 				std::cerr << "Some duplication happened during polygon soup orientation" << std::endl;
+				//if this happens, the remeshing crash
+				m_applyRemeshing = false;
 			}
 			std::cout << __LINE__ << std::endl;
 			if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
