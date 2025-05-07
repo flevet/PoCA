@@ -50,6 +50,7 @@
 
 #ifndef NO_CUDA
 void connectedComponnets2DLabelingBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, uint32_t* _labels);
+void connectedComponnets2DLabelingStackBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
 void connectedComponnets3DLabelingBinary(uint8_t* const _pixels, const size_t _nbValues, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
 template <class T>
 poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, const T _thresholdMin, const T _thresholdMax, const uint32_t _w, const uint32_t _h, const uint32_t _d);

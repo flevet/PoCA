@@ -94,6 +94,135 @@ __device__ void union_(uint32_t* s_buf, uint32_t a, uint32_t b)
 #define BLOCK_ROWS 16
 #define BLOCK_COLS 16
 
+namespace cc2d_stack
+{
+    __global__ void init_labeling(uint32_t* label, const uint32_t W, const uint32_t H, const uint32_t D)
+    {
+        const uint32_t row = (blockIdx.y * blockDim.y + threadIdx.y) * 2;
+        const uint32_t col = (blockIdx.x * blockDim.x + threadIdx.x) * 2;
+        const uint32_t depth = blockIdx.z * blockDim.z + threadIdx.z;
+        const uint32_t idx = depth * W * H + row * W + col;
+
+        if (row < H && col < W && depth < D)
+            label[idx] = idx;
+    }
+
+
+    __global__ void merge(uint8_t* img, uint32_t* label, const uint32_t W, const uint32_t H, const uint32_t D)
+    {
+        const uint32_t row = (blockIdx.y * blockDim.y + threadIdx.y) * 2;
+        const uint32_t col = (blockIdx.x * blockDim.x + threadIdx.x) * 2;
+        const uint32_t depth = blockIdx.z * blockDim.z + threadIdx.z;
+        const uint32_t idx = depth * W * H + row * W + col;
+
+        if (row >= H || col >= W || depth >= D)
+            return;
+
+        uint32_t P = 0;
+
+        // NOTE : Original Codes, but occurs silent error
+        // NOTE : Programs keep runnig, but now showing printf logs, and the result is weird
+        // uint8_t buffer[4] = {0};
+        // if (col + 1 < W) {
+        //     *(reinterpret_cast<uint16_t*>(buffer)) = *(reinterpret_cast<uint16_t*>(img + idx));
+        //     if (row + 1 < H) {
+        //         *(reinterpret_cast<uint16_t*>(buffer + 2)) = *(reinterpret_cast<uint16_t*>(img + idx + W));
+        //     }
+        // }
+        // else {
+        //     buffer[0] = img[idx];
+        //     if (row + 1 < H)
+        //         buffer[2] = img[idx + W];
+        // }
+        // if (buffer[0])              P |= 0x777;
+        // if (buffer[1])              P |= (0x777 << 1);
+        // if (buffer[2])              P |= (0x777 << 4);
+
+        if (img[idx])                      P |= 0x777;
+        if (row + 1 < H && img[idx + W])   P |= 0x777 << 4;
+        if (col + 1 < W && img[idx + 1])   P |= 0x777 << 1;
+
+        if (col == 0)               P &= 0xEEEE;
+        if (col + 1 >= W)           P &= 0x3333;
+        else if (col + 2 >= W)      P &= 0x7777;
+
+        if (row == 0)               P &= 0xFFF0;
+        if (row + 1 >= H)           P &= 0xFF;
+
+        if (P > 0)
+        {
+            // If need check about top-left pixel(if flag the first bit) and hit the top-left pixel
+            if (hasBit(P, 0) && img[idx - W - 1]) {
+                union_(label, idx, idx - 2 * W - 2); // top left block
+            }
+
+            if ((hasBit(P, 1) && img[idx - W]) || (hasBit(P, 2) && img[idx - W + 1]))
+                union_(label, idx, idx - 2 * W); // top bottom block
+
+            if (hasBit(P, 3) && img[idx + 2 - W])
+                union_(label, idx, idx - 2 * W + 2); // top right block
+
+            if ((hasBit(P, 4) && img[idx - 1]) || (hasBit(P, 8) && img[idx + W - 1]))
+                union_(label, idx, idx - 2); // just left block
+        }
+    }
+
+    __global__ void compression(uint32_t* label, const int32_t W, const int32_t H, const uint32_t D)
+    {
+        const uint32_t row = (blockIdx.y * blockDim.y + threadIdx.y) * 2;
+        const uint32_t col = (blockIdx.x * blockDim.x + threadIdx.x) * 2;
+        const uint32_t depth = blockIdx.z * blockDim.z + threadIdx.z;
+        const uint32_t idx = depth * W * H + row * W + col;
+
+
+        if (row < H && col < W && depth < D)
+            find_n_compress(label, idx);
+    }
+
+    __global__ void final_labeling(const uint8_t* img, uint32_t* label, const int32_t W, const int32_t H, const uint32_t D)
+    {
+        const uint32_t row = (blockIdx.y * blockDim.y + threadIdx.y) * 2;
+        const uint32_t col = (blockIdx.x * blockDim.x + threadIdx.x) * 2;
+        const uint32_t depth = blockIdx.z * blockDim.z + threadIdx.z;
+        const uint32_t idx = depth * W * H + row * W + col;
+
+        if (row >= H || col >= W || depth >= D)
+            return;
+
+        int32_t y = label[idx] + 1;
+
+        if (img[idx])
+            label[idx] = y;
+        else
+            label[idx] = 0;
+
+        if (col + 1 < W)
+        {
+            if (img[idx + 1])
+                label[idx + 1] = y;
+            else
+                label[idx + 1] = 0;
+
+            if (row + 1 < H)
+            {
+                if (img[idx + W + 1])
+                    label[idx + W + 1] = y;
+                else
+                    label[idx + W + 1] = 0;
+            }
+        }
+
+        if (row + 1 < H)
+        {
+            if (img[idx + W])
+                label[idx + W] = y;
+            else
+                label[idx + W] = 0;
+        }
+    }
+
+} // namespace cc2d_stack
+
 namespace cc2d
 {
     __global__ void init_labeling(uint32_t* label, const uint32_t W, const uint32_t H)
@@ -433,6 +562,16 @@ void connectedComponnets2DLabelingBinary(uint8_t* const _pixels, const uint32_t 
     cc2d::merge << <grid, block >> > (_pixels, _labels, W, H);
     cc2d::compression << <grid, block >> > (_labels, W, H);
     cc2d::final_labeling << <grid, block >> > (_pixels, _labels, W, H);
+}
+
+void connectedComponnets2DLabelingStackBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels) {
+    dim3 grid = dim3(((W + 1) / 2 + BLOCK_X - 1) / BLOCK_X, ((H + 1) / 2 + BLOCK_Y - 1) / BLOCK_Y, (unsigned int)ceil((float)D / 8.f));
+    dim3 block = dim3(BLOCK_X, BLOCK_Y, 8);
+
+    cc2d_stack::init_labeling << <grid, block >> > (_labels, W, H, D);
+    cc2d_stack::merge << <grid, block >> > (_pixels, _labels, W, H, D);
+    cc2d_stack::compression << <grid, block >> > (_labels, W, H, D);
+    cc2d_stack::final_labeling << <grid, block >> > (_pixels, _labels, W, H, D);
 }
 
 void connectedComponnets3DLabelingBinary(uint8_t* const _pixels, const size_t _nbValues, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels) {
