@@ -811,7 +811,7 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 				m_histWidgets[cpt++]->setInfos(type.c_str(), hist, bci->isLogHistogram(type), bci->isCurrentHistogram(type) ? bci->getPalette() : NULL);
 		}
 
-		clock_t t1 = clock(), t2;
+		auto start2 = std::chrono::high_resolution_clock::now();
 		m_tableObjects->setSortingEnabled(false);
 		QStringList tableHeader2;
 		tableHeader2 << "ID";
@@ -841,9 +841,11 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		m_tableObjects->setSortingEnabled(true);
 
 		m_delaunayTriangulationFilteringWidget->updateGeometry();
-		t2 = clock();
-		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
-		std::cout << "update table " << elapsed << std::endl;
+		auto duration2 = std::chrono::high_resolution_clock::now() - start2;
+		long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
+		float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
+		printf("update table %f seconds (%lld microseconds)\n", s, ms);
+
 
 		if (bci->hasParameter("pointRendering")) {
 			bool val = bci->getParameter<bool>("pointRendering");
