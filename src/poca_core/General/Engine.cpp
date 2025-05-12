@@ -204,7 +204,7 @@ namespace poca::core {
 		QFileInfo finfo(_filename);
 		poca::core::MyObject* wobj = new poca::core::MyObject();
 		wobj->setDir(finfo.absolutePath().toStdString());
-		wobj->setName(finfo.baseName().toStdString());
+		wobj->setName(finfo.completeBaseName().toStdString());
 		wobj->addBasicComponent(bci);
 		wobj->setDimension(bci->dimension());
 		wobj->addCommand(new MyObjectDisplayCommand(wobj));
