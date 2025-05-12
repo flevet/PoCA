@@ -124,6 +124,8 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 	}
 	else if (_infos->nameCommand == "saveAsOBJ") {
 		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
+		if (!filename.endsWith(".obj"))
+			filename.append(".obj");
 		saveAsOBJ(filename);
 	}
 	else if (_infos->nameCommand == "computeSkeletons") {
