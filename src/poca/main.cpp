@@ -43,6 +43,9 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext& context, const QS
 
 int main(int argc, char *argv[])
 {
+	// Set the environment variable in code BEFORE QApplication is created
+	qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "0");
+
 	qInstallMessageHandler(myMessageOutput); // Install the handler
 	QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
 	QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
