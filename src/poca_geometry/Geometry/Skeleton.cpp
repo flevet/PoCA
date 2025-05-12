@@ -116,22 +116,28 @@ namespace poca::geometry {
 				if (!done[n]) {
 					queue.push_back(n);
 					sizeQueue = queue.size();
+					done[n] = true;
 				}
 			}
 			while (current < sizeQueue) {
 				auto id = queue[current];
-				done[id] = true;
 				uint32_t idSegment = floor(id / 2);
 				m_segmentToSkeleton[idSegment] = currentSkeleton;
 				m_skeletons.back().insert(idSegment);
-				if (!done[2 * idSegment]) queue.push_back(2 * idSegment);
-				if (!done[2 * idSegment + 1]) queue.push_back(2 * idSegment + 1);
+				uint32_t ptsSegment[] = { 2 * idSegment , 2 * idSegment + 1 };
+				for (auto ptSeg : ptsSegment) {
+					if (!done[ptSeg]) {
+						queue.push_back(ptSeg);
+						done[ptSeg] = true;
+					}
+				}
 
 				const double queryPt[3] = { cloud.m_pts[id].m_x, cloud.m_pts[id].m_y, cloud.m_pts[id].m_z };
 				nMatches = kdtree.radiusSearch(&queryPt[0], search_radius, ret_matches, params);
 				for (size_t n = 0; n < nMatches; n++) {
 					if (!done[ret_matches[n].first])
 						queue.push_back(ret_matches[n].first);
+					done[ret_matches[n].first] = true;
 				}
 				sizeQueue = queue.size();
 				current++;
