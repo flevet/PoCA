@@ -72,7 +72,9 @@ namespace poca::core {
 		inline unsigned const int* allFirstElements() const { return m_firstElementObjects.data(); }
 
 		inline const std::vector <T>& getData() const { return m_data; }
+		inline std::vector <T>& getData() { return m_data; }
 		inline const std::vector <uint32_t>& getFirstElements() const { return m_firstElementObjects; }
+		inline std::vector <uint32_t>& getFirstElements() { return m_firstElementObjects; }
 
 	protected:
 		std::vector <T> m_data;
