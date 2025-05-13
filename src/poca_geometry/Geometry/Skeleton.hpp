@@ -49,6 +49,7 @@ namespace poca::geometry {
 		BasicComponentInterface* copy();
 
 		const poca::core::MyArrayVec3mf& getSegments() const { return m_segments; }
+		poca::core::MyArrayVec3mf& getSegments() { return m_segments; }
 
 		const uint32_t nbSegments() const { return m_segments.nbElements(); }
 
@@ -57,6 +58,8 @@ namespace poca::geometry {
 		void generatePickingIndicesSkeletons(std::vector <float>&) const;
 		void generatePickingIndices(std::vector <float>&, const std::vector<float>&) const;
 		void getFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;
+
+		void saveAsSkel(const std::string& _filename);
 
 		const poca::core::BoundingBox& boundingBoxSegment(const uint32_t _id) const { return m_bboxSegments[_id]; }
 		const poca::core::BoundingBox& boundingBoxSkeleton(const uint32_t _id) const { return m_bboxSkeletons[_id]; }

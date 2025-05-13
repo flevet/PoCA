@@ -251,4 +251,19 @@ namespace poca::geometry {
 		}
 	}
 
+	void Skeleton::saveAsSkel(const std::string& _filename)
+	{
+		std::ofstream fs(_filename, std::ifstream::binary);
+		poca::core::MyArrayVec3mf& segments = getSegments();
+		std::vector <poca::core::Vec3mf>& points = segments.getData();
+		std::vector <uint32_t>& firsts = segments.getFirstElements();
+		size_t nb = firsts.size();
+		fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+		fs.write(reinterpret_cast<char*>(firsts.data()), nb * sizeof(uint32_t));
+		nb = points.size();
+		fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+		fs.write(reinterpret_cast<char*>(points.data()), nb * sizeof(poca::core::Vec3mf));
+		fs.close();
+	}
 }
+
