@@ -901,7 +901,7 @@ void MainWindow::addComponentToCurrentMdi()
 	QString filename = QFileDialog::getOpenFileName(0,
 		QObject::tr("Select one component to add"),
 		path,
-		QObject::tr("Component files (*.*)"), 0, QFileDialog::DontUseNativeDialog);
+		QObject::tr("Component files (*.*)"), 0);//, QFileDialog::DontUseNativeDialog | QFileDialog::DontUseCustomDirectoryIcons);
 
 	if (filename.isEmpty()) return;
 
