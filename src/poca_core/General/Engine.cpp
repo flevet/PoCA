@@ -320,6 +320,13 @@ namespace poca::core {
 		return wobj;
 	}
 
+	void Engine::setCurrentObject(MyObjectInterface* _obj)
+	{
+		auto it = std::find_if(m_datasets.begin(), m_datasets.end(), [_obj](const std::tuple<poca::core::MyObjectInterface*, poca::opengl::CameraInterface*>& e) {return std::get<0>(e) == _obj; });
+		if (it != m_datasets.end())
+			m_currentDataset = &(*it);
+	}
+
 	void Engine::addCameraToObject(poca::core::MyObjectInterface* _obj, poca::opengl::CameraInterface* _cam)
 	{
 		auto it = std::find_if(m_datasets.begin(), m_datasets.end(), [_obj](const std::tuple<poca::core::MyObjectInterface*, poca::opengl::CameraInterface*>& e) {return std::get<0>(e) == _obj; });
@@ -478,5 +485,129 @@ namespace poca::core {
 			}
 		}
 		return NULL;
+	}
+
+	void Engine::runMacro(std::vector<nlohmann::json> _macro)
+	{
+		for (auto json : _macro) {
+			if (json.empty()) continue;
+
+			const auto nameComp = json.begin().key();
+			if (nameComp == "Engine")
+				runMacro(json[nameComp]);
+			else {
+				poca::core::CommandableObject* comObj = NULL;
+				poca::core::MyObjectInterface* obj = std::get<0>(*m_currentDataset);
+				if (nameComp == "Object")
+					comObj = dynamic_cast<poca::core::CommandableObject*>(obj);
+				else {
+					comObj = dynamic_cast<poca::core::CommandableObject*>(obj->getBasicComponent(nameComp));
+				}
+				if (comObj != NULL) {
+					nlohmann::json jsonCommand = json[nameComp];
+					for (auto& [nameCommand, value] : jsonCommand.items()) {
+						nlohmann::json parameters;
+						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
+						if (!command.empty()) {
+							comObj->executeCommand(&command);
+							/*if (command.hasParameter("newObject")) {
+								poca::geometry::DetectionSet* dset = command.getParameterPtr<poca::geometry::DetectionSet>("newObject");
+								if (dset == NULL) return;
+								poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
+								const std::string& dir = obj->getDir(), name = obj->getName();
+								QString newName(name.c_str());
+								int index = newName.lastIndexOf(".");
+								newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
+								createWindows(newDset, QString(dir.c_str()), newName);
+							}
+							else if (command.hasParameter("object")) {
+								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+								createWidget(obj);
+							}*/
+						}
+						else
+							std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+					}
+				}
+				else
+					std::cout << "Component [" << nameComp << "] does not exist, command " << json.dump() << " was not executed." << std::endl;
+			}
+
+		}
+	}
+
+	void Engine::runMacro(std::vector<nlohmann::json> _macro, QStringList _filenames)
+	{
+		for (auto filename : _filenames) {
+			for (auto json : _macro) {
+				if (json.empty()) continue;
+
+				const auto nameComp = json.begin().key();
+				if (nameComp == "MainWindow") {
+					auto command = json[nameComp];
+					if (command.contains("open")) {
+						//if (command["open"].contains("path"))
+						command["open"]["path"] = filename.toStdString();
+					}
+					runMacro(command);
+				}
+				else {
+					poca::core::CommandableObject* comObj = NULL;
+					if (nameComp == "Object")
+						comObj = dynamic_cast<poca::core::CommandableObject*>(std::get<0>(*m_currentDataset));
+					else {
+						poca::core::MyObjectInterface* obj = std::get<0>(*m_currentDataset);
+						comObj = dynamic_cast<poca::core::CommandableObject*>(obj->getBasicComponent(nameComp));
+					}
+					if (comObj != NULL) {
+						nlohmann::json jsonCommand = json[nameComp];
+						for (auto& [nameCommand, value] : jsonCommand.items()) {
+							nlohmann::json parameters;
+							poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
+							if (!command.empty()) {
+								comObj->executeCommand(&command);
+								/*if (command.hasParameter("object")) {
+									poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+									createWidget(obj);
+								}*/
+							}
+							else
+								std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+						}
+					}
+					else
+						std::cout << "Component [" << nameComp << "] does not exist, command " << json.dump() << " was not executed." << std::endl;
+				}
+
+			}
+		}
+	}
+
+	void Engine::runMacro(const nlohmann::json& _json)
+	{
+		if (_json.empty()) return;
+		const auto tmp = _json.begin().key();
+		if (tmp == "open") {
+			poca::core::CommandInfo command(false, tmp);
+
+			for (auto& [key, value] : _json[tmp].items()) {
+				if (key == "path")
+					command.addParameter(key, _json[tmp][key].get<std::string>());
+				else if (key == "calibration_xy")
+					command.addParameter(key, _json[tmp][key].get<float>());
+				else if (key == "calibration_xy")
+					command.addParameter(key, _json[tmp][key].get<float>());
+				else if (key == "calibration_z")
+					command.addParameter(key, _json[tmp][key].get<float>());
+				else if (key == "calibration_t")
+					command.addParameter(key, _json[tmp][key].get<float>());
+				else if (key == "separator")
+					command.addParameter(key, _json[tmp][key].get<char>());
+				else
+					command.addParameter(key, _json[tmp][key].get<size_t>());
+			}
+
+			//execute(&command);
+		}
 	}
 }

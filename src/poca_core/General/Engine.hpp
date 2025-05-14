@@ -100,8 +100,13 @@ namespace poca::core {
 		MyObjectInterface* getObject(MyObjectInterface*);
 		poca::opengl::CameraInterface* getCamera(BasicComponentInterface*);
 		poca::opengl::CameraInterface* getCamera(MyObjectInterface*);
+		void setCurrentObject(MyObjectInterface*);
 
 		void addData(poca::core::MyObjectInterface*, poca::opengl::CameraInterface*);
+
+		void runMacro(std::vector<nlohmann::json>);
+		void runMacro(std::vector<nlohmann::json>, QStringList);
+		void runMacro(const nlohmann::json&);
 
 		inline const std::any& getSingleton(const std::string& _name) const { return m_singletons.at(_name); }
 		inline std::any& getSingleton(const std::string& _name) { return m_singletons.at(_name); }
