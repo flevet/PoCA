@@ -415,7 +415,10 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
 	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	m_tableObjects = new QTableWidget;
+	//m_tableObjects = new QTableWidget;
+	m_tableObjects = new QTableView;
+	m_model = new TableModel();
+	m_tableObjects->setModel(m_model);
 	m_tableObjects->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	QHeaderView* headerGoods = m_tableObjects->horizontalHeader();
 	connect(headerGoods, SIGNAL(sectionClicked(int)), m_tableObjects, SLOT(sortByColumn(int)));
@@ -496,7 +499,7 @@ void ObjectListsWidget::actionNeeded()
 		objList->executeCommand(true, "saveLocsObjs", "filename", filename.toStdString(), "separator", separator.toStdString());
 	}
 	else if(sender == m_tableObjects){
-		std::set <int> selectedRows;
+		/*std::set <int> selectedRows;
 		QList<QTableWidgetSelectionRange> ranges = m_tableObjects->selectedRanges();
 		for (QTableWidgetSelectionRange range : ranges)
 			for (int n = 0; n < range.rowCount(); n++)
@@ -520,7 +523,7 @@ void ObjectListsWidget::actionNeeded()
 			objList->executeCommand(false, "setIDObjectPicked", -1);
 			objList->executeCommand(false, "updateFeature");
 			m_object->notifyAll("updateDisplay");
-		}
+		}*/
 	}
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
@@ -531,27 +534,17 @@ void ObjectListsWidget::actionNeeded()
 		}
 	}
 	else if (sender == m_duplicateSelectedObjectsButton) {
-		std::set <int> selectedRows;
+		/*std::set <int> selectedRows;
 		QList<QTableWidgetSelectionRange> ranges = m_tableObjects->selectedRanges();
 		for (QTableWidgetSelectionRange range : ranges)
 			for (int n = 0; n < range.rowCount(); n++)
 				selectedRows.insert(range.topRow() + n);
-		/*if (selectedRows.empty()) {
-			const auto& selectedObjects = bc->getSelection();
-			for (auto n = 0; n < selectedObjects.size(); n++)
-				if(selectedObjects[n])
-					selectedRows.insert(n);
-			if(selectedRows.size() == selectedObjects.size())
-				return;
-		}*/
-		//poca::core::CommandInfo ci(true, "saveSelectedObjectsForVectorHeat", "selection", selectedRows);
-		//objList->executeCommand(&ci);
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
 		objList->executeCommand(&ci);
 		if (ci.hasParameter("object")) {
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			emit(transferNewObjectCreated(obj));
-		}
+		}*/
 	}
 	else if (sender == m_parametersButton) {
 		poca::core::MyObjectInterface* obj = m_object->currentObject();
@@ -816,14 +809,20 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		auto start2 = std::chrono::high_resolution_clock::now();
 		m_tableObjects->setSortingEnabled(false);
 		QStringList tableHeader2;
-		tableHeader2 << "ID";
+		//tableHeader2 << "ID";
 		for (std::string type : nameData) {
 			tableHeader2 << type.c_str();
 		}
-		m_tableObjects->setColumnCount(tableHeader2.size());
+		/*m_tableObjects->setColumnCount(tableHeader2.size());
 		m_tableObjects->setHorizontalHeaderLabels(tableHeader2);
-		m_tableObjects->setRowCount((int)bci->nbElements());
-		int columnCount = 0;
+		m_tableObjects->setRowCount((int)bci->nbElements());*/
+		std::vector <float*> values;
+		for (std::string type : nameData) {
+			poca::core::Histogram<float>* hist = dynamic_cast<poca::core::Histogram<float>*>(bci->getOriginalHistogram(type));
+			values.push_back(hist->getValuesPtr());
+		}
+		m_model->setData(tableHeader2, values, (int)bci->nbElements());
+		/*int columnCount = 0;
 		for (size_t rowCount = 0; rowCount < bci->nbElements(); rowCount++)
 			m_tableObjects->setItem((int)rowCount, (int)columnCount, new SortableFloatItem(QString::number(rowCount + 1)));
 		columnCount++;
@@ -834,7 +833,7 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 			for (size_t rowCount = 0; rowCount < values.size(); rowCount++)
 				m_tableObjects->setItem((int)rowCount, (int)columnCount, new SortableFloatItem(QString::number(values[rowCount])));
 			columnCount++;
-		}
+		}*/
 
 		QHeaderView* headerGoods = m_tableObjects->horizontalHeader();
 		//SortIndicator is a triangle indicator next to the horizontal title bar text

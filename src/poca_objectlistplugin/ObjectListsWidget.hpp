@@ -67,6 +67,54 @@ protected:
 	QLabel* m_tedit;
 };
 
+class TableModel : public QAbstractTableModel {
+	Q_OBJECT
+public:
+	TableModel(QObject* parent = nullptr)
+		: QAbstractTableModel(parent) {}
+
+	int rowCount(const QModelIndex& parent = QModelIndex()) const override {
+		return m_rowCount;
+	}
+
+	int columnCount(const QModelIndex& parent = QModelIndex()) const override {
+		return m_data.size();
+	}
+
+	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override {
+		if (role == Qt::DisplayRole) {
+			int row = index.row();
+			int column = index.column();
+			if (row >= 0 && row < rowCount() && column >= 0 && column < columnCount()) {
+				return m_data[column][row];
+			}
+		}
+		return QVariant();
+	}
+
+	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override {
+		if (role == Qt::DisplayRole && orientation == Qt::Horizontal) {
+			if (section >= 0 && section < m_headers.size()) {
+				return m_headers[section];
+			}
+		}
+		return QAbstractTableModel::headerData(section, orientation, role);
+	}
+
+	void setData(const QStringList& _headers, const std::vector <float*>& _data, int _rowCount) {
+		beginResetModel();
+		m_headers = _headers;
+		m_data = _data;
+		m_rowCount = _rowCount;
+		endResetModel();
+	}
+
+private:
+	std::vector <float*> m_data;
+	int m_rowCount{ 0 };
+	QStringList m_headers;
+};
+
 class SortableFloatItem : public QTableWidgetItem
 {
 public:
@@ -122,7 +170,9 @@ protected:
 	QPushButton* m_computeSkeletonsButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
 	QSpinBox* m_sizePointSpn;
 
-	QTableWidget* m_tableObjects;
+	//QTableWidget* m_tableObjects;
+	QTableView* m_tableObjects;
+	TableModel* m_model;
 
 	QWidget* m_widgetList;
 	std::vector <QPushButton*> m_listButtons;
