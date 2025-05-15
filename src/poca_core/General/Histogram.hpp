@@ -70,8 +70,11 @@ namespace poca::core {
 		const size_t memorySize() const;
 
 		inline const T* getValuesPtr() const { return m_values.data(); }
+		inline T* getValuesPtr() { return m_values.data(); }
 		inline const float* getBinsPtr() const { return m_bins.data(); }
+		inline float* getBinsPtr() { return m_bins.data(); }
 		inline const float* getTsPtr() const { return m_ts.data(); }
+		inline float* getTsPtr() { return m_ts.data(); }
 
 		float* valuesf();
 		uint8_t* valuesui8();
