@@ -77,14 +77,19 @@ namespace poca::geometry {
 		std::vector <float> volumes;
 
 		clock_t t1 = clock(), t2;
+		int precPercent = 0;
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
-			std::cout << __LINE__ << std::endl;
 			std::vector < Point_3_double> points(_allVertices[n].size());
 			std::transform(std::execution::par, _allVertices[n].begin(), _allVertices[n].end(), points.begin(), [](const auto& value) {return Point_3_double(value[0], value[1], value[2]);});
-			std::cout << __LINE__ << std::endl;
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
-			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size()  << " vertices";
+			if (percent != precPercent || points.size() > 100000) {
+				if(points.size() > 100000)
+					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size()  << " vertices";
+				else
+					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+				precPercent = percent;
+			}
 			m_repair = _repair;
 			m_applyRemeshing = _applyRemeshing;
 			addObjectMesh(points, _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
@@ -155,7 +160,6 @@ namespace poca::geometry {
 		m_data["minor"] = poca::core::generateDataWithLog(minor);
 		m_data["minor2"] = poca::core::generateDataWithLog(minor2);
 		m_data["minMin2"] = poca::core::generateDataWithLog(minMin2);
-		std::cout << "g " << __LINE__ << std::endl;
 
 		std::vector <float> zs(triPoCA.size());
 		for (auto n = 0; n < triPoCA.size(); n++)
@@ -175,11 +179,17 @@ namespace poca::geometry {
 		std::vector <float> volumes;
 
 		clock_t t1 = clock(), t2;
+		int precPercent = 0;
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
-			std::cout << __LINE__ << std::endl;
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
-			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
+			if (percent != precPercent || _allVertices[n].size() > 100000) {
+				if (_allVertices[n].size() > 100000)
+					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
+				else
+					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+				precPercent = percent;
+			}
 			m_repair = _repair;
 			m_applyRemeshing = _applyRemeshing;
 			addObjectMesh(_allVertices[n], _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
@@ -284,7 +294,6 @@ namespace poca::geometry {
 				//if this happens, the remeshing crash
 				m_applyRemeshing = false;
 			}
-			std::cout << __LINE__ << std::endl;
 			if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
 			{
 				std::cerr << "Warning: polygon soup does not describe a polygon mesh" << std::endl;
@@ -296,7 +305,6 @@ namespace poca::geometry {
 		PMP::polygon_soup_to_polygon_mesh(_vertices, _triangles, mesh);
 		if (m_repair) {
 			PMP::keep_large_connected_components(mesh, 10);
-			std::cout << __LINE__ << std::endl;
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 			PMP::remove_almost_degenerate_faces(mesh);
 #endif
@@ -323,7 +331,6 @@ namespace poca::geometry {
 		std::vector <float>& _volumes)
 	{
 		if (m_repair) {
-			std::cout << __LINE__ << std::endl;
 			if (!CGAL::is_triangle_mesh(_mesh)) {
 				std::cout << "Not a triangle mesh" << std::endl;
 				return false;
