@@ -240,6 +240,7 @@ void MdiChild::actionNeeded(int _val)
 		bbox[5] = plane;
 		cam->zoomToBoundingBox(bbox, false);
 		m_tLabel->setText(QString::number(plane).rightJustified(5, '0'));
+		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)plane));
 	}
 }
 
@@ -257,6 +258,7 @@ void MdiChild::actionNeeded(bool _val)
 		m_tLabel->hide();
 		m_tSlider->hide();
 		m_emptyForSliderW->show();
+		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)-1));
 	}
 	else if (sender == m_2DtButton) {
 		m_tSlider->setEnabled(_val);
@@ -270,6 +272,7 @@ void MdiChild::actionNeeded(bool _val)
 		m_tLabel->show();
 		m_tSlider->show();
 		m_emptyForSliderW->hide();
+		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)plane));
 	}
 	else if (sender == m_playButton) {
 		if (_val) {

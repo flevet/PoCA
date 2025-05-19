@@ -78,6 +78,9 @@ namespace poca::core {
 		virtual std::vector <float>& volumes() { return m_volumes; }
 		virtual const std::vector <float>& volumes() const { return m_volumes; }
 
+		virtual inline int currentFrame() { return m_currentFrame; }
+		virtual void setCurrentFrame(const int _frame) { m_currentFrame = _frame; }
+
 	protected:
 		ImageInterface(const ImageType _typeImage) :BasicComponent("Image"), m_typeImage(_typeImage) {}
 
@@ -85,6 +88,7 @@ namespace poca::core {
 		uint32_t m_width, m_height, m_depth;
 		float m_min, m_max, m_maxValue;
 		ImageType m_type, m_typeImage;
+		int m_currentFrame{ -1 };
 
 		//Currently just store volumes for labels data, TODO think better about the structure
 		std::vector <float> m_volumes;
