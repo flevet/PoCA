@@ -71,6 +71,7 @@ set(GENERAL_HEADER_FILES
   General/Engine.hpp
   General/Histogram.hpp
   General/Image.hpp
+  General/ImagesList.hpp
   General/json.hpp
   General/Misc.h
   General/MyArray.hpp
@@ -92,6 +93,7 @@ set(GENERAL_HEADER_FILES
   General/CommandableObject.cpp
   General/EquationFit.cpp
   General/Engine.cpp
+  General/ImagesList.cpp
   General/Misc.cpp
   General/MyData.cpp
   General/Palette.cpp
@@ -174,6 +176,7 @@ if(CUDA_FOUND)
   #set(CMAKE_CUDA_FLAGS "-Xcompiler=\"/EHsc -Zi -Ob0\"")
   message("CUDA flags: ${CMAKE_CUDA_FLAGS}")
   enable_language(CUDA)
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -extended-lambda")
 	#set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 	foreach(source IN LISTS cuda_list)
 		get_filename_component(source_path "${source}" PATH)
