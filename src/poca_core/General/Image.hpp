@@ -62,7 +62,7 @@ namespace poca::core {
 		void uint16_labeledData(std::vector <uint16_t>&) const;
 		void float_normalisedData(std::vector <float>&) const;
 
-		const float* getImage(const uint32_t) const;
+		const T* getImage(const uint32_t) const;
 
 		inline const T* data() const;
 		inline T* data();
@@ -200,7 +200,7 @@ namespace poca::core {
 	}
 
 	template <class T>
-	const float* Image<T>::getImage(const uint32_t _index) const
+	const T* Image<T>::getImage(const uint32_t _index) const
 	{
 		const std::vector<T>& pixels = this->pixels();
 		auto wh = m_width * m_height;
