@@ -39,12 +39,21 @@
 #include <thrust\sequence.h>
 #include <thrust\distance.h>
 #include <thrust/binary_search.h>
+#include <thrust/transform_reduce.h>
+#include <thrust/functional.h>
+#include <thrust/count.h>
+#include <thrust/transform.h>
+#include <thrust/execution_policy.h>
 
 #include "BasicOperationsImage.h"
 
 #ifndef NO_CUDA
 #define cuda_check(x) if (x!=cudaSuccess) exit(1);
 #define IF_VERBOSE(x) //x
+#define IDX3(i, j, k, width, height) (((k) * (height) + (i)) * (width) + (j))
+#define BLOCKDIM_X 8
+#define BLOCKDIM_Y 8
+#define BLOCKDIM_Z 8
 
 template <class T> struct GPUBuffer {
     void init(T* data) {
@@ -328,10 +337,239 @@ poca::core::ImageInterface* convertAndCreateLabelImage(thrust::device_vector<T>&
     image->finalizeImage(_w, _h, _d);
     return image;
 }
+/*
+template <class T>
+__global__ void init_auto_threshold(const T* image, float* count, float* threshold, uint32_t width, uint32_t height, uint32_t depth)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= width || y >= height || z >= depth) return;
+
+    int idx = IDX3(y, x, z, width, height);
+    T value = image[idx];
+    if (value > T(0)) {
+        atomicAdd(count, 1.f);
+        atomicAdd(threshold, float(value));
+    }
+}
+
+template <class T>
+__global__ void auto_threshold_step1(const T* image, float threshold, float* count0, float* count1, float* m0, float* m1, uint32_t width, uint32_t height, uint32_t depth)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= width || y >= height || z >= depth) return;
+
+    int idx = IDX3(y, x, z, width, height);
+    T value = image[idx];
+    if (value > T(0)) {
+        float valf = float(value);
+        if (valf < threshold) {
+            atomicAdd(count0, 1.f);
+            atomicAdd(m0, valf);
+        }
+        else {
+            atomicAdd(count1, 1.f);
+            atomicAdd(m1, valf);
+        }
+    }
+}
+
+template <class T>
+__global__ void auto_threshold_step2(const T* image, float threshold, float m0, float m1, float* s0, float* s1, uint32_t width, uint32_t height, uint32_t depth)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    if (x >= width || y >= height || z >= depth) return;
+
+    int idx = IDX3(y, x, z, width, height);
+    T value = image[idx];
+    if (value > T(0)) {
+        float valf = float(value);
+        if (valf < threshold) {
+            atomicAdd(s0, (valf - m0) * (valf - m0));
+        }
+        else {
+            atomicAdd(s1, (valf - m0) * (valf - m0));
+        }
+    }
+}
+
+enum AutoThresholdVar { THRESHOLD = 0, OLD_THRESHOLD = 1, M0 = 2, M1 = 3, COUNT0 = 4, COUNT1 = 5, S0 = 6, S1 = 7, SIGMA = 8, COUNT = 9 };
+
+template <class T>
+float getAutoThreshold(const T* image, const uint32_t _w, const uint32_t _h, const uint32_t _d)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t numel = _w * _h * _d;
+    thrust::device_vector <T> d_image(image, image + numel);
+    thrust::device_vector <float> d_values(10);//0 -> 9: {threshold, oldThreshold, m0, m1, count0, count1, count, s0, s1, sigma}
+    uint32_t cpt = 30;
+    float threshold = 0.f, oldThreshold = 1e10;
+    d_values[OLD_THRESHOLD] = oldThreshold;
+
+    dim3 threads = _d == 1 ? dim3(BLOCKDIM_X, BLOCKDIM_Y) : dim3(BLOCKDIM_X, BLOCKDIM_Y, BLOCKDIM_Z);
+    dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)_w / (float)BLOCKDIM_X), (unsigned int)ceil((float)_h / (float)BLOCKDIM_Y)) : dim3((unsigned int)ceil((float)_w / (float)BLOCKDIM_X), (unsigned int)ceil((float)_h / (float)BLOCKDIM_Y), (unsigned int)ceil((float)_d / (float)BLOCKDIM_Z));
+
+    float* d_values_ptr = thrust::raw_pointer_cast(d_values.data());
+    init_auto_threshold << <grid, threads >> > (thrust::raw_pointer_cast(d_image.data()), d_values_ptr + COUNT, d_values_ptr + THRESHOLD, _w, _h, _d);
+    d_values[THRESHOLD] = d_values[THRESHOLD] / d_values[COUNT];
+    threshold = d_values[THRESHOLD];
+    while ((fabs(oldThreshold - threshold) > 1e-12) && (cpt > 0)) {
+        auto start2 = std::chrono::high_resolution_clock::now(), start3 = start2;
+        thrust::fill(d_values.begin() + M0, d_values.begin() + SIGMA, 0.f);
+        auto_threshold_step1 << <grid, threads >> > (thrust::raw_pointer_cast(d_image.data()), d_values[THRESHOLD], d_values_ptr + COUNT0, d_values_ptr + COUNT1, d_values_ptr + M0, d_values_ptr + M1, _w, _h, _d);
+        printf("step 1: %lld ms\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start3).count());
+        start3 = std::chrono::high_resolution_clock::now();
+        d_values[M0] = d_values[M0] / d_values[COUNT0];
+        d_values[M1] = d_values[M1] / d_values[COUNT1];
+        printf("other: %lld ms\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start3).count());
+        start3 = std::chrono::high_resolution_clock::now();
+        auto_threshold_step2 << <grid, threads >> > (thrust::raw_pointer_cast(d_image.data()), d_values[THRESHOLD], d_values[M0], d_values[M1], d_values_ptr + S0, d_values_ptr + S1, _w, _h, _d);
+        printf("step 2: %lld ms\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start3).count());
+        start3 = std::chrono::high_resolution_clock::now();
+        d_values[S0] = sqrt(d_values[S0]);
+        d_values[S1] = sqrt(d_values[S1]);
+        d_values[SIGMA] = (d_values[S0] + d_values[S1]) / d_values[COUNT];
+        d_values[OLD_THRESHOLD] = d_values[THRESHOLD];
+        d_values[THRESHOLD] = (d_values[M0] + d_values[M1]) / 2.f + d_values[SIGMA] * d_values[SIGMA] * log(d_values[COUNT0] / d_values[COUNT1]) / (d_values[M1] - d_values[M0]);
+        threshold = d_values[THRESHOLD];
+        oldThreshold = d_values[OLD_THRESHOLD];
+        printf("other: %lld ms\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start3).count());
+        start3 = std::chrono::high_resolution_clock::now();
+        auto duration2 = std::chrono::high_resolution_clock::now() - start2;
+        long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
+        float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
+        printf("iteration %u, value %f, oldvalue %f, took %f seconds (%lld microseconds)\n", cpt, threshold, oldThreshold, s, ms);
+        cpt--;
+        printf("timing: %lld ms\n", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start3).count());
+    }
+    auto duration = std::chrono::high_resolution_clock::now() - start;
+    long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    float s = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+    printf("auto threshold, value %f, took %f seconds (%lld microseconds)\n", threshold, s, ms);
+    return threshold;
+}
+*/
+template <typename T>
+float getAutoThreshold(const T* image, uint32_t w, uint32_t h, uint32_t d) {
+    auto start = std::chrono::high_resolution_clock::now();
+    using namespace thrust;
+
+    uint32_t numel = w * h * d;
+
+    // Upload input image to device
+    device_vector<T> d_image(image, image + numel);
+
+    // Cast image to float for math
+    device_vector<float> d_float_image(numel);
+    transform(d_image.begin(), d_image.end(), d_float_image.begin(), thrust::placeholders::_1 * 1.0f);
+
+    // Initial threshold = mean
+    // Initial mean of values > 0
+    float sum_pos = thrust::transform_reduce(
+        d_float_image.begin(), d_float_image.end(),
+        [] __device__(float x) {
+        return x > 0.0f ? x : 0.0f;
+    },
+        0.0f, thrust::plus<float>()
+    );
+
+    int count_pos = thrust::count_if(
+        d_float_image.begin(), d_float_image.end(),
+        [] __device__(float x) {
+        return x > 0.0f;
+    }
+    );
+
+    float threshold = (count_pos > 0) ? (sum_pos / count_pos) : 0.0f;
+    float oldThreshold = 1e10f;
+
+    int cpt = 30;
+
+    while (fabs(oldThreshold - threshold) > 1e-12f && cpt-- > 0) {
+        oldThreshold = threshold;
+
+        auto valid_and_leq_thresh = [threshold] __device__(float x) {
+            return x > 0.0f && x <= threshold;
+        };
+
+        auto valid_and_gt_thresh = [threshold] __device__(float x) {
+            return x > threshold;
+        };
+
+        // Count and mean of values in (0, threshold]
+        int count0 = count_if(d_float_image.begin(), d_float_image.end(), valid_and_leq_thresh);
+        float sum0 = transform_reduce(
+            d_float_image.begin(), d_float_image.end(),
+            [threshold] __device__(float x) {
+            return (x > 0.0f && x <= threshold) ? x : 0.0f;
+        },
+            0.0f, plus<float>()
+        );
+
+        // Count and mean of values > threshold
+        int count1 = count_if(d_float_image.begin(), d_float_image.end(), valid_and_gt_thresh);
+        float sum1 = transform_reduce(
+            d_float_image.begin(), d_float_image.end(),
+            [threshold] __device__(float x) {
+            return (x > threshold) ? x : 0.0f;
+        },
+            0.0f, plus<float>()
+        );
+
+        float m0 = (count0 > 0) ? (sum0 / count0) : 0.0f;
+        float m1 = (count1 > 0) ? (sum1 / count1) : 0.0f;
+
+        // Variance for <= threshold (only > 0 values)
+        float s0 = transform_reduce(
+            d_float_image.begin(), d_float_image.end(),
+            [threshold, m0] __device__(float x) {
+            return (x > 0.0f && x <= threshold) ? (x - m0) * (x - m0) : 0.0f;
+        },
+            0.0f, plus<float>()
+        );
+
+        // Variance for > threshold
+        float s1 = transform_reduce(
+            d_float_image.begin(), d_float_image.end(),
+            [threshold, m1] __device__(float x) {
+            return (x > threshold) ? (x - m1) * (x - m1) : 0.0f;
+        },
+            0.0f, plus<float>()
+        );
+
+        s0 = sqrtf(s0);
+        s1 = sqrtf(s1);
+        float sigma = (s0 + s1) / (count0 + count1);
+
+        if (count0 > 0 && count1 > 0 && m1 != m0) {
+            threshold = (m0 + m1) / 2.0f +
+                sigma * sigma * logf((float)count0 / count1) / (m1 - m0);
+        }
+        else {
+            break;
+        }
+    }
+    auto duration = std::chrono::high_resolution_clock::now() - start;
+    long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    float s = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+    printf("auto threshold, value %f, took %f seconds (%lld microseconds)\n", threshold, s, ms);
+    return threshold;
+}
 
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint16_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint32_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+
+template float getAutoThreshold(const uint8_t* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+template float getAutoThreshold(const uint16_t* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+template float getAutoThreshold(const uint32_t* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+template float getAutoThreshold(const int32_t* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+template float getAutoThreshold(const float* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 
 template __global__ void kernel_threshold(const uint8_t* image, const uint8_t _thresholdMin, const uint8_t _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 template __global__ void kernel_threshold(const uint16_t* image, const uint16_t _thresholdMin, const uint16_t _thresholdMax, uint8_t* thresholdedImage, uint32_t size);

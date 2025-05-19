@@ -55,6 +55,9 @@ void relabel_kernel_gpu(thrust::device_vector<T>& d_labels);
 template <class T>
 __global__ void kernel_threshold(const T* image, const T _thresholdMin, const T _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 
+template <class T>
+float getAutoThreshold(const T* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+
 void relabelI32(std::vector <uint32_t>& _labels, std::vector <uint32_t>& _relabels);
 void computeFeaturesLabelImage(poca::core::ImageInterface*);
 poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface*);
