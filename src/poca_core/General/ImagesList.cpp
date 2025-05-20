@@ -52,6 +52,15 @@ namespace poca::core {
 		return new ImagesList(*this);
 	}
 
+	void ImagesList::copyComponentsPtr(BasicComponentList* _list) {
+		BasicComponentList::copyComponentsPtr(_list);
+		ImagesList* list = dynamic_cast <ImagesList*>(_list);
+		if (list) {
+			for (const auto& name : list->m_names)
+				m_names.push_back(name);
+		}
+	}
+
 	void ImagesList::addImage(ImageInterface* _obj, const std::string& _name)
 	{
 		addComponent(_obj);

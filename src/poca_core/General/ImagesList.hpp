@@ -45,6 +45,7 @@ namespace poca::core {
 		~ImagesList();
 
 		BasicComponentInterface* copy();
+		virtual void copyComponentsPtr(BasicComponentList*);
 
 		void addImage(ImageInterface*, const std::string & = "");
 		ImageInterface* currentImage();
