@@ -133,6 +133,7 @@ namespace poca::core {
 		virtual void copyComponentsPtr(BasicComponentList* _list) {
 			for (auto* comp : _list->m_components)
 				m_components.push_back(comp);
+			m_currentComponent = m_components.size() - 1;
 		}
 
 		virtual void copyComponents(BasicComponentList* _list) {
