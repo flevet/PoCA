@@ -42,20 +42,37 @@ uniform vec3 light_position;
 uniform int nb_steps;
 uniform bool applyThreshold;
 uniform bool isFloat;
+uniform bool isLabel;
+uniform bool scaleLUT;
+uniform bool isFrame;
+uniform bool borderRendering;
+uniform uint borderSize;
 
-uniform sampler2D jitter;
+uniform float width_feature_texture;
+uniform float height_feature_texture;
+
 uniform sampler1D lutTexture;
-uniform sampler1D featureTexture;
+uniform sampler2D featureTexture;
 
 uniform sampler3D volume;
 uniform usampler3D uvolume;
 
 uniform float gamma;
-uniform float histogram_min;
-uniform float histogram_max;
+uniform float pixel_min;
+uniform float pixel_max;
+uniform float feature_min;
+uniform float feature_max;
 uniform float current_min;
 uniform float current_max;
 uniform float labelBackground;
+uniform float featureTextureSize;
+
+uniform float values_feature;
+
+const vec3 OFFSETS[4] = vec3[](
+    vec3(1, 0, 0), vec3(-1, 0, 0),
+    vec3(0, 1, 0), vec3(0, -1, 0)
+);
 
 // Ray
 struct Ray {
@@ -68,6 +85,18 @@ struct AABB {
     vec3 top;
     vec3 bottom;
 };
+
+void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
+	float id = label_id - 1;
+	y = floor(id / w) / (h - 1);
+	x = (id - (y * w)) / (w - 1);
+}
+
+float scaleOffsetVar(float texturesize, float pos){
+	float scale = (texturesize - 1.0) / texturesize;
+	float offset = 1.0 / (2.0 * texturesize);
+	return scale * pos + offset;
+}
 
 // Slab method for ray-box intersection
 void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
@@ -95,6 +124,29 @@ void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
     t = min(t_max.xx, t_max.yz);
     float t_1 = min(t.x, t.y);
 	intersected = t_1 >= t_0;
+}
+
+bool isBorderVoxel(vec3 position, uint label, int radius) {
+    vec3 volumeDims = vec3(textureSize(uvolume, 0)); // voxel grid dimensions
+    vec3 texelSize = 1.0 / volumeDims;
+
+    for (int x = -radius; x <= radius; ++x) {
+        for (int y = -radius; y <= radius; ++y) {
+            if (x == 0 && y == 0) continue; // skip center voxel
+
+            vec3 offset = vec3(x, y, 0) * texelSize;
+            vec3 neighborPos = position + offset;
+
+            // Skip out-of-bounds neighbors
+            if (any(lessThan(neighborPos, vec3(0.0))) || any(greaterThanEqual(neighborPos, vec3(1.0))))
+                continue;
+
+            uint neighborLabel = texture(uvolume, neighborPos).r;
+            if (neighborLabel != label)
+                return true;
+        }
+    }
+    return false;
 }
 
 void main()
@@ -133,37 +185,74 @@ void main()
     float ray_length = length(ray);
 	vec3 ray_step = ray / float(nb_steps);
 
-    // Random jitter
-	vec2 viewport_size = viewport.zw;
-    ray_start += ray_step * texture(jitter, gl_FragCoord.xy / viewport_size).r;
-
     vec3 position = ray_start;
 	float intensity = 0.f;
 	
-    // Ray march until reaching the end of the volume, or colour saturation
-    for(int n = 0; n < nb_steps ; n++){
+	bool found = false;
+    for(int n = 0; n < nb_steps && !found; n++){
 		position = position + ray_step;
 		if(isFloat)
 			intensity = texture(volume, position).r;
 		else
 			intensity = float(texture(uvolume, position).r);
 		
-		if(intensity > current_min && intensity < current_max){
-			n = nb_steps;
+		if(intensity >= current_min && intensity <= current_max){
+		
+			if(isLabel && borderRendering && isFrame){
+				if (!isBorderVoxel(position, uint(intensity), int(borderSize)))
+					continue;
+			}
+			//we retrieve the true pixel value from the pixel
+			//We need to normalize it in order to fetch the lookup table from featureTexture
+			float x = intensity, y = 0;
+			if(height_feature_texture == 1){
+				x = (intensity - pixel_min) / (pixel_max - pixel_min);
+			}
+			else{
+				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
+				y = scaleOffsetVar(height_feature_texture, y);
+			}
+			x = scaleOffsetVar(width_feature_texture, x);
+			intensity = texture(featureTexture, vec2(x, y)).r;
+			found = true;
 		}
 	}
 	
-	if (intensity < current_min || intensity > current_max)
+	if(!found)
 		discard;
+	
+	if(scaleLUT){
+		if(intensity < current_min) intensity = current_min;
+		if(intensity > current_max) intensity = current_max;
+	}
+	
+	if(!applyThreshold && !scaleLUT && (intensity < current_min || intensity > current_max))
+		discard;
+
+	if(applyThreshold && intensity > current_min && intensity < current_max){
+		a_colour = vec4(1, 0, 0, 1);
+	}
+	else{
+		//And we need to normalize a second time to fetch the correct color in lutTexture
+		intensity = (intensity - feature_min) / (feature_max - feature_min);
 		
-	//we retrieve the true pixel value from the pixel
-	//We need to normalize it in order to fetch the lookup table from featureTexture
-	intensity = (intensity - histogram_min) / (histogram_max - histogram_min);
-	float scale = (2 - 1.0) / 2;
-	float offset = 1.0 / (2.0 * 2);
-	intensity = texture(featureTexture, scale * intensity + offset).r;
-		
-	//And we need to normalize a second time to fetch the correct color in lutTexture
-	intensity = (intensity - histogram_min) / (intensity - histogram_min);
-	a_colour = vec4(texture(lutTexture, intensity).xyz, 1.f);
+		if(isLabel){
+			float posLut = scaleOffsetVar(512, intensity);
+			a_colour.rgb = texture(lutTexture, posLut).xyz;
+			a_colour.a = 1.0;
+		}
+		else{
+			vec4 colour = vec4(intensity, intensity, intensity, (exp(intensity) - 1.0) / (exp(1.0) - 1.0));
+
+			// Blend background
+			colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
+			float posLut = scaleOffsetVar(512, colour.r);
+			colour.rgb = texture(lutTexture, posLut).xyz;
+			colour.a = 1.0;
+
+			// Gamma correction
+			a_colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
+			a_colour.a = colour.a;
+		}
+	}
 }
