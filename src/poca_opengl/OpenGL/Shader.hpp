@@ -298,7 +298,12 @@ namespace poca::opengl {
 		{
 			glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
 		}
-
+		// ------------------------------------------------------------------------
+		void setHandleui64vARB(const std::string& name, GLuint64 handles[16]) const
+		{
+			glUniformHandleui64vARB(glGetUniformLocation(ID, name.c_str()), 16, handles);
+		}
+		
 	private:
 		void checkCompileErrors(GLuint shader, std::string type)
 		{
