@@ -225,6 +225,10 @@ namespace poca::opengl {
 		{
 			glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
 		}
+		void setBoolv(const std::string& name, std::vector<int>& value) const
+		{
+			glUniform1iv(glGetUniformLocation(ID, name.c_str()), value.size(), reinterpret_cast<int*>(value.data()));
+		}
 		// ------------------------------------------------------------------------
 		void setInt(const std::string& name, int value) const
 		{
@@ -299,9 +303,14 @@ namespace poca::opengl {
 			glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(mat));
 		}
 		// ------------------------------------------------------------------------
-		void setHandleui64vARB(const std::string& name, GLuint64 handles[16]) const
+		void setHandleui64ARB(const std::string& name, GLuint64 handle) const
 		{
-			glUniformHandleui64vARB(glGetUniformLocation(ID, name.c_str()), 16, handles);
+			glUniformHandleui64ARB(glGetUniformLocation(ID, name.c_str()), handle);
+		}
+		// ------------------------------------------------------------------------
+		void setHandleui64vARB(const std::string& name, std::vector<GLuint64>&  handles) const
+		{
+			glUniformHandleui64vARB(glGetUniformLocation(ID, name.c_str()), 16, reinterpret_cast<GLuint64*>(handles.data()));
 		}
 		
 	private:
