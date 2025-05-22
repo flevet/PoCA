@@ -16,8 +16,8 @@
 *
 * The algorithms that underlie PoCA have required considerable
 * development. They are described in the original SR-Tesseler paper,
-* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization, 
-* manipulation, quantification) towards a scientific publication, please include 
+* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization,
+* manipulation, quantification) towards a scientific publication, please include
 * a citation to the original paper.
 *
 * This program is distributed in the hope that it will be useful,
@@ -63,6 +63,17 @@ namespace poca::core {
 	Palette::Palette()
 	{
 
+	}
+
+	Palette::Palette(const std::vector<unsigned char>& _rs, const std::vector<unsigned char>& _gs, const std::vector<unsigned char>& _bs, const std::string& _name, const bool _hilow) : m_name(_name), m_hilow(_hilow)
+	{
+		float position = 0.f, step = 1.f / (float)(_rs.size() - 1);
+		for (auto n = 0; n < _rs.size(); n++) {
+			m_gradient.insert(std::make_pair(position, Color4uc(_rs[n], _gs[n], _bs[n], 255)));
+			position += step;
+		}
+		m_begin = 0.; m_end = 1.;
+		m_from = 0; m_to = 256;
 	}
 
 	Palette::Palette(const Color4uc _color_begin, const Color4uc _color_end, const std::string& _name, const bool _hilow) : m_name(_name), m_hilow(_hilow)

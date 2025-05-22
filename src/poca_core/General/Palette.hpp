@@ -90,6 +90,8 @@ namespace poca::core {
 
 		Palette();
 
+		Palette(const std::vector<unsigned char>&, const std::vector<unsigned char>&, const std::vector<unsigned char>&, const std::string & = "", const bool = false);
+
 		/**
 		 * \brief Constructeur.
 		 * \param _color_begin Couleur de début.
