@@ -52,6 +52,7 @@ namespace poca::opengl {
 		static void setHelperSingleton(poca::opengl::HelperSingleton*);
 		~HelperSingleton();
 
+		void generateLutTexture(GLuint&, GLuint64&, poca::core::PaletteInterface* = NULL);
 		const GLuint generateLutTexture(poca::core::PaletteInterface* = NULL);
 		void generateTexture(const GLuint, const QImage&);
 
@@ -68,6 +69,7 @@ namespace poca::opengl {
 	protected:
 		static HelperSingleton* m_instance;
 		std::map <std::string, GLuint> m_textures;
+		std::map <std::string, GLuint64> m_handles;
 
 		//Unit sphere
 		poca::opengl::QuadSingleGLBuffer <float> m_ellipsoidVerticesBuffer, m_ellipsoidNormalsBuffer;

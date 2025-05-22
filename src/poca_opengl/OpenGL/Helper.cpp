@@ -65,6 +65,16 @@ namespace poca::opengl {
 	{
 	}
 
+	void HelperSingleton::generateLutTexture(GLuint& _id, GLuint64& _handle, poca::core::PaletteInterface* _pal)
+	{
+		_id = generateLutTexture(_pal);
+		if (m_handles.find(_pal->getName()) == m_handles.end()) {
+			m_handles[_pal->getName()] = glGetTextureHandleARB(_id);
+			glMakeTextureHandleResidentARB(m_handles[_pal->getName()]);
+		}
+		_handle = m_handles[_pal->getName()];
+	}
+
 	const GLuint HelperSingleton::generateLutTexture(poca::core::PaletteInterface* _pal)
 	{
 		if (m_textures.find(_pal->getName()) == m_textures.end()) {
@@ -90,7 +100,6 @@ namespace poca::opengl {
 			glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 			glBindTexture(GL_TEXTURE_1D, 0);
 			m_textures[_pal->getName()] = textureLutID;
-			return textureLutID;
 		}
 		else if (_pal->getName() == "Random") {
 			unsigned int sizeLut = 10000;
