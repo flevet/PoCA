@@ -20,7 +20,8 @@
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#version 130
+#version 440 core
+#extension GL_ARB_bindless_texture : require
 
 out vec4 a_colour;
 
@@ -66,8 +67,6 @@ uniform float current_min;
 uniform float current_max;
 uniform float labelBackground;
 uniform float featureTextureSize;
-
-uniform float values_feature;
 
 const vec3 OFFSETS[4] = vec3[](
     vec3(1, 0, 0), vec3(-1, 0, 0),
