@@ -173,73 +173,86 @@ void main()
 
     vec3 position = ray_start;
 	
-	float maximum_intensity = -3.402823466e+38;
-	
+	float maximum_intensity[MAX_NB_IMAGES];
+	for(int n = 0; n < nbImages; n++)
+		maximum_intensity[n] = -3.402823466e+38;
+		
 	// Ray march until reaching the end of the volume
     for(int n = 0; n < nb_steps; n++){
 		position = position + ray_step;
-		float intensity;
-		if(isFloat)
-			intensity = texture(volume, position).r;
-		else
-			intensity = float(texture(uvolume, position).r);
-			
-		if(intensity >= pixel_min){
-			//we retrieve the true pixel value from the pixel
-			//We need to normalize it in order to fetch the lookup table from featureTexture
-			float x = intensity, y = 0;
-			if(height_feature_texture == 1){
-				x = (intensity - pixel_min) / (pixel_max - pixel_min);
-			}
-			else{
-				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
-				y = scaleOffsetVar(height_feature_texture, y);
-			}
-			x = scaleOffsetVar(width_feature_texture, x);
-			intensity = texture(featureTexture, vec2(x, y)).r;
-				
-			if(scaleLUT){
-				if (intensity >= maximum_intensity)
-					maximum_intensity = intensity;
-			}
+		for(int curImage = 0; curImage < nbImages; curImage++){
+			float intensity;
+			if(isFloat[curImage])
+				intensity = texture(volume[curImage], position).r;
 			else
-				if (intensity >= maximum_intensity && intensity <= current_max)
-					maximum_intensity = intensity;
+				intensity = float(texture(uvolume[curImage], position).r);
+				
+			if(intensity >= maximum_intensity[curImage])
+				maximum_intensity[curImage] = intensity;
+				
+			if(intensity >= pixel_min[curImage]){
+				//we retrieve the true pixel value from the pixel
+				//We need to normalize it in order to fetch the lookup table from featureTexture
+				float x = intensity, y = 0;
+				if(height_feature_texture[curImage] == 1){
+					x = (intensity - pixel_min[curImage]) / (pixel_max[curImage] - pixel_min[curImage]);
+				}
+				else{
+					offset_feature_texture(intensity, width_feature_texture[curImage], height_feature_texture[curImage], x, y);
+					y = scaleOffsetVar(height_feature_texture[curImage], y);
+				}
+				x = scaleOffsetVar(width_feature_texture[curImage], x);
+				intensity = texture(featureTexture[curImage], vec2(x, y)).r;
+					
+				if(scaleLUT[curImage]){
+					if (intensity >= maximum_intensity[curImage])
+						maximum_intensity[curImage] = intensity;
+				}
+				else
+					if (intensity >= maximum_intensity[curImage] && intensity <= current_max[curImage])
+						maximum_intensity[curImage] = intensity;
+			}
 		}
 	}
-	
-	if(scaleLUT){
-		if(maximum_intensity < current_min) maximum_intensity = current_min;
-		if(maximum_intensity > current_max) maximum_intensity = current_max;
-	}
-	
-	if(!applyThreshold && !scaleLUT && (maximum_intensity < current_min || maximum_intensity > current_max))
-		discard;
-
-	if(applyThreshold && maximum_intensity > current_min && maximum_intensity < current_max){
-		a_colour = vec4(1, 0, 0, 1);
-	}
-	else{
-		//And we need to normalize a second time to fetch the correct color in lutTexture
-		maximum_intensity = (maximum_intensity - feature_min) / (feature_max - feature_min);
+	a_colour = vec4(0.0);
+	vec4 currentColor;
+	for(int curImage = 0; curImage < nbImages; curImage++){
+		if(scaleLUT[curImage]){
+			if(maximum_intensity[curImage] < current_min[curImage]) maximum_intensity[curImage] = current_min[curImage];
+			if(maximum_intensity[curImage] > current_max[curImage]) maximum_intensity[curImage] = current_max[curImage];
+		}
 		
-		if(isLabel){
-			float posLut = scaleOffsetVar(512, maximum_intensity);
-			a_colour.rgb = texture(lutTexture, posLut).xyz;
-			a_colour.a = 1.0;
+		if(!applyThreshold[curImage] && !scaleLUT[curImage] && (maximum_intensity[curImage] < current_min[curImage] || maximum_intensity[curImage] > current_max[curImage]))
+			continue;
+
+		if(applyThreshold[curImage] && maximum_intensity[curImage] > current_min[curImage] && maximum_intensity[curImage] < current_max[curImage]){
+			currentColor = vec4(1, 0, 0, 1);
 		}
 		else{
-			vec4 colour = vec4(maximum_intensity, maximum_intensity, maximum_intensity, (exp(maximum_intensity) - 1.0) / (exp(1.0) - 1.0));
+			//And we need to normalize a second time to fetch the correct color in lutTexture
+			maximum_intensity[curImage] = (maximum_intensity[curImage] - feature_min[curImage]) / (feature_max[curImage] - feature_min[curImage]);
+			
+			if(isLabel[curImage]){
+				float posLut = scaleOffsetVar(512, maximum_intensity[curImage]);
+				currentColor.rgb = texture(lutTexture[curImage], posLut).xyz;
+				currentColor.a = 1.0;
+			}
+			else{
+				vec4 colour = vec4(maximum_intensity[curImage], maximum_intensity[curImage], maximum_intensity[curImage], (exp(maximum_intensity[curImage]) - 1.0) / (exp(1.0) - 1.0));
 
-			// Blend background
-			colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
-			float posLut = scaleOffsetVar(512, colour.r);
-			colour.rgb = texture(lutTexture, posLut).xyz;
-			colour.a = 1.0;
+				// Blend background
+				colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
+				float posLut = scaleOffsetVar(512, colour.r);
+				colour.rgb = texture(lutTexture[curImage], posLut).xyz;
+				colour.a = 1.0;
 
-			// Gamma correction
-			a_colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
-			a_colour.a = colour.a;
+				// Gamma correction
+				currentColor.rgb = pow(colour.rgb, vec3(1.0 / gamma));
+				currentColor.a = colour.a;
+			}
 		}
+		a_colour = a_colour + currentColor;
+		//a_colour = a_colour + vec4(maximum_intensity[curImage], maximum_intensity[curImage], maximum_intensity[curImage], 1);
 	}
+	a_colour = clamp(a_colour, 0.0, 1.0);
 }

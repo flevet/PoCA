@@ -1979,6 +1979,16 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "maximumProjectionAll") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/maximum_intensity_projection_all.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "maximumProjectionHandle") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_handle.vert", "./shaders/maximum_intensity_projection_handle.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		return nullptr;
 	}
 
