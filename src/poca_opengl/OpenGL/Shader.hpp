@@ -235,9 +235,13 @@ namespace poca::opengl {
 			glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
 		}
 		// ------------------------------------------------------------------------
-		void setUInt(const std::string& name, int value) const
+		void setUInt(const std::string& name, unsigned int value) const
 		{
 			glUniform1ui(glGetUniformLocation(ID, name.c_str()), value);
+		}
+		void setUIntv(const std::string& name, std::vector<unsigned int>& value) const
+		{
+			glUniform1uiv(glGetUniformLocation(ID, name.c_str()), value.size(), reinterpret_cast<GLuint*>(value.data()));
 		}
 		// ------------------------------------------------------------------------
 		void setFloat(const std::string& name, float value) const
