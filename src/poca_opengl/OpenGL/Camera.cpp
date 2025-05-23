@@ -673,6 +673,7 @@ namespace poca::opengl {
 
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)
 	{
+		auto start = std::chrono::high_resolution_clock::now();
 		GL_CHECK_ERRORS();
 		recomputeFrame(m_currentCrop);
 		clock_t beginFrame = clock();
@@ -926,6 +927,14 @@ namespace poca::opengl {
 
 		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
 		GL_CHECK_ERRORS();
+
+#ifdef _DEBUG
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::high_resolution_clock::now() - start;
+		long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+		float s = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+		printf("ImagesList display, took %f seconds (%lld microseconds)\n", s, ms);
+#endif
 }
 
 	void Camera::drawSSAO(QOpenGLFramebufferObject* _buffOffscreen) {
