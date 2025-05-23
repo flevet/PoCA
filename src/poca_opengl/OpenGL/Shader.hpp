@@ -43,6 +43,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <vector>
 
 namespace poca::opengl {
 
@@ -51,7 +52,7 @@ namespace poca::opengl {
 	public:
 		GLuint ID;
 		GLuint vertex, fragment, geometry = 0;
-		std::string m_names;
+		std::string m_names, m_vertexCode, m_fragmentCode, m_geometryCode;
 
 		static float MIN_VALUE_FEATURE_SHADER;
 
@@ -80,9 +81,6 @@ namespace poca::opengl {
 		{
 			m_names = "vertex:" + std::string(vertexPath) + (geometryPath == nullptr ? "" : ", geom=" + std::string(geometryPath)) + "frag:" + std::string(fragmentPath);
 			// 1. Retrieve the vertex/fragment source code from filePath
-			std::string vertexCode;
-			std::string fragmentCode;
-			std::string geometryCode;
 			std::ifstream vShaderFile;
 			std::ifstream fShaderFile;
 			std::ifstream gShaderFile;
@@ -103,8 +101,8 @@ namespace poca::opengl {
 				vShaderFile.close();
 				fShaderFile.close();
 				// Convert stream into string
-				vertexCode = vShaderStream.str();
-				fragmentCode = fShaderStream.str();
+				m_vertexCode = vShaderStream.str();
+				m_fragmentCode = fShaderStream.str();
 				// If geometry shader path is present, also load a geometry shader
 				if (geometryPath != nullptr)
 				{
@@ -112,15 +110,15 @@ namespace poca::opengl {
 					std::stringstream gShaderStream;
 					gShaderStream << gShaderFile.rdbuf();
 					gShaderFile.close();
-					geometryCode = gShaderStream.str();
+					m_geometryCode = gShaderStream.str();
 				}
 			}
 			catch (std::ifstream::failure e)
 			{
 				std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
 			}
-			const GLchar* vShaderCode = vertexCode.c_str();
-			const GLchar* fShaderCode = fragmentCode.c_str();
+			const GLchar* vShaderCode = m_vertexCode.c_str();
+			const GLchar* fShaderCode = m_fragmentCode.c_str();
 			// 2. Compile shaders
 			// Vertex Shader
 			vertex = glCreateShader(GL_VERTEX_SHADER);
@@ -135,7 +133,7 @@ namespace poca::opengl {
 			// If geometry shader is given, compile geometry shader
 			if (geometryPath != nullptr)
 			{
-				const GLchar* gShaderCode = geometryCode.c_str();
+				const GLchar* gShaderCode = m_geometryCode.c_str();
 				geometry = glCreateShader(GL_GEOMETRY_SHADER);
 				glShaderSource(geometry, 1, &gShaderCode, NULL);
 				glCompileShader(geometry);
@@ -315,6 +313,36 @@ namespace poca::opengl {
 		void setHandleui64vARB(const std::string& name, std::vector<GLuint64>&  handles) const
 		{
 			glUniformHandleui64vARB(glGetUniformLocation(ID, name.c_str()), 16, reinterpret_cast<GLuint64*>(handles.data()));
+		}
+
+		std::string vertexCode() const
+		{
+			return m_vertexCode;
+		}
+
+		std::string fragmentCode() const
+		{
+			return m_fragmentCode;
+		}
+
+		std::string geometryCode() const
+		{
+			return m_geometryCode;
+		}
+
+		void printUniforms() const
+		{
+			GLint count;
+			glGetProgramiv(ID, GL_ACTIVE_UNIFORMS, &count);
+
+			for (GLint i = 0; i < count; ++i) {
+				char name[256];
+				GLsizei length;
+				GLint size;
+				GLenum type;
+				glGetActiveUniform(ID, i, sizeof(name), &length, &size, &type, name);
+				std::cout << "Uniform " << i << ": " << name << std::endl;
+			}
 		}
 		
 	private:
