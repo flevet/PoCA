@@ -944,7 +944,12 @@ void MainWindow::duplicate()
 	QString newName(name.c_str());
 	int index = newName.lastIndexOf(".");
 	newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
-	createWindows(newDset, QString(dir.c_str()), newName);
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::MyObjectInterface * newObj = engine->createObject(newName.toStdString(), dir, newDset);
+	poca::opengl::CameraInterface* newCam = createWindows(newObj);
+	engine->addCameraToObject(newObj, newCam);
+	//createWindows(newDset, QString(dir.c_str()), newName);
 }
 
 poca::opengl::CameraInterface* MainWindow::createWindows(poca::core::MyObjectInterface* _obj)
