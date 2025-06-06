@@ -933,7 +933,7 @@ namespace poca::opengl {
 		auto duration = std::chrono::high_resolution_clock::now() - start;
 		long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
 		float s = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-		printf("ImagesList display, took %f seconds (%lld microseconds)\n", s, ms);
+		//printf("Full camera display, took %f seconds (%lld microseconds)\n", s, ms);
 #endif
 }
 
