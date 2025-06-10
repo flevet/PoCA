@@ -51,6 +51,7 @@
 #include <General/MyData.hpp>
 #include <General/BasicComponent.hpp>
 #include <Interfaces/HistogramInterface.hpp>
+#include <Interfaces/ROIInterface.hpp>
 #include <General/Misc.h>
 
 #include "ObjectListMesh.hpp"
@@ -69,7 +70,7 @@ typedef Surface_mesh_3_double::Property_map<vertex_descriptor, Kernel::Vector_3>
 typedef Surface_mesh_3_double::Property_map<face_descriptor, Kernel::Vector_3> Facet_vector_3_map;
 
 namespace poca::geometry {
-	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
+	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const std::vector <poca::core::ROIInterface*>& _ROIs, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
@@ -80,19 +81,27 @@ namespace poca::geometry {
 		int precPercent = 0;
 		std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
-			std::vector < Point_3_double> points(_allVertices[n].size());
-			std::transform(std::execution::par, _allVertices[n].begin(), _allVertices[n].end(), points.begin(), [](const auto& value) {return Point_3_double(value[0], value[1], value[2]);});
-			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
-			if (percent != precPercent || points.size() > 100000) {
-				if(points.size() > 100000)
-					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size()  << " vertices";
-				else
-					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
-				precPercent = percent;
+			bool inROI = true;
+			for (auto cur = 0; cur < _allVertices[n].size() && inROI; cur++) {
+				for (auto curROI = 0; curROI < _ROIs.size() && inROI; curROI++) {
+					inROI = _ROIs[curROI]->inside(_allVertices[n][cur].x(), _allVertices[n][cur].y(), _allVertices[n][cur].z());
+				}
 			}
-			m_repair = _repair;
-			m_applyRemeshing = _applyRemeshing;
-			addObjectMesh(points, _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
+			if (inROI) {
+				std::vector < Point_3_double> points(_allVertices[n].size());
+				std::transform(std::execution::par, _allVertices[n].begin(), _allVertices[n].end(), points.begin(), [](const auto& value) {return Point_3_double(value[0], value[1], value[2]); });
+				int percent = floor((float)n / (float)_allVertices.size() * 10.f);
+				if (percent != precPercent || points.size() > 100000) {
+					if (points.size() > 100000)
+						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size() << " vertices";
+					else
+						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+					precPercent = percent;
+				}
+				m_repair = _repair;
+				m_applyRemeshing = _applyRemeshing;
+				addObjectMesh(points, _allTriangles[n], triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
+			}
 		}
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;

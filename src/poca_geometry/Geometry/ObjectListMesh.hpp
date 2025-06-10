@@ -45,7 +45,7 @@
 namespace poca::geometry {
 	class ObjectListMesh : public poca::geometry::ObjectListInterface {
 	public:
-		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
+		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const std::vector <poca::core::ROIInterface*>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		~ObjectListMesh();
 
