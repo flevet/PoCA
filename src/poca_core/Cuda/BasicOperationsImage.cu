@@ -298,7 +298,7 @@ poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface* _
     relabel_kernel_gpu<uint32_t>(d_result);
     uint32_t newMaxLabel = *thrust::max_element(d_result.begin(), d_result.end());
     poca::core::ImageInterface* image = NULL;
-    if (newMaxLabel < std::numeric_limits<uint8_t>::max()) {
+    /*if (newMaxLabel < std::numeric_limits<uint8_t>::max()) {
         image = convertAndCreateLabelImage<uint32_t, uint8_t>(d_result, _image->width(), _image->height(), _image->depth());
         image->setType(poca::core::UINT8);
     }
@@ -309,7 +309,9 @@ poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface* _
     else {
         image = convertAndCreateLabelImage<uint32_t, uint32_t>(d_result, _image->width(), _image->height(), _image->depth());
         image->setType(poca::core::UINT32);
-    }
+    }*/
+    image = convertAndCreateLabelImage<uint32_t, uint32_t>(d_result, _image->width(), _image->height(), _image->depth());
+    image->setType(poca::core::UINT32);
     return image;
 }
 

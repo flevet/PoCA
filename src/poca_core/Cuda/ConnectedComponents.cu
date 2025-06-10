@@ -639,7 +639,7 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     uint32_t maxLabel = *thrust::max_element(d_labels.begin(), d_labels.end());
     std::cout << "Max lbl = " << maxLabel << std::endl;
     poca::core::ImageInterface* image = NULL;
-    if (maxLabel < std::numeric_limits<uint8_t>::max()) {
+    /*if (maxLabel < std::numeric_limits<uint8_t>::max()) {
         image = convertAndCreateLabelImage<uint32_t, uint8_t>(d_labels, _w, _h, _d);
         image->setType(poca::core::UINT8);
     }
@@ -650,7 +650,9 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     else {
         image = convertAndCreateLabelImage<uint32_t, uint32_t>(d_labels, _w, _h, _d);
         image->setType(poca::core::UINT32);
-    }
+    }*/
+    image = convertAndCreateLabelImage<uint32_t, uint32_t>(d_labels, _w, _h, _d);
+    image->setType(poca::core::UINT32);
     return image;
 }
 
