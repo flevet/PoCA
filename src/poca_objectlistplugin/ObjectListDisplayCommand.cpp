@@ -190,7 +190,7 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 	addCommandInfo(poca::core::CommandInfo(false, "bboxSelection", true));
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
 	addCommandInfo(poca::core::CommandInfo(false, "ellipsoidRendering", true));
-	addCommandInfo(poca::core::CommandInfo(false, "cullFaceType", std::string("front")));
+	addCommandInfo(poca::core::CommandInfo(false, "cullFaceType", std::string("back")));
 	addCommandInfo(poca::core::CommandInfo(false, "skeletonRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "linkRendering", true));
 	if (parameters.contains(name())) {
