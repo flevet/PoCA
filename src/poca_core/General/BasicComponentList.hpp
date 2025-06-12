@@ -100,7 +100,18 @@ namespace poca::core {
 		virtual BasicComponentInterface* copy() = 0;
 
 		inline void setBoundingBox(const float _x, const float _y, const float _z, const float _w, const float _h, const float _t) {  m_components[m_currentComponent]->setBoundingBox(_x, _y, _z, _w, _h, _t); }
-		inline const BoundingBox& boundingBox() const { return m_components[m_currentComponent]->boundingBox(); }
+		inline const BoundingBox& boundingBox() const 
+		{
+			poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (unsigned int n = 0; n < m_components.size(); n++) {
+				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
+				for (size_t i = 0; i < 3; i++)
+					bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
+				for (size_t i = 3; i < 6; i++)
+					bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
+			}
+			return bbox;
+		}
 		inline void setWidth(const float _w) { m_components[m_currentComponent]->setWidth(_w); }
 		inline void setHeight(const float _h) { m_components[m_currentComponent]->setHeight(_h); }
 		inline void setThick(const float _t) { m_components[m_currentComponent]->setThick(_t); }
