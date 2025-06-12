@@ -50,6 +50,9 @@ namespace poca::geometry {
 
 		poca::core::BasicComponentInterface* copy();
 
+		void copyComponentsPtr(poca::core::BasicComponentList*);
+		void copyComponents(poca::core::BasicComponentList*);
+
 		void addObjectList(ObjectListInterface*, const poca::core::CommandInfo&, const std::string&, const std::string & = "");
 		ObjectListInterface* currentObjectList();
 		ObjectListInterface* getObjectList(const uint32_t);

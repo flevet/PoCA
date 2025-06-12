@@ -287,6 +287,72 @@ namespace poca::geometry {
 		return new ObjectListMesh(*this);
 	}
 
+	poca::core::BasicComponentInterface* ObjectListMesh::copy(const std::vector <poca::core::ROIInterface*>& _ROIs)
+	{
+		if (_ROIs.empty())
+			return copy();
+
+		std::vector <std::vector <Point_3_double>> allVertices;
+		std::vector < std::vector <std::vector <std::size_t>>> allTriangles;
+
+		for (const auto& mesh : m_meshes) {
+			bool inside = false;
+			for (const auto& point : mesh.points()) {
+				for (auto curROI = 0; curROI < _ROIs.size() && !inside; curROI++) {
+					inside = _ROIs[curROI]->inside(point.x(), point.y(), point.z());
+					if (inside) break;
+				}
+				if (inside) break;
+			}
+			if (inside) {
+				allVertices.push_back(std::vector <Point_3_double>());
+				allTriangles.push_back(std::vector <std::vector <std::size_t>>());
+				std::vector <Point_3_double>& curVertices = allVertices.back();
+				std::vector <std::vector <std::size_t>>& curTriangles = allTriangles.back();
+				
+				for (const auto& point : mesh.points())
+					curVertices.push_back(point);
+
+				for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
+					CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
+					curTriangles.push_back(std::vector <std::size_t>());
+					for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
+						curTriangles.back().push_back(*vbegin);
+					}
+				}
+			}
+		}
+		return new ObjectListMesh(allVertices, allTriangles, false, false);
+	}
+
+	poca::geometry::ObjectListMesh* ObjectListMesh::exportFilteredObjects()
+	{
+		std::vector <std::vector <Point_3_double>> allVertices;
+		std::vector < std::vector <std::vector <std::size_t>>> allTriangles;
+
+		for (auto n = 0; n < m_meshes.size(); n++) {
+			if (m_selection[n]) {
+				const auto& mesh = m_meshes[n];
+				allVertices.push_back(std::vector <Point_3_double>());
+				allTriangles.push_back(std::vector <std::vector <std::size_t>>());
+				std::vector <Point_3_double>& curVertices = allVertices.back();
+				std::vector <std::vector <std::size_t>>& curTriangles = allTriangles.back();
+
+				for (const auto& point : mesh.points())
+					curVertices.push_back(point);
+
+				for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
+					CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
+					curTriangles.push_back(std::vector <std::size_t>());
+					for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
+						curTriangles.back().push_back(*vbegin);
+					}
+				}
+			}
+		}
+		return allVertices.empty() ? NULL: new ObjectListMesh(allVertices, allTriangles, false, false);
+	}
+	
 	const bool ObjectListMesh::addObjectMesh(std::vector <Point_3_double>& _vertices, std::vector<std::vector<std::size_t> >& _triangles,
 		std::vector <poca::core::Vec3mf>& _trianglesPoCA, std::vector <std::uint32_t>& _nbTriPoCA,
 		std::vector <poca::core::Vec3mf>& _edgesSkeleton, std::vector <std::uint32_t>& _nbSkeletons,

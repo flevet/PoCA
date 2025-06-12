@@ -50,6 +50,9 @@ namespace poca::geometry {
 		~ObjectListMesh();
 
 		poca::core::BasicComponentInterface* copy();
+		poca::core::BasicComponentInterface* copy(const std::vector <poca::core::ROIInterface*>&);
+
+		poca::geometry::ObjectListMesh* exportFilteredObjects();
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);
@@ -69,7 +72,7 @@ namespace poca::geometry {
 		virtual poca::core::Vec3mf computeBarycenterElement(const int) const;
 
 		inline const uint32_t dimension() const { return 3; }
-		inline const size_t nbObjects() const { return 0; }
+		inline const size_t nbObjects() const { return m_meshes.size(); }
 
 		const float* getXs() const { return m_xs.data(); }
 		const float* getYs() const { return m_ys.data(); }
@@ -86,6 +89,8 @@ namespace poca::geometry {
 
 		inline const poca::core::MyArrayVec3mf& getSkeletons() const { return m_edgesSkeleton; }
 		inline const poca::core::MyArrayVec3mf& getLinks() const { return m_linksSkeleton; }
+		inline const std::vector <Surface_mesh_3_double>& getMeshes() const { return m_meshes; }
+		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 
 	protected:
 		const bool addObjectMesh(std::vector <Point_3_double>&, std::vector<std::vector<std::size_t> >&, 

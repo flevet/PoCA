@@ -59,6 +59,22 @@ namespace poca::geometry {
 		return new ObjectLists(*this);
 	}
 
+	void ObjectLists::copyComponentsPtr(poca::core::BasicComponentList* _list) {
+		poca::core::BasicComponentList::copyComponentsPtr(_list);
+		poca::geometry::ObjectLists* objs = dynamic_cast <poca::geometry::ObjectLists*>(_list);
+		if (objs)
+			for (const auto& val : objs->m_infos)
+				m_infos.push_back(val);
+	}
+
+	void ObjectLists::copyComponents(poca::core::BasicComponentList* _list) {
+		poca::core::BasicComponentList::copyComponents(_list);
+		poca::geometry::ObjectLists* objs = dynamic_cast <poca::geometry::ObjectLists*>(_list);
+		if (objs)
+			for (const auto& val : objs->m_infos)
+				m_infos.push_back(val);
+	}
+
 	void ObjectLists::addObjectList(ObjectListInterface* _obj, const poca::core::CommandInfo& _com, const std::string& _plugin, const std::string& _name)
 	{
 		addComponent(_obj);
