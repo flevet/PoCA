@@ -49,8 +49,11 @@
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
 #include <Geometry/ObjectListMesh.hpp>
+#include <General/PluginList.hpp>
+#include <Geometry/ObjectLists.hpp>
 
 #include "ObjectListBasicCommands.hpp"
+#include "ObjectListPlugin.hpp"
 
 ObjectListBasicCommands::ObjectListBasicCommands(poca::geometry::ObjectListInterface* _objs) :poca::core::Command("ObjectListBasicCommands")
 {
@@ -133,6 +136,32 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		if (omesh == NULL) return;
 		omesh->computeSkeletons();
 	}
+	else if (_infos->nameCommand == "exportFilteredObjects") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+
+		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
+		if (!omesh) return;
+		poca::geometry::ObjectListMesh* newObjects = omesh->exportFilteredObjects();
+		if (!newObjects) return;
+		ObjectListPlugin::m_plugins->addCommands(newObjects);
+		poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+		if (objsList)
+			objsList->addObjectList(newObjects, *_infos, "ObjectListPlugin");
+	}
+	else if (_infos->nameCommand == "exportObjectsInROIs") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+
+		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
+		if (!omesh) return;
+		poca::core::BasicComponentInterface* newObjects = omesh->copy(obj->getROIs());
+		if (!newObjects) return;
+		ObjectListPlugin::m_plugins->addCommands(newObjects);
+		poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+		if (objsList)
+			objsList->addObjectList(static_cast<poca::geometry::ObjectListInterface*>(newObjects), *_infos, "ObjectListPlugin");
+	}
 }
 
 poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -147,7 +176,7 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 			
 		return ci;
 	}
-	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons") {
+	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons" || _nameCommand == "exportObjectsInROIs") {
 		return poca::core::CommandInfo(false, _nameCommand);
 	}
 	else if (_nameCommand == "duplicateSelectedObjects") {
@@ -378,7 +407,7 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateCentroids() con
 
 	poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
 
-	 poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 	const std::string& dir = obj->getDir(), name = obj->getName();
 	QString newName(name.c_str());

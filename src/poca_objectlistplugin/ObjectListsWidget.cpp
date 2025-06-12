@@ -184,7 +184,9 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	m_buttonsWidget = new QWidget;
 	m_buttonsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	QHBoxLayout* layoutLuts = new QHBoxLayout, * layoutButtons = new QHBoxLayout;
+	m_buttonsWidgetLine2 = new QWidget;
+	m_buttonsWidgetLine2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	QHBoxLayout* layoutLuts = new QHBoxLayout, * layoutButtons = new QHBoxLayout, * layoutButtonsLine2 = new QHBoxLayout;
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("HotCold2")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("InvFire")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Fire")));
@@ -291,6 +293,10 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	emptyButtons->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	layoutButtons->addWidget(emptyButtons);
 
+	QWidget* emptyButtonsLine2 = new QWidget;
+	emptyButtonsLine2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	layoutButtonsLine2->addWidget(emptyButtonsLine2);
+
 	QLabel* sizePointLbl = new QLabel();
 	sizePointLbl->setMaximumSize(QSize(maxSize, maxSize));
 	sizePointLbl->setPixmap(QPixmap(poca::plot::pointSizeIcon).scaled(maxSize, maxSize, Qt::KeepAspectRatio));
@@ -301,38 +307,6 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_sizePointSpn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	QObject::connect(m_sizePointSpn, SIGNAL(valueChanged(int)), this, SLOT(actionNeeded(int)));
 	layoutButtons->addWidget(m_sizePointSpn, 0, Qt::AlignRight);
-
-	m_duplicateCentroidsButton = new QPushButton();
-	m_duplicateCentroidsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_duplicateCentroidsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_duplicateCentroidsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
-	m_duplicateCentroidsButton->setToolTip("Duplicate centroids");
-	layoutButtons->addWidget(m_duplicateCentroidsButton, 0, Qt::AlignRight);
-	QObject::connect(m_duplicateCentroidsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
-
-	m_duplicateSelectedObjectsButton = new QPushButton();
-	m_duplicateSelectedObjectsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_duplicateSelectedObjectsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_duplicateSelectedObjectsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
-	m_duplicateSelectedObjectsButton->setToolTip("Duplicate selected objects");
-	layoutButtons->addWidget(m_duplicateSelectedObjectsButton, 0, Qt::AlignRight);
-	QObject::connect(m_duplicateSelectedObjectsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
-
-	m_exportButton = new QPushButton();
-	m_exportButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_exportButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_exportButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
-	m_exportButton->setToolTip("Save stats objects");
-	layoutButtons->addWidget(m_exportButton, 0, Qt::AlignRight);
-	QObject::connect(m_exportButton, SIGNAL(released()), this, SLOT(actionNeeded()));
-
-	m_exportLocsButton = new QPushButton();
-	m_exportLocsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_exportLocsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_exportLocsButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
-	m_exportLocsButton->setToolTip("Save locs objects");
-	layoutButtons->addWidget(m_exportLocsButton, 0, Qt::AlignRight);
-	QObject::connect(m_exportLocsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 
 	m_saveSVGButton = new QPushButton();
 	m_saveSVGButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -368,7 +342,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_cullfaceButton->setIcon(QIcon(QPixmap(poca::plot::cullFaceIcon)));
 	m_cullfaceButton->setToolTip("Toggle cull face direction");
 	m_cullfaceButton->setCheckable(true);
-	m_cullfaceButton->setChecked(true);
+	m_cullfaceButton->setChecked(false);
 	layoutButtons->addWidget(m_cullfaceButton, 0, Qt::AlignRight);
 	QObject::connect(m_cullfaceButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 
@@ -380,8 +354,57 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layoutButtons->addWidget(m_saveOBJButton, 0, Qt::AlignRight);
 	QObject::connect(m_saveOBJButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 
+	m_duplicateCentroidsButton = new QPushButton();
+	m_duplicateCentroidsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_duplicateCentroidsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_duplicateCentroidsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
+	m_duplicateCentroidsButton->setToolTip("Duplicate centroids");
+	layoutButtonsLine2->addWidget(m_duplicateCentroidsButton, 0, Qt::AlignRight);
+	QObject::connect(m_duplicateCentroidsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
+	m_duplicateSelectedObjectsButton = new QPushButton();
+	m_duplicateSelectedObjectsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_duplicateSelectedObjectsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_duplicateSelectedObjectsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
+	m_duplicateSelectedObjectsButton->setToolTip("Duplicate selected objects");
+	layoutButtonsLine2->addWidget(m_duplicateSelectedObjectsButton, 0, Qt::AlignRight);
+	QObject::connect(m_duplicateSelectedObjectsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
+	m_exportButton = new QPushButton();
+	m_exportButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_exportButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_exportButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
+	m_exportButton->setToolTip("Save stats objects");
+	layoutButtonsLine2->addWidget(m_exportButton, 0, Qt::AlignRight);
+	QObject::connect(m_exportButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
+	m_exportLocsButton = new QPushButton();
+	m_exportLocsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_exportLocsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_exportLocsButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
+	m_exportLocsButton->setToolTip("Save locs objects");
+	layoutButtonsLine2->addWidget(m_exportLocsButton, 0, Qt::AlignRight);
+	QObject::connect(m_exportLocsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
+	m_exportFilteredObjsButton = new QPushButton();
+	m_exportFilteredObjsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_exportFilteredObjsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_exportFilteredObjsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
+	m_exportFilteredObjsButton->setToolTip("Export filtered objects");
+	layoutButtonsLine2->addWidget(m_exportFilteredObjsButton, 0, Qt::AlignRight);
+	QObject::connect(m_exportFilteredObjsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
+	m_exportObjsROIsButton = new QPushButton();
+	m_exportObjsROIsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_exportObjsROIsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_exportObjsROIsButton->setIcon(QIcon(QPixmap("./images/duplicate.png")));
+	m_exportObjsROIsButton->setToolTip("Export objects in ROIs");
+	layoutButtonsLine2->addWidget(m_exportObjsROIsButton, 0, Qt::AlignRight);
+	QObject::connect(m_exportObjsROIsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+
 	m_lutsWidget->setLayout(layoutLuts);
 	m_buttonsWidget->setLayout(layoutButtons);
+	m_buttonsWidgetLine2->setLayout(layoutButtonsLine2);
 
 	QHBoxLayout* layoutObjectMesh = new QHBoxLayout;
 	m_computeSkeletonsButton = new QPushButton("Compute skeletons");
@@ -433,7 +456,8 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layout->addWidget(listW);
 	layout->addWidget(m_lutsWidget);
 	layout->addWidget(m_buttonsWidget);
-	layout->addWidget(m_widgetObjectMesh);
+	layout->addWidget(m_buttonsWidgetLine2);
+	layout->addWidget(m_widgetObjectMesh); 
 	layout->addWidget(m_delaunayTriangulationFilteringWidget);
 	layout->addWidget(m_tableObjects);
 	this->setLayout(layout);
@@ -590,6 +614,18 @@ void ObjectListsWidget::actionNeeded()
 		}
 	else if (sender == m_computeSkeletonsButton) {
 		objList->executeCommand(true, "computeSkeletons");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_exportFilteredObjsButton) {
+		poca::core::CommandInfo ci(true, "exportFilteredObjects");
+		objList->executeCommand(&ci);
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_exportObjsROIsButton) {
+		poca::core::CommandInfo ci(true, "exportObjectsInROIs");
+		objList->executeCommand(&ci);
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
 }
@@ -847,53 +883,61 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
 		printf("update table %f seconds (%lld microseconds)\n", s, ms);
 
+		poca::geometry::ObjectListInterface* curObjects = bci->currentObjectList();
 
-		if (bci->hasParameter("pointRendering")) {
-			bool val = bci->getParameter<bool>("pointRendering");
+		if (curObjects->hasParameter("pointRendering")) {
+			bool val = curObjects->getParameter<bool>("pointRendering");
 			m_pointRenderButton->blockSignals(true);
 			m_pointRenderButton->setChecked(val);
 			m_pointRenderButton->blockSignals(false);
 		}
-		if (bci->hasParameter("outlinePointRendering")) {
-			bool val = bci->getParameter<bool>("outlinePointRendering");
+		if (curObjects->hasParameter("outlinePointRendering")) {
+			bool val = curObjects->getParameter<bool>("outlinePointRendering");
 			m_outlinePointRenderButton->blockSignals(true);
 			m_outlinePointRenderButton->setChecked(val);
 			m_outlinePointRenderButton->blockSignals(false);
 		}
-		if (bci->hasParameter("shapeRendering")) {
-			bool val = bci->getParameter<bool>("shapeRendering");
+		if (curObjects->hasParameter("shapeRendering")) {
+			bool val = curObjects->getParameter<bool>("shapeRendering");
 			m_shapeRenderButton->blockSignals(true);
 			m_shapeRenderButton->setChecked(val);
 			m_shapeRenderButton->blockSignals(false);
 		}
-		if (bci->hasParameter("fill")) {
-			bool val = bci->getParameter<bool>("fill");
+		if (curObjects->hasParameter("fill")) {
+			bool val = curObjects->getParameter<bool>("fill");
 			m_fillButton->blockSignals(true);
 			m_fillButton->setChecked(val);
 			m_fillButton->blockSignals(false);
 		}
-		if (bci->hasParameter("bboxSelection")) {
-			bool val = bci->getParameter<bool>("bboxSelection");
+		if (curObjects->hasParameter("bboxSelection")) {
+			bool val = curObjects->getParameter<bool>("bboxSelection");
 			m_bboxSelectionButton->blockSignals(true);
 			m_bboxSelectionButton->setChecked(val);
 			m_bboxSelectionButton->blockSignals(false);
 		}
 
-		if (bci->hasParameter("pointSizeGL")) {
-			uint32_t val = bci->getParameter<uint32_t>("pointSizeGL");
+		if (curObjects->hasParameter("pointSizeGL")) {
+			uint32_t val = curObjects->getParameter<uint32_t>("pointSizeGL");
 			m_sizePointSpn->blockSignals(true);
 			m_sizePointSpn->setValue(val);
 			m_sizePointSpn->blockSignals(false);
 		}
 
-		if (bci->hasParameter("ellipsoidRendering")) {
-			bool val = bci->getParameter<bool>("ellipsoidRendering");
+		if (curObjects->hasParameter("ellipsoidRendering")) {
+			bool val = curObjects->getParameter<bool>("ellipsoidRendering");
 			m_ellipsoidRenderButton->blockSignals(true);
 			m_ellipsoidRenderButton->setChecked(val);
 			m_ellipsoidRenderButton->blockSignals(false);
 		}
 
-		bool selected = bci->isSelected();
+		if (curObjects->hasParameter("cullFaceType")) {
+			bool val = curObjects->getParameter<std::string>("cullFaceType") == std::string("front");
+			m_cullfaceButton->blockSignals(true);
+			m_cullfaceButton->setChecked(val);
+			m_cullfaceButton->blockSignals(false);
+		}
+
+		bool selected = curObjects->isSelected();
 		m_displayButton->blockSignals(true);
 		m_displayButton->setChecked(selected);
 		m_displayButton->blockSignals(false);
