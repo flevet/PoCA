@@ -25,6 +25,7 @@
 
 out vec4 a_colour;
 
+uniform mat4 ModelViewProjectionMatrix;
 uniform mat4 invMVP;
 
 uniform vec4 viewport;
@@ -185,63 +186,75 @@ void main()
 	vec3 ray_step = ray / float(nb_steps);
 
     vec3 position = ray_start;
-	float intensity = 0.f;
+	float labelId = -3.402823466e+38, valueFeature;
+	float maxDepth;
 	
 	bool found = false;
     for(int n = 0; n < nb_steps && !found; n++){
 		position = position + ray_step;
 		if(isFloat)
-			intensity = texture(volume, position).r;
+			labelId = texture(volume, position).r;
 		else
-			intensity = float(texture(uvolume, position).r);
+			labelId = float(texture(uvolume, position).r);
 		
-		if(intensity >= current_min && intensity <= current_max){
-		
-			if(isLabel && borderRendering && isFrame){
-				if (!isBorderVoxel(position, uint(intensity), int(borderSize)))
-					continue;
-			}
+		if(labelId > 0){
+		//
 			//we retrieve the true pixel value from the pixel
 			//We need to normalize it in order to fetch the lookup table from featureTexture
-			float x = intensity, y = 0;
+			float x = labelId, y = 0;
 			if(height_feature_texture == 1){
-				x = (intensity - pixel_min) / (pixel_max - pixel_min);
+				x = (labelId - pixel_min) / (pixel_max - pixel_min);
 			}
 			else{
-				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
+				offset_feature_texture(labelId, width_feature_texture, height_feature_texture, x, y);
 				y = scaleOffsetVar(height_feature_texture, y);
 			}
 			x = scaleOffsetVar(width_feature_texture, x);
-			intensity = texture(featureTexture, vec2(x, y)).r;
-			found = true;
+			valueFeature = texture(featureTexture, vec2(x, y)).r;
+			
+			if(valueFeature >= current_min && valueFeature <= current_max){
+				if(isLabel && borderRendering && isFrame){
+					if (!isBorderVoxel(position, uint(labelId), int(borderSize)))
+						continue;
+				}
+				vec3 worldPos = position * (top - bottom) + bottom;
+				// Compute depth at this sample position
+				vec4 clipSpacePos = ModelViewProjectionMatrix * vec4(worldPos, 1.0);
+				float ndcDepth = clipSpacePos.z / clipSpacePos.w;
+				maxDepth = 0.5 * ndcDepth + 0.5; // Convert NDC [-1,1] to [0,1]
+						
+				found = true;
+			}
 		}
 	}
 	
 	if(!found)
 		discard;
+		
+	gl_FragDepth = maxDepth;
 	
 	if(scaleLUT){
-		if(intensity < current_min) intensity = current_min;
-		if(intensity > current_max) intensity = current_max;
+		if(valueFeature < current_min) valueFeature = current_min;
+		if(valueFeature > current_max) valueFeature = current_max;
 	}
 	
-	if(!applyThreshold && !scaleLUT && (intensity < current_min || intensity > current_max))
+	if(!applyThreshold && !scaleLUT && (valueFeature < current_min || valueFeature > current_max))
 		discard;
 
-	if(applyThreshold && intensity > current_min && intensity < current_max){
+	if(applyThreshold && valueFeature > current_min && valueFeature < current_max){
 		a_colour = vec4(1, 0, 0, 1);
 	}
 	else{
 		//And we need to normalize a second time to fetch the correct color in lutTexture
-		intensity = (intensity - feature_min) / (feature_max - feature_min);
+		valueFeature = (valueFeature - feature_min) / (feature_max - feature_min);
 		
 		if(isLabel){
-			float posLut = scaleOffsetVar(512, intensity);
+			float posLut = scaleOffsetVar(512, valueFeature);
 			a_colour.rgb = texture(lutTexture, posLut).xyz;
 			a_colour.a = 1.0;
 		}
 		else{
-			vec4 colour = vec4(intensity, intensity, intensity, (exp(intensity) - 1.0) / (exp(1.0) - 1.0));
+			vec4 colour = vec4(valueFeature, valueFeature, valueFeature, (exp(valueFeature) - 1.0) / (exp(1.0) - 1.0));
 
 			// Blend background
 			colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
