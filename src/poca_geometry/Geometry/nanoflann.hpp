@@ -1452,6 +1452,9 @@ struct KdPointCloud_3D
 	struct KdPoint_3D
 	{
 		T  m_x, m_y, m_z;
+
+		KdPoint_3D() = default;
+		KdPoint_3D(T x, T y, T z) : m_x(x), m_y(y), m_z(z) {}
 	};
 
 	std::vector<KdPoint_3D>  m_pts;
