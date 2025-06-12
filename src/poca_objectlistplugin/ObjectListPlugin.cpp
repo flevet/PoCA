@@ -50,6 +50,7 @@
 #include "ObjectListsWidget.hpp"
 #include "ObjectListParamDialog.hpp"
 
+poca::core::PluginList* ObjectListPlugin::m_plugins = NULL;
 nlohmann::json ObjectListPlugin::m_parameters;
 
 void ObjectListPlugin::addGUI(poca::core::MediatorWObjectFWidgetInterface* _mediator, QTabWidget* _parent)

@@ -67,10 +67,10 @@ protected:
     QTabWidget* m_parent;
 
     std::vector <std::pair<QAction*, QString>> m_actions;
-    poca::core::PluginList* m_plugins;
     ObjectListsWidget* m_widget;
 
 public:
+    static poca::core::PluginList* m_plugins;
     static nlohmann::json m_parameters;
 };
 //! [0]
