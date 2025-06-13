@@ -100,18 +100,7 @@ namespace poca::core {
 		virtual BasicComponentInterface* copy() = 0;
 
 		inline void setBoundingBox(const float _x, const float _y, const float _z, const float _w, const float _h, const float _t) {  m_components[m_currentComponent]->setBoundingBox(_x, _y, _z, _w, _h, _t); }
-		inline const BoundingBox& boundingBox() const 
-		{
-			poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
-			for (unsigned int n = 0; n < m_components.size(); n++) {
-				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
-				for (size_t i = 0; i < 3; i++)
-					bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
-				for (size_t i = 3; i < 6; i++)
-					bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
-			}
-			return bbox;
-		}
+		inline const BoundingBox& boundingBox() const { return m_bbox; }
 		inline void setWidth(const float _w) { m_components[m_currentComponent]->setWidth(_w); }
 		inline void setHeight(const float _h) { m_components[m_currentComponent]->setHeight(_h); }
 		inline void setThick(const float _t) { m_components[m_currentComponent]->setThick(_t); }
@@ -139,17 +128,44 @@ namespace poca::core {
 		virtual void addComponent(BasicComponent* _bci) {
 			m_currentComponent = m_components.size();
 			m_components.push_back(_bci);
+
+			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (unsigned int n = 0; n < m_components.size(); n++) {
+				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
+				for (size_t i = 0; i < 3; i++)
+					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
+				for (size_t i = 3; i < 6; i++)
+					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
+			}
 		}
 
 		virtual void copyComponentsPtr(BasicComponentList* _list) {
 			for (auto* comp : _list->m_components)
 				m_components.push_back(comp);
 			m_currentComponent = m_components.size() - 1;
+
+			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (unsigned int n = 0; n < m_components.size(); n++) {
+				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
+				for (size_t i = 0; i < 3; i++)
+					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
+				for (size_t i = 3; i < 6; i++)
+					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
+			}
 		}
 
 		virtual void copyComponents(BasicComponentList* _list) {
 			for (auto* comp : _list->m_components)
 				m_components.push_back(static_cast<BasicComponent*>(comp->copy()));
+
+			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (unsigned int n = 0; n < m_components.size(); n++) {
+				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
+				for (size_t i = 0; i < 3; i++)
+					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
+				for (size_t i = 3; i < 6; i++)
+					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
+			}
 		}
 
 		virtual const std::vector <BasicComponent*>& components() const { return m_components; }
@@ -207,7 +223,13 @@ namespace poca::core {
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { m_components[m_currentComponent]->executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 		*/
 	protected:
-		BasicComponentList(const std::string& _name) : BasicComponentInterface(_name), m_nameComponent(_name), m_dontDeleteComponents(false){}
+		BasicComponentList(const std::string& _name, BasicComponent* bc) : BasicComponentInterface(_name), m_nameComponent(_name), m_dontDeleteComponents(false)
+		{
+			m_components.push_back(bc);
+			m_currentComponent = 0;
+			m_bbox = bc->boundingBox();
+		}
+
 		BasicComponentList(const BasicComponentList& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_dontDeleteComponents(false){
 			for (auto* component : m_components)
 				delete component;
@@ -222,6 +244,8 @@ namespace poca::core {
 		std::vector <BasicComponent*> m_components;
 		uint32_t m_currentComponent;
 		bool m_dontDeleteComponents;
+
+		poca::core::BoundingBox m_bbox;
 	};
 }
 
