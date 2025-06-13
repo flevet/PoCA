@@ -43,10 +43,8 @@
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
 
 namespace poca::geometry {
-	ObjectLists::ObjectLists(ObjectListInterface* _obj, const poca::core::CommandInfo& _com, const std::string& _plugin, const std::string& _name):BasicComponentList("ObjectLists")
+	ObjectLists::ObjectLists(ObjectListInterface* _obj, const poca::core::CommandInfo& _com, const std::string& _plugin, const std::string& _name):BasicComponentList("ObjectLists", _obj)
 	{
-		m_components.push_back(_obj);
-		m_currentComponent = 0;
 		m_infos.push_back(std::make_tuple(_com, _plugin, _name));
 	}
 

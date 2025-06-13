@@ -36,10 +36,8 @@
 #include "ImagesList.hpp"
 
 namespace poca::core {
-	ImagesList::ImagesList(ImageInterface* _obj, const std::string& _name) :BasicComponentList("ImagesList")
+	ImagesList::ImagesList(ImageInterface* _im, const std::string& _name) :BasicComponentList("ImagesList", _im)
 	{
-		m_components.push_back(_obj);
-		m_currentComponent = 0;
 		m_names.push_back(_name);
 	}
 
