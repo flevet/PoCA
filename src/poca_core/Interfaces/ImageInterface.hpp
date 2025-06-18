@@ -82,7 +82,9 @@ namespace poca::core {
 		virtual void setCurrentFrame(const int _frame) { m_currentFrame = _frame; }
 
 	protected:
-		ImageInterface(const ImageType _typeImage) :BasicComponent("Image"), m_typeImage(_typeImage) {}
+		ImageInterface(const ImageType _typeImage) :BasicComponent("Image", _typeImage == poca::core::RAW ? "LightGrayscale" : "HotCold2"), m_typeImage(_typeImage)
+		{
+		}
 
 	protected:
 		uint32_t m_width, m_height, m_depth;
