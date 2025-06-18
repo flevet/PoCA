@@ -135,7 +135,7 @@ namespace poca::core {
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 
 	protected:
-		BasicComponent(const std::string&);
+		BasicComponent(const std::string&, std::string = "HotCold2");
 		BasicComponent(const BasicComponent&);
 
 	protected:

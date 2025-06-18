@@ -46,9 +46,9 @@
 
 namespace poca::core {
 
-	BasicComponent::BasicComponent(const std::string& _name) :BasicComponentInterface(_name), m_nameComponent(_name), m_log(false), m_nbSelection(0), m_selected(true), m_hilow(false), m_paletteSaved(NULL)
+	BasicComponent::BasicComponent(const std::string& _name, std::string _namePalette) :BasicComponentInterface(_name), m_nameComponent(_name), m_log(false), m_nbSelection(0), m_selected(true), m_hilow(false), m_paletteSaved(NULL)
 	{
-		m_palette = Palette::getStaticLutPtr("HotCold2");
+		m_palette = Palette::getStaticLutPtr(_namePalette);
 	}
 
 	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_data(_o.m_data), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected)
