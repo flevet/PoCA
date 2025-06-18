@@ -80,7 +80,7 @@ namespace poca::core {
 		return static_cast<ImageInterface*>(m_components[_idx]);
 	}
 
-	void ImagesList::eraseImage(const uint32_t _index)
+	void ImagesList::eraseComponent(const uint32_t _index)
 	{
 		if (m_components.empty()) return;
 		BasicComponentList::eraseComponent(_index);

@@ -183,8 +183,8 @@ namespace poca::core {
 		inline BasicComponent* getComponent(const uint32_t _index) const { return m_components[_index]; }
 		inline const size_t nbComponents() const { return m_components.size(); }
 
-		inline void eraseCurrentComponent() { eraseComponent(m_currentComponent); }
-		void eraseComponent(const uint32_t _index) {
+		virtual void eraseCurrentComponent() { eraseComponent(m_currentComponent); }
+		virtual void eraseComponent(const uint32_t _index) {
 			if (m_components.empty()) return;
 			delete m_components[_index];
 			m_components.erase(m_components.begin() + _index);

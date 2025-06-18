@@ -52,8 +52,8 @@ namespace poca::core {
 		ImageInterface* getImage(const uint32_t);
 		uint32_t currentImageIndex() const;
 
-		void eraseCurrentImage() { eraseImage(m_currentComponent); }
-		void eraseImage(const uint32_t);
+		void eraseCurrentComponent() { this->eraseComponent(m_currentComponent); }
+		void eraseComponent(const uint32_t);
 
 		const std::string& currentName() const;
 		const std::string& getName(const uint32_t _index) const;
