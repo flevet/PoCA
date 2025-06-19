@@ -126,7 +126,23 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		saveAsSVG(filename);
 	}
 	else if (_infos->nameCommand == "saveAsOBJ") {
-		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+		QString filename;
+		if(_infos->hasParameter("filename"))
+			filename = (_infos->getParameter<std::string>("filename")).c_str();
+		else {
+			poca::core::Engine* engine = poca::core::Engine::instance();
+			poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+
+			const std::string& dir = obj->getDir(), name = obj->getName();
+			QString completeName = dir.c_str();
+			if (!completeName.endsWith('/'))
+				completeName.append("/");
+			completeName.append(name.c_str());
+			QFileInfo fileInfo(completeName);
+			filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + "_objects.obj";
+		}
 		if (!filename.endsWith(".obj"))
 			filename.append(".obj");
 		saveAsOBJ(filename);
