@@ -134,8 +134,10 @@ namespace poca::core {
 			PluginInterface* pinterface = NULL;
 			if (plugin) {
 				llinterface = qobject_cast<LoaderInterface*>(plugin);
-				if (llinterface)
+				if (llinterface) {
 					m_loadersFile.push_back(llinterface);
+					m_fileExtensions << llinterface->extensions();
+				}
 				ginterface = qobject_cast<GuiInterface*>(plugin);
 				if (ginterface)
 					m_GUIWidgets.push_back(ginterface);

@@ -127,6 +127,8 @@ namespace poca::core {
 		inline bool headlessMode() const { return !m_withMainWindow; }
 		inline void setMode(const bool _val) { m_withMainWindow = _val; }
 
+		inline const QStringList& extensions() const { return m_fileExtensions; }
+
 	protected:
 		Engine();
 
@@ -136,6 +138,7 @@ namespace poca::core {
 		std::vector < LoaderInterface* > m_loadersFile;
 		std::vector < GuiInterface* > m_GUIWidgets;
 		PluginList* m_plugins{ nullptr };
+		QStringList m_fileExtensions;
 
 		std::map <std::string, std::any> m_singletons;
 
