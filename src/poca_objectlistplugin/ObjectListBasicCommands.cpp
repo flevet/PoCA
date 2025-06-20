@@ -135,13 +135,19 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			poca::core::Engine* engine = poca::core::Engine::instance();
 			poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 
+			QString textToAdd = "_objects.obj";
+			if (_infos->hasParameter("appendToTitle"))
+				textToAdd = QString(_infos->getParameter<std::string>("appendToTitle").c_str()).append(".obj");
+
 			const std::string& dir = obj->getDir(), name = obj->getName();
 			QString completeName = dir.c_str();
 			if (!completeName.endsWith('/'))
 				completeName.append("/");
 			completeName.append(name.c_str());
+			std::cout << "Name: " << completeName.toStdString() << std::endl;
 			QFileInfo fileInfo(completeName);
-			filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + "_objects.obj";
+			filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + textToAdd;
+			std::cout << "Name: " << filename.toStdString() << std::endl;
 		}
 		if (!filename.endsWith(".obj"))
 			filename.append(".obj");
@@ -182,10 +188,13 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "saveStatsObjs" || _nameCommand == "saveLocsObjs" || _nameCommand == "saveOutlineLocsObjs") {
+	if (_nameCommand == "saveStatsObjs" || _nameCommand == "saveLocsObjs" || _nameCommand == "saveOutlineLocsObjs" || _nameCommand == "saveAsSVG" || _nameCommand == "saveAsOBJ") {
 		poca::core::CommandInfo ci(_nameCommand);
 		if (_parameters.contains("filename"))
 			ci.addParameter("filename", _parameters["filename"].get<std::string>());
+
+		if (_parameters.contains("appendToTitle"))
+			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
 		
 		std::string separator = _parameters.contains("separator") ? _parameters["separator"].get<std::string>() : ",";
 		ci.addParameter("separator", separator);
@@ -205,12 +214,6 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 		if (_parameters.contains("selection")) {
 			std::set<int> selectedObjects = _parameters["selection"].get<std::set<int>>();
 			return poca::core::CommandInfo(false, _nameCommand, "selection", selectedObjects);
-		}
-	}
-	else if (_nameCommand == "saveAsSVG" || _nameCommand == "saveAsOBJ") {
-		if (_parameters.contains("filename")) {
-			std::string val = _parameters["filename"].get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
 		}
 	}
 	return poca::core::CommandInfo();
