@@ -198,8 +198,15 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 	bool screenCoordinates = getParameter<bool>("screenCoordinates");
 	if (!m_colorBuffer.empty())
 		_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
-	else if(m_normalBuffer.empty())
+	else if (m_normalBuffer.empty()) {
+		poca::core::PaletteInterface* pal = m_dset->getPalette();
+		if (pal->getName() == "RandomOneColor") {
+			poca::core::Color4uc c = pal->getColor(0.5f);
+			glm::vec4 color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
+			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates, true, color);
+		}
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
+	}
 	else
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
 
