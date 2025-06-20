@@ -75,13 +75,18 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlack")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Gray")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Random")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("RandomOneColor")));
 	for (size_t n = 0; n < m_lutButtons.size(); n++) {
 		m_lutButtons[n].first->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 		m_lutButtons[n].first->setMaximumSize(QSize(maxSize, maxSize));
-		QImage im = poca::core::generateImage(maxSize, maxSize, &poca::core::Palette::getStaticLut(m_lutButtons[n].second));
-		QPixmap pix = QPixmap::fromImage(im);
-		QIcon icon(pix);
-		m_lutButtons[n].first->setIcon(icon);
+		if ((m_lutButtons[n].second != "RandomOneColor")) {
+			QImage im = poca::core::generateImage(maxSize, maxSize, &poca::core::Palette::getStaticLut(m_lutButtons[n].second));
+			QPixmap pix = QPixmap::fromImage(im);
+			QIcon icon(pix);
+			m_lutButtons[n].first->setIcon(icon);
+		}
+		else
+			m_lutButtons[n].first->setIcon(QIcon(QPixmap(poca::plot::randomIcon)));
 		if (n < 9)
 			layoutLuts->addWidget(m_lutButtons[n].first, 0, Qt::AlignLeft);
 		else
