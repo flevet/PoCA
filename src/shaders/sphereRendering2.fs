@@ -15,6 +15,9 @@ uniform bool clip;
 uniform bool activatedCulling;
 uniform vec3 cameraForward;
 
+uniform bool applyUniformColor;
+uniform vec4 uniformColor;
+
 in vec2 texC;
 in vec3 center;
 in float vfeature;
@@ -76,6 +79,8 @@ void main()
 	if (useSpecialColors) {
 		colorTmp = vec3(vcolor);
 	}
+	else if(applyUniformColor)
+		colorTmp = uniformColor.rgb;
 	else {
 		if (vfeature < minFeatureValue)
 			discard;

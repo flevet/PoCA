@@ -240,7 +240,7 @@ namespace poca::opengl {
 		void drawLineShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const SingleGLBuffer<T>&, const GLfloat, const GLfloat, const GLfloat = 1.f);
 		
 		template < class T, class M >
-		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false);
+		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false, const bool = false, glm::vec4 = glm::vec4());
 
 		template < class T, class M >
 		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false);
@@ -591,7 +591,7 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius)
+	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius, const bool _applyUniformColor, glm::vec4 _uniformColor)
 	{
 		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
@@ -644,6 +644,8 @@ namespace poca::opengl {
 		shader->setBool("clip", m_applyClippingPlanes);
 		shader->setFloat("nbPoints", _bufferVertex.getNbElements());
 		shader->setVec3("light_position", getEye());
+		shader->setBool("applyUniformColor", _applyUniformColor);
+		shader->setVec4("uniformColor", _uniformColor);
 
 		GL_CHECK_ERRORS();
 		glActiveTexture(GL_TEXTURE0);
