@@ -95,6 +95,7 @@
 #include "../Objects/Coloc_Object/ColocObject.hpp"
 #include "../Widgets/MainFilterWidget.hpp"
 #include "../Widgets/ColocalizationChoiceDialog.hpp"
+#include "../Widgets/MergeDatasetsChoiceDialog.hpp"
 #include "../Widgets/PythonWidget.hpp"
 #include "../Widgets/ROIGeneralWidget.hpp"
 #include "../Widgets/MacroWidget.hpp"
@@ -1304,7 +1305,8 @@ void MainWindow::computeColocalization()
 		return;
 	}
 
-	ColocalizationChoiceDialog* dial = new ColocalizationChoiceDialog(datasets);
+	//ColocalizationChoiceDialog* dial = new ColocalizationChoiceDialog(datasets);
+	MergeDatasetsChoiceDialog* dial = new MergeDatasetsChoiceDialog(datasets);
 	dial->setModal(true);
 	if (dial->exec() == QDialog::Accepted) {
 		std::vector < MdiChild*> objects = dial->getObjects();
@@ -1902,6 +1904,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro)
 		}
 
 	}
+	if (m_currentMdi != NULL) {
+		m_currentMdi->getWidget()->getObject()->notify("updateDisplay");
+		m_currentMdi->getWidget()->getObject()->notify("LoadObjCharacteristicsAllWidgets");
+	}
 }
 
 void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filenames)
@@ -1960,6 +1966,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 			}
 
 		}
+	}
+	if (m_currentMdi != NULL) {
+		m_currentMdi->getWidget()->getObject()->notify("updateDisplay");
+		m_currentMdi->getWidget()->getObject()->notify("LoadObjCharacteristicsAllWidgets");
 	}
 }
 
