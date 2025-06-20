@@ -101,8 +101,8 @@ namespace poca::opengl {
 			glBindTexture(GL_TEXTURE_1D, 0);
 			m_textures[_pal->getName()] = textureLutID;
 		}
-		else if (_pal->getName() == "Random") {
-			unsigned int sizeLut = 10000;
+		else if (_pal->getName() == "Random" || _pal->getName() == "RandomOneColor") {
+			unsigned int sizeLut = (_pal->getName() == "Random") ? 10000 : 512;
 			unsigned int cpt = 0;
 			std::vector <float> lutValues(sizeLut * 4);
 			float stepLut = 1. / (float)(sizeLut - 1);
