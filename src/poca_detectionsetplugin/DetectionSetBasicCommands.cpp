@@ -373,6 +373,9 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		else
 			filename = QString(path.c_str());
 
+		QFileInfo fileInfo(filename);
+		filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".csv";
+
 		std::ofstream fs(filename.toStdString().data());
 		if (!fs) {
 			std::cout << "System failed to open " << filename.toLatin1().data() << std::endl;
