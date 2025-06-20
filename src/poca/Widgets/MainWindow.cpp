@@ -2063,4 +2063,46 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		fs << elapsed << std::endl;
 		fs.close();
 	}
+
+	else if (tmp == "mergeLocalizationsDatasets") {
+		std::vector <float> allxs, allys, allzs, allts;
+		float count = 1;
+		QString dir;
+		for (auto window : m_mdiArea->subWindowList()) {
+			MdiChild* child = qobject_cast <MdiChild*>(window);
+			poca::core::MyObjectInterface* object = child->getWidget()->getObject();
+			if (!object) continue;
+			object = object->currentObject();
+			if (!object) continue;
+			if (!object->hasBasicComponent("DetectionSet")) continue;
+			dir = object->getDir().c_str();
+			poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(object->getBasicComponent("DetectionSet"));
+			const std::vector <float>& xs = dset->getData<float>("x");
+			const std::vector <float>& ys = dset->getData<float>("y");
+			const std::vector <float>& zs = dset->hasData("z") ? dset->getData<float>("z") : std::vector <float>(xs.size(), 0.f);
+			std::vector <float> ts = std::vector <float>(xs.size(), count);
+
+			std::copy(xs.begin(), xs.end(), std::back_inserter(allxs));
+			std::copy(ys.begin(), ys.end(), std::back_inserter(allys));
+			std::copy(zs.begin(), zs.end(), std::back_inserter(allzs));
+			std::copy(ts.begin(), ts.end(), std::back_inserter(allts));
+			count++;
+		}
+		std::map <std::string, std::vector <float>> features;
+
+		features["x"] = allxs;
+		features["y"] = allys;
+		features["z"] = allzs;
+		features["frame"] = allts;
+
+		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::PluginList* plugins = engine->getPlugins();
+		poca::core::MyObjectInterface* obj = engine->createObject(dir.toStdString(), "merged.csv", dset);
+		if (obj == NULL)
+			return;
+		poca::opengl::CameraInterface* cam = createWindows(obj);
+		engine->addCameraToObject(obj, cam);
+	}
 }
