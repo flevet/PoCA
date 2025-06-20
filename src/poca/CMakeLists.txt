@@ -32,6 +32,7 @@ set(WIDGET_HEADER_FILES
   Widgets/ColocalizationChoiceDialog.hpp
   Widgets/MacroWidget.hpp
   Widgets/MainWindow.hpp
+  Widgets/MergeDatasetsChoiceDialog.hpp
   Widgets/PythonParametersDialog.hpp
   Widgets/PythonWidget.hpp
   Widgets/ROIGeneralWidget.hpp
@@ -44,6 +45,7 @@ set(WIDGET_SOURCE_FILES
   Widgets/ColocalizationChoiceDialog.cpp
   Widgets/MacroWidget.cpp
   Widgets/MainWindow.cpp
+  Widgets/MergeDatasetsChoiceDialog.cpp
   Widgets/PythonParametersDialog.cpp
   Widgets/PythonWidget.cpp
   Widgets/ROIGeneralWidget.cpp
@@ -57,6 +59,7 @@ if(ADD_PYTHON)
 	  Widgets/ColocalizationChoiceDialog.hpp
 	  Widgets/MacroWidget.hpp
 	  Widgets/MainWindow.hpp
+	  Widgets/MergeDatasetsChoiceDialog.hpp
 	  Widgets/PythonParametersDialog.hpp
 	  Widgets/PythonWidget.hpp
 	  Widgets/ROIGeneralWidget.hpp
@@ -69,6 +72,7 @@ else()
 	  Widgets/ColocalizationChoiceDialog.hpp
 	  Widgets/MacroWidget.hpp
 	  Widgets/MainWindow.hpp
+	  Widgets/MergeDatasetsChoiceDialog.hpp
 	  Widgets/ROIGeneralWidget.hpp
 	  Widgets/PythonParametersDialog.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
@@ -83,6 +87,7 @@ if(ADD_PYTHON)
 	  Widgets/ColocalizationChoiceDialog.cpp
 	  Widgets/MacroWidget.cpp
 	  Widgets/MainWindow.cpp
+	  Widgets/MergeDatasetsChoiceDialog.cpp
 	  Widgets/PythonParametersDialog.cpp
 	  Widgets/PythonWidget.cpp
 	  Widgets/ROIGeneralWidget.cpp
@@ -95,6 +100,7 @@ else()
 	  Widgets/ColocalizationChoiceDialog.cpp
 	  Widgets/MacroWidget.cpp
 	  Widgets/MainWindow.cpp
+	  Widgets/MergeDatasetsChoiceDialog.cpp
 	  Widgets/ROIGeneralWidget.cpp
 	  Widgets/PythonParametersDialog.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
