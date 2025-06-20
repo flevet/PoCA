@@ -43,6 +43,7 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QSplitter>
 #include <QtGui/QClipboard>
+#include <QtCore/QMimeData>
 #include <fstream>
 #include <iomanip>
 
@@ -51,6 +52,7 @@
 #include <Geometry/DetectionSet.hpp>
 #include <General/PythonInterpreter.hpp>
 #include <Objects/MyObject.hpp>
+#include <General/Engine.hpp>
 
 #include "../Widgets/MacroWidget.hpp"
 
@@ -96,6 +98,10 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	m_macroEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_filesEdit = new QTextEdit;
 	m_filesEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_filesEdit->setAcceptDrops(true);
+	//m_filesEdit->installEventFilter(this);
+	m_filesEdit->viewport()->setAcceptDrops(true);
+	m_filesEdit->viewport()->installEventFilter(this);
 	splitter->addWidget(m_macroEdit);
 	splitter->addWidget(m_filesEdit);
 	splitter->setStretchFactor(0, 3);
@@ -255,17 +261,23 @@ void MacroWidget::actionNeeded()
 		if (!dirName.endsWith("/"))
 			dirName.append("/");
 
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		const QStringList& availableExtensions = engine->extensions();
+
+
 		QFileInfoList list = dir.entryInfoList();
 		QStringList filenames;
 		for (int i = 0; i < list.size(); ++i) {
 			QFileInfo fileInfo = list.at(i);
+			QString ext = fileInfo.suffix();  // Get the extension WITHOUT the dot
+			if (!availableExtensions.contains(ext, Qt::CaseInsensitive)) continue;
 			QString filename = fileInfo.fileName();
-			if (!filename.endsWith(".csv")) continue;
 			filenames.push_back(dirName + filename);
 		}
-		if (filenames.isEmpty()) return;
+		m_filesEdit->setPlainText(filenames.join("\n"));
+		/*if (filenames.isEmpty()) return;
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
-		emit(runMacro(m_jsonRun, filenames));
+		emit(runMacro(m_jsonRun, filenames));*/
 	}
 }
 
@@ -309,6 +321,7 @@ void MacroWidget::execute(poca::core::CommandInfo* _com)
 			json->erase(nameStr);
 		(*json)[nameStr]["macro"] = text.toStdString();
 		(*json)[nameStr]["path"] = m_pathForOpening.toStdString();
+		(*json)[nameStr]["filepaths"] = m_filesEdit->toPlainText().toStdString();
 	}
 }
 
@@ -341,6 +354,11 @@ void MacroWidget::loadParameters(const nlohmann::json& _json)
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;
 			}
+		}
+		if (_json[nameStr].contains("filepaths")) {
+			QString text = _json[nameStr]["filepaths"].get<string>().c_str();
+			std::cout << text.toStdString() << std::endl;
+			m_filesEdit->setText(text);
 		}
 	}
 }
@@ -383,4 +401,42 @@ void MacroWidget::getJsonsFromTextEdit(QTextEdit* _textEdit, std::vector <nlohma
 	}
 	catch (nlohmann::json::exception& e) {
 	}
+}
+
+bool MacroWidget::eventFilter(QObject* watched, QEvent* event)
+{
+	if (watched == m_filesEdit->viewport())
+	{
+		if (event->type() == QEvent::DragEnter)
+		{
+			QDragEnterEvent* dragEnterEvent = static_cast<QDragEnterEvent*>(event);
+			if (dragEnterEvent->mimeData()->hasUrls())
+			{
+				dragEnterEvent->acceptProposedAction();
+				return true;
+			}
+		}
+		else if (event->type() == QEvent::Drop)
+		{
+			QDropEvent* dropEvent = static_cast<QDropEvent*>(event);
+			QList<QUrl> urlList = dropEvent->mimeData()->urls();
+
+			QStringList filePaths;
+			for (const QUrl& url : urlList)
+			{
+				QString localPath = url.toLocalFile();
+				if (!localPath.isEmpty())
+				{
+					filePaths << localPath;
+				}
+			}
+
+			m_filesEdit->insertPlainText(filePaths.join("\n"));
+
+			dropEvent->acceptProposedAction();
+			return true;
+		}
+	}
+
+	return QTabWidget::eventFilter(watched, event);
 }

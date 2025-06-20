@@ -62,6 +62,8 @@ public:
 	void getJsonsFromQString(const QString&, std::vector <nlohmann::json>&);
 	void getJsonsFromTextEdit(QTextEdit*, std::vector <nlohmann::json>&);
 
+	bool eventFilter(QObject*, QEvent*);
+
 	QTextEdit* getTextEdit() { return m_recordEdit; }
 	std::vector <nlohmann::json>* getJson() { return &m_jsonRecord; }
 
