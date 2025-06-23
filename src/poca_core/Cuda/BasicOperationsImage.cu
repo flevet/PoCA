@@ -149,7 +149,7 @@ template <class T>
 __global__ void kernel_threshold(const T* image, const T _thresholdMin, const T _thresholdMax, uint8_t* thresholdedImage, uint32_t size)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= size) return;
+    if (tid < 0 || tid >= size) return;
     T value = image[tid];
     thresholdedImage[tid] = value >= _thresholdMin && value <= _thresholdMax ? 255 : 0;
 }
@@ -158,7 +158,7 @@ template <class T>
 __global__ void kernel_threshold32(const T* image, const T _thresholdMin, const T _thresholdMax, int32_t* thresholdedImage, uint32_t size)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= size) return;
+    if (tid < 0 || tid >= size) return;
     T value = image[tid];
     thresholdedImage[tid] = value > _thresholdMin && value < _thresholdMax ? 255 : 0;
 }
