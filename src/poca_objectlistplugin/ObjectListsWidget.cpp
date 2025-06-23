@@ -411,6 +411,9 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_buttonsWidget->setLayout(layoutButtons);
 	m_buttonsWidgetLine2->setLayout(layoutButtonsLine2);
 
+	m_alphaWidget = new AlphaSliderWidget(0.1f, 1.f, 100);
+	QObject::connect(m_alphaWidget, SIGNAL(alphaChanged(float)), this, SLOT(actionNeeded(float)));
+
 	QHBoxLayout* layoutObjectMesh = new QHBoxLayout;
 	m_computeSkeletonsButton = new QPushButton("Compute skeletons");
 	m_computeSkeletonsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -462,6 +465,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layout->addWidget(m_lutsWidget);
 	layout->addWidget(m_buttonsWidget);
 	layout->addWidget(m_buttonsWidgetLine2);
+	layout->addWidget(m_alphaWidget);
 	layout->addWidget(m_widgetObjectMesh); 
 	layout->addWidget(m_delaunayTriangulationFilteringWidget);
 	layout->addWidget(m_tableObjects);
@@ -711,6 +715,20 @@ void ObjectListsWidget::actionNeeded(bool _val)
 		objList->executeCommand(true, "linkRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
+	}
+}
+
+void ObjectListsWidget::actionNeeded(float _val)
+{
+	poca::core::MyObjectInterface* obj = m_object->currentObject();
+	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
+	if (!bc) return;
+	poca::core::CommandableObject* objList = dynamic_cast <poca::core::CommandableObject*>(bc);
+
+	QObject* sender = QObject::sender();
+	if (sender == m_alphaWidget) {
+		objList->executeCommand(true, "alpha", _val);
+		m_object->notifyAll("updateDisplay");
 	}
 }
 

@@ -122,6 +122,7 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 	addCommandInfo(poca::core::CommandInfo(false, "cullFaceType", std::string("back")));
 	addCommandInfo(poca::core::CommandInfo(false, "skeletonRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "linkRendering", true));
+	addCommandInfo(poca::core::CommandInfo(false, "alpha", 1.f));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if(param.contains("fill"))
@@ -144,6 +145,8 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 			loadParameters(poca::core::CommandInfo(false, "centroidRendering", param["centroidRendering"].get<bool>()));
 		if (param.contains("linkRendering"))
 			loadParameters(poca::core::CommandInfo(false, "shapeRendering", param["shapeRendering"].get<bool>()));
+		if (param.contains("alpha"))
+			loadParameters(poca::core::CommandInfo(false, "alpha", param["alpha"].get<float>()));
 	}
 }
 
@@ -249,6 +252,10 @@ poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::strin
 		uint32_t val = _parameters.get<uint32_t>();
 		return poca::core::CommandInfo(false, _nameCommand, val);
 	}
+	else if (_nameCommand == "alpha") {
+		float val = _parameters.get<float>();
+		return poca::core::CommandInfo(false, _nameCommand, val);
+	}
 	else if (_nameCommand == "sortWRTCameraPosition") {
 		glm::vec3 cameraPosition, cameraForward;
 		bool complete = _parameters.contains("cameraPosition") && _parameters.contains("cameraForward");
@@ -296,13 +303,14 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	std::string cullFaceType = getParameter<std::string>("cullFaceType");
 	bool skeletonRendering = getParameter<bool>("skeletonRendering");
 	bool linkRendering = getParameter<bool>("linkRendering");
+	float alpha = getParameter<float>("alpha");
 
 	const poca::core::BoundingBox bbox = m_objects->boundingBox();
 	glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
 	glm::vec3 pos(orientation + _cam->getCenter());
 	pos *= 2 * _cam->getOriginalDistanceOrtho();
 
-	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_DEPTH_TEST);
 	if (cullFaceActivated)
 		glEnable(GL_CULL_FACE);
 	else
@@ -328,7 +336,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		glCullFace(GL_BACK);
 
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
-	glDisable(GL_BLEND);
+	glEnable(GL_BLEND);
 	if (shapeRendering) {
 		if (m_objects->dimension() == 3) {
 			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();

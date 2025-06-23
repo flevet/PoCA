@@ -130,6 +130,84 @@ public:
 	}
 };
 
+class AlphaSliderWidget : public QWidget
+{
+	Q_OBJECT
+
+public:
+	explicit AlphaSliderWidget(float _min, float _max, int nbSteps, QWidget* parent = nullptr)
+		: QWidget(parent),
+		alphaMin(_min),
+		alphaMax(_max),
+		sliderSteps(nbSteps)
+	{
+		// Slider
+		slider = new QSlider(Qt::Horizontal);
+		slider->setRange(0, sliderSteps);
+		slider->setValue(sliderSteps);  // initial position
+
+		// Min / Max labels
+		QLabel* labelMin = new QLabel(QString::number(alphaMin, 'f', 3));
+		QLabel* labelMax = new QLabel(QString::number(alphaMax, 'f', 3));
+
+		// Layout: single row
+		QHBoxLayout* hLayout = new QHBoxLayout;
+		hLayout->addWidget(labelMin);
+		hLayout->addWidget(slider);
+		hLayout->addWidget(labelMax);
+
+		setLayout(hLayout);
+
+		// Live tooltip during drag
+		connect(slider, &QSlider::sliderMoved, this, &AlphaSliderWidget::showTooltip);
+
+		// Emit signal when value changes (optional)
+		connect(slider, &QSlider::valueChanged, this, &AlphaSliderWidget::emitAlphaChanged);
+	}
+
+	float alphaValue() const
+	{
+		return alphaMin + (alphaMax - alphaMin) * (float(slider->value()) / sliderSteps);
+	}
+
+signals:
+	void alphaChanged(float alpha);
+
+private:
+	QSlider* slider;
+	const float alphaMin;
+	const float alphaMax;
+	const int sliderSteps;
+
+	void showTooltip(int value)
+	{
+		float alpha = alphaMin + (alphaMax - alphaMin) * (float(value) / sliderSteps);
+
+		// Get slider handle position using QStyle
+		QStyleOptionSlider opt;
+		opt.initFrom(slider);
+		opt.orientation = slider->orientation();
+		opt.minimum = slider->minimum();
+		opt.maximum = slider->maximum();
+		opt.sliderPosition = value;
+		opt.sliderValue = value;
+
+		QRect handleRect = slider->style()->subControlRect(
+			QStyle::CC_Slider, &opt, QStyle::SC_SliderHandle, slider);
+
+		QPoint handleCenter = slider->mapToGlobal(handleRect.center());
+		QPoint tooltipPos(handleCenter.x(), handleCenter.y() - 30);  // offset above handle
+
+		QToolTip::showText(tooltipPos, QString::number(alpha, 'f', 3), slider);
+	}
+
+	void emitAlphaChanged(int value)
+	{
+		float alpha = alphaMin + (alphaMax - alphaMin) * (float(value) / sliderSteps);
+		emit alphaChanged(alpha);
+	}
+};
+
 //! [0]
 class ObjectListsWidget : public QWidget, public poca::core::ObserverForMediator {
 	Q_OBJECT
@@ -149,6 +227,7 @@ protected slots:
 	void actionNeeded();
 	void actionNeeded(int);
 	void actionNeeded(bool);
+	void actionNeeded(float);
 
 	void changeListObject(QAbstractButton*);
 
@@ -169,6 +248,8 @@ protected:
 	QWidget* m_widgetObjectMesh;
 	QPushButton* m_computeSkeletonsButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
 	QSpinBox* m_sizePointSpn;
+
+	AlphaSliderWidget* m_alphaWidget;
 
 	//QTableWidget* m_tableObjects;
 	QTableView* m_tableObjects;
