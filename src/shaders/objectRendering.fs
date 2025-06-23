@@ -22,8 +22,13 @@ void main() {
 		
 	if (feature < minFeatureValue)
 		discard;
+		
+	vec3 objectColor;
 	float inter = maxFeatureValue - minFeatureValue;
-	vec3 objectColor = texture(lutTexture, ((feature - minFeatureValue) / inter)).xyz;
+	if (inter > -0.0001 && inter < 0.0001)
+		objectColor = texture(lutTexture, 0).xyz;
+	else
+		objectColor = texture(lutTexture, ((feature - minFeatureValue) / inter)).xyz;
 	// ambient
 	float ambientStrength = 0.1;
 	vec3 ambient = ambientStrength * lightColor;
