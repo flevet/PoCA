@@ -1030,6 +1030,8 @@ namespace poca::opengl {
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
 		shader->setBool("clip", m_applyClippingPlanes);
+		shader->setBool("applyUniformColor", _applyUniformColor);
+		shader->setVec4("uniformColor", _uniformColor);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, _textureLutID);
