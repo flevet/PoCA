@@ -370,9 +370,17 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			GL_CHECK_ERRORS();
 		}
 		else {
-			glDisable(GL_BLEND);
+			poca::core::PaletteInterface* pal = m_objects->getPalette();
+			bool useUniformColor = false;
+			glm::vec4 color(0, 0, 0, 0);
+			if (pal->getName() == "RandomOneColor") {
+				poca::core::Color4uc c = pal->getColor(0.5f);
+				color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
+				useUniformColor = true;
+			}
+
 			if(m_lineBuffer.empty() || fill)
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature);
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, color);
 			else
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature);
 		}
