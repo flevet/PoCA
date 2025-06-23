@@ -253,7 +253,7 @@ namespace poca::opengl {
 		void drawUniformShader(const GLBuffer<T>&, const poca::core::Color4D&);
 
 		template < class T, class M >
-		void drawSimpleShader(const GLuint, const GLBuffer<T>&, const GLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat = 1.f);
+		void drawSimpleShader(const GLuint, const GLBuffer<T>&, const GLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat = 1.f, const bool = false, glm::vec4 = glm::vec4());
 
 		template < class T, class M >
 		void drawSimpleShaderWithColor(const GLBuffer<T>&, const GLBuffer<M>&);
@@ -1002,7 +1002,7 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSimpleShader(const GLuint _textureLutID, const GLBuffer<T>& _bufferVertex, const GLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const GLfloat _alpha)
+	void Camera::drawSimpleShader(const GLuint _textureLutID, const GLBuffer<T>& _bufferVertex, const GLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const GLfloat _alpha, const bool _applyUniformColor, glm::vec4 _uniformColor)
 	{
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
 		uint32_t sizeGL = 1, widthLineGL = 1;

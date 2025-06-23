@@ -1861,8 +1861,7 @@ namespace poca::opengl {
 			return m_ssaoShader.m_shaderGeometryPass;
 		}
 		if (_nameShader == "simpleShader") {
-			Shader* shader = new Shader();
-			shader->createAndLinkProgramFromStr(vs, fs);
+			Shader* shader = new Shader("./shaders/simpleShader.vs", "./shaders/simpleShader.fs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
