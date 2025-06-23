@@ -225,7 +225,7 @@ namespace poca::geometry {
 				size_t index = queueTriangles.at(currentTriangle);
 				if (selectionTriangulationFaces[index]) {
 					selectionTriangulationFaces[index] = false;
-					uint32_t i1 = triangles[3 * index], i2 = triangles[3 * index + 1], i3 = triangles[3 * index + 2];
+					uint32_t i1 = triangles[3 * index], i3 = triangles[3 * index + 1], i2 = triangles[3 * index + 2];
 					locsOfObject.insert(i1);
 					locsOfObject.insert(i2);
 					locsOfObject.insert(i3);
