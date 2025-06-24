@@ -219,7 +219,7 @@ namespace poca::opengl {
 
 
 		template < class T, class M >
-		void drawSimpleShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat = 1.f, const SingleGLBuffer<T>& = SingleGLBuffer<T>());
+		void drawSimpleShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat = 1.f, const bool = false, glm::vec4 = glm::vec4(), const SingleGLBuffer<T>& = SingleGLBuffer<T>());
 
 		template < class T, class M >
 		void drawSimpleShader(const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat = 1.f, const SingleGLBuffer<T> & = SingleGLBuffer<T>());
@@ -412,7 +412,7 @@ namespace poca::opengl {
 	};
 
 	template < class T, class M >
-	void Camera::drawSimpleShader(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const GLfloat _alpha, const SingleGLBuffer<T>& _bufferNormal)
+	void Camera::drawSimpleShader(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const GLfloat _alpha, const bool _applyUniformColor, glm::vec4 _uniformColor, const SingleGLBuffer<T>& _bufferNormal)
 	{
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = getShader("simpleShader");
@@ -428,6 +428,8 @@ namespace poca::opengl {
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
 		shader->setBool("clip", m_applyClippingPlanes);
+		shader->setBool("applyUniformColor", _applyUniformColor);
+		shader->setVec4("uniformColor", _uniformColor);
 
 		glm::vec3 frwd = getEye();
 		frwd = glm::normalize(frwd);
