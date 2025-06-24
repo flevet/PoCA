@@ -85,6 +85,7 @@
 #include <Interfaces/ObjectIndicesFactoryInterface.hpp>
 #include <General/Image.hpp>
 #include <General/Engine.hpp>
+#include <General/Palette.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -2114,5 +2115,27 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			return;
 		poca::opengl::CameraInterface* cam = createWindows(obj);
 		engine->addCameraToObject(obj, cam);
+	}
+	else if (tmp == "colorForBacteries") {
+		poca::core::Palette palette = poca::core::Palette::getStaticLut("HotCold2");
+		poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
+		float nbs = (float)object->nbColors();
+		for (auto n = 0; n < object->nbColors(); n++) {
+			poca::core::Color4uc color = palette.getColorLUT((float)n / nbs);
+			
+			poca::core::MyObjectInterface* curObj = object->getObject(n);
+			if (curObj->hasBasicComponent("DetectionSet")) {
+				poca::core::BasicComponentInterface* bci = curObj->getBasicComponent("DetectionSet");
+				bci->setPalette(new poca::core::Palette(color, color, "RandomOneColor"));
+				bci->executeCommand(false, "changeLUT");
+			}
+			if (curObj->hasBasicComponent("ObjectLists")) {
+				poca::core::BasicComponentInterface* bci = curObj->getBasicComponent("ObjectLists");
+				poca::core::BasicComponentList* bclist = static_cast <poca::core::BasicComponentList*>(bci);
+				poca::core::BasicComponent* bc = bclist->currentComponent();
+				bc->setPalette(new poca::core::Palette(color, color, "RandomOneColor"));
+				bc->executeCommand(false, "changeLUT");
+			}
+		}
 	}
 }
