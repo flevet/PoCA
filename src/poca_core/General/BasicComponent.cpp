@@ -196,7 +196,7 @@ namespace poca::core {
 							forceRegenerateSelection();
 						}
 					}
-					else if (action == "displayWithLUT") {
+					else if (action == "displayWithLUT" || action == "selectHistogram") {
 						setCurrentHistogramType(type);
 					}
 					else if (action == "save") {
@@ -293,7 +293,7 @@ namespace poca::core {
 							return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action, "dir", val);
 						}
 					}
-					else if (action == "displayWithLUT")
+					else if (action == "displayWithLUT" || action == "selectHistogram")
 						return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action);
 				}
 			}
