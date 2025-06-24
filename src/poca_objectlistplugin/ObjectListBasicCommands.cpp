@@ -422,7 +422,8 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateCentroids() con
 
 	std::map <std::string, poca::core::MyData*> featuresObjects = m_objects->getData();
 	for (const auto& feature : featuresObjects)
-		features[feature.first] = feature.second->getData<float>();
+		if(feature.first != "x" && feature.first != "y" && feature.first != "z")
+			features[feature.first] = feature.second->getData<float>();
 
 	poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
 
