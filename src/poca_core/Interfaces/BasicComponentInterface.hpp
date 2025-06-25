@@ -88,7 +88,7 @@ namespace poca::core {
 		virtual BasicComponentInterface* copy() = 0;
 
 		virtual void setBoundingBox(const float, const float, const float, const float, const float, const float) = 0;
-		virtual const BoundingBox& boundingBox() const = 0;
+		virtual const BoundingBox& boundingBox() = 0;
 		virtual void setWidth(const float) = 0;
 		virtual void setHeight(const float) = 0;
 		virtual void setThick(const float) = 0;

@@ -70,7 +70,7 @@ namespace poca::geometry {
 			delete m_kdTree;
 	}
 
-	const float VoronoiDiagram::averageMeanNbLocs() const
+	const float VoronoiDiagram::averageMeanNbLocs()
 	{
 		const poca::core::BoundingBox& bbox = boundingBox();
 		float w = bbox[3] - bbox[0], h = bbox[4] - bbox[1], t = bbox[5] - bbox[2];
@@ -79,7 +79,7 @@ namespace poca::geometry {
 		
 	}
 
-	const float VoronoiDiagram::averageDensity() const
+	const float VoronoiDiagram::averageDensity()
 	{
 		const poca::core::BoundingBox& bbox = boundingBox();
 		float w = bbox[3] - bbox[0], h = bbox[4] - bbox[1], t = bbox[5] - bbox[2];

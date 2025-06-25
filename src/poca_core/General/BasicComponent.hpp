@@ -96,7 +96,7 @@ namespace poca::core {
 		virtual const uint32_t dimension() const = 0;
 
 		inline void setBoundingBox(const float _x, const float _y, const float _z, const float _w, const float _h, const float _t) { m_bbox = { _x, _y, _z, _w, _h, _t }; }
-		inline const BoundingBox& boundingBox() const { return m_bbox; }
+		inline const BoundingBox& boundingBox() { return m_bbox; }
 		inline void setWidth(const float _w) { m_bbox.setWidth(_w); }
 		inline void setHeight(const float _h) { m_bbox.setHeight(_h); }
 		inline void setThick(const float _t) { m_bbox.setThick(_t); }

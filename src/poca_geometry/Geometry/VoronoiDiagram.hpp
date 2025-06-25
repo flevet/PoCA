@@ -74,8 +74,8 @@ namespace poca::geometry {
 
 		virtual const std::vector <bool>& borderLocalizations() const { return m_borderLocs; }
 
-		virtual const float averageDensity() const;
-		virtual const float averageMeanNbLocs() const;
+		virtual const float averageDensity();
+		virtual const float averageMeanNbLocs();
 
 		virtual uint32_t indexTriangleOfPoint(const float, const float, const float) const = 0;
 
