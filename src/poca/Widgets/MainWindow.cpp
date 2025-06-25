@@ -2119,7 +2119,10 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 	else if (tmp == "colorForBacteries") {
 		poca::core::Palette palette = poca::core::Palette::getStaticLut("HotCold2");
 		poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
+		const std::string& dir = object->getDir();
+		std::ofstream fs(dir + std::string("/allStats.txt"));
 		float nbs = (float)object->nbColors();
+		std::vector <float> nbsCentroids, surfaces;
 		for (auto n = 0; n < object->nbColors(); n++) {
 			poca::core::Color4uc color = palette.getColorLUT((float)n / nbs);
 			
@@ -2135,7 +2138,15 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				poca::core::BasicComponent* bc = bclist->currentComponent();
 				bc->setPalette(new poca::core::Palette(color, color, "RandomOneColor"));
 				bc->executeCommand(false, "changeLUT");
+
+				const std::vector <float>& nbs = bc->getData<float>("nbLocs");
+				const std::vector <float>& area = bc->getData<float>("area");
+				float totalArea = std::accumulate(area.begin(), area.end(), 0.f);
+				float totalNbs = std::accumulate(nbs.begin(), nbs.end(), 0.f);
+
+				fs << (n + 1) << "\t" << totalArea << "\t" << totalNbs << std::endl;
 			}
 		}
+		fs.close();
 	}
 }
