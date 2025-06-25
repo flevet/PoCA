@@ -16,6 +16,7 @@ include_directories(${CMAKE_SOURCE_DIR}/../include)
 link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(PLOT_HEADER_FILES
+  Plot/CustomizedSlider.hpp
   Plot/FilterHistogramWidget.hpp
   Plot/Icons.hpp
   Plot/QCPGraphWithColor.hpp
@@ -25,6 +26,7 @@ set(PLOT_HEADER_FILES
   )
 
 set(PLOT_SOURCE_FILES
+  Plot/CustomizedSlider.cpp
   Plot/FilterHistogramWidget.cpp
   Plot/QCPGraphWithColor.cpp
   Plot/QCPHistogram.cpp
@@ -33,12 +35,14 @@ set(PLOT_SOURCE_FILES
 )
 
 set(FOO_MOC_HEADERS
+  Plot/CustomizedSlider.hpp
   Plot/FilterHistogramWidget.hpp
   Plot/QCPHistogram.hpp
   Plot/qcustomplot.h
 )
 
 set(FOO_SOURCE_FILES
+  Plot/CustomizedSlider.cpp
   Plot/FilterHistogramWidget.cpp
   Plot/QCPHistogram.cpp
   Plot/qcustomplot.cpp
