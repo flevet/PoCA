@@ -15,6 +15,10 @@ uniform vec3 lightColor;
 uniform bool applyIllumination;
 uniform vec3 light_position;
 uniform bool clip;
+uniform float alpha;
+
+uniform bool applyUniformColor;
+uniform vec4 uniformColor;
 
 void main() {
 	if(clip && vclipDistance < 0.f)
@@ -48,5 +52,8 @@ void main() {
 		result = (ambient + diffuse + specular) * objectColor;
 	else
 		result = objectColor;
-	color = vec4(result, 0.4);
+	if(applyUniformColor)
+		color = vec4(uniformColor.rgb, alpha);
+	else
+		color = vec4(result, alpha);
 }
