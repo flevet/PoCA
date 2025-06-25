@@ -1264,12 +1264,19 @@ namespace poca::opengl {
 		else
 			factorH = diffY / diffX;
 
+		float d;
+		poca::core::BoundingBox bbox = m_object->boundingBox();
+		float w = bbox[3] - bbox[0], h = bbox[4] - bbox[1], t = bbox[5] - bbox[2];
+		d = w > h ? w / 2 : h / 2;
+		d = d > t ? d : t;
+
+
 		float projLeft = -m_distanceOrtho * factorW;
 		float projRight = m_distanceOrtho * factorW;
 		float projBottom = -m_distanceOrtho * factorH;
 		float projUp = m_distanceOrtho * factorH;
-		float projNear = -m_originalDistanceOrtho * sqrt(3);
-		float projFar = m_originalDistanceOrtho * sqrt(3);
+		float projNear = -d * sqrt(3);
+		float projFar = d * sqrt(3);
 
 		m_matrixProjection = glm::ortho(projLeft, projRight, projBottom, projUp, projNear, projFar);
 
