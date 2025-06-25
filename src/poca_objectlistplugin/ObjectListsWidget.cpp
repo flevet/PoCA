@@ -411,8 +411,8 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_buttonsWidget->setLayout(layoutButtons);
 	m_buttonsWidgetLine2->setLayout(layoutButtonsLine2);
 
-	m_alphaWidget = new AlphaSliderWidget(0.1f, 1.f, 100);
-	QObject::connect(m_alphaWidget, SIGNAL(alphaChanged(float)), this, SLOT(actionNeeded(float)));
+	m_alphaWidget = new poca::plot::CustomizedSlider(0.1f, 1.f, 100);
+	QObject::connect(m_alphaWidget, SIGNAL(changedValue(float)), this, SLOT(actionNeeded(float)));
 
 	QHBoxLayout* layoutObjectMesh = new QHBoxLayout;
 	m_computeSkeletonsButton = new QPushButton("Compute skeletons");
