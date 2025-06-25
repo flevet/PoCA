@@ -337,6 +337,16 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
 	glEnable(GL_BLEND);
+
+	poca::core::PaletteInterface* pal = m_objects->getPalette();
+	bool useUniformColor = false;
+	glm::vec4 uniformColor(0, 0, 0, 0);
+	if (pal->getName() == "RandomOneColor") {
+		poca::core::Color4uc c = pal->getColor(0.5f);
+		uniformColor = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
+		useUniformColor = true;
+	}
+
 	if (shapeRendering) {
 		if (m_objects->dimension() == 3) {
 			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
@@ -356,6 +366,11 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			shader->setVec3("viewPos", pos);
 			shader->setBool("applyIllumination", fill ? true : false);
 			shader->setVec3("light_position", _cam->getEye());
+
+			shader->setFloat("alpha", alpha);
+			shader->setBool("applyUniformColor", useUniformColor);
+			shader->setVec4("uniformColor", uniformColor);
+
 			glActiveTexture(GL_TEXTURE0); 
 			glBindTexture(GL_TEXTURE_1D, m_textureLutID);
 			const std::vector <size_t>& sizeStrides = m_triangleBuffer.getSizeBuffers();
@@ -378,19 +393,10 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			GL_CHECK_ERRORS();
 		}
 		else {
-			poca::core::PaletteInterface* pal = m_objects->getPalette();
-			bool useUniformColor = false;
-			glm::vec4 color(0, 0, 0, 0);
-			if (pal->getName() == "RandomOneColor") {
-				poca::core::Color4uc c = pal->getColor(0.5f);
-				color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
-				useUniformColor = true;
-			}
-
 			if(m_lineBuffer.empty() || fill)
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, color);
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 			else
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, color);
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 		}
 	}
 	GL_CHECK_ERRORS();
