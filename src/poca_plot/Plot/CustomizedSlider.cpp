@@ -43,10 +43,13 @@ namespace poca::plot {
 		m_slider = new QSlider(Qt::Horizontal);
 		m_slider->setRange(0, m_sliderSteps);
 		m_slider->setValue(0);  // initial position
+		m_slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 
 		// Min / Max labels
 		m_minLEdit = new QLineEdit(QString::number(m_minVal, 'f', 3));
+		m_minLEdit->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 		m_maxLEdit = new QLineEdit(QString::number(m_maxVal, 'f', 3));
+		m_maxLEdit->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
 		// Layout: single row
 		QHBoxLayout* hLayout = new QHBoxLayout;
