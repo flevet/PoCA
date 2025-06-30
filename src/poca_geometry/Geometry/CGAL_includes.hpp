@@ -63,6 +63,10 @@
 #include <CGAL/Delaunay_triangulation_on_sphere_2.h>
 #include <CGAL/Projection_on_sphere_traits_3.h>
 
+namespace poca::geometry {
+	enum DTriangleTag { NOT_DONE = 0, INSIDE = 1, OUTSIDE = 2 };
+}
+
 struct FaceInfo2
 {
 	FaceInfo2() {}
@@ -70,6 +74,11 @@ struct FaceInfo2
 	bool in_domain() {
 		return m_nesting_level % 2 == 1;
 	}
+};
+
+struct FaceInfoTag
+{
+	poca::geometry::DTriangleTag m_tag = poca::geometry::NOT_DONE;
 };
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K_inexact;
@@ -93,6 +102,13 @@ typedef CGAL::Constrained_triangulation_face_base_2 < K_inexact, Fbb > ConstFb;
 typedef CGAL::Triangulation_data_structure_2 < Vb_int, ConstFb > ConstTds;
 typedef CGAL::Exact_predicates_tag Itag;
 typedef CGAL::Constrained_Delaunay_triangulation_2 < K_inexact, ConstTds, Itag > Constrained_Delaunay_triangulation_2;
+
+typedef CGAL::Triangulation_face_base_with_info_2 < FaceInfoTag, K_inexact > FbbTag;
+typedef CGAL::Constrained_triangulation_face_base_2 < K_inexact, FbbTag > ConstFbTag;
+typedef CGAL::Triangulation_data_structure_2 < Vb_int, ConstFbTag > ConstTdsTag;
+typedef CGAL::Exact_predicates_tag Itag;
+typedef CGAL::Constrained_Delaunay_triangulation_2 < K_inexact, ConstTdsTag, Itag > Constrained_Delaunay_triangulation_2_tag;
+
 typedef Constrained_Delaunay_triangulation_2::Point ConstPoint;
 typedef CGAL::Polygon_2 < K_inexact > Polygon_2;
 typedef std::list<Polygon_2> Polygons_2;
@@ -154,6 +170,7 @@ typedef CGAL::Exact_predicates_exact_constructions_kernel K_exact;
 typedef K_exact::Point_2 Point_22;
 typedef CGAL::Polygon_2<K_exact> Polygon_22;
 typedef CGAL::Polygon_with_holes_2<K_exact> Polygon_with_holes_2;
+typedef CGAL::Polygon_with_holes_2<K_inexact> Polygon_with_holes_2_inexact;
 typedef std::list<Polygon_with_holes_2> Pwh_list_2;
 
 typedef K_exact::Point_3 Point_3_exact;
