@@ -56,6 +56,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/ObjectLists.hpp
   Geometry/ObjectListDelaunay.hpp
   Geometry/ObjectListMesh.hpp
+  Geometry/ObjectListPolygon.hpp
   Geometry/StraightLine.hpp
   Geometry/Skeleton.hpp
   Geometry/VoronoiDiagram.hpp
@@ -76,6 +77,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/ObjectLists.cpp
   Geometry/ObjectListDelaunay.cpp
   Geometry/ObjectListMesh.cpp
+  Geometry/ObjectListPolygon.cpp
   Geometry/StraightLine.cpp  
   Geometry/Skeleton.cpp
   Geometry/VoronoiDiagram.cpp
