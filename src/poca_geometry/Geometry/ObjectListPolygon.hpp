@@ -82,6 +82,10 @@ namespace poca::geometry {
 		virtual void getOutlineLocsFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;
 		virtual void getOutlineLocsFeatureInSelectionHiLow(std::vector <float>&, const std::vector <bool>&, const float, const float) const;
 
+
+		inline const std::vector <std::vector<Polygon_2>>& getPolygons() const { return m_polygons; }
+		inline const std::vector <Constrained_Delaunay_triangulation_2_tag>& getCdts() const { return m_cdts; }
+
 	protected:
 
 	protected:
