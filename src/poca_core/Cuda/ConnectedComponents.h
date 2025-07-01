@@ -47,12 +47,35 @@
 #endif
 
 #include <General/Image.hpp>
+#include "BasicOperationsImage.h"
 
 #ifndef NO_CUDA
+static __device__ int NEIGHBOR_OFFSET_2D_X[4] = {
+     0, -1, 1,  0
+};
+
+static __device__ int NEIGHBOR_OFFSET_2D_Y[4] = {
+    -1,  0, 0,  1
+};
+
+static __device__ int NEIGHBOR_OFFSET_3D_X[6] = {
+     0, -1, 1,  0,  0,  0
+};
+
+static __device__ int NEIGHBOR_OFFSET_3D_Y[6] = {
+    -1,  0, 0,  1,  0,  0
+};
+
+static __device__ int NEIGHBOR_OFFSET_3D_Z[6] = {
+     0,  0, 0,  0, -1,  1
+};
+
 void connectedComponnets2DLabelingBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, uint32_t* _labels);
 void connectedComponnets2DLabelingStackBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
 void connectedComponnets3DLabelingBinary(uint8_t* const _pixels, const size_t _nbValues, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
 template <class T>
 poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, const T _thresholdMin, const T _thresholdMax, const uint32_t _w, const uint32_t _h, const uint32_t _d);
+void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_labels, int width, int height, int depth);
+void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::device_vector<uint32_t>& d_labels, int width, int height, int depth);
 #endif
 #endif

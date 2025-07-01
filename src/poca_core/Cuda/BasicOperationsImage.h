@@ -61,6 +61,15 @@ float getAutoThreshold(const T* image, const uint32_t _w, const uint32_t _h, con
 void relabelI32(std::vector <uint32_t>& _labels, std::vector <uint32_t>& _relabels);
 void computeFeaturesLabelImage(poca::core::ImageInterface*);
 poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface*);
+uint32_t relabel_kernel_uint32t_gpu(thrust::device_vector<uint32_t>& d_labels);
+
+template <class T>
+void fill_all_holes(thrust::device_vector<T>& d_labels, uint32_t width, uint32_t height);
+template <class T>
+void run_fill_holes(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height);
+
+template <class T>
+void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 #endif
 
 #endif

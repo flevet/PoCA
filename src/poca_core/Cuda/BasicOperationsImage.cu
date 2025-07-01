@@ -563,6 +563,63 @@ float getAutoThreshold(const T* image, uint32_t w, uint32_t h, uint32_t d) {
     return threshold;
 }
 
+uint32_t relabel_kernel_uint32t_gpu(thrust::device_vector<uint32_t>& d_labels)
+{
+    thrust::device_vector<uint32_t> d_data(d_labels);
+    // Sort the data copy
+    thrust::sort(thrust::device, d_labels.begin(), d_labels.end());
+    // Allocate an array to store unique values
+    thrust::device_vector<uint32_t> d_unique = d_labels;
+    // Compress all duplicates
+    const auto end = thrust::unique(d_unique.begin(), d_unique.end());
+    // Search for all original labels, in this compressed range, and write their
+    // indices back as the result 
+    thrust::lower_bound(d_unique.begin(), end, d_data.begin(), d_data.end(), d_labels.begin());
+    return thrust::distance(d_unique.begin(), end);
+}
+
+template <class T>
+__global__ void pad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
+{
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= _w || y >= _h) { return; }
+
+    uint32_t wdest = _w + 2 * _pad;
+
+    T val = src[_w * y + x];
+    dest[wdest * (y + _pad) + (x + _pad)] = val;
+}
+
+template <class T>
+__global__ void pad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
+{
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= _w || y >= _h || z >= _d) { return; }
+
+    uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad;
+    uint32_t who = _w * _h, whd = wdest * hdest;
+    T val = src[who * z + _w * y + x];
+    dest[whd * (z + _pad) + wdest * (y + _pad) + (x + _pad)] = val;
+}
+
+template <class T>
+void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
+{
+    uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad, ddest = _d + 2 * _pad;
+    _output.resize(wdest * hdest * ddest);
+    dim3 threads = _d == 1 ? dim3(8, 8) : dim3(8, 8, 8);
+    dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8)) : dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8), (unsigned int)ceil((float)_d / (float)8));
+    if (_d == 1) 
+        pad2D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), _w, _h, _pad);
+    else
+        pad3D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), _w, _h, _d, _pad);
+}
+
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint16_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint32_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
@@ -578,4 +635,9 @@ template __global__ void kernel_threshold(const uint16_t* image, const uint16_t 
 template __global__ void kernel_threshold(const uint32_t* image, const uint32_t _thresholdMin, const uint32_t _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 template __global__ void kernel_threshold(const int32_t* image, const int32_t _thresholdMin, const int32_t _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 template __global__ void kernel_threshold(const float* image, const float _thresholdMin, const float _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
+
+template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 #endif

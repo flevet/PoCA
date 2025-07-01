@@ -630,12 +630,16 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     kernel_threshold << <grid, block >> > (thrust::raw_pointer_cast(imageToThreshold.data()), _thresholdMin, _thresholdMax, thresholImage, nbValues);
 
     thrust::device_vector<uint32_t> d_labels(nbValues);
-    if (D > 1)
+    /*if (D > 1)
         connectedComponnets3DLabelingBinary(thresholImage, nbValues, _w, _h, _d, thrust::raw_pointer_cast(d_labels.data()));
     else
-        connectedComponnets2DLabelingBinary(thresholImage, _w, _h, thrust::raw_pointer_cast(d_labels.data()));
+        connectedComponnets2DLabelingBinary(thresholImage, _w, _h, thrust::raw_pointer_cast(d_labels.data()));*/
+    //void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_labels, int width, int height, int depth)
+    run_face_connected_component_pipeline(thresholImage, thrust::raw_pointer_cast(d_labels.data()), _w, _h, _d);
     cudaFree(thresholImage);
     relabel_kernel_gpu<uint32_t>(d_labels);
+    if(_d == 1)
+        fill_all_holes(d_labels, _w, _h);
     uint32_t maxLabel = *thrust::max_element(d_labels.begin(), d_labels.end());
     std::cout << "Max lbl = " << maxLabel << std::endl;
     poca::core::ImageInterface* image = NULL;

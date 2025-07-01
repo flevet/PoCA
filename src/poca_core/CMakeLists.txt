@@ -146,6 +146,8 @@ set(cuda_list
   Cuda/CoreMisc.cu
   Cuda/BasicOperationsImage.cu
   Cuda/ConnectedComponents.cu
+  Cuda/FaceConnectedComponents.cu
+  Cuda/FillHoles.cu
   )
   
 foreach(source IN LISTS header_list)
