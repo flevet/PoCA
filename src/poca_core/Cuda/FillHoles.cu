@@ -119,6 +119,8 @@ template <class T>
 void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height) {
     thrust::device_vector<T> d_image(_pixels), d_padded_image;
 
+    pad(d_image, d_padded_image, _width, _height, 1, 1);
+
     fill_all_holes(d_image, _width, _height);
 
     cudaMemcpy(_pixels.data(), thrust::raw_pointer_cast(d_image.data()), _width * _height * sizeof(T), cudaMemcpyDeviceToHost);
