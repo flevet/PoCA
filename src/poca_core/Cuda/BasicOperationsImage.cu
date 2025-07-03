@@ -579,6 +579,15 @@ uint32_t relabel_kernel_uint32t_gpu(thrust::device_vector<uint32_t>& d_labels)
 }
 
 template <class T>
+__global__ void binarize(const T* image, uint8_t* bimage, uint32_t size)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < 0 || tid >= size) return;
+    T value = image[tid];
+    bimage[tid] = value > T(0) ? 255 : 0;
+}
+
+template <class T>
 __global__ void pad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -608,16 +617,60 @@ __global__ void pad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _
 }
 
 template <class T>
+__global__ void unpad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
+{
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= _w || y >= _h) { return; }
+
+    uint32_t wdest = _w + 2 * _pad;
+
+    T val = src[wdest * (y + _pad) + (x + _pad)];
+     dest[_w * y + x] = val;
+}
+
+template <class T>
+__global__ void unpad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
+{
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= _w || y >= _h || z >= _d) { return; }
+
+    uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad;
+    uint32_t who = _w * _h, whd = wdest * hdest;
+    T val = src[whd * (z + _pad) + wdest * (y + _pad) + (x + _pad)];
+    dest[who * z + _w * y + x] = val;
+}
+
+template <class T>
 void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
 {
-    uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad, ddest = _d + 2 * _pad;
+    uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad, ddest = _d == 1 ? 1 : _d + 2 * _pad;
     _output.resize(wdest * hdest * ddest);
+    thrust::fill(_output.begin(), _output.end(), T(0));
     dim3 threads = _d == 1 ? dim3(8, 8) : dim3(8, 8, 8);
     dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8)) : dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8), (unsigned int)ceil((float)_d / (float)8));
     if (_d == 1) 
         pad2D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), _w, _h, _pad);
     else
         pad3D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), _w, _h, _d, _pad);
+}
+
+template <class T>
+void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
+{
+    uint32_t wdest = _w - 2 * _pad, hdest = _h - 2 * _pad, ddest = _d == 1 ? 1 : _d - 2 * _pad;
+    _output.resize(wdest * hdest * ddest);
+    thrust::fill(_output.begin(), _output.end(), T(0));
+    dim3 threads = _d == 1 ? dim3(8, 8) : dim3(8, 8, 8);
+    dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)wdest / (float)8), (unsigned int)ceil((float)hdest / (float)8)) : dim3((unsigned int)ceil((float)wdest / (float)8), (unsigned int)ceil((float)hdest / (float)8), (unsigned int)ceil((float)ddest / (float)8));
+    if (_d == 1)
+        unpad2D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), wdest, hdest, _pad);
+    else
+        unpad3D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), wdest, hdest, ddest, _pad);
 }
 
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
@@ -636,8 +689,18 @@ template __global__ void kernel_threshold(const uint32_t* image, const uint32_t 
 template __global__ void kernel_threshold(const int32_t* image, const int32_t _thresholdMin, const int32_t _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 template __global__ void kernel_threshold(const float* image, const float _thresholdMin, const float _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 
+template __global__ void binarize(const uint8_t* image, uint8_t* bimage, uint32_t size);
+template __global__ void binarize(const uint16_t* image, uint8_t* bimage, uint32_t size);
+template __global__ void binarize(const uint32_t* image, uint8_t* bimage, uint32_t size);
+template __global__ void binarize(const float* image, uint8_t* bimage, uint32_t size);
+
 template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<float>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 #endif

@@ -56,6 +56,9 @@ template <class T>
 __global__ void kernel_threshold(const T* image, const T _thresholdMin, const T _thresholdMax, uint8_t* thresholdedImage, uint32_t size);
 
 template <class T>
+__global__ void binarize(const T* image, uint8_t* bimage, uint32_t size);
+
+template <class T>
 float getAutoThreshold(const T* image, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 
 void relabelI32(std::vector <uint32_t>& _labels, std::vector <uint32_t>& _relabels);
@@ -67,9 +70,16 @@ template <class T>
 void fill_all_holes(thrust::device_vector<T>& d_labels, uint32_t width, uint32_t height);
 template <class T>
 void run_fill_holes(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height);
+template <class T>
+void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth);
+
+template <class T>
+void run_fill_holes_3(const std::vector<T>& _pixels, std::vector <uint32_t>&, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _pad, uint32_t& wdest, uint32_t& hdest, uint32_t& ddest);
 
 template <class T>
 void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template <class T>
+void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 #endif
 
 #endif

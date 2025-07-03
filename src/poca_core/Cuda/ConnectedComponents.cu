@@ -638,8 +638,8 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     run_face_connected_component_pipeline(thresholImage, thrust::raw_pointer_cast(d_labels.data()), _w, _h, _d);
     cudaFree(thresholImage);
     relabel_kernel_gpu<uint32_t>(d_labels);
-    if(_d == 1)
-        fill_all_holes(d_labels, _w, _h);
+    //if(_d == 1)
+    //    fill_all_holes_2(d_labels, _w, _h);
     uint32_t maxLabel = *thrust::max_element(d_labels.begin(), d_labels.end());
     std::cout << "Max lbl = " << maxLabel << std::endl;
     poca::core::ImageInterface* image = NULL;
