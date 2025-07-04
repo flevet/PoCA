@@ -23,7 +23,8 @@
 //--------------------------------------------------------------
 // Watershed Kernels (GPU Iterative)
 //--------------------------------------------------------------
-__global__ void face_cc_kernel_2d_init(const uint8_t* binary, uint32_t* labels, int width, int height) {
+template <class T>
+__global__ void face_cc_kernel_2d_init(const uint8_t* binary, T* labels, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
@@ -32,24 +33,25 @@ __global__ void face_cc_kernel_2d_init(const uint8_t* binary, uint32_t* labels, 
 
     if (binary[idx] == 0) return;
 
-    labels[idx] = idx;
+    labels[idx] = T(idx);
 }
 
-__global__ void face_cc_kernel_2d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height) {
+template <class T>
+__global__ void face_cc_kernel_2d_iteration(T* cclabels, uint32_t* changed, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
 
     int idx = IDX2(y, x, width);
-    uint32_t curVal = cclabels[idx];
+    T curVal = cclabels[idx];
     if (curVal == 0) return;
 
-    uint32_t minLabel = ::cuda::std::numeric_limits<uint32_t>::max();
+    T minLabel = ::cuda::std::numeric_limits<T>::max();
     for (auto n = 0; n < 4; n++) {
         int x2 = x + NEIGHBOR_OFFSET_2D_X[n], y2 = y + NEIGHBOR_OFFSET_2D_Y[n];
         if (x2 >= width || y2 >= height) continue;
         int idxNeigh = IDX2(y2, x2, width);
-        uint32_t val = cclabels[idxNeigh];
+        T val = cclabels[idxNeigh];
         if (val != 0) {
             minLabel = min(minLabel, val);
         }
@@ -60,7 +62,8 @@ __global__ void face_cc_kernel_2d_iteration(uint32_t* cclabels, uint32_t* change
     }
 }
 
-__global__ void face_cc_kernel_3d_init(const uint8_t* binary, uint32_t* labels, int width, int height, int depth) {
+template <class T>
+__global__ void face_cc_kernel_3d_init(const uint8_t* binary, T* labels, int width, int height, int depth) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -70,10 +73,11 @@ __global__ void face_cc_kernel_3d_init(const uint8_t* binary, uint32_t* labels, 
 
     if (binary[idx] == 0) return;
 
-    labels[idx] = idx;
+    labels[idx] = T(idx);
 }
 
-__global__ void face_cc_kernel_3d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height, int depth) {
+template <class T>
+__global__ void face_cc_kernel_3d_iteration(T* cclabels, uint32_t* changed, int width, int height, int depth) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -81,15 +85,15 @@ __global__ void face_cc_kernel_3d_iteration(uint32_t* cclabels, uint32_t* change
 
     int idx = IDX3(y, x, z, width, height);
 
-    uint32_t curVal = cclabels[idx];
+    T curVal = cclabels[idx];
     if (curVal == 0) return;
 
-    uint32_t minLabel = ::cuda::std::numeric_limits<uint32_t>::max();
+    T minLabel = ::cuda::std::numeric_limits<T>::max();
     for (auto n = 0; n < 6; n++) {
         int x2 = x + NEIGHBOR_OFFSET_3D_X[n], y2 = y + NEIGHBOR_OFFSET_3D_Y[n], z2 = z + NEIGHBOR_OFFSET_3D_Z[n];
         if (x2 >= width || y2 >= height || z2 >= depth) continue;
         int idxNeigh = IDX3(y2, x2, z2, width, height);
-        uint32_t val = cclabels[idxNeigh];
+        T val = cclabels[idxNeigh];
         if (val != 0) {
             minLabel = min(minLabel, val);
         }
@@ -109,28 +113,28 @@ void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::
 
     int iteration = 1;
     uint32_t changed = 1;
-    auto start2 = std::chrono::high_resolution_clock::now();
+    //auto start2 = std::chrono::high_resolution_clock::now();
     if (depth == 1)
-        face_cc_kernel_2d_init << < grid, threads >> > (thrust::raw_pointer_cast(d_binary.data()), thrust::raw_pointer_cast(d_labels.data()), width, height);
+        face_cc_kernel_2d_init<uint32_t> << < grid, threads >> > (thrust::raw_pointer_cast(d_binary.data()), thrust::raw_pointer_cast(d_labels.data()), width, height);
     else
-        face_cc_kernel_3d_init << < grid, threads >> > (thrust::raw_pointer_cast(d_binary.data()), thrust::raw_pointer_cast(d_labels.data()), width, height, depth);
+        face_cc_kernel_3d_init<uint32_t> << < grid, threads >> > (thrust::raw_pointer_cast(d_binary.data()), thrust::raw_pointer_cast(d_labels.data()), width, height, depth);
     cudaDeviceSynchronize();
     while (changed != 0) {
         thrust::fill(d_changed.begin(), d_changed.end(), 0);
         if (depth == 1)
-            face_cc_kernel_2d_iteration << < grid, threads >> > (thrust::raw_pointer_cast(d_labels.data()), thrust::raw_pointer_cast(d_changed.data()), width, height);
+            face_cc_kernel_2d_iteration<uint32_t> << < grid, threads >> > (thrust::raw_pointer_cast(d_labels.data()), thrust::raw_pointer_cast(d_changed.data()), width, height);
         else
-            face_cc_kernel_3d_iteration << < grid, threads >> > (thrust::raw_pointer_cast(d_labels.data()), thrust::raw_pointer_cast(d_changed.data()), width, height, depth);
+            face_cc_kernel_3d_iteration<uint32_t> << < grid, threads >> > (thrust::raw_pointer_cast(d_labels.data()), thrust::raw_pointer_cast(d_changed.data()), width, height, depth);
         cudaDeviceSynchronize();
         cudaMemcpy(&changed, thrust::raw_pointer_cast(d_changed.data()), 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost);
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess) {
             std::cerr << "CUDA error: " << cudaGetErrorString(err) << std::endl;
         }
-        auto duration2 = std::chrono::high_resolution_clock::now() - start2;
-        long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
-        float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
-        printf("face-connected component, iteration %u, sum %u, took %f seconds (%lld microseconds)\n", iteration, changed, s, ms);
+        //auto duration2 = std::chrono::high_resolution_clock::now() - start2;
+        //long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
+        //float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
+        //printf("face-connected component, iteration %u, sum %u, took %f seconds (%lld microseconds)\n", iteration, changed, s, ms);
         iteration++;
         err = cudaGetLastError();
         if (err != cudaSuccess) {
@@ -142,7 +146,7 @@ void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::
     auto duration2 = std::chrono::high_resolution_clock::now() - start;
     long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
     float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
-    printf("total time face connected components took %f seconds (%lld microseconds)\n", s, ms);
+    printf("total time face connected components took %f seconds (%lld microseconds), with number of iterations: %u\n", s, ms, iteration);
 }
 
 //--------------------------------------------------------------
@@ -158,3 +162,13 @@ void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_lab
 
     cudaMemcpy(output_labels, thrust::raw_pointer_cast(d_labels.data()), numel * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 }
+
+template __global__ void face_cc_kernel_2d_iteration(uint8_t* cclabels, uint32_t* changed, int width, int height);
+template __global__ void face_cc_kernel_2d_iteration(uint16_t* cclabels, uint32_t* changed, int width, int height);
+template __global__ void face_cc_kernel_2d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height);
+template __global__ void face_cc_kernel_2d_iteration(float* cclabels, uint32_t* changed, int width, int height);
+
+template __global__ void face_cc_kernel_3d_iteration(uint8_t* cclabels, uint32_t* changed, int width, int height, int depth);
+template __global__ void face_cc_kernel_3d_iteration(uint16_t* cclabels, uint32_t* changed, int width, int height, int depth);
+template __global__ void face_cc_kernel_3d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height, int depth);
+template __global__ void face_cc_kernel_3d_iteration(float* cclabels, uint32_t* changed, int width, int height, int depth);

@@ -393,10 +393,11 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			GL_CHECK_ERRORS();
 		}
 		else {
-			if(m_lineBuffer.empty() || fill)
+			_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
+			/*if (m_lineBuffer.empty() || fill)
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 			else
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);*/
 		}
 	}
 	GL_CHECK_ERRORS();

@@ -127,7 +127,7 @@ void relabel_kernel_gpu(thrust::device_vector<T>& d_labels)
 template <class T>
 void count_occurences_label_kernel_gpu(thrust::device_vector<T>& d_pixels, thrust::device_vector<T>& d_labels, thrust::device_vector<T>& d_counts)
 {
-    thrust::sort(thrust::device, d_pixels.begin(), d_pixels.end());
+    /*thrust::sort(thrust::device, d_pixels.begin(), d_pixels.end());
     thrust::device_vector<T> d_unique = d_pixels;
     const auto end = thrust::unique(d_unique.begin(), d_unique.end());
     int nbUniqueLabels = thrust::distance(d_unique.begin(), end);
@@ -137,12 +137,75 @@ void count_occurences_label_kernel_gpu(thrust::device_vector<T>& d_pixels, thrus
     //thrust::copy(d_unique.begin(), end, std::ostream_iterator<T>(std::cout, ","));
     thrust::equal_to<T> binary_pred;
     thrust::plus<T> binary_op;
-    auto new_end = thrust::reduce_by_key(thrust::device, d_pixels.begin(), d_pixels.end(), ones.begin(), d_labels.begin(), d_counts.begin(), binary_pred, binary_op);
+    auto new_end = thrust::reduce_by_key(thrust::device, d_pixels.begin(), d_pixels.end(), ones.begin(), d_labels.begin(), d_counts.begin(), binary_pred, binary_op);*/
     //std::cout << std::endl;
     //thrust::copy(d_labels.begin(), new_end.first, std::ostream_iterator<T>(std::cout, ","));
     //std::cout << std::endl;
     //thrust::copy(d_counts.begin(), new_end.second, std::ostream_iterator<T>(std::cout, ","));
+    // Sort pixels to prepare for reduce_by_key
+    thrust::sort(thrust::device, d_pixels.begin(), d_pixels.end());
 
+    // Prepare a vector of ones for counting
+    thrust::device_vector<T> ones(d_pixels.size(), 1);
+
+    // Resize output containers to a maximum possible size
+    d_labels.resize(d_pixels.size());
+    d_counts.resize(d_pixels.size());
+
+    // Reduce by key to count occurrences
+    auto new_end = thrust::reduce_by_key(
+        thrust::device,
+        d_pixels.begin(), d_pixels.end(),
+        ones.begin(),
+        d_labels.begin(),
+        d_counts.begin(),
+        thrust::equal_to<T>(),
+        thrust::plus<T>());
+
+    // Resize output vectors to the actual number of unique labels
+    size_t num_unique = thrust::distance(d_labels.begin(), new_end.first);
+    d_labels.resize(num_unique);
+    d_counts.resize(num_unique);
+}
+
+template <class T>
+void remove_small_labels_kernel_gpu(thrust::device_vector<T>& d_pixels, T threshold)
+{
+    thrust::device_vector<T> d_labels(d_pixels.size());
+    thrust::device_vector<T> d_counts(d_pixels.size());
+
+    count_occurences_label_kernel_gpu(d_pixels, d_labels, d_counts);
+
+    // 3. Build LUT: set to new consecutive label if count >= threshold, else 0
+    T max_label = d_labels.back();
+    thrust::device_vector<T> label_lut(max_label + 1, 0);  // initialize with 0 (background)
+
+    // Assign new consecutive labels starting from 1
+    T next_label = 1;
+    for (size_t i = 0; i < num_unique; ++i)
+    {
+        if (d_counts[i] >= threshold)
+        {
+            label_lut[d_labels[i]] = next_label;
+            ++next_label;
+        }
+        else
+        {
+            label_lut[d_labels[i]] = 0; // Remove label: set to background
+        }
+    }
+
+    // 4. Remap d_pixels using the LUT
+    thrust::transform(
+        thrust::device,
+        d_pixels.begin(),
+        d_pixels.end(),
+        d_pixels.begin(),
+        [lut = label_lut.data()] __device__(T pixel_label) {
+        return (pixel_label < static_cast<T>(thrust::distance(lut, lut + pixel_label + 1)))
+            ? lut[pixel_label]
+            : static_cast<T>(0);
+    });
 }
 
 template <class T>
@@ -587,8 +650,8 @@ __global__ void binarize(const T* image, uint8_t* bimage, uint32_t size)
     bimage[tid] = value > T(0) ? 255 : 0;
 }
 
-template <class T>
-__global__ void pad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
+template <class T, class M>
+__global__ void pad2D(const T* src, M* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -598,11 +661,11 @@ __global__ void pad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _
     uint32_t wdest = _w + 2 * _pad;
 
     T val = src[_w * y + x];
-    dest[wdest * (y + _pad) + (x + _pad)] = val;
+    dest[wdest * (y + _pad) + (x + _pad)] = static_cast<M>(val);
 }
 
-template <class T>
-__global__ void pad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
+template <class T, class M>
+__global__ void pad3D(const T* src, M* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -613,11 +676,11 @@ __global__ void pad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _
     uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad;
     uint32_t who = _w * _h, whd = wdest * hdest;
     T val = src[who * z + _w * y + x];
-    dest[whd * (z + _pad) + wdest * (y + _pad) + (x + _pad)] = val;
+    dest[whd * (z + _pad) + wdest * (y + _pad) + (x + _pad)] = static_cast<M>(val);
 }
 
-template <class T>
-__global__ void unpad2D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
+template <class T, class M>
+__global__ void unpad2D(const T* src, M* dest, const uint32_t _w, const uint32_t _h, const uint32_t _pad)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -627,11 +690,11 @@ __global__ void unpad2D(const T* src, T* dest, const uint32_t _w, const uint32_t
     uint32_t wdest = _w + 2 * _pad;
 
     T val = src[wdest * (y + _pad) + (x + _pad)];
-     dest[_w * y + x] = val;
+     dest[_w * y + x] = M(val);
 }
 
-template <class T>
-__global__ void unpad3D(const T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
+template <class T, class M>
+__global__ void unpad3D(const T* src, M* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d, const uint32_t _pad)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -642,15 +705,15 @@ __global__ void unpad3D(const T* src, T* dest, const uint32_t _w, const uint32_t
     uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad;
     uint32_t who = _w * _h, whd = wdest * hdest;
     T val = src[whd * (z + _pad) + wdest * (y + _pad) + (x + _pad)];
-    dest[who * z + _w * y + x] = val;
+    dest[who * z + _w * y + x] = static_cast<M>(val);
 }
 
-template <class T>
-void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
+template <class T, class M>
+void pad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
 {
     uint32_t wdest = _w + 2 * _pad, hdest = _h + 2 * _pad, ddest = _d == 1 ? 1 : _d + 2 * _pad;
     _output.resize(wdest * hdest * ddest);
-    thrust::fill(_output.begin(), _output.end(), T(0));
+    thrust::fill(_output.begin(), _output.end(), M(0));
     dim3 threads = _d == 1 ? dim3(8, 8) : dim3(8, 8, 8);
     dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8)) : dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8), (unsigned int)ceil((float)_d / (float)8));
     if (_d == 1) 
@@ -659,12 +722,12 @@ void pad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _out
         pad3D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), _w, _h, _d, _pad);
 }
 
-template <class T>
-void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
+template <class T, class M>
+void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad)
 {
     uint32_t wdest = _w - 2 * _pad, hdest = _h - 2 * _pad, ddest = _d == 1 ? 1 : _d - 2 * _pad;
     _output.resize(wdest * hdest * ddest);
-    thrust::fill(_output.begin(), _output.end(), T(0));
+    thrust::fill(_output.begin(), _output.end(), M(0));
     dim3 threads = _d == 1 ? dim3(8, 8) : dim3(8, 8, 8);
     dim3 grid = _d == 1 ? dim3((unsigned int)ceil((float)wdest / (float)8), (unsigned int)ceil((float)hdest / (float)8)) : dim3((unsigned int)ceil((float)wdest / (float)8), (unsigned int)ceil((float)hdest / (float)8), (unsigned int)ceil((float)ddest / (float)8));
     if (_d == 1)
@@ -694,13 +757,48 @@ template __global__ void binarize(const uint16_t* image, uint8_t* bimage, uint32
 template __global__ void binarize(const uint32_t* image, uint8_t* bimage, uint32_t size);
 template __global__ void binarize(const float* image, uint8_t* bimage, uint32_t size);
 
+template void count_occurences_label_kernel_gpu(thrust::device_vector<uint8_t>& d_pixels, thrust::device_vector<uint8_t>& d_labels, thrust::device_vector<uint8_t>& d_counts);
+template void count_occurences_label_kernel_gpu(thrust::device_vector<uint16_t>& d_pixels, thrust::device_vector<uint16_t>& d_labels, thrust::device_vector<uint16_t>& d_counts);
+template void count_occurences_label_kernel_gpu(thrust::device_vector<uint32_t>& d_pixels, thrust::device_vector<uint32_t>& d_labels, thrust::device_vector<uint32_t>& d_counts);
+template void count_occurences_label_kernel_gpu(thrust::device_vector<float>& d_pixels, thrust::device_vector<float>& d_labels, thrust::device_vector<float>& d_counts);
+
 template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void pad(const thrust::device_vector<float>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 
-template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void unpad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint16_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void unpad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void unpad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint32_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void unpad(const thrust::device_vector<float>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<float>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<float>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void unpad(const thrust::device_vector<float>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 #endif
