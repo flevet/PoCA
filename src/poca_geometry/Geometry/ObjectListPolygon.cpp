@@ -48,7 +48,14 @@
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
 
 namespace poca::geometry {
-	ObjectListPolygon::ObjectListPolygon(const std::vector <std::vector <std::vector <poca::core::Vec3mf>>>& _allSegments): ObjectListInterface("ObjectListPolygon")
+	ObjectListPolygon::ObjectListPolygon(const float* _xs, const float* _ys, const float* _zs, 
+		const std::vector <std::vector<Polygon_2>>& _polygons, const std::vector <uint32_t>& _locsAllObjects, 
+		const std::vector <uint32_t>& _firstsLocs, const std::vector <uint32_t>& _linkTriangulationFacesToObjects) : ObjectListInterface("ObjectListPolygon", _locsAllObjects, _firstsLocs), m_polygons(_polygons), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
+	{
+		generateFromPolygons();
+	}
+
+	ObjectListPolygon::ObjectListPolygon(const std::vector <std::vector <std::vector <poca::core::Vec3mf>>>& _allSegments) : ObjectListInterface("ObjectListPolygon")
 	{
 		m_polygons.resize(_allSegments.size());
 
@@ -70,34 +77,49 @@ namespace poca::geometry {
 			curObj++;
 		}
 
+		generateFromPolygons();
+	}
+
+	void ObjectListPolygon::generateFromPolygons()
+	{
 		std::vector <float> area;
 
 		m_centroids.resize(m_polygons.size());
 		m_bboxMeshes.resize(m_polygons.size());
 
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 0.f, std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), 0.f);
-		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
-		curObj = 0;
+		uint32_t curObj = 0;
 		for (const auto& polygons : m_polygons) {
 			const auto& polygon = polygons.front();
-			for (const auto& p : polygon.container()) {
-				auto x = p.x(), y = p.y();
-				m_xs.push_back(x);
-				m_ys.push_back(y);
-				if (x < m_bbox[0]) m_bbox[0] = x;
-				if (y < m_bbox[1]) m_bbox[1] = y;
-				if (x > m_bbox[3]) m_bbox[3] = x;
-				if (y > m_bbox[4]) m_bbox[4] = y;
-			}
-			nbPts.push_back(m_xs.size());
 			auto centroid = CGAL::centroid(polygon.vertices_begin(), polygon.vertices_end());
 			auto bbox = CGAL::bounding_box(polygon.vertices_begin(), polygon.vertices_end());
+			m_centroids[curObj].set(centroid.x(), centroid.y(), 0.f);
+			m_bboxMeshes[curObj].set(bbox.xmin(), bbox.ymin(), 0.f, bbox.xmax(), bbox.ymax(), 0.f);
+			m_bbox.addPointBBox(bbox.xmin(), bbox.ymin(), 0.f);
+			m_bbox.addPointBBox(bbox.xmax(), bbox.ymax(), 0.f);
 		}
 
-		points.resize(nbPts.back());
-		std::iota(std::begin(points), std::end(points), 0);
-		m_locs.initialize(points, nbPts);
-		m_outlineLocs = m_locs;
+		if (m_locs.empty()) {
+			std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
+			uint32_t curObj = 0;
+			for (const auto& polygons : m_polygons) {
+				const auto& polygon = polygons.front();
+				for (const auto& p : polygon.container()) {
+					auto x = p.x(), y = p.y();
+					m_xsDuplicate.push_back(x);
+					m_ysDuplicate.push_back(y);
+				}
+				nbPts.push_back(m_xsDuplicate.size());
+			}
+			m_xs = m_xsDuplicate.data();
+			m_ys = m_ysDuplicate.data();
+			m_zs = NULL;
+
+			points.resize(nbPts.back());
+			std::iota(std::begin(points), std::end(points), 0);
+			m_locs.initialize(points, nbPts);
+			m_outlineLocs = m_locs;
+		}
 
 		std::vector <poca::core::Vec3mf> outlines;
 		std::vector <uint32_t> nbSegments{ 0 }; //_mesh.number_of_vertices()
@@ -147,6 +169,7 @@ namespace poca::geometry {
 			CGAL::make_conforming_Gabriel_2(cdt);
 
 			// 5. Collect valid triangles (inside outer, outside holes)
+			size_t currentIndex = 0;
 			for (auto fit = cdt.finite_faces_begin(); fit != cdt.finite_faces_end(); ++fit) {
 				Point_2 p0 = fit->vertex(0)->point();
 				Point_2 p1 = fit->vertex(1)->point();
@@ -169,6 +192,7 @@ namespace poca::geometry {
 						triangles.emplace_back(p0.x(), p0.y(), 0.f);
 						triangles.emplace_back(p1.x(), p1.y(), 0.f);
 						triangles.emplace_back(p2.x(), p2.y(), 0.f);
+						fit->info().m_index = currentIndex++;
 					}
 					fit->info().m_tag = inside_hole ? poca::geometry::OUTSIDE : poca::geometry::INSIDE;
 				}
@@ -190,7 +214,7 @@ namespace poca::geometry {
 		m_axis.resize(m_locs.nbElements());
 		for (size_t n = 0; n < m_locs.nbElements(); n++) {
 			float* ptr = &resPCA[0];
-			factory->computePCA(m_locs, n, m_xs.data(), m_ys.data(), NULL, ptr);
+			factory->computePCA(m_locs, n, m_xs, m_ys, m_zs, ptr);
 			sizes[n] = (resPCA[8] + resPCA[9]) / 2.f;
 			circ[n] = resPCA[7];
 			areas[n] = m_polygons[n].front().area();

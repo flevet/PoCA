@@ -38,10 +38,13 @@
 #include <CGAL/Alpha_shape_cell_base_3.h>
 #include <CGAL/Alpha_shape_vertex_base_3.h>
 #include <CGAL/convex_hull_2.h>
+#include <CGAL/Arrangement_2.h>
+#include <CGAL/Arr_segment_traits_2.h>
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 #include <CGAL/Point_set_3.h>
 #include <CGAL/Poisson_reconstruction_function.h>
 #include <CGAL/Implicit_surface_3.h>
+#include <CGAL/Kernel/global_functions_2.h>
 #endif
 
 #include <General/BasicComponent.hpp>
@@ -56,6 +59,7 @@
 #include "../Interfaces/DelaunayTriangulationFactoryInterface.hpp"
 #include "../Geometry/DelaunayTriangulation.hpp"
 #include "../Geometry/BasicComputation.hpp"
+#include "../Geometry/ObjectListPolygon.hpp"
 #include "../Geometry/ObjectListDelaunay.hpp"
 #include "../Geometry/ObjectListMesh.hpp"
 #include "../Geometry/delaunator.hpp"
@@ -71,10 +75,378 @@ typedef Alpha_shape_3::NT                                Alpha_NT;
 typedef Alpha_shape_3::Cell_handle                          Alpha_Cell_handle;
 typedef Alpha_shape_3::Vertex_handle                        Alpha_Vertex_handle;
 typedef Alpha_shape_3::Facet                             Alpha_Facet;
+typedef CGAL::Arr_segment_traits_2<K_inexact> Traits_2;
+typedef CGAL::Arrangement_2<Traits_2> Arrangement_2;
 
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 typedef CGAL::Point_set_3<Point_3_inexact, Vector_3_inexact> Point_set;
 #endif
+
+/*// Each edge is a pair of vertex indices
+typedef std::pair<size_t, size_t> EdgeObjectPolygon;
+
+// Undirected edge comparison
+EdgeObjectPolygon make_ordered_edge(size_t a, size_t b) {
+	return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+}
+
+// Adjacency list: from vertex index to connected vertex indices
+std::unordered_map<size_t, std::vector<size_t>> build_boundary_graph(const std::vector<EdgeObjectPolygon>& boundary_edges) {
+	std::unordered_map<size_t, std::vector<size_t>> adjacency;
+
+	for (const auto& e : boundary_edges) {
+		size_t a = e.first, b = e.second;
+		adjacency[a].push_back(b);
+		adjacency[b].push_back(a);
+	}
+
+	return adjacency;
+}
+
+std::vector<std::vector<size_t>> extract_loops(const std::unordered_map<size_t, std::vector<size_t>>& adjacency) {
+	std::unordered_set<size_t> visited_vertices;
+	std::vector<std::vector<size_t>> loops;
+
+	std::cout << "***************************" << std::endl;
+	for (const auto& [start, _] : adjacency) {
+		if (visited_vertices.count(start)) continue;
+
+		std::vector<size_t> loop;
+		auto current = start;
+		auto previous = -1;
+		std::cout << "------------------------------" << std::endl;
+		std::cout << start << std::endl;
+		do {
+			loop.push_back(current);
+			visited_vertices.insert(current);
+
+			const auto& neighbors = adjacency.at(current);
+			size_t next = -1;
+
+			// Select the neighbor that is not the previous node
+			for (int neighbor : neighbors) {
+				if (neighbor != previous) {
+					next = neighbor;
+					break;
+				}
+			}
+
+			previous = current;
+			current = next;
+
+			std::cout << current << std::endl;
+		} while (current != start && current != -1);
+		std::cout << "------------------------------" << std::endl;
+
+		if (!loop.empty() && loop.front() == loop.back()) {
+			loop.pop_back();  // Ensure closed loop
+		}
+
+		loops.push_back(loop);
+	}
+	std::cout << "***************************" << std::endl;
+
+	return loops;
+}
+
+void build_polygons(
+	const std::vector<std::vector<size_t>>& loops,
+	std::vector<Polygon_2>& _polygons,
+	const float* _xs, const float* _ys)
+{
+	std::vector<Polygon_2> polygons;
+
+	for (const auto& loop : loops) {
+		Polygon_2 poly;
+		for (auto idx : loop) {
+			poly.push_back(Point_2(_xs[idx], _ys[idx]));
+		}
+
+		_polygons.push_back(poly);
+	}
+}
+
+void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
+	if (polygons.empty()) return;
+
+	// Lambda to compute absolute area
+	auto abs_area = [](const Polygon_2& poly) {
+		return std::abs(poly.area());
+		};
+
+	// Find the iterator to the polygon with the largest area
+	auto outer_it = std::max_element(polygons.begin(), polygons.end(),
+		[&](const Polygon_2& a, const Polygon_2& b) {
+			return abs_area(a) < abs_area(b);
+		});
+
+	// Move the outer polygon to the front (if it's not already there)
+	if (outer_it != polygons.begin()) {
+		std::iter_swap(polygons.begin(), outer_it);
+	}
+
+	// Ensure correct orientation:
+	if (!polygons[0].is_clockwise_oriented()) {
+		polygons[0].reverse_orientation();
+	}
+
+	for (size_t i = 1; i < polygons.size(); ++i) {
+		if (!polygons[i].is_clockwise_oriented()) {
+			polygons[i].reverse_orientation();
+		}
+	}
+}*/
+
+std::unordered_map<size_t, std::vector<size_t>> build_boundary_graph(const std::vector<std::pair<size_t, size_t>>& boundary_edges) {
+	std::unordered_map<size_t, std::vector<size_t>> adjacency;
+
+	for (const auto& e : boundary_edges) {
+		adjacency[e.first].push_back(e.second);
+		adjacency[e.second].push_back(e.first);
+	}
+
+	return adjacency;
+}
+
+/*std::vector<std::vector<size_t>> extract_loops(
+	const std::unordered_map<size_t, std::vector<size_t>>& adjacency,
+	const float* _xs, const float* _ys)
+{
+	std::unordered_set<std::pair<size_t, size_t>, boost::hash<std::pair<size_t, size_t>>> visited_edges;
+	std::vector<std::vector<size_t>> loops;
+
+	for (const auto& [start_vertex, neighbors] : adjacency) {
+		for (auto neighbor : neighbors) {
+
+			auto edge_key = std::minmax(start_vertex, neighbor);
+			if (visited_edges.count(edge_key)) continue;
+
+			std::vector<size_t> loop;
+			loop.push_back(start_vertex);
+
+			int prev = start_vertex;
+			int current = neighbor;
+			loop.push_back(current);
+			visited_edges.insert(edge_key);
+
+			while (current != start_vertex) {
+				const auto& next_neighbors = adjacency.at(current);
+				int next_vertex = -1;
+				double best_turn = -std::numeric_limits<double>::infinity();
+
+				for (int candidate : next_neighbors) {
+					if (candidate == prev) continue;
+
+					Point_2 pprev(_xs[prev], _ys[prev]), pcurrent(_xs[current], _ys[current]), pcandidate(_xs[candidate], _ys[candidate]);
+
+					CGAL::Orientation orient = CGAL::orientation(
+						pprev, pcurrent, pcandidate);
+
+					double score = 0;
+					if (orient == CGAL::LEFT_TURN) score = 1;
+					else if (orient == CGAL::COLLINEAR) score = 0;
+					else score = -1;
+
+					if (score > best_turn) {
+						best_turn = score;
+						next_vertex = candidate;
+					}
+				}
+
+				if (next_vertex == -1) break;  // Dead end, should not happen in a closed boundary.
+
+				prev = current;
+				current = next_vertex;
+				loop.push_back(current);
+
+				std::cout << current << std::endl;
+
+				visited_edges.insert(std::minmax(prev, current));
+			}
+
+			// If the loop isn't closed, close it
+			//if (loop.front() != loop.back()) {
+			//	loop.push_back(loop.front());
+			//}
+			if (loop.front() == loop.back())
+				loop.pop_back();
+
+			loops.push_back(loop);
+		}
+	}
+
+	return loops;
+}*/
+
+enum class WalkDirection { CW, CCW };
+
+double angle_between(const K_inexact::Vector_2& v1, const K_inexact::Vector_2& v2) {
+	double cross = CGAL::to_double(v1.x() * v2.y() - v1.y() * v2.x());
+	double dot = CGAL::to_double(v1.x() * v2.x() + v1.y() * v2.y());
+	return std::atan2(cross, dot);
+}
+
+void remove_duplicate_loops(std::vector<size_t>& loop) {
+	std::unordered_map<size_t, size_t> vertex_to_index;
+
+	for (size_t i = 0; i < loop.size(); ++i) {
+		auto [it, inserted] = vertex_to_index.emplace(loop[i], i);
+		if (!inserted) {
+			// Duplicate found: remove the subpath between it->second + 1 and i
+			size_t first_occurrence = it->second;
+
+			// Erase from loop[first_occurrence + 1] to loop[i] inclusive
+			loop.erase(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+
+			// Reset and start over, because indices changed
+			vertex_to_index.clear();
+			for (size_t j = 0; j < loop.size(); ++j) {
+				vertex_to_index[loop[j]] = j;
+			}
+
+			// Start over in case other duplicates exist later
+			i = first_occurrence;
+		}
+	}
+}
+
+std::vector<std::vector<size_t>> extract_loops(
+	const std::unordered_map<size_t, std::vector<size_t>>& adjacency,
+	const float* _xs, const float* _ys)
+{
+	typedef std::pair<size_t, size_t> Edge;
+	std::unordered_set<Edge, boost::hash<Edge>> visited_edges;
+	std::vector<std::vector<size_t>> loops;
+
+	for (const auto& [start_vertex, neighbors] : adjacency) {
+		for (auto neighbor : neighbors) {
+
+			auto edge_key = std::minmax(start_vertex, neighbor);
+			if (visited_edges.count(edge_key)) continue;
+
+			// Decide initial walk direction based on the first two points
+			Point_2 p0(_xs[start_vertex], _ys[start_vertex]);
+			Point_2 p1(_xs[neighbor], _ys[neighbor]);
+			WalkDirection walk_dir = WalkDirection::CCW; // default
+
+			// Find a third neighbor if possible to decide orientation
+			if (neighbors.size() >= 2) {
+				for (auto n2 : neighbors) {
+					if (n2 == neighbor) continue;
+					Point_2 p2(_xs[n2], _ys[n2]);
+					auto orient = CGAL::orientation(p0, p1, p2);
+					if (orient == CGAL::LEFT_TURN) walk_dir = WalkDirection::CCW;
+					else if (orient == CGAL::RIGHT_TURN) walk_dir = WalkDirection::CW;
+					break;
+				}
+			}
+
+			std::vector<size_t> loop;
+			loop.push_back(start_vertex);
+
+			size_t prev = start_vertex;
+			size_t current = neighbor;
+			loop.push_back(current);
+			visited_edges.insert(edge_key);
+
+			while (current != start_vertex) {
+				const auto& next_neighbors = adjacency.at(current);
+				size_t next_vertex = -1;
+				double best_score = walk_dir == WalkDirection::CCW ?
+					-std::numeric_limits<double>::infinity() :
+					std::numeric_limits<double>::infinity();
+
+				for (size_t candidate : next_neighbors) {
+					if (candidate == prev) continue;
+
+					Point_2 pprev(_xs[prev], _ys[prev]);
+					Point_2 pcurrent(_xs[current], _ys[current]);
+					Point_2 pcandidate(_xs[candidate], _ys[candidate]);
+
+					K_inexact::Vector_2 v1 = pcurrent - pprev;
+					K_inexact::Vector_2 v2 = pcandidate - pcurrent;
+
+					double angle = angle_between(v1, v2);
+
+					if ((walk_dir == WalkDirection::CCW && angle > best_score) ||
+						(walk_dir == WalkDirection::CW && angle < best_score)) {
+						best_score = angle;
+						next_vertex = candidate;
+					}
+				}
+
+				if (next_vertex == size_t(-1)) break;  // Should not happen in a closed loop
+
+				prev = current;
+				current = next_vertex;
+				loop.push_back(current);
+
+				visited_edges.insert(std::minmax(prev, current));
+			}
+
+			if (loop.front() == loop.back())
+				loop.pop_back(); // Loop is already closed by walking
+
+			remove_duplicate_loops(loop);
+
+			loops.push_back(loop);
+		}
+	}
+
+	return loops;
+}
+
+void build_polygons(
+	const std::vector<std::vector<size_t>>& loops,
+	std::vector<Polygon_2>& _polygons,
+	const float* _xs, const float* _ys)
+{
+	std::vector<Polygon_2> polygons;
+
+	for (const auto& loop : loops) {
+		Polygon_2 poly;
+		std::cout << "**************************************" << std::endl;
+		for (auto idx : loop) {
+			poly.push_back(Point_2(_xs[idx], _ys[idx]));
+			std::cout << idx << " - ";
+		}
+		std::cout << std::endl;
+
+		_polygons.push_back(poly);
+	}
+}
+
+void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
+	if (polygons.empty()) return;
+
+	// Lambda to compute absolute area
+	auto abs_area = [](const Polygon_2& poly) {
+		return std::abs(poly.area());
+		};
+
+	// Find the iterator to the polygon with the largest area
+	auto outer_it = std::max_element(polygons.begin(), polygons.end(),
+		[&](const Polygon_2& a, const Polygon_2& b) {
+			return abs_area(a) < abs_area(b);
+		});
+
+	// Move the outer polygon to the front (if it's not already there)
+	if (outer_it != polygons.begin()) {
+		std::iter_swap(polygons.begin(), outer_it);
+	}
+
+	// Ensure correct orientation:
+	if (!polygons[0].is_clockwise_oriented()) {
+		polygons[0].reverse_orientation();
+	}
+
+	for (size_t i = 1; i < polygons.size(); ++i) {
+		if (!polygons[i].is_clockwise_oriented()) {
+			polygons[i].reverse_orientation();
+		}
+	}
+}
+
 
 namespace poca::geometry {
 	ObjectListFactoryInterface* createObjectListFactory()
@@ -164,6 +536,106 @@ namespace poca::geometry {
 		return objs;
 	}
 
+	ObjectListInterface* ObjectListFactory::createObjectList2D_old(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	{
+		const float* xs = _delaunay->getXs();
+		const float* ys = _delaunay->getYs();
+		std::vector <float> zsTmp;
+		if (_delaunay->getZs() == NULL)
+			zsTmp = std::vector<float>(_delaunay->nbPoints(), 0.f);
+		const float* zs = _delaunay->getZs() == NULL ? zsTmp.data() : _delaunay->getZs();
+
+		const std::vector<uint32_t>& triangles = _delaunay->getTriangles();
+		const poca::core::MyArrayUInt32& neighbors = _delaunay->getNeighbors();
+
+		std::vector <uint32_t> linkTriangulationFacesToObjects(_selection.size(), std::numeric_limits<std::uint32_t>::max());
+		std::vector <bool> selectionTriangulationFaces(_selection);
+		if (!_ROIs.empty()) {
+			for (size_t n = 0; n < _delaunay->nbFaces(); n++) {
+				if (!selectionTriangulationFaces[n]) continue;
+				uint32_t i1 = triangles[3 * n], i2 = triangles[3 * n + 1], i3 = triangles[3 * n + 2];
+				bool inside = false;
+				for (size_t i = 0; i < _ROIs.size() && !inside; i++) {
+					bool p1Inside = _ROIs[i]->inside(xs[i1], ys[i1], zs[i1]);
+					bool p2Inside = _ROIs[i]->inside(xs[i2], ys[i2], zs[i2]);
+					bool p3Inside = _ROIs[i]->inside(xs[i3], ys[i3], zs[i3]);
+					inside = p1Inside && p2Inside && p3Inside;
+				}
+				selectionTriangulationFaces[n] = inside;
+			}
+		}
+
+		bool applyCutDistance = _dMax != std::numeric_limits < double >::max();
+		double dMaxSqr = applyCutDistance ? _dMax * _dMax : _dMax;
+		for (size_t n = 0; n < _delaunay->nbFaces(); n++) {
+			if (!selectionTriangulationFaces[n] || !applyCutDistance) continue;
+			uint32_t i1 = triangles[3 * n], i2 = triangles[3 * n + 1], i3 = triangles[3 * n + 2];
+			float d0 = distanceSqr(xs[i1], ys[i1], zs[i1], xs[i2], ys[i2], zs[i2]);
+			float d1 = distanceSqr(xs[i2], ys[i2], zs[i2], xs[i3], ys[i3], zs[i3]);
+			float d2 = distanceSqr(xs[i3], ys[i3], zs[i3], xs[i1], ys[i1], zs[i1]);
+			selectionTriangulationFaces[n] = !(d0 > dMaxSqr || d1 > dMaxSqr || d2 > dMaxSqr);
+		}
+
+		std::vector <bool> originalSelection(selectionTriangulationFaces), selectionLocsForOutline(_delaunay->nbPoints(), false);
+
+		std::vector <std::vector<Polygon_2>> polygons;
+		std::vector <uint32_t> locsAllObjects, firstsLocs;
+		uint32_t currentFirstLocs = 0, currentFirstTriangles = 0, currentFirstOutlines = 0;
+		firstsLocs.push_back(currentFirstLocs);
+		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
+			if (!selectionTriangulationFaces[n]) continue;
+			std::vector <uint32_t> queueTriangles;
+			std::set <uint32_t> locsOfObject;
+			queueTriangles.push_back(n);
+			size_t currentTriangle = 0, sizeQueue = queueTriangles.size();
+
+			std::vector<std::pair<size_t, size_t>> boundary_edges;
+
+			float area = 0.f;
+			while (currentTriangle < sizeQueue) {
+				size_t index = queueTriangles.at(currentTriangle);
+				if (selectionTriangulationFaces[index]) {
+					selectionTriangulationFaces[index] = false;
+					uint32_t i1 = triangles[3 * index], i3 = triangles[3 * index + 1], i2 = triangles[3 * index + 2];
+					locsOfObject.insert(i1);
+					locsOfObject.insert(i2);
+					locsOfObject.insert(i3);
+					poca::core::Vec3mf v1(xs[i1], ys[i1], zs[i1]), v2(xs[i2], ys[i2], zs[i2]), v3(xs[i3], ys[i3], zs[i3]);
+					float sideA = (v1 - v2).length(), sideB = (v1 - v3).length(), sideC = (v2 - v3).length();
+					area += poca::geometry::computeAreaTriangle<float>(sideA, sideB, sideC);
+
+					for (uint32_t i = 0; i < neighbors.nbElementsObject(index); i++) {
+						uint32_t indexNeigh = neighbors.elementIObject(index, i);
+						if (indexNeigh != std::numeric_limits<std::uint32_t>::max() && selectionTriangulationFaces[indexNeigh])
+							queueTriangles.push_back(indexNeigh);
+						if (indexNeigh == std::numeric_limits<std::uint32_t>::max() || !originalSelection[indexNeigh]) {
+							std::array<size_t, 3> edge = _delaunay->getOutline(index, i);
+							boundary_edges.push_back(std::make_pair(edge[0], edge[1]));
+						}
+					}
+					sizeQueue = queueTriangles.size();
+				}
+				currentTriangle++;
+			}
+
+			
+			if (_minNbLocs <= locsOfObject.size() && locsOfObject.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
+				size_t curObject = firstsLocs.size() - 1;
+				for (const uint32_t val : queueTriangles)
+					linkTriangulationFacesToObjects[val] = curObject;
+				currentFirstLocs += locsOfObject.size();
+				firstsLocs.push_back(currentFirstLocs);
+				std::copy(locsOfObject.begin(), locsOfObject.end(), std::back_inserter(locsAllObjects));
+				polygons.push_back(std::vector <Polygon_2>());
+				auto adjacency = build_boundary_graph(boundary_edges);
+				auto loops = extract_loops(adjacency, xs, ys);
+				build_polygons(loops, polygons.back(), xs, ys);
+				reorder_polygons_by_area(polygons.back());
+			}
+		}
+		return locsAllObjects.empty() ? NULL : new ObjectListPolygon(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), polygons, locsAllObjects, firstsLocs, linkTriangulationFacesToObjects);
+	}
+
 	ObjectListInterface* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
@@ -220,6 +692,8 @@ namespace poca::geometry {
 			queueTriangles.push_back(n);
 			size_t currentTriangle = 0, sizeQueue = queueTriangles.size();
 
+			std::vector<std::pair<size_t, size_t>> boundary_edges;
+
 			float area = 0.f;
 			while (currentTriangle < sizeQueue) {
 				size_t index = queueTriangles.at(currentTriangle);
@@ -242,16 +716,34 @@ namespace poca::geometry {
 							queueTriangles.push_back(indexNeigh);
 						if (indexNeigh == std::numeric_limits<std::uint32_t>::max() || !originalSelection[indexNeigh]) {
 							std::array<size_t, 3> edge = _delaunay->getOutline(index, i);
-							outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[0]], ys[edge[0]], zs[edge[0]]));
-							outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[1]], ys[edge[1]], zs[edge[1]]));
+							//outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[0]], ys[edge[0]], zs[edge[0]]));
+							//outlineOfObject.push_back(poca::core::Vec3mf(xs[edge[1]], ys[edge[1]], zs[edge[1]]));
+							boundary_edges.push_back(std::make_pair(edge[0], edge[1]));
 						}
 					}
 					sizeQueue = queueTriangles.size();
 				}
 				currentTriangle++;
 			}
-			
+
 			if (_minNbLocs <= locsOfObject.size() && locsOfObject.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
+				std::vector<Polygon_2> polygons;
+				auto adjacency = build_boundary_graph(boundary_edges);
+				auto loops = extract_loops(adjacency, xs, ys);
+				build_polygons(loops, polygons, xs, ys);
+				for (const auto& polygon : polygons) {
+					const auto& points = polygon.container();
+					std::size_t n = points.size();
+
+					for (std::size_t i = 0; i < n; ++i) {
+						const auto& curr = points[i];
+						const auto& next = points[(i + 1) % n];  // wrap around
+
+						outlineOfObject.emplace_back(curr.x(), curr.y(), 0.f);
+						outlineOfObject.emplace_back(next.x(), next.y(), 0.f);
+					}
+				}
+
 				size_t curObject = firstsLocs.size() - 1;
 				for (const uint32_t val : queueTriangles)
 					linkTriangulationFacesToObjects[val] = curObject;

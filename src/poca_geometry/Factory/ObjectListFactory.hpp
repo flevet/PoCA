@@ -57,6 +57,7 @@ namespace poca::geometry {
 		ObjectListInterface* createObjectListAlreadyIdentified(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max());
 
 		ObjectListInterface* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*>& = std::vector <poca::core::ROIInterface*>());
+		ObjectListInterface* createObjectList2D_old(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
 		ObjectListInterface* createObjectList3D(DelaunayTriangulationInterface*, const std::vector <bool>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());
 
 		//ObjectList* createObjectList2D(DelaunayTriangulationInterface*, const std::vector <uint32_t>&, const float, const size_t, const size_t, const float, const float, const std::vector <poca::core::ROIInterface*> & = std::vector <poca::core::ROIInterface*>());

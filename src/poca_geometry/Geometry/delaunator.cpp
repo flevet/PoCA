@@ -882,6 +882,17 @@ void DelaunayFromDelaunator::trianglesAdjacentToTriangleUint32(std::uint32_t i, 
     }
 }
 
+bool DelaunayFromDelaunator::isConnectedToInfiniteVertex(std::uint32_t i)
+{
+    size_t edgesOfTriangle[] = { 3 * i, 3 * i + 1, 3 * i + 2 };
+    for (size_t e : edgesOfTriangle) {
+        size_t opposite = delaunator->halfedges[e];
+        if (opposite == INVALID_INDEX)
+            return true;
+    }
+    return false;
+}
+
 void DelaunayFromDelaunator::trianglesAdjacentToPointUint32(std::uint32_t i, std::vector <std::uint32_t>& neighs)
 {
     neighs.clear();

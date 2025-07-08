@@ -79,6 +79,7 @@ struct FaceInfo2
 struct FaceInfoTag
 {
 	poca::geometry::DTriangleTag m_tag = poca::geometry::NOT_DONE;
+	size_t m_index;
 };
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K_inexact;

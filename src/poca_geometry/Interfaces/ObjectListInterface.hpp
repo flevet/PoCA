@@ -89,6 +89,10 @@ namespace poca::geometry {
 
 	protected:
 		ObjectListInterface(const std::string& _name) :BasicComponent(_name){}
+		ObjectListInterface(const std::string& _name,
+			const std::vector <uint32_t>& _locsAllObjects,
+			const std::vector <uint32_t>& _firstsLocs) :BasicComponent(_name), m_locs(_locsAllObjects, _firstsLocs) {}
+
 		ObjectListInterface(const std::string& _name, 
 			const std::vector <uint32_t>& _locsAllObjects, 
 			const std::vector <uint32_t>& _firstsLocs, 

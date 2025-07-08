@@ -68,6 +68,7 @@ namespace poca::geometry {
 		virtual void getTrianglesNeighboringPoint(uint32_t, std::vector <uint32_t>&) = 0;
 		virtual void trianglesAdjacentToTriangle(std::uint32_t, std::vector <std::uint32_t>&) = 0;
 		virtual uint32_t indexTriangleOfPoint(const float, const float, const float, const uint32_t = std::numeric_limits<std::uint32_t>::max()) = 0;
+		virtual bool isConnectedToInfiniteVertex(std::uint32_t) { return false; }
 		virtual const std::array<size_t, 3> getOutline(const size_t, const size_t) const = 0;
 		
 	protected:
@@ -84,6 +85,7 @@ namespace poca::geometry {
 		void getTrianglesNeighboringPoint(uint32_t, std::vector <uint32_t>&);
 		void trianglesAdjacentToTriangle(std::uint32_t, std::vector <std::uint32_t>&);
 		uint32_t indexTriangleOfPoint(const float, const float, const float, const uint32_t = std::numeric_limits<std::uint32_t>::max());
+		bool isConnectedToInfiniteVertex(std::uint32_t);
 		const std::array<size_t, 3> getOutline(const size_t, const size_t) const;
 
 		const size_t nbPoints() const { return m_coords->size() / 2; }

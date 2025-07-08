@@ -324,7 +324,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
 	}
 
-	if (outlinePointRendering) {
+	if (outlinePointRendering && !m_outlinePointBuffer.empty()) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_outlinePointBuffer, m_outlineLocsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
@@ -393,11 +393,11 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			GL_CHECK_ERRORS();
 		}
 		else {
-			_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
-			/*if (m_lineBuffer.empty() || fill)
+			//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
+			if (m_lineBuffer.empty() || fill)
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 			else
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);*/
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 		}
 	}
 	GL_CHECK_ERRORS();
@@ -671,21 +671,21 @@ void ObjectListDisplayCommand::createDisplay()
 	m_pointNormalBuffer.updateBuffer(normsB.data());
 	m_idLocsBuffer.updateBuffer(idsLocs.data());
 	
-	std::vector <poca::core::Vec3mf> outlineLocs;
+	/*std::vector <poca::core::Vec3mf> outlineLocs;
 	m_objects->generateOutlineLocs(outlineLocs);
 	m_outlinePointBuffer.generateBuffer(outlineLocs.size(), 3, GL_FLOAT);
 	m_outlineLocsFeatureBuffer.generateBuffer(outlineLocs.size(), 1, GL_FLOAT);
-	m_outlinePointBuffer.updateBuffer(outlineLocs.data());
+	m_outlinePointBuffer.updateBuffer(outlineLocs.data());*/
 
 	const std::vector <poca::core::Vec3mf>& normalOutline = m_objects->getNormalOutlineLocs();
 	if (!normalOutline.empty()) {
-		std::vector <poca::core::Vec3mf> normalsOutLoc(outlineLocs.size() * 2);
+		/*std::vector <poca::core::Vec3mf> normalsOutLoc(outlineLocs.size() * 2);
 		for (size_t n = 0; n < outlineLocs.size(); n++) {
 			normalsOutLoc[2 * n] = outlineLocs[n];
 			normalsOutLoc[2 * n + 1] = outlineLocs[n] + 10.f * normalOutline[n];
 		}
 		m_normalsBuffer.generateBuffer(normalsOutLoc.size(), 3, GL_FLOAT);
-		m_normalsBuffer.updateBuffer(normalsOutLoc.data());
+		m_normalsBuffer.updateBuffer(normalsOutLoc.data());*/
 	}
 
 	//For objects
@@ -823,7 +823,8 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 			float notSelectedValue = m_minOriginalFeature + inter * (3.f / 4.f);
 			m_objects->getLocsFeatureInSelectionHiLow(featureLocs, selection, selectedValue, notSelectedValue);
 			m_objects->getFeatureInSelectionHiLow(featureValues, selection, selectedValue, notSelectedValue);
-			m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
+			if(!m_outlineLocsFeatureBuffer.empty())
+				m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
 			if (!m_lineBuffer.empty())
 				m_objects->getOutlinesFeatureInSelectionHiLow(featureOutlines, selection, selectedValue, notSelectedValue);
 
@@ -833,7 +834,8 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 		else {
 			m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			m_objects->getFeatureInSelection(featureValues, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			if (!m_outlineLocsFeatureBuffer.empty())
+				m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			if (!m_lineBuffer.empty())
 				m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 
@@ -842,7 +844,8 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 		}
 		m_locsFeatureBuffer.updateBuffer(featureLocs.data());
 		m_triangleFeatureBuffer.updateBuffer(featureValues.data());
-		m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
+		if (!m_outlineLocsFeatureBuffer.empty())
+			m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
 		if (!m_lineBuffer.empty())
 			m_lineFeatureBuffer.updateBuffer(featureOutlines.data());
 

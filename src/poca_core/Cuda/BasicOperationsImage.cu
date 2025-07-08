@@ -142,20 +142,22 @@ void count_occurences_label_kernel_gpu(thrust::device_vector<T>& d_pixels, thrus
     //thrust::copy(d_labels.begin(), new_end.first, std::ostream_iterator<T>(std::cout, ","));
     //std::cout << std::endl;
     //thrust::copy(d_counts.begin(), new_end.second, std::ostream_iterator<T>(std::cout, ","));
+     
+    thrust::device_vector <T> d_pixels_tmp(d_pixels);
     // Sort pixels to prepare for reduce_by_key
-    thrust::sort(thrust::device, d_pixels.begin(), d_pixels.end());
+    thrust::sort(thrust::device, d_pixels_tmp.begin(), d_pixels_tmp.end());
 
     // Prepare a vector of ones for counting
-    thrust::device_vector<T> ones(d_pixels.size(), 1);
+    thrust::device_vector<T> ones(d_pixels_tmp.size(), 1);
 
     // Resize output containers to a maximum possible size
-    d_labels.resize(d_pixels.size());
-    d_counts.resize(d_pixels.size());
+    d_labels.resize(d_pixels_tmp.size());
+    d_counts.resize(d_pixels_tmp.size());
 
     // Reduce by key to count occurrences
     auto new_end = thrust::reduce_by_key(
         thrust::device,
-        d_pixels.begin(), d_pixels.end(),
+        d_pixels_tmp.begin(), d_pixels_tmp.end(),
         ones.begin(),
         d_labels.begin(),
         d_counts.begin(),

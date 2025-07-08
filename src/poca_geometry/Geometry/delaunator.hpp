@@ -169,6 +169,7 @@ public:
     void neighborsUint32(std::uint32_t, std::vector <std::uint32_t>&);
     void trianglesAdjacentToTriangleUint32(std::uint32_t, std::vector <std::uint32_t>&);
     void trianglesAdjacentToPointUint32(std::uint32_t, std::vector <std::uint32_t>&);
+    bool isConnectedToInfiniteVertex(std::uint32_t);
     std::uint32_t firstTriangleConnectedToPointUint32(std::uint32_t);
     bool intersectSegments(const double, const double, const double, const double, const double, const double, const double, const double);
 

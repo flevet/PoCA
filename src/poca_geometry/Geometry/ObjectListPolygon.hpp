@@ -45,6 +45,7 @@
 namespace poca::geometry {
 	class ObjectListPolygon : public poca::geometry::ObjectListInterface {
 	public:
+		ObjectListPolygon(const float*, const float*, const float*, const std::vector <std::vector<Polygon_2>>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
 		ObjectListPolygon(const std::vector <std::vector <std::vector <poca::core::Vec3mf>>>&);
 		~ObjectListPolygon();
 
@@ -71,9 +72,10 @@ namespace poca::geometry {
 		inline const uint32_t dimension() const { return 2; }
 		inline const size_t nbObjects() const { return m_polygons.size(); }
 
-		const float* getXs() const { return m_xs.data(); }
-		const float* getYs() const { return m_ys.data(); }
-		const float* getZs() const { return NULL; }
+		inline const std::vector <uint32_t>& getLinkTriangulationFacesToObjects() const { return m_linkTriangulationFacesToObjects; }
+		const float* getXs() const { return m_xs; }
+		const float* getYs() const { return m_ys; }
+		const float* getZs() const { return m_zs; }
 
 		bool hasSkeletons() const { return false; }
 		poca::geometry::ObjectListPolygon* exportFilteredObjects();
@@ -88,6 +90,9 @@ namespace poca::geometry {
 
 	protected:
 
+	private:
+		void generateFromPolygons();
+
 	protected:
 		std::vector <std::vector<Polygon_2>> m_polygons;
 		std::vector <poca::core::Vec3mf> m_centroids;
@@ -95,7 +100,9 @@ namespace poca::geometry {
 		std::vector <Constrained_Delaunay_triangulation_2_tag> m_cdts;
 
 		//For now duplicate information about the points for compatibility with ObjectListInterface and existing plugins
-		std::vector <float> m_xs, m_ys;
+		std::vector <float> m_xsDuplicate, m_ysDuplicate;
+		const float* m_xs, * m_ys, * m_zs;
+		std::vector <uint32_t> m_linkTriangulationFacesToObjects;
 	};
 }
 

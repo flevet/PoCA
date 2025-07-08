@@ -73,6 +73,10 @@ uint32_t relabel_kernel_uint32t_gpu(thrust::device_vector<uint32_t>& d_labels);
 template <class T>
 void identify_holes(const thrust::device_vector <T>& _pixels, thrust::device_vector <T>& _holes, const uint32_t _width, const uint32_t _height, const uint32_t _depth);
 template <class T>
+void map_holes_to_labels(const thrust::device_vector <T>& _pixels, thrust::device_vector <T>& _holes, const uint32_t _width, const uint32_t _height, const uint32_t _depth);
+template <class T>
+void fill_holes_gpu(thrust::device_vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold);
+template <class T>
 void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold);
 
 template <class T, class M>

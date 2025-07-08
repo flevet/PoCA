@@ -105,6 +105,11 @@ namespace poca::geometry {
 		return m_internalDelaunay->findTriangle(_x, _y, _idx);
 	}
 
+	bool DelaunayTriangulation2DDelaunator::isConnectedToInfiniteVertex(std::uint32_t _tri)
+	{
+		return m_internalDelaunay->isConnectedToInfiniteVertex(_tri);
+	}
+
 	const std::array<size_t, 3> DelaunayTriangulation2DDelaunator::getOutline(const size_t _idxTriangle, const size_t _idxNeigh) const
 	{
 		return m_internalDelaunay->getEdge(_idxTriangle, _idxNeigh);

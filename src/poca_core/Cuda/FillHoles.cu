@@ -66,7 +66,7 @@ void identify_holes(const thrust::device_vector <T>& _pixels, thrust::device_vec
 
     unpad<uint32_t, T>(d_holes, _holes, wpad, hpad, dpad, padVal);
 
-     /* {
+     /*{
         std::string name("d:/test.tif");
         TinyTIFFWriterSampleFormat sampleF;
         uint16_t bitPerSample;
@@ -102,7 +102,7 @@ void identify_holes(const thrust::device_vector <T>& _pixels, thrust::device_vec
         int blocks2 = (numel2 + threadsSingle2 - 1) / threadsSingle2;
         TinyTIFFWriterFile* tif = TinyTIFFWriter_open(name.c_str(), bitPerSample, sampleF, 1, w, h, TinyTIFFWriter_Greyscale);
         if (tif) {
-            std::vector <uint16_t> pixImage(wpad * hpad);
+            std::vector <uint16_t> pixImage(w * h);
             thrust::device_vector<uint16_t> dtmp(numel2);
             copy_transfer<T, uint16_t> << <blocks2, threadsSingle2 >> > (thrust::raw_pointer_cast(_holes.data()), thrust::raw_pointer_cast(dtmp.data()), numel2);
             cudaMemcpy(pixImage.data(), thrust::raw_pointer_cast(dtmp.data()), w * h * sizeof(uint16_t), cudaMemcpyDeviceToHost);
@@ -179,16 +179,12 @@ void map_holes_to_labels(const thrust::device_vector <T>& _pixels, thrust::devic
 }
 
 template <class T>
-void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold) {
-    uint32_t padVal = 1;
-    uint32_t wpad = _width + 2 * padVal, hpad = _height + 2 * padVal, dpad = _depth == 1 ? 1 : _depth + 2 * padVal;
-    uint32_t numel = _width * _height * _depth, numelpad = wpad * hpad * dpad;
-    int threadsSingle = 256;
-    int blocks = (numel + threadsSingle - 1) / threadsSingle;
+void fill_holes_gpu(thrust::device_vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold)
+{
+    uint32_t numel = _width * _height * _depth;
+    thrust::device_vector<T> d_holes(numel, 0);
 
-    thrust::device_vector<T> d_image(_pixels), d_holes(numel, 0);
-
-    identify_holes(d_image, d_holes, _width, _height, _depth);
+    identify_holes(_pixels, d_holes, _width, _height, _depth);
 
     thrust::device_vector<T> d_holes_id(d_holes.size());
     thrust::device_vector<T> d_counts(d_holes.size());
@@ -198,10 +194,12 @@ void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint
     thrust::device_vector<uint8_t> label_keep_lut(max_label + 1, 0);  // 0: remove, 1: keep
 
     for (size_t i = 0; i < d_holes_id.size(); ++i)
-        if (d_counts[i] >= _threshold)
+        if (d_counts[i] < _threshold)
             label_keep_lut[d_holes_id[i]] = 1;  // Keep this label
         else
             label_keep_lut[d_holes_id[i]] = 0;  // Remove this label (set to background)
+
+    //thrust::copy(label_keep_lut.begin(), label_keep_lut.end(), std::ostream_iterator<uint32_t>(std::cout, ","));
 
     // Remove labels by setting them to 0 if they're not kept
     thrust::transform(
@@ -210,16 +208,16 @@ void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint
         d_holes.end(),
         d_holes.begin(),
         [lut = label_keep_lut.data()] __device__(T label) {
-        return (label < static_cast<T>(thrust::distance(lut, lut + label + 1)) && lut[label]) ? label : static_cast<T>(0);
+        return lut[label] ? label : static_cast<T>(0);
     });
 
-    map_holes_to_labels(d_image, d_holes, _width, _height, _depth);
+    map_holes_to_labels(_pixels, d_holes, _width, _height, _depth);
 
     thrust::transform(
         thrust::device,
         d_holes.begin(), d_holes.end(),
-        d_image.begin(),
-        d_image.begin(),
+        _pixels.begin(),
+        _pixels.begin(),
         [] __device__(T holeValue, T imageValue) -> T {
         if (holeValue > 0) {
             return holeValue;
@@ -230,8 +228,25 @@ void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint
     }
     );
 
-    cudaMemcpy(_pixels.data(), thrust::raw_pointer_cast(d_holes.data()), _width * _height * _depth * sizeof(T), cudaMemcpyDeviceToHost);
 }
+
+template <class T>
+void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold) {
+    uint32_t numel = _width * _height * _depth;
+    int threadsSingle = 256;
+    int blocks = (numel + threadsSingle - 1) / threadsSingle;
+
+    thrust::device_vector<T> d_image(_pixels);
+
+    fill_holes_gpu(d_image, _width, _height, _depth, _threshold);
+
+    cudaMemcpy(_pixels.data(), thrust::raw_pointer_cast(d_image.data()), _width * _height * _depth * sizeof(T), cudaMemcpyDeviceToHost);
+}
+
+template void fill_holes_gpu(thrust::device_vector<uint8_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint8_t _threshold);
+template void fill_holes_gpu(thrust::device_vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint16_t _threshold);
+template void fill_holes_gpu(thrust::device_vector<uint32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _threshold);
+template void fill_holes_gpu(thrust::device_vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const float _threshold);
 
 template void run_fill_holes_2(std::vector<uint8_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint8_t _threshold);
 template void run_fill_holes_2(std::vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint16_t _threshold);

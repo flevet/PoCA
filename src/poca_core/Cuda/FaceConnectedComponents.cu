@@ -49,11 +49,12 @@ __global__ void face_cc_kernel_2d_iteration(T* cclabels, uint32_t* changed, int 
     T minLabel = ::cuda::std::numeric_limits<T>::max();
     for (auto n = 0; n < 4; n++) {
         int x2 = x + NEIGHBOR_OFFSET_2D_X[n], y2 = y + NEIGHBOR_OFFSET_2D_Y[n];
-        if (x2 >= width || y2 >= height) continue;
-        int idxNeigh = IDX2(y2, x2, width);
-        T val = cclabels[idxNeigh];
-        if (val != 0) {
-            minLabel = min(minLabel, val);
+        if (x2 >= 0 && y2 >= 0 && x2 < width && y2 < height) {
+            int idxNeigh = IDX2(y2, x2, width);
+            T val = cclabels[idxNeigh];
+            if (val != 0) {
+                minLabel = min(minLabel, val);
+            }
         }
     }
     if (minLabel < curVal) {
@@ -91,7 +92,7 @@ __global__ void face_cc_kernel_3d_iteration(T* cclabels, uint32_t* changed, int 
     T minLabel = ::cuda::std::numeric_limits<T>::max();
     for (auto n = 0; n < 6; n++) {
         int x2 = x + NEIGHBOR_OFFSET_3D_X[n], y2 = y + NEIGHBOR_OFFSET_3D_Y[n], z2 = z + NEIGHBOR_OFFSET_3D_Z[n];
-        if (x2 >= width || y2 >= height || z2 >= depth) continue;
+        if (x2 >= 0 && y2 >= 0 && z2 >= 0 && x2 < width && y2 < height && z2 < depth) continue;
         int idxNeigh = IDX3(y2, x2, z2, width, height);
         T val = cclabels[idxNeigh];
         if (val != 0) {
