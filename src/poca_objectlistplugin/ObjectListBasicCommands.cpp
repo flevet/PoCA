@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <glm/gtc/quaternion.hpp>
 #include <math.h>
+#include <tinysplinecxx.h>
 
 #include <QtCore/QString>
 #include <QtCore/QFileInfo>
@@ -49,6 +50,7 @@
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
 #include <Geometry/ObjectListMesh.hpp>
+#include <Geometry/ObjectListPolygon.hpp>
 #include <General/PluginList.hpp>
 #include <Geometry/ObjectLists.hpp>
 
@@ -184,7 +186,170 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		if (objsList)
 			objsList->addObjectList(static_cast<poca::geometry::ObjectListInterface*>(newObjects), *_infos, "ObjectListPlugin");
 	}
+	else if (_infos->nameCommand == "exportHolesObjects") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+
+		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+		if (!opol) return;
+		const std::vector <std::vector<Polygon_2>>& polygons = opol->getPolygons();
+		std::vector <std::vector<Polygon_2>> holes;
+		for (const auto& polygonWithHoles : polygons) {
+			for (auto n = 1; n < polygonWithHoles.size(); n++) {
+				holes.push_back(std::vector <Polygon_2>({ polygonWithHoles[n] }));
+			}
+		}
+		poca::geometry::ObjectListPolygon* holesObject = new poca::geometry::ObjectListPolygon(holes);
+		ObjectListPlugin::m_plugins->addCommands(holesObject);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(holesObject, *_infos, "ObjectListPlugin");
+			ObjectListPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(holesObject, *_infos, "ObjectListPlugin");
+			std::cout << text << std::endl;
+		}
+	}
+	else if (_infos->nameCommand == "fillHolesObjects") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+		float minArea = 0.f;
+		if (_infos->hasParameter("minArea"))
+			minArea = _infos->getParameter<float>("minArea");
+
+		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+		if (!opol) return;
+		const std::vector <std::vector<Polygon_2>>& polygons = opol->getPolygons();
+		std::vector <std::vector<Polygon_2>> newObjects;
+		for (const auto& polygonWithHoles : polygons) {
+			newObjects.push_back(std::vector <Polygon_2>());
+			auto& object = newObjects.back();
+			object.emplace_back(polygonWithHoles.front());
+			for (auto n = 1; n < polygonWithHoles.size(); n++) {
+				if(fabs(polygonWithHoles[n].area()) > minArea)
+					object.emplace_back(polygonWithHoles[n]);
+			}
+		}
+		poca::geometry::ObjectListPolygon* holesObject = new poca::geometry::ObjectListPolygon(newObjects);
+		ObjectListPlugin::m_plugins->addCommands(holesObject);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(holesObject, *_infos, "ObjectListPlugin");
+			ObjectListPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(holesObject, *_infos, "ObjectListPlugin");
+			std::cout << text << std::endl;
+		}
+	}
+	else if (_infos->nameCommand == "smoothObjects") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+		float factor = 2;
+		uint32_t nbSmooth = 3;
+		if (_infos->hasParameter("factorResampling"))
+			factor = _infos->getParameter<float>("factorResampling");
+		if (_infos->hasParameter("nbSmoothSteps"))
+			nbSmooth = _infos->getParameter<uint32_t>("nbSmoothSteps");
+
+		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+		if (!opol) return;
+		const std::vector <std::vector<Polygon_2>>& polygons = opol->getPolygons();
+		std::vector <std::vector<Polygon_2>> newObjects;
+		for (const auto& polygonWithHoles : polygons) {
+			std::cout << __LINE__ << std::endl;
+			newObjects.push_back(std::vector <Polygon_2>());
+			auto& newObject = newObjects.back();
+
+			for (const auto& polygon : polygonWithHoles) {
+				std::vector <poca::core::Vec3mf> smoothedOutline, outlineTmp;
+				std::cout << __LINE__ << std::endl;
+				for (const auto& p : polygon.container())
+					outlineTmp.emplace_back(p.x(), p.y(), 0.f);
+				smoothedOutline.resize(outlineTmp.size());
+				for (auto step = 0; step < nbSmooth; step++) {
+					for (auto n = 0; n < outlineTmp.size(); n++) {
+						auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
+						auto x = (outlineTmp[prec].x() + outlineTmp[n].x() * 2.f + outlineTmp[next].x()) / 4.f;
+						auto y = (outlineTmp[prec].y() + outlineTmp[n].y() * 2.f + outlineTmp[next].y()) / 4.f;
+						smoothedOutline[n].set(x, y, 0.f);
+					}
+					outlineTmp = smoothedOutline;
+				}
+				std::cout << __LINE__ << std::endl;
+
+				std::vector<tinyspline::real> points;
+				for (const auto& pt : smoothedOutline) {
+					points.push_back(pt.x());
+					points.push_back(pt.y());
+				}
+
+				std::cout << __LINE__ << " " << (points.size() / 2) << std::endl;
+
+				if (points.size() > 10 * 2) {
+					try {
+						std::cout << __LINE__ << std::endl;
+						tinyspline::BSpline spline = tinyspline::BSpline(points.size() / 2);
+						std::cout << __LINE__ << std::endl;
+						spline.setControlPoints(points);
+						std::cout << __LINE__ << std::endl;
+						std::vector<tinyspline::real> knotsAct = spline.chordLengths(points.size()).equidistantKnotSeq(( points.size() / 2) * factor);
+						std::vector <poca::core::Vec3mf> vtmp;
+						std::cout << __LINE__ << std::endl;
+						for (auto n = 0; n < knotsAct.size(); n++) {
+							auto pt = spline.eval(knotsAct[n]).resultVec2();
+							if (!vtmp.empty()) {
+								const auto& p = vtmp.back();
+								float d = poca::geometry::distance((float)pt.x(), (float)pt.y(), p.x(), p.y());
+								if (d < 0.001f)
+									continue;
+							}
+							vtmp.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
+						}
+						std::cout << __LINE__ << std::endl;
+						//catmulls[curOutline].push_back(vtmp);
+						//smooth curve
+						std::vector < Point_2 > finalPoints;
+						for (auto n = 0; n < vtmp.size(); n++) {
+							auto prec = n == 0 ? vtmp.size() - 1 : n - 1, next = (n + 1) % vtmp.size();
+							auto x = (vtmp[prec].x() + vtmp[n].x() * 2.f + vtmp[next].x()) / 4.f;
+							auto y = (vtmp[prec].y() + vtmp[n].y() * 2.f + vtmp[next].y()) / 4.f;
+							finalPoints.emplace_back(x, y);
+						}
+						std::cout << __LINE__ << std::endl;
+						newObject.emplace_back(finalPoints.begin(), finalPoints.begin() + finalPoints.size());
+						std::cout << __LINE__ << std::endl;
+					}
+					catch (const std::runtime_error& e) {
+						std::cerr << "Caught runtime_error: " << e.what() << std::endl;
+					}
+				}
+			}
+		}
+		poca::geometry::ObjectListPolygon* objects = new poca::geometry::ObjectListPolygon(newObjects);
+		ObjectListPlugin::m_plugins->addCommands(objects);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objects, *_infos, "ObjectListPlugin");
+			ObjectListPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(objects, *_infos, "ObjectListPlugin");
+			std::cout << text << std::endl;
+		}
+		}
 }
+
 
 poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
