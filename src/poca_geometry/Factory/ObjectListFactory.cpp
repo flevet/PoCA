@@ -286,28 +286,59 @@ double angle_between(const K_inexact::Vector_2& v1, const K_inexact::Vector_2& v
 	return std::atan2(cross, dot);
 }
 
-void remove_duplicate_loops(std::vector<size_t>& loop) {
+std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> remove_duplicate_loops(std::vector<size_t> loop) {
 	std::unordered_map<size_t, size_t> vertex_to_index;
+	std::vector<std::vector<size_t>> removed_loops;
 
-	for (size_t i = 0; i < loop.size(); ++i) {
+	size_t i = 0;
+	while (i < loop.size()) {
 		auto [it, inserted] = vertex_to_index.emplace(loop[i], i);
 		if (!inserted) {
-			// Duplicate found: remove the subpath between it->second + 1 and i
 			size_t first_occurrence = it->second;
 
-			// Erase from loop[first_occurrence + 1] to loop[i] inclusive
-			loop.erase(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+			if (i > first_occurrence + 1) {
+				std::cout << "Duplicate at vertex " << loop[i] << " positions " << first_occurrence << " and " << i << ", loop size: " << loop.size() << std::endl;
+				// Extract the duplicate subloop
+				std::vector<size_t> removed(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+				std::reverse(removed.begin(), removed.end());
+				removed_loops.push_back(removed);
 
-			// Reset and start over, because indices changed
-			vertex_to_index.clear();
-			for (size_t j = 0; j < loop.size(); ++j) {
-				vertex_to_index[loop[j]] = j;
+				// Remove the duplicate segment, leaving one occurrence
+				loop.erase(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+			}
+			else {
+				// Direct duplicate, remove the second occurrence only
+				loop.erase(loop.begin() + i);
 			}
 
-			// Start over in case other duplicates exist later
-			i = first_occurrence;
+			// Start over with a fresh map
+			vertex_to_index.clear();
+			/*for (size_t j = 0; j < loop.size(); ++j) {
+				vertex_to_index[loop[j]] = j;
+			}*/
+
+			i = 0; // Fully restart the scan after a modification
+		}
+		else {
+			++i;
 		}
 	}
+
+	return { loop, removed_loops };
+}
+
+bool have_same_elements(const std::vector<size_t>& a, const std::vector<size_t>& b) {
+	if (a.size() != b.size()) return false;
+
+	std::unordered_map<size_t, size_t> count;
+
+	for (auto x : a) ++count[x];
+	for (auto x : b) {
+		if (!count.count(x)) return false;
+		if (--count[x] == 0) count.erase(x);
+	}
+
+	return count.empty();
 }
 
 std::vector<std::vector<size_t>> extract_loops(
@@ -387,11 +418,40 @@ std::vector<std::vector<size_t>> extract_loops(
 			if (loop.front() == loop.back())
 				loop.pop_back(); // Loop is already closed by walking
 
-			remove_duplicate_loops(loop);
+			auto loopProcessed = remove_duplicate_loops(loop);
 
-			loops.push_back(loop);
+			/*std::cout << "******************" << std::endl;
+			for (auto id : loopProcessed.first)
+				std::cout << id << std::endl;
+
+			std::cout << "******************" << std::endl;*/
+
+			loops.push_back(loopProcessed.first);
+
+			for (auto loopRemoved : loopProcessed.second) {
+				bool loopExistinHoles = false;
+				for (const auto& existingHole : loops) {
+					loopExistinHoles = have_same_elements(loopRemoved, existingHole);
+					if (loopExistinHoles)
+						break;
+				}
+				if (!loopExistinHoles)
+					loops.push_back(loopRemoved);
+			}
 		}
 	}
+
+	/*for (auto l : loops) {
+		std::cout << "*********************************" << std::endl;
+		std::copy(l.begin(), l.end(),
+			std::ostream_iterator<int>(std::cout, " "));
+		std::cout << std::endl;
+		std::cout << "-----------------------------" << std::endl;
+		std::sort(l.begin(), l.end());
+		std::copy(l.begin(), l.end(),
+			std::ostream_iterator<int>(std::cout, " "));
+		std::cout << std::endl;
+	}*/
 
 	return loops;
 }
@@ -405,18 +465,18 @@ void build_polygons(
 
 	for (const auto& loop : loops) {
 		Polygon_2 poly;
-		std::cout << "**************************************" << std::endl;
+		//std::cout << "**************************************" << std::endl;
 		for (auto idx : loop) {
 			poly.push_back(Point_2(_xs[idx], _ys[idx]));
-			std::cout << idx << " - ";
+			//std::cout << idx << " - " << (idx == 8293) << std::endl;
 		}
-		std::cout << std::endl;
+		//std::cout << std::endl;
 
 		_polygons.push_back(poly);
 	}
 }
 
-void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
+/*void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
 	if (polygons.empty()) return;
 
 	// Lambda to compute absolute area
@@ -445,7 +505,29 @@ void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
 			polygons[i].reverse_orientation();
 		}
 	}
+}*/
+void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
+	if (polygons.empty()) return;
+
+	// Lambda to compute absolute area
+	auto abs_area = [](const Polygon_2& poly) {
+		return std::abs(poly.area());
+		};
+
+	// Sort polygons by descending area
+	std::sort(polygons.begin(), polygons.end(),
+		[&](const Polygon_2& a, const Polygon_2& b) {
+			return abs_area(a) > abs_area(b);
+		});
+
+	// Ensure correct orientation:
+	for (size_t i = 0; i < polygons.size(); ++i) {
+		if (!polygons[i].is_clockwise_oriented()) {
+			polygons[i].reverse_orientation();
+		}
+	}
 }
+
 
 
 namespace poca::geometry {
@@ -536,7 +618,7 @@ namespace poca::geometry {
 		return objs;
 	}
 
-	ObjectListInterface* ObjectListFactory::createObjectList2D_old(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
@@ -627,16 +709,21 @@ namespace poca::geometry {
 				firstsLocs.push_back(currentFirstLocs);
 				std::copy(locsOfObject.begin(), locsOfObject.end(), std::back_inserter(locsAllObjects));
 				polygons.push_back(std::vector <Polygon_2>());
+				std::cout << __LINE__ << std::endl;
 				auto adjacency = build_boundary_graph(boundary_edges);
+				std::cout << __LINE__ << std::endl;
 				auto loops = extract_loops(adjacency, xs, ys);
+				std::cout << __LINE__ << std::endl;
 				build_polygons(loops, polygons.back(), xs, ys);
+				std::cout << __LINE__ << std::endl;
 				reorder_polygons_by_area(polygons.back());
+				std::cout << __LINE__ << std::endl;
 			}
 		}
 		return locsAllObjects.empty() ? NULL : new ObjectListPolygon(xs, ys, _delaunay->getZs() == NULL ? NULL : _delaunay->getZs(), polygons, locsAllObjects, firstsLocs, linkTriangulationFacesToObjects);
 	}
 
-	ObjectListInterface* ObjectListFactory::createObjectList2D(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
+	ObjectListInterface* ObjectListFactory::createObjectList2D_old(DelaunayTriangulationInterface* _delaunay, const std::vector <bool>& _selection, const float _dMax, const size_t _minNbLocs, const size_t _maxNbLocs, const float _minArea, const float _maxArea, const std::vector <poca::core::ROIInterface*>& _ROIs)
 	{
 		const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();

@@ -55,6 +55,16 @@ namespace poca::geometry {
 		generateFromPolygons();
 	}
 
+	ObjectListPolygon::ObjectListPolygon(const std::vector <std::vector<Polygon_2>>& _polygons) : ObjectListInterface("ObjectListPolygon"), m_polygons(_polygons)
+	{
+		generateFromPolygons();
+	}
+
+	ObjectListPolygon::ObjectListPolygon(std::vector <std::vector<Polygon_2>>::const_iterator _begin, std::vector <std::vector<Polygon_2>>::const_iterator _end) : ObjectListInterface("ObjectListPolygon"), m_polygons(_begin, _end)
+	{
+		generateFromPolygons();
+	}
+
 	ObjectListPolygon::ObjectListPolygon(const std::vector <std::vector <std::vector <poca::core::Vec3mf>>>& _allSegments) : ObjectListInterface("ObjectListPolygon")
 	{
 		m_polygons.resize(_allSegments.size());
@@ -124,7 +134,9 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf> outlines;
 		std::vector <uint32_t> nbSegments{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& polygons : m_polygons) {
+			std::cout << "****************************************" << std::endl;
 			for (const auto& polygon : polygons) {
+				std::cout << "Aera = " << fabs(polygon.area()) << ", # verts = " << polygon.size() << std::endl;
 				const auto& points = polygon.container();
 				std::size_t n = points.size();
 
@@ -139,67 +151,130 @@ namespace poca::geometry {
 			nbSegments.push_back(outlines.size());
 		}
 		m_outlines.initialize(outlines, nbSegments);
+		std::cout << "****************************************" << std::endl;
 
 		std::vector <poca::core::Vec3mf> triangles;
 		std::vector <uint32_t> nbTriangles{ 0 }; //_mesh.number_of_vertices()
-		for (const auto& polygons : m_polygons) {
-			Polygon_with_holes_2_inexact pwh(polygons.front());
-			for (auto n = 1; n < polygons.size(); n++)
-				pwh.add_hole(polygons[n]);
-
-			m_cdts.push_back(Constrained_Delaunay_triangulation_2_tag());
-			auto& cdt = m_cdts.back();
-			//Constrained_Delaunay_triangulation_2 cdt;
-
-			auto insert_polygon = [&cdt](const Polygon_2& poly) {
-				for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
-					auto next = std::next(it);
-					if (next == poly.vertices_end()) next = poly.vertices_begin();
-					cdt.insert_constraint(*it, *next);
-				}
-				};
-
-			insert_polygon(pwh.outer_boundary());
-			for (auto hit = pwh.holes_begin(); hit != pwh.holes_end(); ++hit) {
-				insert_polygon(*hit);
-			}
-
-			// Optional: refine triangulation
-			CGAL::make_conforming_Delaunay_2(cdt);
-			CGAL::make_conforming_Gabriel_2(cdt);
-
-			// 5. Collect valid triangles (inside outer, outside holes)
-			size_t currentIndex = 0;
-			for (auto fit = cdt.finite_faces_begin(); fit != cdt.finite_faces_end(); ++fit) {
-				Point_2 p0 = fit->vertex(0)->point();
-				Point_2 p1 = fit->vertex(1)->point();
-				Point_2 p2 = fit->vertex(2)->point();
-
-				// Use centroid to check whether triangle is inside area of interest
-				Point_2 centroid((p0.x() + p1.x() + p2.x()) / 3,
-					(p0.y() + p1.y() + p2.y()) / 3);
-
-				// Check that centroid is INSIDE outer boundary and OUTSIDE all holes
-				if (pwh.outer_boundary().bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE) {
-					bool inside_hole = false;
-					for (auto hit = pwh.holes_begin(); hit != pwh.holes_end(); ++hit) {
-						if (hit->bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE) {
-							inside_hole = true;
-							break;
+		if (false) {
+			for (const auto& polygons : m_polygons) {
+				const auto& polygon = polygons.size() >= 2 ? polygons[1] : polygons[0];
+					Constrained_Delaunay_triangulation_2_tag cdt;
+					auto insert_polygon = [&cdt](const Polygon_2& poly) {
+						for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
+							auto next = std::next(it);
+							if (next == poly.vertices_end()) next = poly.vertices_begin();
+							cdt.insert_constraint(*it, *next);
 						}
+						};
+
+					insert_polygon(polygon);
+
+					size_t currentIndex = 0;
+					for (auto fit = cdt.finite_faces_begin(); fit != cdt.finite_faces_end(); ++fit) {
+						Point_2 p0 = fit->vertex(0)->point();
+						Point_2 p1 = fit->vertex(1)->point();
+						Point_2 p2 = fit->vertex(2)->point();
+
+						// Use centroid to check whether triangle is inside area of interest
+						Point_2 centroid((p0.x() + p1.x() + p2.x()) / 3,
+							(p0.y() + p1.y() + p2.y()) / 3);
+
+						bool inside = polygon.bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE;
+
+						if (inside) {
+							triangles.emplace_back(p0.x(), p0.y(), 0.f);
+							triangles.emplace_back(p1.x(), p1.y(), 0.f);
+							triangles.emplace_back(p2.x(), p2.y(), 0.f);
+							fit->info().m_index = currentIndex++;
+						}
+						fit->info().m_tag = inside ? poca::geometry::INSIDE : poca::geometry::OUTSIDE;
 					}
-					if (!inside_hole) {
+				nbTriangles.push_back(triangles.size());
+				std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
+			}
+		}
+		else {
+			for (const auto& polygons : m_polygons) {
+				std::cout << "****************************************\n# polygons " << polygons.size() << std::endl;
+				Polygon_with_holes_2_inexact pwh(polygons.front());
+				for (auto n = 1; n < polygons.size(); n++)
+					pwh.add_hole(polygons[n]);
+
+				std::cout << "-";
+				m_cdts.push_back(Constrained_Delaunay_triangulation_2_tag());
+				auto& cdt = m_cdts.back();
+				//Constrained_Delaunay_triangulation_2 cdt;
+
+				std::cout << "-";
+				auto insert_polygon = [&cdt](const Polygon_2& poly) {
+					for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
+						auto next = std::next(it);
+						if (next == poly.vertices_end()) next = poly.vertices_begin();
+						cdt.insert_constraint(*it, *next);
+					}
+					};
+				std::cout << "-";
+
+				insert_polygon(pwh.outer_boundary());
+				for (auto hit = pwh.holes_begin(); hit != pwh.holes_end(); ++hit) {
+					insert_polygon(*hit);
+				}
+				std::cout << "-";
+
+				// Optional: refine triangulation
+				//CGAL::make_conforming_Delaunay_2(cdt);
+				//CGAL::make_conforming_Gabriel_2(cdt);
+
+				// 5. Collect valid triangles (inside outer, outside holes)
+				std::cout << "\nnumber of faces " << cdt.number_of_faces() << ", # vertices = " << cdt.number_of_vertices() << std::endl;
+				size_t currentIndex = 0;
+				for (auto fit = cdt.finite_faces_begin(); fit != cdt.finite_faces_end(); ++fit) {
+					Point_2 p0 = fit->vertex(0)->point();
+					Point_2 p1 = fit->vertex(1)->point();
+					Point_2 p2 = fit->vertex(2)->point();
+
+					// Use centroid to check whether triangle is inside area of interest
+					Point_2 centroid((p0.x() + p1.x() + p2.x()) / 3,
+						(p0.y() + p1.y() + p2.y()) / 3);
+
+					/*bool inside = pwh.outer_boundary().bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE;
+
+					if (inside) {
 						triangles.emplace_back(p0.x(), p0.y(), 0.f);
 						triangles.emplace_back(p1.x(), p1.y(), 0.f);
 						triangles.emplace_back(p2.x(), p2.y(), 0.f);
 						fit->info().m_index = currentIndex++;
 					}
-					fit->info().m_tag = inside_hole ? poca::geometry::OUTSIDE : poca::geometry::INSIDE;
+					fit->info().m_tag = inside ? poca::geometry::INSIDE : poca::geometry::OUTSIDE;*/
+
+
+
+					// Check that centroid is INSIDE outer boundary and OUTSIDE all holes
+					if (pwh.outer_boundary().bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE) {
+						bool inside_hole = false;
+						for (auto hit = pwh.holes_begin(); hit != pwh.holes_end(); ++hit) {
+							if (hit->bounded_side(centroid) == CGAL::ON_BOUNDED_SIDE) {
+								inside_hole = true;
+								break;
+							}
+						}
+						if (!inside_hole) {
+							triangles.emplace_back(p0.x(), p0.y(), 0.f);
+							triangles.emplace_back(p1.x(), p1.y(), 0.f);
+							triangles.emplace_back(p2.x(), p2.y(), 0.f);
+							fit->info().m_index = currentIndex++;
+						}
+						fit->info().m_tag = inside_hole ? poca::geometry::OUTSIDE : poca::geometry::INSIDE;
+					}
+					else
+						fit->info().m_tag = poca::geometry::OUTSIDE;
 				}
-				else
-					fit->info().m_tag = poca::geometry::OUTSIDE;
+				nbTriangles.push_back(triangles.size());
+				std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
+				//for (const auto& pol : polygons) {
+				//	std::cout << "\t area -> " << fabs(pol.area()) << std::endl;
+				//}
 			}
-			nbTriangles.push_back(triangles.size());
 		}
 		m_triangles.initialize(triangles, nbTriangles);
 
@@ -217,7 +292,9 @@ namespace poca::geometry {
 			factory->computePCA(m_locs, n, m_xs, m_ys, m_zs, ptr);
 			sizes[n] = (resPCA[8] + resPCA[9]) / 2.f;
 			circ[n] = resPCA[7];
-			areas[n] = m_polygons[n].front().area();
+			areas[n] = fabs(m_polygons[n].front().area());
+			for(auto i = 1; i < m_polygons[n].size(); i++)
+				areas[n] -= fabs(m_polygons[n][i].area());;
 		}
 		delete factory;
 
@@ -333,13 +410,6 @@ namespace poca::geometry {
 
 	void ObjectListPolygon::getLocsFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
-		/*_features.clear();
-		int i = 0;
-		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _values[i] : _notSelectedValue);
-			i++;
-		}*/
 		_features.resize(m_locs.nbData());
 
 		size_t cpt = 0;
@@ -353,14 +423,7 @@ namespace poca::geometry {
 
 	void ObjectListPolygon::getLocsFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
-		/*_features.clear();
-		int i = 0;
-		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _selectedValue : _notSelectedValue);
-			i++;
-		}*/
-		_features.resize(m_locs.nbData());
+		_features.resize(m_locs.nbData());// *2);
 
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_locs.nbElements(); i++) {
@@ -373,38 +436,23 @@ namespace poca::geometry {
 
 	void ObjectListPolygon::getOutlinesFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
-		/*_features.clear();
-		int i = 0;
-		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _values[i] : _notSelectedValue);
-			i++;
-		}*/
-		_features.resize(m_locs.nbData());
+		_features.resize(m_outlines.nbData());// *2);
 
 		size_t cpt = 0;
-		for (size_t i = 0; i < m_locs.nbElements(); i++) {
-			for (size_t j = 0; j < m_locs.nbElementsObject(i); j++) {
+		for (size_t i = 0; i < m_outlines.nbElements(); i++) {
+			for (size_t j = 0; j < m_outlines.nbElementsObject(i); j++) {
 				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
 			}
-
 		}
 	}
 
 	void ObjectListPolygon::getOutlinesFeatureInSelectionHiLow(std::vector <float>& _features, const std::vector <bool>& _selection, const float _selectedValue, const float _notSelectedValue) const
 	{
-		/*_features.clear();
-		int i = 0;
-		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _selectedValue : _notSelectedValue);
-			i++;
-		}*/
-		_features.resize(m_locs.nbData());
+		_features.resize(m_outlines.nbData());
 
 		size_t cpt = 0;
-		for (size_t i = 0; i < m_locs.nbElements(); i++) {
-			for (size_t j = 0; j < m_locs.nbElementsObject(i); j++) {
+		for (size_t i = 0; i < m_outlines.nbElements(); i++) {
+			for (size_t j = 0; j < m_outlines.nbElementsObject(i); j++) {
 				_features[cpt++] = _selection[i] ? _selectedValue : _notSelectedValue;
 			}
 
