@@ -47,9 +47,9 @@ namespace poca::plot {
 
 		// Min / Max labels
 		m_minLEdit = new QLineEdit(QString::number(m_minVal, 'f', 3));
-		m_minLEdit->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+		m_minLEdit->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Maximum);
 		m_maxLEdit = new QLineEdit(QString::number(m_maxVal, 'f', 3));
-		m_maxLEdit->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+		m_maxLEdit->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Maximum);
 
 		// Layout: single row
 		QHBoxLayout* hLayout = new QHBoxLayout;
