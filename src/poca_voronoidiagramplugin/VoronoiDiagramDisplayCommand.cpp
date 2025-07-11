@@ -375,13 +375,14 @@ void VoronoiDiagramDisplayCommand::generateFeatureBuffer(poca::core::HistogramIn
 	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(_histogram);
 	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_voronoi->getSelection();
+	const std::vector <bool>& borderLocs = m_voronoi->borderLocalizations();
 	m_minOriginalFeature = _histogram->getMin();
 	m_maxOriginalFeature = _histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
 	std::vector<float> featureLocs(m_voronoi->nbFaces());
 	for (size_t n = 0; n < m_voronoi->nbFaces(); n++)
-		featureLocs[n] = selection[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+		featureLocs[n] = selection[n] && !borderLocs[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
 	m_locsFeatureBuffer.updateBuffer(featureLocs.data());
 
 	if (m_voronoi->hasCells()) {

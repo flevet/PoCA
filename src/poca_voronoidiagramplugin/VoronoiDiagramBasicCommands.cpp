@@ -155,11 +155,12 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 		poca::core::BoundingBox bbox = m_voronoi->boundingBox();
 		float meanD = m_voronoi->averageDensity();
-		const std::vector <float>& feature = m_voronoi->getMyData("density")->getData<float>();
+		const std::vector <float>& feature = m_voronoi->getMyData("density")->getOriginalData<float>();
 		std::vector <bool>& selection = m_voronoi->getSelection();
+		const std::vector <bool>& borderLocs = m_voronoi->borderLocalizations();
 
 		for (size_t n = 0; n < feature.size(); n++)
-			selection[n] = feature[n] >= (factor * meanD);
+			selection[n] = (feature[n] >= (factor * meanD)) && !borderLocs[n];
 
 		m_voronoi->executeCommand(false, "updateFeature");
 	}
