@@ -42,6 +42,7 @@
 #include <General/Command.hpp>
 #include <Geometry/ObjectLists.hpp>
 #include <Geometry/ObjectListMesh.hpp>
+#include <Geometry/ObjectListPolygon.hpp>
 #include <General/Histogram.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
@@ -414,6 +415,16 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_alphaWidget = new poca::plot::CustomizedSlider(0.1f, 1.f, 100);
 	QObject::connect(m_alphaWidget, SIGNAL(changedValue(float)), this, SLOT(actionNeeded(float)));
 
+	QVBoxLayout* layoutCommonActions = new QVBoxLayout;
+	layoutCommonActions->setContentsMargins(1, 1, 1, 1);
+	layoutCommonActions->addWidget(m_lutsWidget);
+	layoutCommonActions->addWidget(m_buttonsWidget);
+	layoutCommonActions->addWidget(m_buttonsWidgetLine2);
+	layoutCommonActions->addWidget(m_alphaWidget);
+	QWidget* commonActionsW = new QWidget;
+	commonActionsW->setLayout(layoutCommonActions);
+
+
 	QHBoxLayout* layoutObjectMesh = new QHBoxLayout;
 	m_computeSkeletonsButton = new QPushButton("Compute skeletons");
 	m_computeSkeletonsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -440,9 +451,66 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_linkToSkeletonRenderButton->setChecked(true);
 	layoutObjectMesh->addWidget(m_linkToSkeletonRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_linkToSkeletonRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	QWidget* omemptyW = new QWidget;
+	omemptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QVBoxLayout* layoutObjectMeshV = new QVBoxLayout;
+	layoutObjectMeshV->addLayout(layoutObjectMesh);
+	layoutObjectMeshV->addWidget(omemptyW);
 	m_widgetObjectMesh = new QWidget;
 	m_widgetObjectMesh->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-	m_widgetObjectMesh->setLayout(layoutObjectMesh);
+	m_widgetObjectMesh->setLayout(layoutObjectMeshV);
+
+	m_exportHolesBtn = new QPushButton("Export holes");
+	m_exportHolesBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_exportHolesBtn, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QLabel* minAreaHolesLbl = new QLabel("Minimum hole area:");
+	minAreaHolesLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_areaHolesFilledLEdit = new QLineEdit("0");
+	m_areaHolesFilledLEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_fillHolesBtn = new QPushButton("Fill holes");
+	m_fillHolesBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_fillHolesBtn, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QLabel* nbSmoothLbl = new QLabel("# smooting steps:");
+	nbSmoothLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_nbSmoothingStepsLbl = new QLineEdit("3");
+	m_nbSmoothingStepsLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QLabel* factorResamplLbl = new QLabel("Resampling factor:");
+	factorResamplLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_factorResamplingLEdit = new QLineEdit("2");
+	m_factorResamplingLEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_smoothObjectsBtn = new QPushButton("Smooth objects");
+	m_smoothObjectsBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_smoothObjectsBtn, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QWidget* opolemptyW = new QWidget;
+	opolemptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QGridLayout* layoutObjectPolygon = new QGridLayout;
+	layoutObjectPolygon->addWidget(m_exportHolesBtn, 0, 0, 1, 1);
+	layoutObjectPolygon->addWidget(minAreaHolesLbl, 1, 0, 1, 1);
+	layoutObjectPolygon->addWidget(m_areaHolesFilledLEdit, 1, 1, 1, 1);
+	layoutObjectPolygon->addWidget(m_fillHolesBtn, 1, 2, 1, 1);
+	layoutObjectPolygon->addWidget(nbSmoothLbl, 2, 0, 1, 1);
+	layoutObjectPolygon->addWidget(m_nbSmoothingStepsLbl, 2, 1, 1, 1);
+	layoutObjectPolygon->addWidget(factorResamplLbl, 2, 2, 1, 1);
+	layoutObjectPolygon->addWidget(m_factorResamplingLEdit, 2, 3, 1, 1);
+	layoutObjectPolygon->addWidget(m_smoothObjectsBtn, 2, 4, 1, 1);
+	layoutObjectPolygon->addWidget(opolemptyW, 3, 0, 1, 5);
+	m_objectPolygonW = new QWidget;
+	m_objectPolygonW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_objectPolygonW->setLayout(layoutObjectPolygon);
+
+
+	m_allActionsTab = new QTabWidget;
+	m_objectPolygonW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_allActionsTab->addTab(commonActionsW, "Common");
+	m_allActionsTab->addTab(m_widgetObjectMesh, "Object mesh");
+	m_allActionsTab->addTab(m_objectPolygonW, "Object polygon");
+	for (auto n = 1; n < m_allActionsTab->count(); n++) {
+		m_allActionsTab->setTabEnabled(n, false);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+		m_allActionsTab->setTabVisible(n, false);
+#endif
+	}
+	m_allActionsTab->setMaximumHeight(200);
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
 	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -462,11 +530,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layout->setContentsMargins(1, 1, 1, 1);
 	layout->setSpacing(1);
 	layout->addWidget(listW);
-	layout->addWidget(m_lutsWidget);
-	layout->addWidget(m_buttonsWidget);
-	layout->addWidget(m_buttonsWidgetLine2);
-	layout->addWidget(m_alphaWidget);
-	layout->addWidget(m_widgetObjectMesh); 
+	layout->addWidget(m_allActionsTab);
 	layout->addWidget(m_delaunayTriangulationFilteringWidget);
 	layout->addWidget(m_tableObjects);
 	this->setLayout(layout);
@@ -637,6 +701,29 @@ void ObjectListsWidget::actionNeeded()
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
+	else if (sender == m_exportHolesBtn) {
+		poca::core::CommandInfo ci(true, "exportHolesObjects");
+		objList->executeCommand(&ci);
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_fillHolesBtn) {
+		bool ok;
+		float tmp = m_areaHolesFilledLEdit->text().toFloat(&ok), minArea = ok ? tmp : 0;
+		poca::core::CommandInfo ci(true, "fillHolesObjects", "minArea", minArea);
+		objList->executeCommand(&ci);
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_smoothObjectsBtn) {
+		bool ok;
+		float tmp = m_factorResamplingLEdit->text().toFloat(&ok), factor = ok ? tmp : 0;
+		uint32_t tmp2 = m_nbSmoothingStepsLbl->text().toUInt(&ok), nbSmooth = ok ? tmp2 : 3;
+		poca::core::CommandInfo ci(true, "smoothObjects", "factorResampling", factor, "nbSmoothSteps", nbSmooth);
+		objList->executeCommand(&ci);
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
+		m_object->notifyAll("updateDisplay");
+		}
 }
 
 void ObjectListsWidget::actionNeeded(int _val)
@@ -965,8 +1052,17 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		m_displayButton->setChecked(selected);
 		m_displayButton->blockSignals(false);
 
+		int currentWidget = m_allActionsTab->count();
 		poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(bci->currentObjectList());
-		m_widgetObjectMesh->setVisible(omesh != NULL);
+		if (omesh)
+			currentWidget = 1;
+		poca::geometry::ObjectListPolygon* opol = dynamic_cast <poca::geometry::ObjectListPolygon*>(bci->currentObjectList());
+		if (opol)
+			currentWidget = 2;
+		for (auto n = 1; n < m_allActionsTab->count(); n++) {
+			m_allActionsTab->setTabEnabled(n, n == currentWidget);
+			m_allActionsTab->setTabVisible(n, n == currentWidget);
+		}
 	}
 }
 

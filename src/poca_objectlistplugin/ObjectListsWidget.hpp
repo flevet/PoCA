@@ -161,6 +161,8 @@ protected:
 	QTabWidget* m_parentTab;
 	poca::core::MediatorWObjectFWidgetInterface* m_mediator;
 
+	QTabWidget* m_allActionsTab;
+	QWidget* m_objectPolygonW, * m_widgetObjectMesh;
 	QWidget* m_lutsWidget, * m_buttonsWidget, * m_buttonsWidgetLine2, * m_delaunayTriangulationFilteringWidget, * m_emptyWidget;
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons;
 	std::pair<QPushButton*, std::string> m_hilowButton;
@@ -168,11 +170,13 @@ protected:
 	QPushButton* m_displayButton, * m_fillButton, * m_pointRenderButton, * m_outlinePointRenderButton, * m_shapeRenderButton, * m_bboxSelectionButton, 
 		* m_exportButton, * m_exportLocsButton, * m_selectionButton, * m_duplicateCentroidsButton, * m_duplicateSelectedObjectsButton,
 		* m_ellipsoidRenderButton, * m_parametersButton, * m_eraseObjectButton, * m_saveSVGButton, * m_saveOBJButton, * m_cullfaceButton, * m_exportFilteredObjsButton, * m_exportObjsROIsButton;
-	QWidget* m_widgetObjectMesh;
 	QPushButton* m_computeSkeletonsButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
 	QSpinBox* m_sizePointSpn;
 
 	poca::plot::CustomizedSlider* m_alphaWidget;
+	QPushButton* m_exportHolesBtn, * m_fillHolesBtn, * m_smoothObjectsBtn;
+	QLineEdit* m_areaHolesFilledLEdit;
+	QLineEdit* m_nbSmoothingStepsLbl, * m_factorResamplingLEdit;
 
 	//QTableWidget* m_tableObjects;
 	QTableView* m_tableObjects;
