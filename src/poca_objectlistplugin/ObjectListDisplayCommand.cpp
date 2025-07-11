@@ -670,7 +670,7 @@ void ObjectListDisplayCommand::createDisplay()
 	m_pointBuffer.updateBuffer(locsB.data());
 	m_pointNormalBuffer.updateBuffer(normsB.data());
 	m_idLocsBuffer.updateBuffer(idsLocs.data());
-	
+
 	/*std::vector <poca::core::Vec3mf> outlineLocs;
 	m_objects->generateOutlineLocs(outlineLocs);
 	m_outlinePointBuffer.generateBuffer(outlineLocs.size(), 3, GL_FLOAT);
