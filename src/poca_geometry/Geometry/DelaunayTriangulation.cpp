@@ -239,8 +239,12 @@ namespace poca::geometry {
 	{
 		_selecFaces.resize(nbFaces());
 		for (size_t n = 0, cpt = 0; n < m_triangles.size(); n += 3, cpt++) {
-			size_t i1 = m_triangles[n], i2 = m_triangles[n + 1], i3 = m_triangles[n + 2];
-			_selecFaces[cpt] = _selecLocs[i1] && _selecLocs[i2] && _selecLocs[i3];
+			if (isConnectedToInfiniteVertex(cpt))
+				_selecFaces[cpt] = false;
+			else {
+				size_t i1 = m_triangles[n], i2 = m_triangles[n + 1], i3 = m_triangles[n + 2];
+				_selecFaces[cpt] = _selecLocs[i1] && _selecLocs[i2] && _selecLocs[i3];
+			}
 		}
 	}
 
@@ -248,9 +252,13 @@ namespace poca::geometry {
 	{
 		_selecFaces.resize(nbFaces());
 		for (size_t n = 0, cpt = 0; n < m_triangles.size(); n += 3, cpt++) {
-			size_t i1 = m_triangles[n], i2 = m_triangles[n + 1], i3 = m_triangles[n + 2];
-			uint32_t o1 = _selecLocs[i1], o2 = _selecLocs[i2], o3 = _selecLocs[i3];
-			_selecFaces[cpt] = (o1 == o2 && o2 == o3 && o1 != std::numeric_limits<uint32_t>::max()) ? o1 : std::numeric_limits<uint32_t>::max();
+			if (isConnectedToInfiniteVertex(cpt))
+				_selecFaces[cpt] = std::numeric_limits<uint32_t>::max();
+			else {
+				size_t i1 = m_triangles[n], i2 = m_triangles[n + 1], i3 = m_triangles[n + 2];
+				uint32_t o1 = _selecLocs[i1], o2 = _selecLocs[i2], o3 = _selecLocs[i3];
+				_selecFaces[cpt] = (o1 == o2 && o2 == o3 && o1 != std::numeric_limits<uint32_t>::max()) ? o1 : std::numeric_limits<uint32_t>::max();
+			}
 		}
 	}
 
