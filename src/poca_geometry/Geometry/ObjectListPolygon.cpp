@@ -134,9 +134,9 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf> outlines;
 		std::vector <uint32_t> nbSegments{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& polygons : m_polygons) {
-			std::cout << "****************************************" << std::endl;
+			//std::cout << "****************************************" << std::endl;
 			for (const auto& polygon : polygons) {
-				std::cout << "Aera = " << fabs(polygon.area()) << ", # verts = " << polygon.size() << std::endl;
+				//std::cout << "Aera = " << fabs(polygon.area()) << ", # verts = " << polygon.size() << std::endl;
 				const auto& points = polygon.container();
 				std::size_t n = points.size();
 
@@ -151,7 +151,7 @@ namespace poca::geometry {
 			nbSegments.push_back(outlines.size());
 		}
 		m_outlines.initialize(outlines, nbSegments);
-		std::cout << "****************************************" << std::endl;
+		//std::cout << "****************************************" << std::endl;
 
 		std::vector <poca::core::Vec3mf> triangles;
 		std::vector <uint32_t> nbTriangles{ 0 }; //_mesh.number_of_vertices()
@@ -190,22 +190,22 @@ namespace poca::geometry {
 						fit->info().m_tag = inside ? poca::geometry::INSIDE : poca::geometry::OUTSIDE;
 					}
 				nbTriangles.push_back(triangles.size());
-				std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
+				//std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
 			}
 		}
 		else {
 			for (const auto& polygons : m_polygons) {
-				std::cout << "****************************************\n# polygons " << polygons.size() << std::endl;
+				//std::cout << "****************************************\n# polygons " << polygons.size() << std::endl;
 				Polygon_with_holes_2_inexact pwh(polygons.front());
 				for (auto n = 1; n < polygons.size(); n++)
 					pwh.add_hole(polygons[n]);
 
-				std::cout << "-";
+				//std::cout << "-";
 				m_cdts.push_back(Constrained_Delaunay_triangulation_2_tag());
 				auto& cdt = m_cdts.back();
 				//Constrained_Delaunay_triangulation_2 cdt;
 
-				std::cout << "-";
+				//std::cout << "-";
 				auto insert_polygon = [&cdt](const Polygon_2& poly) {
 					for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
 						auto next = std::next(it);
@@ -213,20 +213,20 @@ namespace poca::geometry {
 						cdt.insert_constraint(*it, *next);
 					}
 					};
-				std::cout << "-";
+				//std::cout << "-";
 
 				insert_polygon(pwh.outer_boundary());
 				for (auto hit = pwh.holes_begin(); hit != pwh.holes_end(); ++hit) {
 					insert_polygon(*hit);
 				}
-				std::cout << "-";
+				//std::cout << "-";
 
 				// Optional: refine triangulation
 				//CGAL::make_conforming_Delaunay_2(cdt);
 				//CGAL::make_conforming_Gabriel_2(cdt);
 
 				// 5. Collect valid triangles (inside outer, outside holes)
-				std::cout << "\nnumber of faces " << cdt.number_of_faces() << ", # vertices = " << cdt.number_of_vertices() << std::endl;
+				//std::cout << "\nnumber of faces " << cdt.number_of_faces() << ", # vertices = " << cdt.number_of_vertices() << std::endl;
 				size_t currentIndex = 0;
 				for (auto fit = cdt.finite_faces_begin(); fit != cdt.finite_faces_end(); ++fit) {
 					Point_2 p0 = fit->vertex(0)->point();
@@ -270,7 +270,7 @@ namespace poca::geometry {
 						fit->info().m_tag = poca::geometry::OUTSIDE;
 				}
 				nbTriangles.push_back(triangles.size());
-				std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
+				//std::cout << "Polygon, nb triangles " << triangles.size() << std::endl;
 				//for (const auto& pol : polygons) {
 				//	std::cout << "\t area -> " << fabs(pol.area()) << std::endl;
 				//}
