@@ -478,6 +478,12 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	factorResamplLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_factorResamplingLEdit = new QLineEdit("2");
 	m_factorResamplingLEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QLabel* windowSizeSmoothLbl = new QLabel("Smooth window size:");
+	m_windowSizeCbox = new QComboBox;
+	QStringList sizes;
+	sizes << "3" << "5" << "7" << "9" << "11" << "13" << "30";
+	m_windowSizeCbox->insertItems(0, sizes);
+	m_windowSizeCbox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_smoothObjectsBtn = new QPushButton("Smooth objects");
 	m_smoothObjectsBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QObject::connect(m_smoothObjectsBtn, SIGNAL(released()), this, SLOT(actionNeeded()));
@@ -492,8 +498,10 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layoutObjectPolygon->addWidget(m_nbSmoothingStepsLbl, 2, 1, 1, 1);
 	layoutObjectPolygon->addWidget(factorResamplLbl, 2, 2, 1, 1);
 	layoutObjectPolygon->addWidget(m_factorResamplingLEdit, 2, 3, 1, 1);
-	layoutObjectPolygon->addWidget(m_smoothObjectsBtn, 2, 4, 1, 1);
-	layoutObjectPolygon->addWidget(opolemptyW, 3, 0, 1, 5);
+	layoutObjectPolygon->addWidget(windowSizeSmoothLbl, 3, 0, 1, 1);
+	layoutObjectPolygon->addWidget(m_windowSizeCbox, 3, 1, 1, 1);
+	layoutObjectPolygon->addWidget(m_smoothObjectsBtn, 3, 3, 1, 1);
+	layoutObjectPolygon->addWidget(opolemptyW, 4, 0, 1, 5);
 	m_objectPolygonW = new QWidget;
 	m_objectPolygonW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_objectPolygonW->setLayout(layoutObjectPolygon);
@@ -719,7 +727,8 @@ void ObjectListsWidget::actionNeeded()
 		bool ok;
 		float tmp = m_factorResamplingLEdit->text().toFloat(&ok), factor = ok ? tmp : 0;
 		uint32_t tmp2 = m_nbSmoothingStepsLbl->text().toUInt(&ok), nbSmooth = ok ? tmp2 : 3;
-		poca::core::CommandInfo ci(true, "smoothObjects", "factorResampling", factor, "nbSmoothSteps", nbSmooth);
+		uint32_t windowSize = m_windowSizeCbox->currentText().toUInt(&ok);
+		poca::core::CommandInfo ci(true, "smoothObjects", "factorResampling", factor, "nbSmoothSteps", nbSmooth, "windowSize", windowSize);
 		objList->executeCommand(&ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");

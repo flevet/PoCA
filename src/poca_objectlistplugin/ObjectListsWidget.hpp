@@ -177,6 +177,7 @@ protected:
 	QPushButton* m_exportHolesBtn, * m_fillHolesBtn, * m_smoothObjectsBtn;
 	QLineEdit* m_areaHolesFilledLEdit;
 	QLineEdit* m_nbSmoothingStepsLbl, * m_factorResamplingLEdit;
+	QComboBox* m_windowSizeCbox;
 
 	//QTableWidget* m_tableObjects;
 	QTableView* m_tableObjects;

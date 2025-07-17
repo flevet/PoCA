@@ -253,11 +253,18 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 		float factor = 2;
-		uint32_t nbSmooth = 3;
+		uint32_t nbSmooth = 3, windowSize = 3;
 		if (_infos->hasParameter("factorResampling"))
 			factor = _infos->getParameter<float>("factorResampling");
 		if (_infos->hasParameter("nbSmoothSteps"))
 			nbSmooth = _infos->getParameter<uint32_t>("nbSmoothSteps");
+		if (_infos->hasParameter("windowSize"))
+			windowSize = _infos->getParameter<uint32_t>("windowSize");
+
+		std::vector <int> nindices;
+		int half = (int)floor(windowSize / 2);
+		for (auto n = -half; n <= half; n++)
+			nindices.emplace_back(n);
 
 		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
 		if (!opol) return;
@@ -276,10 +283,21 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 				smoothedOutline.resize(outlineTmp.size());
 				for (auto step = 0; step < nbSmooth; step++) {
 					for (auto n = 0; n < outlineTmp.size(); n++) {
-						auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
+						float x = 0, y = 0;
+						for (auto nind : nindices) {
+							auto id = n + nind;
+							if (id < 0)
+								id = outlineTmp.size() + id;
+							else if (id >= outlineTmp.size())
+								id = id % outlineTmp.size();
+							x += outlineTmp[id].x() / (float)windowSize;
+							y += outlineTmp[id].y() / (float)windowSize;
+						}
+						smoothedOutline[n].set(x, y, 0.f);
+						/*auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
 						auto x = (outlineTmp[prec].x() + outlineTmp[n].x() * 2.f + outlineTmp[next].x()) / 4.f;
 						auto y = (outlineTmp[prec].y() + outlineTmp[n].y() * 2.f + outlineTmp[next].y()) / 4.f;
-						smoothedOutline[n].set(x, y, 0.f);
+						smoothedOutline[n].set(x, y, 0.f);*/
 					}
 					outlineTmp = smoothedOutline;
 				}
