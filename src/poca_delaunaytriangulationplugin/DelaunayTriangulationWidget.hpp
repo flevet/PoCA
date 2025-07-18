@@ -70,7 +70,7 @@ protected:
 	QTabWidget* m_parentTab;
 	poca::core::MediatorWObjectFWidgetInterface* m_mediator;
 
-	QWidget* m_lutsWidget, * m_delaunayTriangulationFilteringWidget, * m_emptyWidget;
+	QWidget* m_lutsWidget, * m_lutsWidget2, * m_delaunayTriangulationFilteringWidget, * m_emptyWidget;
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
 	QPushButton* m_displayButton, * m_fillButton, * m_creationFlteredObjectsButton, * m_bboxSelectionButton, * m_applyCutDButton, * m_invertSelectionButton;

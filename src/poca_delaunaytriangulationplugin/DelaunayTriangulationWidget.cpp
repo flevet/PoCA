@@ -56,7 +56,9 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 
 	m_lutsWidget = new QWidget;
 	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	QHBoxLayout* layoutLuts = new QHBoxLayout;
+	m_lutsWidget2 = new QWidget;
+	m_lutsWidget2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	QHBoxLayout* layoutLuts = new QHBoxLayout, * layoutLuts2 = new QHBoxLayout;
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("HotCold2")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("InvFire")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Fire")));
@@ -66,6 +68,12 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlue")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllWhite")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlack")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllRed")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllGreen")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllOrange")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllTomato")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllCyan")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Random")));
 	int maxSize = 20;
 	for (size_t n = 0; n < m_lutButtons.size(); n++) {
 		m_lutButtons[n].first->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -74,13 +82,20 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 		QPixmap pix = QPixmap::fromImage(im);
 		QIcon icon(pix);
 		m_lutButtons[n].first->setIcon(icon);
-		layoutLuts->addWidget(m_lutButtons[n].first);
+
+		if (n < 9)
+			layoutLuts->addWidget(m_lutButtons[n].first);
+		else
+			layoutLuts2->addWidget(m_lutButtons[n].first);
 
 		QObject::connect(m_lutButtons[n].first, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	}
 	QWidget* emptyLuts = new QWidget;
 	emptyLuts->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	layoutLuts->addWidget(emptyLuts);
+	QWidget* emptyLuts2 = new QWidget;
+	emptyLuts2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	layoutLuts2->addWidget(emptyLuts2);
 
 	m_invertSelectionButton = new QPushButton();
 	m_invertSelectionButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -129,6 +144,7 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	QObject::connect(m_displayButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 
 	m_lutsWidget->setLayout(layoutLuts);
+	m_lutsWidget2->setLayout(layoutLuts2);
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
 	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -190,6 +206,7 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	layout->setContentsMargins(1, 1, 1, 1);
 	layout->setSpacing(1);
 	layout->addWidget(m_lutsWidget);
+	layout->addWidget(m_lutsWidget2);
 	layout->addWidget(m_delaunayTriangulationFilteringWidget);
 	layout->addWidget(widgetFilter);
 	layout->addWidget(m_emptyWidget);
