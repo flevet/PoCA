@@ -274,6 +274,8 @@ namespace poca::opengl {
 
 		void recalcModelView(void);
 
+		void updateCameraEyeUp(bool eye, bool up);
+
 	protected:
 		void initializeGL();
 		void paintGL();
@@ -291,7 +293,6 @@ namespace poca::opengl {
 
 	protected:
 		void computeRotation();
-		void updateCameraEyeUp(bool eye, bool up);
 		void computeCameraEye(glm::vec3& eye);
 		void computeCameraUp(glm::vec3& up);
 		void computePointOnSphere(const glm::vec2& point,
