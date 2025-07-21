@@ -284,7 +284,7 @@ void MdiChild::actionNeeded(bool _val)
 		}
 		else {
 			m_timer->stop();
-			std::vector <QImage>& frames = m_camera->getMovieFrames();
+			/*std::vector <QImage>& frames = m_camera->getMovieFrames();
 			QString filename("movie.mp4");
 			filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save movie..."), filename, QString("mp4 files (*.mp4)"), 0, QFileDialog::DontUseNativeDialog);
 			if (filename.isEmpty()) return;
@@ -342,11 +342,6 @@ void MdiChild::actionNeeded(bool _val)
 					}
 				}
 
-				/*QString paddedNumber = QString::number(i).rightJustified(5, '0');
-				bool res = _frames[i].save(QString("e:/poca_") + paddedNumber + QString(".png"));
-				if (!res)
-					std::cout << "Problem with saving" << std::endl;*/
-
 				encoder.submitFrame();
 
 				bool res = _frames[i].save(QString("d:/poca_%1.jpg").arg(QString::number(i + 1).rightJustified(3, '0')));
@@ -370,7 +365,7 @@ void MdiChild::actionNeeded(bool _val)
 			else {
 				std::cout << "Encoding failed\n";
 			}
-			frames.clear();
+			frames.clear();*/
 		}
 	}
 }
