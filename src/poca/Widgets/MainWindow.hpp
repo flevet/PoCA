@@ -154,7 +154,6 @@ public slots:
 	void runMacro(std::vector<nlohmann::json>);
 	void runMacro(std::vector<nlohmann::json>, QStringList);
 	void createObjectFromFeatures(const std::map <std::string, std::vector <float>>&, const std::string, const std::string);
-	void createMovie();
 	void zoomToCropCurrentMdi(poca::core::BoundingBox);
 
 private:
