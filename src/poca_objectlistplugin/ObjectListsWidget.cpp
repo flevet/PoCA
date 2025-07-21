@@ -1070,7 +1070,9 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 			currentWidget = 2;
 		for (auto n = 1; n < m_allActionsTab->count(); n++) {
 			m_allActionsTab->setTabEnabled(n, n == currentWidget);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 			m_allActionsTab->setTabVisible(n, n == currentWidget);
+#endif
 		}
 	}
 }
