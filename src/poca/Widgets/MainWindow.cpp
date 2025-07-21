@@ -59,7 +59,6 @@
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
 #include <QtCore/QMimeData>
-#include <dtv.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -1591,100 +1590,6 @@ void MainWindow::pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
 	if (cam == NULL) return;
 	cam->animateCameraPath(_iterations, _saveImages, _traveling);
-}
-
-void MainWindow::createMovie()
-{
-	QObject* obj = this->sender();
-	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(obj);
-	if (cam == NULL)
-		return;
-
-	QString filename("movie.mp4");
-	filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save movie..."), filename, QString("mp4 files (*.mp4)"), 0, QFileDialog::DontUseNativeDialog);
-	if (filename.isEmpty()) return;
-
-	const std::vector <QImage>& _frames = cam->getMovieFrames();
-
-	atg_dtv::Encoder encoder;
-	atg_dtv::Encoder::VideoSettings settings{};
-
-	// Output filename
-	settings.fname = filename.toStdString();
-
-	// Input dimensions
-	settings.inputWidth = _frames[0].width();
-	settings.inputHeight = _frames[0].height();
-
-	// Output dimensions
-	settings.width = _frames[0].width();
-	settings.height = _frames[0].height();
-
-	// Encoder settings
-	settings.hardwareEncoding = true;
-	settings.bitRate = 16000000;
-	settings.frameRate = 24;
-
-	const int FrameCount = _frames.size();
-
-	auto start = std::chrono::steady_clock::now();
-
-	std::cout << "==============================================\n";
-	std::cout << " Direct to Video (DTV) Sample Application\n\n";
-
-	encoder.run(settings, 2);
-
-	for (int i = 0; i < FrameCount; ++i) {
-		if ((i + 1) % 100 == 0 || i >= FrameCount - 10) {
-			std::cout << "Frame: " << (i + 1) << "/" << FrameCount << "\n";
-		}
-
-		const int sin_i = std::lroundf(255 * (0.5 + 0.5 * std::sin(i * 0.01)));
-
-		atg_dtv::Frame* frame = encoder.newFrame(true);
-		if (frame == nullptr) break;
-		if (encoder.getError() != atg_dtv::Encoder::Error::None) break;
-
-		const int lineWidth = frame->m_lineWidth;
-		for (int y = 0; y < settings.inputHeight; ++y) {
-			uint8_t* row = &frame->m_rgb[y * lineWidth];
-			for (int x = 0; x < settings.inputWidth; ++x) {
-				const int index = x * 3;
-				QRgb color = _frames[i].pixel(x, y);
-				row[index + 0] = qRed(color); // r
-				row[index + 1] = qGreen(color); // g
-				row[index + 2] = qBlue(color);   // b
-			}
-		}
-
-		/*QString paddedNumber = QString::number(i).rightJustified(5, '0');
-		bool res = _frames[i].save(QString("e:/poca_") + paddedNumber + QString(".png"));
-		if (!res)
-			std::cout << "Problem with saving" << std::endl;*/
-
-		encoder.submitFrame();
-
-		bool res = _frames[i].save(QString("d:/poca_%1.jpg").arg(QString::number(i + 1).rightJustified(3, '0')));
-		if (!res)
-			std::cout << "Problem with saving" << std::endl;
-	}
-
-	encoder.commit();
-	encoder.stop();
-
-	auto end = std::chrono::steady_clock::now();
-
-	const double elapsedSeconds =
-		std::chrono::duration<double>(end - start).count();
-
-	std::cout << "==============================================\n";
-	if (encoder.getError() == atg_dtv::Encoder::Error::None) {
-		std::cout << "Encoding took: " << elapsedSeconds << " seconds" << "\n";
-		std::cout << "Real-time framerate: " << FrameCount / elapsedSeconds << " FPS" << "\n";
-	}
-	else {
-		std::cout << "Encoding failed\n";
-	}
 }
 
 void MainWindow::loadPositionCamera()
