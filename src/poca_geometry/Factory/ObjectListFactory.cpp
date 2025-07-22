@@ -53,6 +53,7 @@
 #include <General/Histogram.hpp>
 #include <General/Engine.hpp>
 #include <General/Misc.h>
+#include <Geometry/BasicComputation.hpp>
 
 #include "ObjectListFactory.hpp"
 #include "../Interfaces/DelaunayTriangulationInterface.hpp"
@@ -197,17 +198,6 @@ void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
 	}
 }*/
 
-std::unordered_map<size_t, std::vector<size_t>> build_boundary_graph(const std::vector<std::pair<size_t, size_t>>& boundary_edges) {
-	std::unordered_map<size_t, std::vector<size_t>> adjacency;
-
-	for (const auto& e : boundary_edges) {
-		adjacency[e.first].push_back(e.second);
-		adjacency[e.second].push_back(e.first);
-	}
-
-	return adjacency;
-}
-
 /*std::vector<std::vector<size_t>> extract_loops(
 	const std::unordered_map<size_t, std::vector<size_t>>& adjacency,
 	const float* _xs, const float* _ys)
@@ -278,69 +268,6 @@ std::unordered_map<size_t, std::vector<size_t>> build_boundary_graph(const std::
 	return loops;
 }*/
 
-enum class WalkDirection { CW, CCW };
-
-double angle_between(const K_inexact::Vector_2& v1, const K_inexact::Vector_2& v2) {
-	double cross = CGAL::to_double(v1.x() * v2.y() - v1.y() * v2.x());
-	double dot = CGAL::to_double(v1.x() * v2.x() + v1.y() * v2.y());
-	return std::atan2(cross, dot);
-}
-
-std::pair<std::vector<size_t>, std::vector<std::vector<size_t>>> remove_duplicate_loops(std::vector<size_t> loop) {
-	std::unordered_map<size_t, size_t> vertex_to_index;
-	std::vector<std::vector<size_t>> removed_loops;
-
-	size_t i = 0;
-	while (i < loop.size()) {
-		auto [it, inserted] = vertex_to_index.emplace(loop[i], i);
-		if (!inserted) {
-			size_t first_occurrence = it->second;
-
-			if (i > first_occurrence + 1) {
-				std::cout << "Duplicate at vertex " << loop[i] << " positions " << first_occurrence << " and " << i << ", loop size: " << loop.size() << std::endl;
-				// Extract the duplicate subloop
-				std::vector<size_t> removed(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
-				std::reverse(removed.begin(), removed.end());
-				removed_loops.push_back(removed);
-
-				// Remove the duplicate segment, leaving one occurrence
-				loop.erase(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
-			}
-			else {
-				// Direct duplicate, remove the second occurrence only
-				loop.erase(loop.begin() + i);
-			}
-
-			// Start over with a fresh map
-			vertex_to_index.clear();
-			/*for (size_t j = 0; j < loop.size(); ++j) {
-				vertex_to_index[loop[j]] = j;
-			}*/
-
-			i = 0; // Fully restart the scan after a modification
-		}
-		else {
-			++i;
-		}
-	}
-
-	return { loop, removed_loops };
-}
-
-bool have_same_elements(const std::vector<size_t>& a, const std::vector<size_t>& b) {
-	if (a.size() != b.size()) return false;
-
-	std::unordered_map<size_t, size_t> count;
-
-	for (auto x : a) ++count[x];
-	for (auto x : b) {
-		if (!count.count(x)) return false;
-		if (--count[x] == 0) count.erase(x);
-	}
-
-	return count.empty();
-}
-
 std::vector<std::vector<size_t>> extract_loops(
 	const std::unordered_map<size_t, std::vector<size_t>>& adjacency,
 	const float* _xs, const float* _ys)
@@ -358,7 +285,7 @@ std::vector<std::vector<size_t>> extract_loops(
 			// Decide initial walk direction based on the first two points
 			Point_2 p0(_xs[start_vertex], _ys[start_vertex]);
 			Point_2 p1(_xs[neighbor], _ys[neighbor]);
-			WalkDirection walk_dir = WalkDirection::CCW; // default
+			poca::geometry::WalkDirection walk_dir = poca::geometry::WalkDirection::CCW; // default
 
 			// Find a third neighbor if possible to decide orientation
 			if (neighbors.size() >= 2) {
@@ -366,8 +293,8 @@ std::vector<std::vector<size_t>> extract_loops(
 					if (n2 == neighbor) continue;
 					Point_2 p2(_xs[n2], _ys[n2]);
 					auto orient = CGAL::orientation(p0, p1, p2);
-					if (orient == CGAL::LEFT_TURN) walk_dir = WalkDirection::CCW;
-					else if (orient == CGAL::RIGHT_TURN) walk_dir = WalkDirection::CW;
+					if (orient == CGAL::LEFT_TURN) walk_dir = poca::geometry::WalkDirection::CCW;
+					else if (orient == CGAL::RIGHT_TURN) walk_dir = poca::geometry::WalkDirection::CW;
 					break;
 				}
 			}
@@ -383,7 +310,7 @@ std::vector<std::vector<size_t>> extract_loops(
 			while (current != start_vertex) {
 				const auto& next_neighbors = adjacency.at(current);
 				size_t next_vertex = -1;
-				double best_score = walk_dir == WalkDirection::CCW ?
+				double best_score = walk_dir == poca::geometry::WalkDirection::CCW ?
 					-std::numeric_limits<double>::infinity() :
 					std::numeric_limits<double>::infinity();
 
@@ -397,10 +324,10 @@ std::vector<std::vector<size_t>> extract_loops(
 					K_inexact::Vector_2 v1 = pcurrent - pprev;
 					K_inexact::Vector_2 v2 = pcandidate - pcurrent;
 
-					double angle = angle_between(v1, v2);
+					double angle = poca::geometry::angle_between(v1, v2);
 
-					if ((walk_dir == WalkDirection::CCW && angle > best_score) ||
-						(walk_dir == WalkDirection::CW && angle < best_score)) {
+					if ((walk_dir == poca::geometry::WalkDirection::CCW && angle > best_score) ||
+						(walk_dir == poca::geometry::WalkDirection::CW && angle < best_score)) {
 						best_score = angle;
 						next_vertex = candidate;
 					}
@@ -418,7 +345,7 @@ std::vector<std::vector<size_t>> extract_loops(
 			if (loop.front() == loop.back())
 				loop.pop_back(); // Loop is already closed by walking
 
-			auto loopProcessed = remove_duplicate_loops(loop);
+			auto loopProcessed = poca::geometry::remove_duplicate_loops<size_t>(loop);
 
 			/*std::cout << "******************" << std::endl;
 			for (auto id : loopProcessed.first)
@@ -431,7 +358,7 @@ std::vector<std::vector<size_t>> extract_loops(
 			for (auto loopRemoved : loopProcessed.second) {
 				bool loopExistinHoles = false;
 				for (const auto& existingHole : loops) {
-					loopExistinHoles = have_same_elements(loopRemoved, existingHole);
+					loopExistinHoles = poca::geometry::have_same_elements<size_t>(loopRemoved, existingHole);
 					if (loopExistinHoles)
 						break;
 				}
@@ -475,60 +402,6 @@ void build_polygons(
 		_polygons.push_back(poly);
 	}
 }
-
-/*void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
-	if (polygons.empty()) return;
-
-	// Lambda to compute absolute area
-	auto abs_area = [](const Polygon_2& poly) {
-		return std::abs(poly.area());
-		};
-
-	// Find the iterator to the polygon with the largest area
-	auto outer_it = std::max_element(polygons.begin(), polygons.end(),
-		[&](const Polygon_2& a, const Polygon_2& b) {
-			return abs_area(a) < abs_area(b);
-		});
-
-	// Move the outer polygon to the front (if it's not already there)
-	if (outer_it != polygons.begin()) {
-		std::iter_swap(polygons.begin(), outer_it);
-	}
-
-	// Ensure correct orientation:
-	if (!polygons[0].is_clockwise_oriented()) {
-		polygons[0].reverse_orientation();
-	}
-
-	for (size_t i = 1; i < polygons.size(); ++i) {
-		if (!polygons[i].is_clockwise_oriented()) {
-			polygons[i].reverse_orientation();
-		}
-	}
-}*/
-void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
-	if (polygons.empty()) return;
-
-	// Lambda to compute absolute area
-	auto abs_area = [](const Polygon_2& poly) {
-		return std::abs(poly.area());
-		};
-
-	// Sort polygons by descending area
-	std::sort(polygons.begin(), polygons.end(),
-		[&](const Polygon_2& a, const Polygon_2& b) {
-			return abs_area(a) > abs_area(b);
-		});
-
-	// Ensure correct orientation:
-	for (size_t i = 0; i < polygons.size(); ++i) {
-		if (!polygons[i].is_clockwise_oriented()) {
-			polygons[i].reverse_orientation();
-		}
-	}
-}
-
-
 
 namespace poca::geometry {
 	ObjectListFactoryInterface* createObjectListFactory()
@@ -710,13 +583,13 @@ namespace poca::geometry {
 				std::copy(locsOfObject.begin(), locsOfObject.end(), std::back_inserter(locsAllObjects));
 				polygons.push_back(std::vector <Polygon_2>());
 				std::cout << __LINE__ << std::endl;
-				auto adjacency = build_boundary_graph(boundary_edges);
+				auto adjacency = poca::geometry::build_boundary_graph<size_t>(boundary_edges);
 				std::cout << __LINE__ << std::endl;
 				auto loops = extract_loops(adjacency, xs, ys);
 				std::cout << __LINE__ << std::endl;
 				build_polygons(loops, polygons.back(), xs, ys);
 				std::cout << __LINE__ << std::endl;
-				reorder_polygons_by_area(polygons.back());
+				poca::geometry::reorder_polygons_by_area(polygons.back());
 				std::cout << __LINE__ << std::endl;
 			}
 		}

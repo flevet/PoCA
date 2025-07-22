@@ -221,6 +221,11 @@ typedef boost::graph_traits<Surface_mesh_3_double>::face_descriptor             
 typedef Surface_mesh_3_double::Property_map<face_descriptor, double> Facet_double_map;
 typedef Surface_mesh_3_double::Property_map<face_descriptor, std::size_t> Facet_size_t_map;
 
+namespace poca::geometry {
+	double angle_between(const K_inexact::Vector_2&, const K_inexact::Vector_2&);
+
+	void reorder_polygons_by_area(std::vector<Polygon_2>&);
+}
 
 #endif // CGAL_includes_h__
 

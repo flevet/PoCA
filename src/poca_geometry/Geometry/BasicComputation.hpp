@@ -37,6 +37,8 @@
 #include <General/Vec3.hpp>
 
 namespace poca::geometry {
+	enum class WalkDirection { CW, CCW };
+
 	float computeTriangleArea(const double, const double, const double, const double, const double, const double);
 	float computePolygonArea(poca::core::Vec3md*, const unsigned int);
 	float computePolygonArea2D(poca::core::Vec3md*, const unsigned int);
@@ -51,6 +53,75 @@ namespace poca::geometry {
 	static T computeAreaTriangle(const T _a, const T _b, const T _c) {
 		T semiPerimeter = (_a + _b + _c) / 2.;
 		return (T)sqrt(fabs(semiPerimeter * (semiPerimeter - _a) * (semiPerimeter - _b) * (semiPerimeter - _c)));
+	}
+
+	template <class T>
+	std::unordered_map<T, std::vector<T>> build_boundary_graph(const std::vector<std::pair<T, T>>& boundary_edges) {
+		std::unordered_map<T, std::vector<T>> adjacency;
+
+		for (const auto& e : boundary_edges) {
+			adjacency[e.first].push_back(e.second);
+			adjacency[e.second].push_back(e.first);
+		}
+
+		return adjacency;
+	}
+
+	template <class T>
+	std::pair<std::vector<T>, std::vector<std::vector<T>>> remove_duplicate_loops(std::vector<T> loop) {
+		std::unordered_map<T, T> vertex_to_index;
+		std::vector<std::vector<T>> removed_loops;
+
+		T i = 0;
+		while (i < loop.size()) {
+			auto [it, inserted] = vertex_to_index.emplace(loop[i], i);
+			if (!inserted) {
+				T first_occurrence = it->second;
+
+				if (i > first_occurrence + 1) {
+					std::cout << "Duplicate at vertex " << loop[i] << " positions " << first_occurrence << " and " << i << ", loop size: " << loop.size() << std::endl;
+					// Extract the duplicate subloop
+					std::vector<T> removed(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+					std::reverse(removed.begin(), removed.end());
+					removed_loops.push_back(removed);
+
+					// Remove the duplicate segment, leaving one occurrence
+					loop.erase(loop.begin() + first_occurrence + 1, loop.begin() + i + 1);
+				}
+				else {
+					// Direct duplicate, remove the second occurrence only
+					loop.erase(loop.begin() + i);
+				}
+
+				// Start over with a fresh map
+				vertex_to_index.clear();
+				/*for (size_t j = 0; j < loop.size(); ++j) {
+					vertex_to_index[loop[j]] = j;
+				}*/
+
+				i = 0; // Fully restart the scan after a modification
+			}
+			else {
+				++i;
+			}
+		}
+
+		return { loop, removed_loops };
+	}
+
+	template <class T>
+	bool have_same_elements(const std::vector<T>& a, const std::vector<T>& b) {
+		if (a.size() != b.size()) return false;
+
+		std::unordered_map<T, T> count;
+
+		for (auto x : a) ++count[x];
+		for (auto x : b) {
+			if (!count.count(x)) return false;
+			if (--count[x] == 0) count.erase(x);
+		}
+
+		return count.empty();
 	}
 
 	class BasicComputation {

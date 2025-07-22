@@ -33,6 +33,7 @@
 #include <General/Misc.h>
 
 #include "BasicComputation.hpp"
+#include "CGAL_includes.hpp"
 
 namespace poca::geometry {
 	float computeTriangleArea(const double _x1, const double _y1, const double _x2, const double _y2, const double _x3, const double _y3)
@@ -100,6 +101,34 @@ namespace poca::geometry {
 	{
 		double x = _x1 - _x0, y = _y1 - _y0, z = _z1 - _z0;
 		return x * x + y * y + z * z;
+	}
+
+	double angle_between(const K_inexact::Vector_2& v1, const K_inexact::Vector_2& v2) {
+		double cross = CGAL::to_double(v1.x() * v2.y() - v1.y() * v2.x());
+		double dot = CGAL::to_double(v1.x() * v2.x() + v1.y() * v2.y());
+		return std::atan2(cross, dot);
+	}
+
+	void reorder_polygons_by_area(std::vector<Polygon_2>& polygons) {
+		if (polygons.empty()) return;
+
+		// Lambda to compute absolute area
+		auto abs_area = [](const Polygon_2& poly) {
+			return std::abs(poly.area());
+			};
+
+		// Sort polygons by descending area
+		std::sort(polygons.begin(), polygons.end(),
+			[&](const Polygon_2& a, const Polygon_2& b) {
+				return abs_area(a) > abs_area(b);
+			});
+
+		// Ensure correct orientation:
+		for (size_t i = 0; i < polygons.size(); ++i) {
+			if (!polygons[i].is_clockwise_oriented()) {
+				polygons[i].reverse_orientation();
+			}
+		}
 	}
 
 	double BasicComputation::distance(const double _x0, const double _y0, const double _x1, const double _y1)
