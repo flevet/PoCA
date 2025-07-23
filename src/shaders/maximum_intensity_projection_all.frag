@@ -68,6 +68,7 @@ uniform float current_max[MAX_NB_IMAGES];
 uniform float labelBackground[MAX_NB_IMAGES];
 uniform float featureTextureSize[MAX_NB_IMAGES];
 
+uniform vec3 scale;
 // Ray
 struct Ray {
     vec3 origin;
@@ -184,8 +185,10 @@ void main()
 			float intensity;
 			if(isFloat[curImage])
 				intensity = texture(volume[curImage], position).r;
-			else
-				intensity = float(texture(uvolume[curImage], position).r);
+			else{
+				ivec3 texPos = ivec3(position * vec3(textureSize(uvolume[curImage], 0)));
+				intensity = float(texelFetch(uvolume[curImage], texPos, 0).r);
+			}
 				
 			if(intensity >= maximum_intensity[curImage])
 				maximum_intensity[curImage] = intensity;

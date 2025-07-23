@@ -25,6 +25,11 @@
 
 out vec4 a_colour;
 
+/*void main()
+{
+	a_colour = vec4(1,0, 0, 1);
+}*/
+
 uniform mat4 ModelViewProjectionMatrix;
 uniform mat4 invMVP;
 
@@ -66,8 +71,9 @@ uniform float feature_min;
 uniform float feature_max;
 uniform float current_min;
 uniform float current_max;
-uniform float labelBackground;
 uniform float featureTextureSize;
+
+uniform vec3 scale;
 
 const vec3 OFFSETS[4] = vec3[](
     vec3(1, 0, 0), vec3(-1, 0, 0),
@@ -194,8 +200,10 @@ void main()
 		position = position + ray_step;
 		if(isFloat)
 			labelId = texture(volume, position).r;
-		else
-			labelId = float(texture(uvolume, position).r);
+		else{
+			ivec3 texPos = ivec3(position * vec3(textureSize(uvolume, 0)));
+			labelId = float(texelFetch(uvolume, texPos, 0).r);
+		}
 		
 		if(labelId > 0){
 		//
@@ -232,6 +240,8 @@ void main()
 		discard;
 		
 	gl_FragDepth = maxDepth;
+	
+	//a_colour = vec4(maxDepth,maxDepth, maxDepth, 1);
 	
 	if(scaleLUT){
 		if(valueFeature < current_min) valueFeature = current_min;
