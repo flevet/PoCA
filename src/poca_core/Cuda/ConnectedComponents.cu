@@ -622,12 +622,13 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     AT_ASSERTM((H % 2) == 0, "shape must be a even number");
     AT_ASSERTM((W % 2) == 0, "shape must be a even number");*/
 
-    uint8_t* thresholImage;
-    cudaMalloc((void**)&thresholImage, nbValues * sizeof(uint8_t));
+    //uint8_t* thresholImage;
+    //cudaMalloc((void**)&thresholImage, nbValues * sizeof(uint8_t));
+    thrust::device_vector<uint8_t> thresholImage(nbValues);
     dim3 block(32);
     dim3 grid((nbValues + block.x - 1) / block.x);
     thrust::device_vector<T> imageToThreshold(_pixels, _pixels + nbValues);
-    kernel_threshold << <grid, block >> > (thrust::raw_pointer_cast(imageToThreshold.data()), _thresholdMin, _thresholdMax, thresholImage, nbValues);
+    kernel_threshold << <grid, block >> > (thrust::raw_pointer_cast(imageToThreshold.data()), _thresholdMin, _thresholdMax, thrust::raw_pointer_cast(thresholImage.data()), nbValues);
 
     thrust::device_vector<uint32_t> d_labels(nbValues);
     /*if (D > 1)
@@ -635,8 +636,8 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     else
         connectedComponnets2DLabelingBinary(thresholImage, _w, _h, thrust::raw_pointer_cast(d_labels.data()));*/
     //void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_labels, int width, int height, int depth)
-    run_face_connected_component_pipeline(thresholImage, thrust::raw_pointer_cast(d_labels.data()), _w, _h, _d);
-    cudaFree(thresholImage);
+    face_connected_component(thresholImage, d_labels, _w, _h, _d);
+    //cudaFree(thresholImage);
     relabel_kernel_gpu<uint32_t>(d_labels);
     //if(_d == 1)
     //    fill_all_holes_2(d_labels, _w, _h);
