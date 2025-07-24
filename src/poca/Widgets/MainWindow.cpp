@@ -910,6 +910,8 @@ void MainWindow::addComponentToCurrentMdi()
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	if (engine->loadDataAndAddToObject(filename, obj, &ci)) {
+		poca::core::CommandInfo ci(false, "createDisplay");
+		obj->executeGlobalCommand(&ci);
 		obj->notify("LoadObjCharacteristicsAllWidgets");
 		obj->notifyAll("updateDisplay");
 	}
@@ -924,6 +926,9 @@ void MainWindow::openFile(const QString& _filename, poca::core::CommandInfo* _co
 		return;
 	poca::opengl::CameraInterface* cam = createWindows(obj);
 	engine->addCameraToObject(obj, cam);
+	cam->makeCurrent();
+	poca::core::CommandInfo ci(false, "createDisplay");
+	obj->executeGlobalCommand(&ci);
 }
 
 void MainWindow::duplicate()
