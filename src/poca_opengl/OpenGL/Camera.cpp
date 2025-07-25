@@ -2009,6 +2009,11 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "testRendering") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_handle.vert", "./shaders/test_rendering.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		return nullptr;
 	}
 
