@@ -46,12 +46,18 @@ namespace poca::plot {
 		Q_OBJECT
 
 	public:
-		explicit CustomizedSlider(float _min, float _max, int nbSteps, QWidget* parent = nullptr);
+		explicit CustomizedSlider(float _min, float _max, int nbSteps, bool = true, QWidget* parent = nullptr);
 
 		float value() const;
 		void setMaxValue(float);
 
 		void modifyMinMax();
+
+		void changeMin(float _val) { m_minLEdit->setText(QString::number(_val)); m_minVal = _val; }
+		void changeMax(float _val) { m_maxLEdit->setText(QString::number(_val)); m_maxVal = _val; }
+		void changeMinAndMax(float _valMin, float _valMax) { m_minLEdit->setText(QString::number(_valMin)); m_maxLEdit->setText(QString::number(_valMax)); m_minVal = _valMin; m_maxVal = _valMax; }
+
+		float getValue() const { return m_value; }
 
 	signals:
 		void changedValue(float alpha);
@@ -59,8 +65,7 @@ namespace poca::plot {
 	private:
 		QSlider* m_slider;
 		QLineEdit* m_minLEdit, * m_maxLEdit;
-		float m_minVal;
-		float m_maxVal;
+		float m_minVal, m_maxVal, m_value;
 		int m_sliderSteps;
 
 		void showTooltip(int value);

@@ -33,7 +33,7 @@
 #include "CustomizedSlider.hpp"
 
 namespace poca::plot {
-	CustomizedSlider::CustomizedSlider(float _min, float _max, int nbSteps, QWidget* parent)
+	CustomizedSlider::CustomizedSlider(float _min, float _max, int nbSteps, bool _enableLineEdit, QWidget* parent)
 		: QWidget(parent),
 		m_minVal(_min),
 		m_maxVal(_max),
@@ -48,8 +48,12 @@ namespace poca::plot {
 		// Min / Max labels
 		m_minLEdit = new QLineEdit(QString::number(m_minVal, 'f', 3));
 		m_minLEdit->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Maximum);
+		m_minLEdit->setMaximumWidth(65);
+		m_minLEdit->setEnabled(_enableLineEdit);
 		m_maxLEdit = new QLineEdit(QString::number(m_maxVal, 'f', 3));
 		m_maxLEdit->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Maximum);
+		m_maxLEdit->setEnabled(_enableLineEdit);
+		m_maxLEdit->setMaximumWidth(65);
 
 		// Layout: single row
 		QHBoxLayout* hLayout = new QHBoxLayout;
@@ -104,8 +108,8 @@ namespace poca::plot {
 
 	void CustomizedSlider::emitValueChanged(int value)
 	{
-		float alpha = m_minVal + (m_maxVal - m_minVal) * (float(value) / m_sliderSteps);
-		emit changedValue(alpha);
+		m_value = m_minVal + (m_maxVal - m_minVal) * (float(value) / m_sliderSteps);
+		emit changedValue(m_value);
 	}
 
 	void CustomizedSlider::modifyMinMax()
