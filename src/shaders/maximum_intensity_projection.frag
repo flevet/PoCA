@@ -36,8 +36,6 @@ uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
 uniform vec3 background_colour;
-uniform vec3 material_colour;
-uniform vec3 light_position;
 
 uniform int nb_steps;
 uniform bool applyThreshold;
