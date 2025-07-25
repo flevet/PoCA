@@ -43,6 +43,8 @@
 #include <OpenGL/GLBuffer.hpp>
 
 namespace poca::opengl {
+	enum AttributeArray { POSITION = 0, NORMAL = 1, TEXCOORD = 2 };
+
 	void TEXT_2_PPM_file(const GLuint, int, int, const std::string&);
 
 	class HelperSingleton {
