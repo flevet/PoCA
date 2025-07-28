@@ -1979,6 +1979,11 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "alphaBlendingAll") {
+			Shader* shader = new Shader("./shaders/alpha_blending.vert", "./shaders/alpha_blending_all.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "maximumProjection") {
 			Shader* shader = new Shader("./shaders/maximum_intensity_projection.vert", "./shaders/maximum_intensity_projection.frag");
 			m_shaders[_nameShader] = shader;
