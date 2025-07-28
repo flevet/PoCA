@@ -1262,6 +1262,7 @@ void MainWindow::resetViewer()
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
 	if (cam == NULL) return;
 	cam->resetProjection();
+	m_currentMdi->resetViewer();
 	cam->update();
 }
 

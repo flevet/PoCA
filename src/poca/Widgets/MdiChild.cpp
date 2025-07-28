@@ -390,6 +390,21 @@ void MdiChild::playFrame()
 	m_camera->drawElementsOffscreen();
 }
 
+void MdiChild::resetViewer()
+{
+	poca::core::MyObjectInterface* object = m_widget->getObject();
+	const poca::core::BoundingBox& bbox = object->boundingBox();
+	m_minT = ceil(bbox[2]);
+	m_maxT = ceil(bbox[5] - 1);
+	m_interval = m_maxT - m_minT;
+	m_tSlider->setMinimum(0);
+	m_tSlider->setMaximum(m_interval);
+	if (m_tSlider->value() < m_minT)
+		m_tSlider->setValue(m_minT);
+	if (m_tSlider->value() > m_maxT)
+		m_tSlider->setValue(m_maxT);
+}
+
 MyMdiArea::MyMdiArea( QWidget * _w ):QMdiArea( _w )
 {
 

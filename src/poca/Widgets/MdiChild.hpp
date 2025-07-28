@@ -62,6 +62,8 @@ public:
 	inline poca::opengl::CameraInterface* getWidget() {return m_widget;}
 	QSize sizeHint() const;
 
+	void resetViewer();
+
 signals:
 	void setCurrentMdi( MdiChild * );
 
