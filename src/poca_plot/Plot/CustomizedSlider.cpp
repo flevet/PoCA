@@ -39,6 +39,7 @@ namespace poca::plot {
 		m_maxVal(_max),
 		m_sliderSteps(nbSteps)
 	{
+		m_value = m_minVal + (m_maxVal - m_minVal) * (m_minVal / m_sliderSteps);
 		// Slider
 		m_slider = new QSlider(Qt::Horizontal);
 		m_slider->setRange(0, m_sliderSteps);
