@@ -1815,7 +1815,8 @@ namespace poca::opengl {
 			}
 			poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
 			if (m_insidePatchId == -1) {
-				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this);
+				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
+				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
 				m_object->executeGlobalCommand(&ci);
 				if (ci.hasParameter("bbox")) {
 					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
