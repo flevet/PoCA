@@ -65,6 +65,7 @@ namespace poca::opengl {
 		virtual const float getOriginalDistanceOrtho() const = 0;
 
 		virtual glm::vec3 getWorldCoordinates(const glm::vec2&) = 0;
+		virtual glm::vec3 getWorldCoordinatesWithScaling(const glm::vec2&, const glm::mat4&) = 0;
 		virtual glm::vec2 worldToScreenCoordinates(const glm::vec3&) const = 0;
 
 		virtual void resizeWindow(const int, const int, const int, const int) = 0;

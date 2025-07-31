@@ -1410,6 +1410,7 @@ namespace poca::opengl {
 		emit(clickInsideWindow());
 		makeCurrent();
 		setClickPoint(_event->pos().x(), _event->pos().y());
+		m_tmp = glm::vec2(_event->pos().x(), this->height() - _event->pos().y());
 		m_cropPointBegin.set(_event->pos().x(), this->height() - _event->pos().y(), 0.f);
 		m_cropPointEnd = m_cropPointBegin;
 		poca::core::BoundingBox cropBox(FLT_MAX, FLT_MAX, 0.f, -FLT_MAX, -FLT_MAX, 0.f);
@@ -1458,12 +1459,12 @@ namespace poca::opengl {
 					glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 					x = coords[0];
 					y = coords[1];
+					z = getObject()->dimension() == 3 ? coords[2] : 0.f;
 				}
 			}
 			if(m_ROI != NULL)
 				m_ROI->onClick(x, y, z);
 			m_buttonOn = true;
-			m_tmp = m_clickPoint;
 		}
 		else {
 			if (m_insidePatchId != -1) {
@@ -1585,7 +1586,7 @@ namespace poca::opengl {
 					}
 					else {
 						glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
-						m_ROI->onMove(coords[0], coords[1], coords[2]);
+						m_ROI->onMove(coords[0], coords[1], getObject()->dimension() == 3 ? coords[2] : 0.f);
 					}
 				}
 			}
@@ -1681,7 +1682,18 @@ namespace poca::opengl {
 						}
 						else {
 							glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
-							m_ROI->finalize(coords[0], coords[1], coords[2]);
+							m_ROI->finalize(coords[0], coords[1], getObject()->dimension() == 3 ? coords[2] : 0.f);
+
+							if (m_currentInteractionMode == poca::opengl::Camera::Line2DRoiDefinition) {
+								poca::core::LineROI* lroi = dynamic_cast<poca::core::LineROI*>(m_ROI);
+								if (lroi) {
+									const poca::core::Vec3mf& p1 = lroi->getP1();
+									const poca::core::Vec3mf& p2 = lroi->getP2();
+								
+									poca::core::CommandInfo ci = poca::core::CommandInfo(false, "tracedLineScreenCoordinates", "p1", glm::vec3(m_tmp[0], m_tmp[1], 0), "p2", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
+									m_object->executeGlobalCommand(&ci);
+								}
+							}
 						}
 						m_object->addROI(m_ROI);
 						m_ROI = NULL;
@@ -1816,7 +1828,8 @@ namespace poca::opengl {
 			poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
 			if (m_insidePatchId == -1) {
 				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
-				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
+				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
+				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
 				m_object->executeGlobalCommand(&ci);
 				if (ci.hasParameter("bbox")) {
 					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
@@ -2363,6 +2376,13 @@ namespace poca::opengl {
 	{
 		glm::mat4 projection = m_matrixProjection * m_stateCamera.m_matrixView;
 		return glm::unProject(glm::vec3(_winCoords, 0), m_matrixModel, projection, m_viewport);
+	}
+
+	glm::vec3 Camera::getWorldCoordinatesWithScaling(const glm::vec2& _winCoords, const glm::mat4& _scalingMat)
+	{
+		glm::mat4 projection = m_matrixProjection * m_stateCamera.m_matrixView;
+		glm::mat4 model = m_matrixModel * _scalingMat;
+		return glm::unProject(glm::vec3(_winCoords, 0), model, projection, m_viewport);
 	}
 
 	glm::vec2 Camera::worldToScreenCoordinates(const glm::vec3& _wpos) const

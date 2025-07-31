@@ -679,7 +679,7 @@ void MainWindow::setCameraInteraction(bool _on)
 		cam->setCameraInteraction(_on ? poca::opengl::Camera::Crop : poca::opengl::Camera::None);
 
 		size_t dimension = cam->getObject()->dimension();
-		m_line2DROIAct->setEnabled(!_on || dimension == 2);
+		m_line2DROIAct->setEnabled(true);// !_on || dimension == 2);
 		m_triangle2DROIAct->setEnabled(!_on || dimension == 2);
 		m_circle2DROIAct->setEnabled(!_on || dimension == 2);
 		m_square2DROIAct->setEnabled(!_on || dimension == 2);
@@ -688,7 +688,7 @@ void MainWindow::setCameraInteraction(bool _on)
 
 	if (dimension == 2) return;
 	if (act == m_xyAct) {
-		m_line2DROIAct->setEnabled(_on);
+		m_line2DROIAct->setEnabled(true);// _on);
 		m_triangle2DROIAct->setEnabled(_on);
 		m_circle2DROIAct->setEnabled(_on);
 		m_square2DROIAct->setEnabled(_on);
@@ -712,7 +712,7 @@ void MainWindow::setCameraInteraction(bool _on)
 		}
 	}
 	else {
-		m_line2DROIAct->setEnabled(false);
+		m_line2DROIAct->setEnabled(true);// false);
 		m_triangle2DROIAct->setEnabled(false);
 		m_circle2DROIAct->setEnabled(false);
 		m_square2DROIAct->setEnabled(false);
@@ -1120,7 +1120,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		m_widgetColors->updateGeometry();
 
 		size_t dimension = wobj->dimension();
-		m_line2DROIAct->setEnabled(dimension == 2);
+		m_line2DROIAct->setEnabled(true);// dimension == 2);
 		m_triangle2DROIAct->setEnabled(dimension == 2);
 		m_circle2DROIAct->setEnabled(dimension == 2);
 		m_square2DROIAct->setEnabled(dimension == 2);

@@ -124,8 +124,8 @@ namespace poca::core {
 	{
 		if(m_lineBuffer.empty())
 			m_lineBuffer.generateBuffer(2, 512 * 512, 3, GL_FLOAT);
-		std::vector <poca::core::Vec3mf> pts = { poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), 0.f),
-					poca::core::Vec3mf(m_pts[1].x(), m_pts[1].y(), 0.f) };
+		std::vector <poca::core::Vec3mf> pts = { poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), m_pts[0].z()),
+					poca::core::Vec3mf(m_pts[1].x(), m_pts[1].y(), m_pts[1].z()) };
 		m_lineBuffer.updateBuffer(pts);
 		m_changed = false;
 	}
@@ -164,20 +164,20 @@ namespace poca::core {
 	void LineROI::onClick(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		m_changed = true;
-		m_pts[0].set(_x, _y);
-		m_pts[1].set(_x, _y);
+		m_pts[0].set(_x, _y, _z);
+		m_pts[1].set(_x, _y, _z);
 	}
 
 	void LineROI::onMove(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		m_changed = true;
-		m_pts[1].set(_x, _y);
+		m_pts[1].set(_x, _y, _z);
 	}
 
 	void LineROI::finalize(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		m_changed = true;
-		m_pts[1].set(_x, _y);
+		m_pts[1].set(_x, _y, _z);
 	}
 
 	float LineROI::getFeature(const std::string& _typeFeature) const
@@ -208,7 +208,7 @@ namespace poca::core {
 	{
 		std::string text("LineROI, " + m_name + "\n" + 
 			"[" + std::to_string(m_pts[0].x()) + ", " + std::to_string(m_pts[0].y()) + "]" +
-			"[" + std::to_string(m_pts[1].x()) + ", " + std::to_string(m_pts[2].y()) + "]");
+			"[" + std::to_string(m_pts[1].x()) + ", " + std::to_string(m_pts[1].y()) + "]");
 		return text;
 	}
 
@@ -375,10 +375,10 @@ namespace poca::core {
 		if (m_buffer.empty())
 			m_buffer.generateBuffer(6, 3, GL_FLOAT);
 		std::vector <poca::core::Vec3mf> pts;
-		for (Vec2mf tmp : m_pts)
-			pts.push_back(poca::core::Vec3mf(tmp.x(), tmp.y(), 0.f));
+		for (Vec3mf tmp : m_pts)
+			pts.push_back(poca::core::Vec3mf(tmp.x(), tmp.y(), tmp.z()));
 		if(pts.size() > 2)
-			pts.push_back(poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), 0.f));
+			pts.push_back(poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), m_pts[0].z()));
 
 		std::vector <uint32_t> indices(pts.size());
 		std::iota(std::begin(indices), std::end(indices), 0);
@@ -425,7 +425,7 @@ namespace poca::core {
 	bool PolylineROI::inside(const float _x, const float _y, const float _z) const
 	{
 		float epsilon = 0.00001;
-		for (std::vector < Vec2mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++) {
+		for (std::vector < Vec3mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++) {
 			float d = poca::geometry::distance(_x, _y, it->x(), it->y());
 			if (d < epsilon)
 				return true;
@@ -433,10 +433,10 @@ namespace poca::core {
 
 		int cn = 0;// the  crossing number counter
 
-		std::vector < Vec2mf >::const_iterator prec = m_pts.end();
+		std::vector < Vec3mf >::const_iterator prec = m_pts.end();
 		prec--;
 		// loop through all edges of the polygon
-		for (std::vector < Vec2mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
+		for (std::vector < Vec3mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
 			if (((prec->y() <= _y) && (current->y() > _y))     // an upward crossing
 				|| ((prec->y() > _y) && (current->y() <= _y))) { // a downward crossing
 					// compute  the actual edge-ray intersect x-coordinate
@@ -452,31 +452,31 @@ namespace poca::core {
 	void PolylineROI::onClick(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		m_changed = true;
-		m_pts.push_back(Vec2md(_x, _y));
+		m_pts.push_back(Vec3mf(_x, _y, _z));
 	}
 
 	void PolylineROI::onMove(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		if (m_pts.size() < 3) return;
 		m_changed = true;
-		m_pts.back().set(_x, _y);
+		m_pts.back().set(_x, _y, _z);
 	}
 
 	void PolylineROI::finalize(const float _x, const float _y, const float _z, const bool _modify)
 	{
 		if (m_pts.size() < 3) return;
 		m_changed = true;
-		m_pts.back().set(_x, _y);
+		m_pts.back().set(_x, _y, _z);
 	}
 
 	float PolylineROI::getFeature(const std::string& _typeFeature) const
 	{
 		if (_typeFeature == "perimeter") {
 			float perimeter = 0.;
-			std::vector < Vec2mf >::const_iterator prec = m_pts.end();
+			std::vector < Vec3mf >::const_iterator prec = m_pts.end();
 			prec--;
 			// loop through all edges of the polygon
-			for (std::vector < Vec2mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
+			for (std::vector < Vec3mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
 				perimeter += prec->distance(*current);
 				prec = current;
 			}
@@ -484,10 +484,10 @@ namespace poca::core {
 		}
 		else if (_typeFeature == "area") {
 			float totalArea = 0;
-			std::vector < Vec2mf >::const_iterator prec = m_pts.end();
+			std::vector < Vec3mf >::const_iterator prec = m_pts.end();
 			prec--;
 			// loop through all edges of the polygon
-			for (std::vector < Vec2mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
+			for (std::vector < Vec3mf >::const_iterator current = m_pts.begin(); current != m_pts.end(); current++) {
 				totalArea += ((prec->x() - current->x()) * (current->y() + (prec->y() - current->y()) / 2));
 				prec = current;
 			}
@@ -507,9 +507,9 @@ namespace poca::core {
 	{
 		_fs << "PolygonROI" << std::endl;
 		_fs << this->nbPoints() << std::endl;
-		const std::vector < Vec2mf >& points = this->getPoints();
-		for (std::vector < Vec2mf >::const_iterator it = points.begin(); it != points.end(); it++)
-			_fs << it->x() << " " << it->y() << std::endl;
+		const std::vector < Vec3mf >& points = this->getPoints();
+		for (std::vector < Vec3mf >::const_iterator it = points.begin(); it != points.end(); it++)
+			_fs << it->x() << " " << it->y() << " " << it->z() << std::endl;
 	}
 
 	void PolylineROI::load(std::ifstream& _fs)
@@ -554,7 +554,7 @@ namespace poca::core {
 	const std::string PolylineROI::toStdString() const
 	{
 		std::string text("PolylineROI, " + m_name + "\n# points = " + std::to_string(this->nbPoints()) + "\n");
-		for (std::vector < Vec2mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++)
+		for (std::vector < Vec3mf >::const_iterator it = m_pts.begin(); it != m_pts.end(); it++)
 			text.append("[" + std::to_string(it->x()) + ", " + std::to_string(it->y()) + "]\n");
 		return text;
 	}

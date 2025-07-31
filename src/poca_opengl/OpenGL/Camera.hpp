@@ -201,6 +201,7 @@ namespace poca::opengl {
 		void displayGrid();
 
 		glm::vec3 getWorldCoordinates(const glm::vec2&);
+		virtual glm::vec3 getWorldCoordinatesWithScaling(const glm::vec2&, const glm::mat4&);
 		glm::vec2 worldToScreenCoordinates(const glm::vec3&) const;
 
 		void fixPlane(const int, const bool);

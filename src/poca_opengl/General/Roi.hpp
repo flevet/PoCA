@@ -101,9 +101,11 @@ namespace poca::core {
 		virtual const std::string toStdString() const;
 		virtual ROIInterface* copy() const;
 		virtual const BoundingBox boundingBox() const;
+		inline const poca::core::Vec3mf& getP1() const { return m_pts[0]; }
+		inline const poca::core::Vec3mf& getP2() const { return m_pts[1]; }
 
 	protected:
-		Vec2mf m_pts[2];
+		Vec3mf m_pts[2];
 		poca::opengl::LineGLBuffer <Vec3mf> m_lineBuffer;
 	};
 
@@ -156,11 +158,11 @@ namespace poca::core {
 		virtual ROIInterface* copy() const;
 		virtual const BoundingBox boundingBox() const;
 
-		inline const std::vector < Vec2mf >& getPoints() const { return m_pts; }
+		inline const std::vector < Vec3mf >& getPoints() const { return m_pts; }
 		inline const std::size_t nbPoints() const { return m_pts.size(); }
 
 	protected:
-		std::vector < Vec2mf > m_pts;
+		std::vector < Vec3mf > m_pts;
 		poca::opengl::LineStripAdjacencySingleGLBuffer <Vec3mf> m_buffer;
 	};
 
