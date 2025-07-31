@@ -231,6 +231,9 @@ find_package(GLM REQUIRED)
 message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
 include_directories(${GLM_INCLUDE_DIR})
 
+find_package(TinyTIFF)
+target_link_libraries(${targetname} TinyTIFF::TinyTIFF)
+
 find_package(FFmpeg REQUIRED)
 include_directories(
     ${AVCODEC_INCLUDE_DIR}
