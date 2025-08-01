@@ -1690,7 +1690,7 @@ namespace poca::opengl {
 									const poca::core::Vec3mf& p1 = lroi->getP1();
 									const poca::core::Vec3mf& p2 = lroi->getP2();
 								
-									poca::core::CommandInfo ci = poca::core::CommandInfo(false, "tracedLineScreenCoordinates", "p1", glm::vec3(m_tmp[0], m_tmp[1], 0), "p2", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
+									poca::core::CommandInfo ci = poca::core::CommandInfo(false, "tracedLineScreenCoordinates", "p1", glm::vec3(p1[0], p1[1], p1[2]), "p2", glm::vec3(p2[0], p2[1], p2[2]));
 									m_object->executeGlobalCommand(&ci);
 								}
 							}
@@ -1829,7 +1829,7 @@ namespace poca::opengl {
 			if (m_insidePatchId == -1) {
 				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
-				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
+				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
 				m_object->executeGlobalCommand(&ci);
 				if (ci.hasParameter("bbox")) {
 					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
