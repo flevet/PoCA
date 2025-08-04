@@ -1813,7 +1813,7 @@ namespace poca::opengl {
 				if (m_currentInteractionMode == poca::opengl::Camera::Polyline2DRoiDefinition) {
 					if (m_ROI != NULL) {
 						glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
-						m_ROI->finalize(coords[0], coords[1]);
+						m_ROI->finalize(coords[0], coords[1], 0.f, true);
 						m_object->addROI(m_ROI);
 						m_ROI = NULL;
 					}
