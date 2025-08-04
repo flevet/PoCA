@@ -782,6 +782,8 @@ namespace poca::opengl {
 		glDisable(GL_CLIP_DISTANCE4);
 		//glDisable(GL_CLIP_DISTANCE5);
 
+		glDisable(GL_DEPTH_TEST);
+
 		bool displayROIs = true;
 
 		if (comObj->hasParameter("displayROIs"))
@@ -804,13 +806,13 @@ namespace poca::opengl {
 
 		GL_CHECK_ERRORS();
 
-		glDisable(GL_DEPTH_TEST);
 
 		poca::opengl::Shader* shader = this->getShader("uniformColorShader");
 		float w = width(), h = height();
 		glm::mat4 projText = glm::ortho(0.f, w, 0.f, h);
 		shader->use();
 		shader->setMat4("MVP", projText);
+		shader->setBool("clip", false);
 		glEnableVertexAttribArray(0);
 		if (m_debugPointBuffer.getNbElements() != 0) {
 			shader->setVec4("singleColor", 1.f, 0.f, 1.f, 1.f);
