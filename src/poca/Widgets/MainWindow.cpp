@@ -448,6 +448,11 @@ void MainWindow::createActions()
 	m_polyplaneROIAct->setCheckable(true);
 	connect(m_polyplaneROIAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
 
+	m_freehandROIAct = new QAction(QIcon(QPixmap(poca::plot::freehandIcon)), tr("&Freehand"), this);
+	m_freehandROIAct->setStatusTip(tr("Freehand ROI"));
+	m_freehandROIAct->setCheckable(true);
+	connect(m_freehandROIAct, SIGNAL(triggered()), this, SLOT(setCameraInteraction()));
+
 	QActionGroup* roiGroup = new QActionGroup(this);
 	roiGroup->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
 	roiGroup->addAction(m_line2DROIAct);
@@ -458,6 +463,7 @@ void MainWindow::createActions()
 	roiGroup->addAction(m_sphere3DROIAct);
 	roiGroup->addAction(m_planeROIAct);
 	roiGroup->addAction(m_polyplaneROIAct);
+	roiGroup->addAction(m_freehandROIAct);
 }
 
 void MainWindow::createMenus()
@@ -574,6 +580,7 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_sphere3DROIAct);
 	m_fileToolBar->addAction(m_planeROIAct);
 	m_fileToolBar->addAction(m_polyplaneROIAct);
+	m_fileToolBar->addAction(m_freehandROIAct);
 	m_lastActionROIToolbar = m_fileToolBar->addSeparator();
 	m_fileToolBar->addAction(m_colocAct);
 	m_lastActionColocToolbar = m_fileToolBar->addSeparator();
@@ -653,6 +660,8 @@ void MainWindow::setCameraInteraction()
 		cam->setCameraInteraction(m_planeROIAct->isChecked() ? poca::opengl::Camera::PlaneRoiDefinition : poca::opengl::Camera::None);
 	else if (sender == m_polyplaneROIAct)
 		cam->setCameraInteraction(m_polyplaneROIAct->isChecked() ? poca::opengl::Camera::PolyPlaneRoiDefinition : poca::opengl::Camera::None);
+	else if (sender == m_freehandROIAct)
+		cam->setCameraInteraction(m_freehandROIAct->isChecked() ? poca::opengl::Camera::FreehandDefinition : poca::opengl::Camera::None);
 }
 
 void MainWindow::setCameraInteraction(bool _on)

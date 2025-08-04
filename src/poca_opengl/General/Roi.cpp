@@ -75,6 +75,8 @@ namespace poca::core {
 			return new PlaneROI("PlaneROI");
 		else if (_type == poca::opengl::Camera::PolyPlaneRoiDefinition)
 			return new PolyplaneROI("PolyplaneROI");
+		else if (_type == poca::opengl::Camera::FreehandDefinition)
+			return new PolylineROI("FreehandROI");
 		return NULL;
 	}
 
@@ -377,8 +379,8 @@ namespace poca::core {
 		std::vector <poca::core::Vec3mf> pts;
 		for (Vec3mf tmp : m_pts)
 			pts.push_back(poca::core::Vec3mf(tmp.x(), tmp.y(), tmp.z()));
-		if(pts.size() > 2)
-			pts.push_back(poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), m_pts[0].z()));
+		//if(pts.size() > 2)
+		//	pts.push_back(poca::core::Vec3mf(m_pts[0].x(), m_pts[0].y(), m_pts[0].z()));
 
 		std::vector <uint32_t> indices(pts.size());
 		std::iota(std::begin(indices), std::end(indices), 0);
@@ -467,6 +469,8 @@ namespace poca::core {
 		if (m_pts.size() < 3) return;
 		m_changed = true;
 		m_pts.back().set(_x, _y, _z);
+		if (_modify)
+			m_pts.emplace_back(m_pts.front());
 	}
 
 	float PolylineROI::getFeature(const std::string& _typeFeature) const

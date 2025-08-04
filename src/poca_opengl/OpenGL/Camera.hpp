@@ -122,8 +122,9 @@ namespace poca::opengl {
 			PolyPlaneRoiDefinition = 6,
 			Sphere3DRoiDefinition = 7,
 			PlaneRoiDefinition = 8,
-			ModifyRoi = 9,
-			Crop = 10,
+			FreehandDefinition = 9,
+			ModifyRoi = 10,
+			Crop = 11,
 		};
 		enum PlaneType
 		{

@@ -1452,7 +1452,7 @@ namespace poca::opengl {
 					z = coords[2];
 				}
 			}
-			else if(poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::Ellipse2DRoiDefinition){
+			else if((poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::Ellipse2DRoiDefinition) || m_currentInteractionMode == poca::opengl::Camera::FreehandDefinition){
 				if (m_ROI == NULL)
 					m_ROI = poca::core::getROIFromType(m_currentInteractionMode);
 				if (m_ROI != NULL) {
@@ -1584,6 +1584,18 @@ namespace poca::opengl {
 						glm::vec3 point(center + rightVector + upVector);
 						m_ROI->onMove(point[0], point[1], point[2]);
 					}
+					else if (m_currentInteractionMode == poca::opengl::Camera::FreehandDefinition) {
+						glm::vec2 pt(_event->pos().x(), this->height() - _event->pos().y());
+						float d = poca::geometry::distance(pt.x, pt.y, m_tmp.x, m_tmp.y);
+						if (d > 5) {
+							if (m_ROI != NULL) {
+								glm::vec3 coords = getWorldCoordinates(pt);
+								float z = getObject()->dimension() == 3 ? coords[2] : 0.f;
+								m_ROI->onClick(coords[0], coords[1], z);
+								m_tmp = pt;
+							}
+						}
+					}
 					else {
 						glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 						m_ROI->onMove(coords[0], coords[1], getObject()->dimension() == 3 ? coords[2] : 0.f);
@@ -1627,7 +1639,7 @@ namespace poca::opengl {
 		{
 		case Qt::LeftButton:
 		{
-			if (poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::PlaneRoiDefinition) {
+			if (poca::opengl::Camera::Line2DRoiDefinition <= m_currentInteractionMode && m_currentInteractionMode <= poca::opengl::Camera::FreehandDefinition) {
 				if (m_currentInteractionMode != poca::opengl::Camera::Polyline2DRoiDefinition && m_currentInteractionMode != poca::opengl::Camera::PolyPlaneRoiDefinition) {
 					if (m_ROI != NULL) {
 						if (m_currentInteractionMode == poca::opengl::Camera::Sphere3DRoiDefinition) {
@@ -1695,8 +1707,29 @@ namespace poca::opengl {
 								}
 							}
 						}
-						m_object->addROI(m_ROI);
-						m_ROI = NULL;
+						if (m_currentInteractionMode == poca::opengl::Camera::FreehandDefinition) {
+							glm::vec2 pt(_event->pos().x(), this->height() - _event->pos().y());
+							float d = poca::geometry::distance(pt.x, pt.y, m_tmp.x, m_tmp.y);
+							if (d > 3) {
+								if (m_ROI != NULL) {
+									glm::vec3 coords = getWorldCoordinates(pt);
+									float z = getObject()->dimension() == 3 ? coords[2] : 0.f;
+									m_ROI->onClick(coords[0], coords[1], z);
+									m_tmp = pt;
+								}
+							}
+							poca::core::PolylineROI* proi = dynamic_cast<poca::core::PolylineROI*>(m_ROI);
+							if (proi) {
+								poca::core::CommandInfo ci = poca::core::CommandInfo(false, "freehandWorldCoordinates", "points", proi->getPoints());
+								m_object->executeGlobalCommand(&ci);
+							}
+							delete m_ROI;
+							m_ROI = NULL;
+						}
+						else {
+							m_object->addROI(m_ROI);
+							m_ROI = NULL;
+						}
 					}
 				}
 			}

@@ -169,7 +169,7 @@ private:
 	QAction * m_openFileAct, * m_openDirAct, * m_plusAct, * m_duplicateAct, * m_exitAct, * m_gridAct, * m_fontDisplayAct, * m_colocAct, * m_aboutAct, * m_resetProjAct;
 	QAction * m_closeAllAct, * m_boundingBoxAct;
 	QAction * m_tileWindowsAct, *m_cascadeWindowsAct;
-	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct;
+	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct, * m_freehandROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_pythonParamsAct;
 	QTabWidget * m_tabWidget;
