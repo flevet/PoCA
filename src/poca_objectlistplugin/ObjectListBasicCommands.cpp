@@ -336,10 +336,11 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 						//smooth curve
 						std::vector < Point_2 > finalPoints;
 						for (auto n = 0; n < vtmp.size(); n++) {
-							auto prec = n == 0 ? vtmp.size() - 1 : n - 1, next = (n + 1) % vtmp.size();
+							/*auto prec = n == 0 ? vtmp.size() - 1 : n - 1, next = (n + 1) % vtmp.size();
 							auto x = (vtmp[prec].x() + vtmp[n].x() * 2.f + vtmp[next].x()) / 4.f;
 							auto y = (vtmp[prec].y() + vtmp[n].y() * 2.f + vtmp[next].y()) / 4.f;
-							finalPoints.emplace_back(x, y);
+							finalPoints.emplace_back(x, y);*/
+							finalPoints.emplace_back(vtmp[n].x(), vtmp[n].y());
 						}
 						std::cout << __LINE__ << std::endl;
 						newObject.emplace_back(finalPoints.begin(), finalPoints.begin() + finalPoints.size());
