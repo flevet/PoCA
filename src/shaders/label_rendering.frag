@@ -155,43 +155,9 @@ bool isBorderVoxel(vec3 position, uint label, int radius) {
     return false;
 }
 
-void main()
+void raycast_normal(vec3 ray_start, vec3 ray_step) 
 {
-    vec4 ndcPos;
-	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-	ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
-	ndcPos.w = 1.0;
- 
-	vec4 clipPos = ndcPos;
-	clipPos.z = -1.0;
-	vec4 eyePos  = invMVP * clipPos;
-	vec3 ray_origin = eyePos.xyz;
-	
-    float t_0, t_1, t_0_crop, t_1_crop;
-    Ray casting_ray = Ray(ray_origin, ray_direction);
-    AABB bounding_box = AABB(top, bottom);
-    ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
-	
-	if(cropped){
-		AABB crop_bbox = AABB(top_crop, bottom_crop);
-		ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
-		if(t_0_crop > t_1_crop)
-			discard;
-		t_0 = t_0_crop;
-		t_1 = t_1_crop;
-	}
-	
-    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
-	//vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    //vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
-    vec3 ray = ray_stop - ray_start;
-    float ray_length = length(ray);
-	vec3 ray_step = ray / float(nb_steps);
-
-    vec3 position = ray_start;
+	vec3 position = ray_start;
 	float labelId = -3.402823466e+38, valueFeature;
 	float maxDepth;
 	
@@ -201,7 +167,10 @@ void main()
 		if(isFloat)
 			labelId = texture(volume, position).r;
 		else{
-			ivec3 texPos = ivec3(position * vec3(textureSize(uvolume, 0)));
+			ivec3 tsize = textureSize(uvolume, 0);
+			if(tsize.z == 1)
+				tsize.z = tsize.z - 1;
+			ivec3 texPos = ivec3(position * vec3(tsize));
 			labelId = float(texelFetch(uvolume, texPos, 0).r);
 		}
 		
@@ -277,4 +246,70 @@ void main()
 			a_colour.a = colour.a;
 		}
 	}
+}
+
+void raycast_test(vec3 ray_start, vec3 ray_step) 
+{
+	vec3 position = ray_start;
+	float labelId = -3.402823466e+38, valueFeature;
+	float maxDepth;
+	
+	bool found = false;
+    for(int n = 0; n < nb_steps && !found; n++){
+		position = position + ray_step;
+		if(isFloat)
+			labelId = texture(volume, position).r;
+		else{
+			ivec3 tsize = textureSize(uvolume, 0);
+			if(tsize.z == 1)
+				tsize.z = tsize.z - 1;
+			ivec3 texPos = ivec3(position * vec3(tsize));
+			labelId = float(texelFetch(uvolume, texPos, 0).r);
+		}
+		
+		if(labelId > 0){
+			a_colour = vec4(1,0,0,1);
+			return;
+		}
+	}
+	a_colour = vec4(1,1,0,1);
+}
+
+void main()
+{
+    vec4 ndcPos;
+	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+	ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
+	ndcPos.w = 1.0;
+ 
+	vec4 clipPos = ndcPos;
+	clipPos.z = -1.0;
+	vec4 eyePos  = invMVP * clipPos;
+	vec3 ray_origin = eyePos.xyz;
+	
+    float t_0, t_1, t_0_crop, t_1_crop;
+    Ray casting_ray = Ray(ray_origin, ray_direction);
+    AABB bounding_box = AABB(top, bottom);
+    ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
+	
+	if(cropped){
+		AABB crop_bbox = AABB(top_crop, bottom_crop);
+		ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
+		if(t_0_crop > t_1_crop)
+			discard;
+		t_0 = t_0_crop;
+		t_1 = t_1_crop;
+	}
+	
+    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
+	
+	//vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    //vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
+	
+    vec3 ray = ray_stop - ray_start;
+    float ray_length = length(ray);
+	vec3 ray_step = ray / float(nb_steps);
+
+    raycast_normal(ray_start, ray_step);
 }

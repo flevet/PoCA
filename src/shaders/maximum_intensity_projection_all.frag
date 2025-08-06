@@ -69,6 +69,7 @@ uniform float labelBackground[MAX_NB_IMAGES];
 uniform float featureTextureSize[MAX_NB_IMAGES];
 
 uniform vec3 scale;
+
 // Ray
 struct Ray {
     vec3 origin;
@@ -130,49 +131,9 @@ vec4 colour_transfer(float intensity)
     return vec4(intensity * high + (1.0 - intensity) * low, alpha);
 }
 
-void main()
+void raycast_normal(vec3 ray_start, vec3 ray_step) 
 {
-	vec4 ndcPos;
-	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-	ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
-	ndcPos.w = 1.0;
- 
-	vec4 clipPos = ndcPos;
-	clipPos.z = -1.0;
-	vec4 eyePos  = invMVP * clipPos;
-	vec3 ray_origin = eyePos.xyz;
-	
-    float t_0, t_1, t_0_crop, t_1_crop;
-    Ray casting_ray = Ray(ray_origin + ray_direction, ray_direction);
-    AABB bounding_box = AABB(top, bottom);
-    ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
-	
-	if(cropped){
-		AABB crop_bbox = AABB(top_crop, bottom_crop);
-		ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
-		if(t_0_crop > t_1_crop)
-			discard;
-		t_0 = t_0_crop;
-		t_1 = t_1_crop;
-	}
-	
-	//if(t_0 > t_1)
-	//	discard;
-	
-    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
-	//vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    //vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
-    vec3 ray = ray_stop - ray_start;
-    float ray_length = length(ray);
-	vec3 ray_step = ray / float(nb_steps);
-	
-    /*vec3 ray_step = ray * step_length;
-	int nbs = int(ray_length / step_length);*/
-
-    vec3 position = ray_start;
+	vec3 position = ray_start;
 	
 	float maximum_intensity[MAX_NB_IMAGES];
 	for(int n = 0; n < nbImages; n++)
@@ -186,12 +147,12 @@ void main()
 			if(isFloat[curImage])
 				intensity = texture(volume[curImage], position).r;
 			else{
-				ivec3 texPos = ivec3(position * vec3(textureSize(uvolume[curImage], 0)));
+				ivec3 tsize = textureSize(uvolume[curImage], 0);
+				if(tsize.z == 1)
+					tsize.z = tsize.z - 1;
+				ivec3 texPos = ivec3(position * vec3(tsize));
 				intensity = float(texelFetch(uvolume[curImage], texPos, 0).r);
 			}
-				
-			if(intensity >= maximum_intensity[curImage])
-				maximum_intensity[curImage] = intensity;
 				
 			if(intensity >= pixel_min[curImage]){
 				//we retrieve the true pixel value from the pixel
@@ -258,4 +219,102 @@ void main()
 		//a_colour = a_colour + vec4(maximum_intensity[curImage], maximum_intensity[curImage], maximum_intensity[curImage], 1);
 	}
 	a_colour = clamp(a_colour, 0.0, 1.0);
+}
+
+void raycast_test(vec3 ray_start, vec3 ray_step) 
+{
+	vec3 position = ray_start;
+	
+	float maximum_intensity[MAX_NB_IMAGES];
+	for(int n = 0; n < nbImages; n++)
+		maximum_intensity[n] = -3.402823466e+38;
+		
+	// Ray march until reaching the end of the volume
+    for(int n = 0; n < nb_steps; n++){
+		position = position + ray_step;
+		for(int curImage = 0; curImage < nbImages; curImage++){
+			float intensity;
+			if(isFloat[curImage]){
+				intensity = texture(volume[curImage], position).r;
+				intensity = float(255);//float(texelFetch(uvolume[curImage], texPos, 0).r);
+			}
+			else{
+				ivec3 texPos = ivec3(position * vec3(textureSize(uvolume[curImage], 0).xy, 0));
+				intensity = float(texelFetch(uvolume[curImage], texPos, 0).r);
+				//intensity = 255;//texture(volume[curImage], position).r;
+			}
+				
+			if(intensity >= maximum_intensity[curImage])
+				maximum_intensity[curImage] = intensity;
+				
+			/*if(intensity >= pixel_min[curImage]){
+				//we retrieve the true pixel value from the pixel
+				//We need to normalize it in order to fetch the lookup table from featureTexture
+				float x = intensity, y = 0;
+				if(height_feature_texture[curImage] == 1){
+					x = (intensity - pixel_min[curImage]) / (pixel_max[curImage] - pixel_min[curImage]);
+				}
+				else{
+					offset_feature_texture(intensity, width_feature_texture[curImage], height_feature_texture[curImage], x, y);
+					y = scaleOffsetVar(height_feature_texture[curImage], y);
+				}
+				x = scaleOffsetVar(width_feature_texture[curImage], x);
+				intensity = texture(featureTexture[curImage], vec2(x, y)).r;
+					
+				if(scaleLUT[curImage]){
+					if (intensity >= maximum_intensity[curImage])
+						maximum_intensity[curImage] = intensity;
+				}
+				else
+					if (intensity >= maximum_intensity[curImage] && intensity <= current_max[curImage])
+						maximum_intensity[curImage] = intensity;
+			}*/
+		}
+	}
+	//if(maximum_intensity[0] == 0)
+	//	discard;
+	float val = maximum_intensity[0];// / 255;
+	a_colour = vec4(val, 0, 0, 1);
+}
+
+void main()
+{
+	vec4 ndcPos;
+	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+	ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
+	ndcPos.w = 1.0;
+ 
+	vec4 clipPos = ndcPos;
+	clipPos.z = -1.0;
+	vec4 eyePos  = invMVP * clipPos;
+	vec3 ray_origin = eyePos.xyz;
+	
+    float t_0, t_1, t_0_crop, t_1_crop;
+    Ray casting_ray = Ray(ray_origin + ray_direction, ray_direction);
+    AABB bounding_box = AABB(top, bottom);
+    ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
+	
+	if(cropped){
+		AABB crop_bbox = AABB(top_crop, bottom_crop);
+		ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
+		if(t_0_crop > t_1_crop)
+			discard;
+		t_0 = t_0_crop;
+		t_1 = t_1_crop;
+	}
+	
+	//if(t_0 > t_1)
+	//	discard;
+	
+    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
+	
+	//vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    //vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
+	
+    vec3 ray = ray_stop - ray_start;
+    float ray_length = length(ray);
+	vec3 ray_step = ray / float(nb_steps);
+	
+    raycast_normal(ray_start, ray_step);
 }
