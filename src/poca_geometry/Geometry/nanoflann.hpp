@@ -1405,6 +1405,7 @@ struct KdPointCloud_2D
 		public:
 			KdPoint() :m_x(0.), m_y(0.){}
 			KdPoint(const KdPoint & _p) :m_x(_p.m_x), m_y(_p.m_y){}
+			KdPoint(T x, T y) : m_x(x), m_y(y) {}
 
 			T  m_x, m_y;
 	};
