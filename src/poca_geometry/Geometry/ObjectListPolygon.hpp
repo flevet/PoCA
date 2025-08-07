@@ -89,6 +89,9 @@ namespace poca::geometry {
 
 		inline const std::vector <std::vector<Polygon_2>>& getPolygons() const { return m_polygons; }
 		inline const std::vector <Constrained_Delaunay_triangulation_2_tag>& getCdts() const { return m_cdts; }
+		inline const std::vector <std::vector<std::vector <float>>>& getCurvatures() const { return m_curvatures; }
+		inline std::vector <std::vector<std::vector <float>>>& getCurvatures() { return m_curvatures; }
+		inline void setCurvatures(const std::vector <std::vector<std::vector <float>>>& _curvatures) { m_curvatures = _curvatures; }
 
 	protected:
 
@@ -100,6 +103,7 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf> m_centroids;
 		std::vector <poca::core::BoundingBox> m_bboxMeshes;
 		std::vector <Constrained_Delaunay_triangulation_2_tag> m_cdts;
+		std::vector <std::vector<std::vector <float>>> m_curvatures;
 
 		//For now duplicate information about the points for compatibility with ObjectListInterface and existing plugins
 		std::vector <float> m_xsDuplicate, m_ysDuplicate;
@@ -109,4 +113,3 @@ namespace poca::geometry {
 }
 
 #endif
-

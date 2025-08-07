@@ -270,10 +270,13 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		if (!opol) return;
 		const std::vector <std::vector<Polygon_2>>& polygons = opol->getPolygons();
 		std::vector <std::vector<Polygon_2>> newObjects;
+		std::vector <std::vector<std::vector <float>>> allCurvatures;
 		for (const auto& polygonWithHoles : polygons) {
 			std::cout << __LINE__ << std::endl;
 			newObjects.push_back(std::vector <Polygon_2>());
+			allCurvatures.push_back(std::vector<std::vector <float>>());
 			auto& newObject = newObjects.back();
+			auto& newCurvatures = allCurvatures.back();
 
 			for (const auto& polygon : polygonWithHoles) {
 				std::vector <poca::core::Vec3mf> smoothedOutline, outlineTmp;
@@ -313,6 +316,9 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 				if (points.size() > 10 * 2) {
 					try {
+						newCurvatures.push_back(std::vector <float>());
+						auto& curvatures = newCurvatures.back();
+						
 						std::cout << __LINE__ << std::endl;
 						tinyspline::BSpline spline = tinyspline::BSpline(points.size() / 2);
 						std::cout << __LINE__ << std::endl;
@@ -323,13 +329,29 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 						std::cout << __LINE__ << std::endl;
 						for (auto n = 0; n < knotsAct.size(); n++) {
 							auto pt = spline.eval(knotsAct[n]).resultVec2();
+							bool addPoint = true;
 							if (!vtmp.empty()) {
 								const auto& p = vtmp.back();
 								float d = poca::geometry::distance((float)pt.x(), (float)pt.y(), p.x(), p.y());
 								if (d < 0.001f)
-									continue;
+									addPoint = false;
 							}
-							vtmp.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
+							if (addPoint) {
+								vtmp.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
+
+								tinyspline::DeBoorNet deriv1 = spline.derive().eval(knotsAct[n]);
+								tinyspline::DeBoorNet deriv2 = spline.derive().derive().eval(knotsAct[n]);
+
+								const auto& d1 = deriv1.result();
+								const auto& d2 = deriv2.result();
+
+								double dx = d1[0], dy = d1[1];
+								double ddx = d2[0], ddy = d2[1];
+
+								double num = std::abs(dx * ddy - dy * ddx);
+								double denom = std::pow(dx * dx + dy * dy, 1.5);
+								curvatures.emplace_back((denom != 0.0) ? float(num / denom) : 0.f);
+							}
 						}
 						std::cout << __LINE__ << std::endl;
 						//catmulls[curOutline].push_back(vtmp);
@@ -353,6 +375,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			}
 		}
 		poca::geometry::ObjectListPolygon* objects = new poca::geometry::ObjectListPolygon(newObjects);
+		objects->setCurvatures(allCurvatures);
 		ObjectListPlugin::m_plugins->addCommands(objects);
 		if (!obj->hasBasicComponent("ObjectLists")) {
 			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objects, *_infos, "ObjectListPlugin");
