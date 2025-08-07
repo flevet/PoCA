@@ -37,6 +37,10 @@
 
 #include "Widgets/MainWindow.hpp"
 
+extern "C" {
+	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+}
+
 void myMessageOutput(QtMsgType type, const QMessageLogContext& context, const QString& msg)
 {
 }
