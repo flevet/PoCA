@@ -686,9 +686,13 @@ void ObjectListsWidget::actionNeeded()
 		QString filename = m_object->getDir().c_str();
 		if (!filename.endsWith("/")) filename.append("/");
 		filename.append(m_object->getName().c_str());
-		if (!filename.endsWith(".obj"))
-			filename.append(".obj");
-		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save objects as OBJ..."), filename, QObject::tr("obj files (*.obj)"), 0, QFileDialog::DontUseNativeDialog);
+		if(m_object->dimension() == 3)
+			if (!filename.endsWith(".obj"))
+				filename.append(".obj");
+		if (m_object->dimension() == 2)
+			if (!filename.endsWith(".pol"))
+				filename.append(".pol");
+		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save objects..."), filename, QObject::tr("object files (*.obj *.pol)"), 0, QFileDialog::DontUseNativeDialog);
 		if (!filename.isEmpty()) {
 			bc->executeCommand(true, "saveAsOBJ", "filename", filename.toStdString());
 		}
