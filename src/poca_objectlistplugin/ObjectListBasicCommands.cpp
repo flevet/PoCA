@@ -134,7 +134,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		if(_infos->hasParameter("filename"))
 			filename = (_infos->getParameter<std::string>("filename")).c_str();
 		else {
-			poca::core::Engine* engine = poca::core::Engine::instance();
+			/*poca::core::Engine* engine = poca::core::Engine::instance();
 			poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 
 			QString textToAdd = "_objects.obj";
