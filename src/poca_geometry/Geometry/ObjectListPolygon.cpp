@@ -196,6 +196,10 @@ namespace poca::geometry {
 		else {
 			for (const auto& polygons : m_polygons) {
 				//std::cout << "****************************************\n# polygons " << polygons.size() << std::endl;
+
+				for(const auto& pol : polygons)
+					std::cout << "Polygon, # locs " << pol.size() << ", area " << pol.area() << std::endl;
+
 				Polygon_with_holes_2_inexact pwh(polygons.front());
 				for (auto n = 1; n < polygons.size(); n++)
 					pwh.add_hole(polygons[n]);
