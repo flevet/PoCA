@@ -372,29 +372,34 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 						std::vector <poca::core::Vec3mf> vtmp;
 						std::cout << __LINE__ << std::endl;
 						for (auto n = 0; n < knotsAct.size(); n++) {
-							auto pt = spline.eval(knotsAct[n]).resultVec2();
-							bool addPoint = true;
-							if (!vtmp.empty()) {
-								const auto& p = vtmp.back();
-								float d = poca::geometry::distance((float)pt.x(), (float)pt.y(), p.x(), p.y());
-								if (d < 0.001f)
-									addPoint = false;
+							try {
+								auto pt = spline.eval(knotsAct[n]).resultVec2();
+								bool addPoint = true;
+								if (!vtmp.empty()) {
+									const auto& p = vtmp.back();
+									float d = poca::geometry::distance((float)pt.x(), (float)pt.y(), p.x(), p.y());
+									if (d < TS_POINT_EPSILON)
+										addPoint = false;
+								}
+								if (addPoint) {
+									/*tinyspline::DeBoorNet deriv1 = spline.derive().eval(knotsAct[n]);
+									tinyspline::DeBoorNet deriv2 = spline.derive().derive().eval(knotsAct[n]);
+
+									const auto& d1 = deriv1.result();
+									const auto& d2 = deriv2.result();
+
+									double dx = d1[0], dy = d1[1];
+									double ddx = d2[0], ddy = d2[1];
+
+									double num = std::abs(dx * ddy - dy * ddx);
+									double denom = std::pow(dx * dx + dy * dy, 1.5);*/
+	
+									vtmp.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
+									//curvatures.emplace_back((denom != 0.0) ? float(num / denom) : 0.f);
+								}
 							}
-							if (addPoint) {
-								vtmp.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
-
-								tinyspline::DeBoorNet deriv1 = spline.derive().eval(knotsAct[n]);
-								tinyspline::DeBoorNet deriv2 = spline.derive().derive().eval(knotsAct[n]);
-
-								const auto& d1 = deriv1.result();
-								const auto& d2 = deriv2.result();
-
-								double dx = d1[0], dy = d1[1];
-								double ddx = d2[0], ddy = d2[1];
-
-								double num = std::abs(dx * ddy - dy * ddx);
-								double denom = std::pow(dx * dx + dy * dy, 1.5);
-								curvatures.emplace_back((denom != 0.0) ? float(num / denom) : 0.f);
+							catch (const std::runtime_error& e) {
+								std::cerr << "Caught runtime_error: " << e.what() << " for n = " << n << " and knotsAct " << knotsAct[n] << std::endl;
 							}
 						}
 						std::cout << __LINE__ << std::endl;
