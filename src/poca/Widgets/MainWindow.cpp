@@ -214,9 +214,9 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	poca::core::utils::addWidget(m_tabWidget, QString("ROI Manager"), QString("General"), m_ROIsW, false);
 
 	for (int n = 0; n < m_tabWidget->count(); n++) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+/*#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 		m_tabWidget->setTabVisible(n, m_tabWidget->tabText(n) == "Misc." || m_tabWidget->tabText(n) == "Macro");
-#endif
+#endif*/
 		QTabWidget* tab = dynamic_cast <QTabWidget*>(m_tabWidget->widget(n));
 		if (!tab) continue;
 		std::string name = m_tabWidget->tabText(n).toStdString();
@@ -1690,10 +1690,10 @@ void MainWindow::updateTabWidget()
 			oneTabVisible = oneTabVisible || tab->isTabVisible(j);
 		m_tabWidget->setTabVisible(n, oneTabVisible);
 	}
-	if (m_currentMdi == NULL) {
+	/*if (m_currentMdi == NULL) {
 		for (int n = 0; n < m_tabWidget->count(); n++)
 			m_tabWidget->setTabVisible(n, m_tabWidget->tabText(n) == "Misc." || m_tabWidget->tabText(n) == "Macro");
-	}
+	}*/
 #endif
 }
 
