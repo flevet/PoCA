@@ -604,4 +604,25 @@ namespace poca::geometry {
 
 		}
 	}
+
+	void ObjectListPolygon::saveAsPol(const std::string& _filename) const
+	{
+		std::ofstream fs(_filename, std::ifstream::binary);
+		size_t nb = m_polygons.size();
+		fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+		for (const auto& polygons : m_polygons) {
+			nb = polygons.size();
+			fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+
+			for (const auto& poly : polygons) {
+				std::vector <poca::core::Vec3mf> vertices;
+				for (auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it)
+					vertices.emplace_back(it->x(), it->y(), 0.f);
+				nb = vertices.size();
+				fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+				fs.write(reinterpret_cast<char*>(vertices.data()), nb * sizeof(poca::core::Vec3mf));
+			}
+		}
+		fs.close();
+	}
 }

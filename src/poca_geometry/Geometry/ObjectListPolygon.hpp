@@ -82,6 +82,8 @@ namespace poca::geometry {
 		bool hasSkeletons() const { return false; }
 		poca::geometry::ObjectListPolygon* exportFilteredObjects();
 
+		void saveAsPol(const std::string&) const;
+
 		virtual void generateOutlineLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void getOutlineLocsFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;
 		virtual void getOutlineLocsFeatureInSelectionHiLow(std::vector <float>&, const std::vector <bool>&, const float, const float) const;
