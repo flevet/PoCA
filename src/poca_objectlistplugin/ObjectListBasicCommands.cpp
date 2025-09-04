@@ -283,6 +283,15 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 				std::cout << __LINE__ << std::endl;
 				for (const auto& p : polygon.container())
 					outlineTmp.emplace_back(p.x(), p.y(), 0.f);
+
+				for(auto n = 0; n < outlineTmp.size(); n++){
+					auto next = (n + 1) % outlineTmp.size();
+					const auto& p = outlineTmp[n], pn = outlineTmp[next];
+					float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
+					if (d < TS_POINT_EPSILON)
+						std::cout << "Very close" << std::endl;
+				}
+
 				smoothedOutline.resize(outlineTmp.size());
 				for (auto step = 0; step < nbSmooth; step++) {
 					for (auto n = 0; n < outlineTmp.size(); n++) {
@@ -305,6 +314,14 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 					outlineTmp = smoothedOutline;
 				}
 				std::cout << __LINE__ << std::endl;
+
+				for (auto n = 0; n < smoothedOutline.size(); n++) {
+					auto next = (n + 1) % smoothedOutline.size();
+					const auto& p = smoothedOutline[n], pn = smoothedOutline[next];
+					float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
+					if (d < TS_POINT_EPSILON)
+						std::cout << "Very close" << std::endl;
+				}
 
 				std::vector<tinyspline::real> points;
 				for (const auto& pt : smoothedOutline) {
