@@ -149,10 +149,37 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			std::cout << "Name: " << completeName.toStdString() << std::endl;
 			QFileInfo fileInfo(completeName);
 			filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + textToAdd;
-			std::cout << "Name: " << filename.toStdString() << std::endl;
+			std::cout << "Name: " << filename.toStdString() << std::endl;*/
+
+			poca::core::Engine* engine = poca::core::Engine::instance();
+			poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+			QString dir = obj->getDir().c_str();
+			QString name = obj->getName().c_str();
+			if (!dir.endsWith('/'))
+				dir.append("/");
+			if (_infos->hasParameter("appendToDir")) {
+				std::string addToDir = _infos->getParameter<std::string>("appendToDir");
+				dir = dir + addToDir.c_str();
+				if (!dir.endsWith('/'))
+					dir.append("/");
+			}
+			if (_infos->hasParameter("appendToName")) {
+				std::string addToFile = _infos->getParameter<std::string>("appendToName");
+				int dotIndex = name.lastIndexOf('.');
+
+				if (dotIndex != -1)
+					name.insert(dotIndex, addToFile.c_str());
+				else
+					name.append(addToFile.c_str());
+			}
+			filename = dir + name;
 		}
-		if (!filename.endsWith(".obj"))
-			filename.append(".obj");
+		if (m_objects->dimension() == 3)
+			if (!filename.endsWith('.obj'))
+				filename.append(".obj");
+		if (m_objects->dimension() == 2)
+			if (!filename.endsWith('.pol'))
+				filename.append(".pol");
 		saveAsOBJ(filename);
 	}
 	else if (_infos->nameCommand == "computeSkeletons") {
@@ -895,7 +922,16 @@ void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 void ObjectListBasicCommands::saveAsOBJ(const QString& _filename) const
 {
 	poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(m_objects);
-	if (omesh == NULL) return;
-	omesh->saveAsOBJ(_filename.toStdString());
-	std::cout << "File " << _filename.toStdString() << "has been saved." << std::endl;
+	if (omesh != NULL) {
+		omesh->saveAsOBJ(_filename.toStdString());
+		std::cout << "File " << _filename.toStdString() << "has been saved." << std::endl;
+		return;
+	}
+	poca::geometry::ObjectListPolygon* opol = dynamic_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+	if (opol != NULL) {
+		opol->saveAsPol(_filename.toStdString());
+		std::cout << "File " << _filename.toStdString() << "has been saved." << std::endl;
+		return;
+	}
+	std::cout << "Saving file " << _filename.toStdString() << "failed." << std::endl;
 }
