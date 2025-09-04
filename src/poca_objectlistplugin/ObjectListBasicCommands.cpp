@@ -412,7 +412,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "saveStatsObjs" || _nameCommand == "saveLocsObjs" || _nameCommand == "saveOutlineLocsObjs" || _nameCommand == "saveAsSVG" || _nameCommand == "saveAsOBJ") {
+	if (_nameCommand == "saveStatsObjs" || _nameCommand == "saveLocsObjs" || _nameCommand == "saveOutlineLocsObjs" || _nameCommand == "saveAsSVG") {
 		poca::core::CommandInfo ci(_nameCommand);
 		if (_parameters.contains("filename"))
 			ci.addParameter("filename", _parameters["filename"].get<std::string>());
@@ -423,6 +423,18 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 		std::string separator = _parameters.contains("separator") ? _parameters["separator"].get<std::string>() : ",";
 		ci.addParameter("separator", separator);
 			
+		return ci;
+	}
+	else if (_nameCommand == "saveAsOBJ") {
+		poca::core::CommandInfo ci(false, _nameCommand);
+		if (_parameters.contains("filename"))
+			ci.addParameter("filename", _parameters["filename"].get<std::string>());
+		if (_parameters.contains("appendToTitle"))
+			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
+		if (_parameters.contains("appendToDir"))
+			ci.addParameter("appendToDir", _parameters["appendToDir"].get<std::string>());
+		if (_parameters.contains("appendToName"))
+			ci.addParameter("appendToName", _parameters["appendToName"].get<std::string>());
 		return ci;
 	}
 	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons" || _nameCommand == "exportObjectsInROIs") {
@@ -440,7 +452,21 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 			return poca::core::CommandInfo(false, _nameCommand, "selection", selectedObjects);
 		}
 	}
-	return poca::core::CommandInfo();
+	else if (_nameCommand == "fillHolesObjects") {
+		if (_parameters.contains("minArea")) {
+			float minA = _parameters["minArea"].get<float>();
+			return poca::core::CommandInfo(false, _nameCommand, "minArea", minA);
+		}
+	}
+	else if (_nameCommand == "smoothObjects") {
+		if (_parameters.contains("factorResampling") && _parameters.contains("nbSmoothSteps") && _parameters.contains("windowSize")) {
+			float factorResampling = _parameters["factorResampling"].get<float>();
+			uint32_t nbSmoothSteps = _parameters["nbSmoothSteps"].get<uint32_t>();
+			uint32_t windowSize = _parameters["windowSize"].get<uint32_t>();
+			return poca::core::CommandInfo(false, _nameCommand, "factorResampling", factorResampling, "nbSmoothSteps", nbSmoothSteps, "windowSize", windowSize);
+		}
+	}
+	return poca::core::CommandInfo(); 
 }
 
 poca::core::Command* ObjectListBasicCommands::copy()
