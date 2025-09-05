@@ -104,7 +104,7 @@ namespace poca::geometry {
 			auto centroid = CGAL::centroid(polygon.vertices_begin(), polygon.vertices_end());
 			auto bbox = CGAL::bounding_box(polygon.vertices_begin(), polygon.vertices_end());
 			m_centroids[curObj].set(centroid.x(), centroid.y(), 0.f);
-			m_bboxMeshes[curObj].set(bbox.xmin(), bbox.ymin(), 0.f, bbox.xmax(), bbox.ymax(), 0.f);
+			m_bboxMeshes[curObj++].set(bbox.xmin(), bbox.ymin(), 0.f, bbox.xmax(), bbox.ymax(), 0.f);
 			m_bbox.addPointBBox(bbox.xmin(), bbox.ymin(), 0.f);
 			m_bbox.addPointBBox(bbox.xmax(), bbox.ymax(), 0.f);
 		}
