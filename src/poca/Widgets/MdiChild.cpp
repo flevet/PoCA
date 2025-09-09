@@ -396,6 +396,8 @@ void MdiChild::resetViewer()
 	const poca::core::BoundingBox& bbox = object->boundingBox();
 	m_minT = ceil(bbox[2]);
 	m_maxT = ceil(bbox[5] - 1);
+	if (m_maxT == -1)
+		return;
 	m_interval = m_maxT - m_minT;
 	m_tSlider->setMinimum(0);
 	m_tSlider->setMaximum(m_interval);
