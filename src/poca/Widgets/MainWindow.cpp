@@ -636,13 +636,14 @@ void MainWindow::setCameraInteraction()
 	size_t dimension = cam->getObject()->dimension();
 	QObject* sender = QObject::sender();
 	if (sender == m_xyAct) {
-		if (dimension == 3)
+		return;
+		/*if (dimension == 3)
 			return;
 		else {
 			cam->fixPlane(poca::opengl::Camera::Plane_XY, true);
 			cam->fixPlane(poca::opengl::Camera::Plane_XY, false);
 			return;
-		}
+		}*/
 	}
 	if (sender == m_line2DROIAct)
 		cam->setCameraInteraction(m_line2DROIAct->isChecked() ? poca::opengl::Camera::Line2DRoiDefinition : poca::opengl::Camera::None);
@@ -695,13 +696,13 @@ void MainWindow::setCameraInteraction(bool _on)
 		m_polyline2DROIAct->setEnabled(!_on || dimension == 2);
 	}
 
-	if (dimension == 2) return;
+	//if (dimension == 2) return;
 	if (act == m_xyAct) {
 		m_line2DROIAct->setEnabled(true);// _on);
-		m_triangle2DROIAct->setEnabled(_on);
-		m_circle2DROIAct->setEnabled(_on);
-		m_square2DROIAct->setEnabled(_on);
-		m_polyline2DROIAct->setEnabled(_on);
+		m_triangle2DROIAct->setEnabled(dimension == 2);
+		m_circle2DROIAct->setEnabled(dimension == 2);
+		m_square2DROIAct->setEnabled(dimension == 2);
+		m_polyline2DROIAct->setEnabled(dimension == 2);
 		if (!_on) {
 			bool ROI2D = false;
 			ROI2D |= m_line2DROIAct->isChecked();
@@ -1145,7 +1146,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		if (m_yzAct->isChecked())
 			m_yzAct->setChecked(false);
 		
-		m_xyAct->setCheckable(dimension == 3);
+		//m_xyAct->setCheckable(dimension == 3);
 		m_xzAct->setEnabled(dimension == 3);
 		m_yzAct->setEnabled(dimension == 3);
 
