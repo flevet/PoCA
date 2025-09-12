@@ -46,6 +46,7 @@ namespace poca::geometry {
 	class ObjectListPolygon : public poca::geometry::ObjectListInterface {
 	public:
 		ObjectListPolygon(const float*, const float*, const float*, const std::vector <std::vector<Polygon_2>>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <uint32_t>&);
+		ObjectListPolygon(const std::vector <Polygon_2>&);
 		ObjectListPolygon(const std::vector <std::vector<Polygon_2>>&);
 		ObjectListPolygon(std::vector <std::vector<Polygon_2>>::const_iterator, std::vector <std::vector<Polygon_2>>::const_iterator);
 		ObjectListPolygon(const std::vector <std::vector <std::vector <poca::core::Vec3mf>>>&);

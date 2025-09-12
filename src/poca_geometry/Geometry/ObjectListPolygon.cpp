@@ -55,6 +55,14 @@ namespace poca::geometry {
 		generateFromPolygons();
 	}
 
+	ObjectListPolygon::ObjectListPolygon(const std::vector <Polygon_2>& _polygons) : ObjectListInterface("ObjectListPolygon")
+	{
+		for (const auto& poly : _polygons)
+			m_polygons.push_back({ poly });
+		generateFromPolygons();
+	}
+
+
 	ObjectListPolygon::ObjectListPolygon(const std::vector <std::vector<Polygon_2>>& _polygons) : ObjectListInterface("ObjectListPolygon"), m_polygons(_polygons)
 	{
 		generateFromPolygons();
