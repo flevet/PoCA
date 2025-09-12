@@ -1761,6 +1761,18 @@ namespace poca::opengl {
 			}
 			if (m_leftButtonOn && !m_scaling)
 				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", m_stateCamera.m_center, "cameraForward", m_stateCamera.m_eye));
+
+			poca::core::CommandInfo ci(false, "pick",
+				"x", _event->pos().x(),
+				"y", _event->pos().y(),
+				"saveImage", false,
+				"infos", poca::core::stringList(),
+				"click", std::string("left"));
+			m_object->executeGlobalCommand(&ci);
+			m_infoPicking.clear();
+			poca::core::stringList listInfos = ci.getParameter<poca::core::stringList>("infos");
+			for (std::string info : listInfos)
+				m_infoPicking.push_back(QString::fromStdString(info));
 			break;
 		}
 		case Qt::MiddleButton:
