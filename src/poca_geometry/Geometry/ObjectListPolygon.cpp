@@ -35,6 +35,8 @@
 #include <CGAL/centroid.h>
 #include <CGAL/bounding_box.h>
 #include <CGAL/Triangulation_conformer_2.h>
+#include <tinysplinecxx.h>
+#include <boost/range/combine.hpp>
 
 #include <General/MyData.hpp>
 #include <General/BasicComponent.hpp>
@@ -46,6 +48,378 @@
 #include "BasicComputation.hpp"
 #include "DelaunayTriangulation.hpp"
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
+
+template <class K>
+inline double to_d(const typename K::FT& v) { return CGAL::to_double(v); }
+
+template <class K>
+inline double edge_len(const CGAL::Point_2<K>& p, const CGAL::Point_2<K>& q)
+{
+	const double dx = to_d<K>(q.x() - p.x());
+	const double dy = to_d<K>(q.y() - p.y());
+	return std::sqrt(dx * dx + dy * dy);
+}
+
+template <class K>
+inline double signed_area2(const CGAL::Point_2<K>& a,
+	const CGAL::Point_2<K>& b,
+	const CGAL::Point_2<K>& c)
+{
+	const double ax = to_d<K>(a.x()), ay = to_d<K>(a.y());
+	const double bx = to_d<K>(b.x()), by = to_d<K>(b.y());
+	const double cx = to_d<K>(c.x()), cy = to_d<K>(c.y());
+	// 2 * signed area
+	return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+// Returns pair: {signed_kappa, abs_kappa}
+template <class K>
+inline std::pair<float, float>
+vertex_curvature_control_polygon(const CGAL::Point_2<K>& A,
+	const CGAL::Point_2<K>& B,
+	const CGAL::Point_2<K>& C)
+{
+	const double ab = edge_len<K>(A, B);
+	const double bc = edge_len<K>(B, C);
+	const double ca = edge_len<K>(C, A);
+
+	const double s2 = signed_area2<K>(A, B, C); // 2 * signed area
+	const double denom = ab * bc * ca;
+	const double eps = 1e-14;
+
+	if (denom <= eps) return { 0.0, 0.0 };  // degenerate or nearly collinear
+
+	const double k_abs = (2.0 * std::abs(s2)) / denom; // equals 1/R
+	const double k_signed = (s2 >= 0.0) ? k_abs : -k_abs;
+	return { (float)k_signed, (float)k_abs };
+}
+
+// Main function: curvature for each vertex of a closed polygon
+// If first point equals last point, the last is ignored.
+template <class K>
+inline std::vector<std::pair<float, float>>
+control_polygon_curvatures(const CGAL::Polygon_2<K>& poly)
+{
+	std::vector<std::pair<float, float>> out;
+	const std::size_t N0 = poly.size();
+	if (N0 < 3) return out;
+
+	// Handle possible duplicated closing vertex
+	std::size_t N = N0;
+	if (N0 >= 2 && poly[0] == poly[N0 - 1]) N = N0 - 1;
+	if (N < 3) return out;
+
+	out.reserve(N);
+	for (std::size_t i = 0; i < N; ++i) {
+		const auto& A = poly[(i + N - 1) % N];
+		const auto& B = poly[i];
+		const auto& C = poly[(i + 1) % N];
+		out.push_back(vertex_curvature_control_polygon<K>(A, B, C));
+	}
+	return out;
+}
+
+// Returns {p2, p98}. Throws if there are no finite values.
+inline std::pair<float, float> percentile_bounds_2_98(const std::vector<float>& x)
+{
+	// Copy only finite values
+	std::vector<float> a;
+	a.reserve(x.size());
+	for (float v : x) {
+		if (std::isfinite(v)) a.push_back(v);
+	}
+	if (a.empty())
+		throw std::runtime_error("percentile_bounds_2_98: no finite values");
+
+	std::sort(a.begin(), a.end());
+	const size_t n = a.size();
+
+	auto percentile = [&](double p) -> float {
+		if (p <= 0.0) return a.front();
+		if (p >= 1.0) return a.back();
+		const double pos = p * (n - 1);     // 0-based index position
+		const size_t idx = static_cast<size_t>(pos);
+		const double frac = pos - idx;      // fractional part for interpolation
+		if (idx + 1 < n) {
+			const double v =
+				(1.0 - frac) * static_cast<double>(a[idx]) +
+				frac * static_cast<double>(a[idx + 1]);
+			return static_cast<float>(v);
+		}
+		else {
+			return a[idx];
+		}
+		};
+
+	float lo = percentile(0.02);
+	float hi = percentile(0.98);
+	if (lo > hi) std::swap(lo, hi);
+	return { lo, hi };
+}
+
+// Works for dim = 2 or 3.
+// For 2D:   kappa = abs(x' * y'' - y' * x'') / ( (x'^2 + y'^2)^(3/2) )
+// For 3D:   kappa = ||r' cross r''|| / ||r'||^3
+namespace splineutils {
+
+	/*using real_t = tinyspline::real;
+
+	// Euclidean norm of a vector
+	inline double norm(const std::vector<real_t>& v)
+	{
+		double s = 0.0;
+		for (double x : v) s += x * x;
+		return std::sqrt(s);
+	}
+
+	// Cross product for 3D vectors stored in std::vector
+	inline std::vector<double> cross3(const std::vector<real_t>& a,
+		const std::vector<real_t>& b)
+	{
+		return {
+			static_cast<double>(a[1] * b[2] - a[2] * b[1]),
+			static_cast<double>(a[2] * b[0] - a[0] * b[2]),
+			static_cast<double>(a[0] * b[1] - a[1] * b[0])
+		};
+	}
+
+	// Compute Greville abscissae for a clamped or open B-spline.
+	// For control point i (0..n-1), xi = (t_{i+1} + ... + t_{i+p}) / p, where p = degree.
+	inline std::vector<double> greville_abscissae(const tinyspline::BSpline& s)
+	{
+		const int p = static_cast<int>(s.degree());                 // degree
+		const int nCtrl = static_cast<int>(s.numControlPoints());   // number of control points
+
+		if (p <= 0) throw std::runtime_error("Degree must be >= 1 to compute Greville points.");
+
+		// Knot vector length should be nCtrl + p + 1
+		const std::vector<real_t> knots = s.knots();
+		if (static_cast<int>(knots.size()) != nCtrl + p + 1)
+			throw std::runtime_error("Unexpected knot vector size.");
+
+		std::vector<double> xi;
+		xi.reserve(nCtrl);
+
+		for (int i = 0; i < nCtrl; ++i) {
+			double sum = 0.0;
+			for (int j = 1; j <= p; ++j) {
+				sum += static_cast<double>(knots[i + j]);
+			}
+			xi.push_back(sum / p);
+		}
+
+		// Clamp into the curve domain just in case
+		tinyspline::Domain dom = s.domain(); // provides min() and max()
+		const double umin = static_cast<double>(dom.min());
+		const double umax = static_cast<double>(dom.max());
+		for (double& u : xi) {
+			if (u < umin) u = umin;
+			if (u > umax) u = umax;
+		}
+		return xi;
+	}
+
+	// Curvature kappa(u) using TinySpline derivatives
+	inline float curvature_at(const tinyspline::BSpline& s, const tinyspline::BSpline& d1, const tinyspline::BSpline& d2, double u)
+	{
+		const size_t dim = s.dimension();
+		if (dim < 2 || dim > 3)
+			throw std::runtime_error("Curvature only implemented for 2D or 3D splines.");
+
+		tinyspline::DeBoorNet deriv1 = d1.eval(u);
+		tinyspline::DeBoorNet deriv2 = d2.eval(u);
+
+		const auto& d1r = deriv1.result();
+		const auto& d2r = deriv2.result();
+
+		double dx = d1r[0], dy = d1r[1];
+		double ddx = d2r[0], ddy = d2r[1];
+
+		double num = std::abs(dx * ddy - dy * ddx);
+		double denom = std::pow(dx * dx + dy * dy, 1.5);
+
+		return (denom != 0.0) ? float(num / denom) : 0.f;
+
+		// Evaluate r'(u) and r''(u)
+		const std::vector<real_t> rp = d1.eval(static_cast<real_t>(u)).result();
+		const std::vector<real_t> rpp = d2.eval(static_cast<real_t>(u)).result();
+
+		const double eps = 1e-12;
+
+		// 2D curvature
+		if (dim == 2) {
+			const double xp = static_cast<double>(rp[0]);
+			const double yp = static_cast<double>(rp[1]);
+			const double xpp = static_cast<double>(rpp[0]);
+			const double ypp = static_cast<double>(rpp[1]);
+
+			const double den2 = xp * xp + yp * yp;
+			const double den = std::pow(den2, 1.5);
+			if (den < eps) return 0.0;
+
+			const double num = std::abs(xp * ypp - yp * xpp);
+			std::cout << u << " -> " << num / den << std::endl;
+			return num / den;
+		}
+
+		// 3D curvature
+		// kappa = ||r' cross r''|| / ||r'||^3
+		const double rp_norm = norm(rp);
+		if (rp_norm < eps) return 0.0;
+
+		auto cp = cross3(rp, rpp);
+		const double cp_norm = std::sqrt(cp[0] * cp[0] + cp[1] * cp[1] + cp[2] * cp[2]);
+		const double den = rp_norm * rp_norm * rp_norm;
+		if (den < eps) return 0.0;
+
+		return (float)(cp_norm / den);
+	}
+
+	// Convenience: curvature for each control point (evaluated at its Greville abscissa)
+	inline std::vector<float> curvature_per_control(const tinyspline::BSpline& s)
+	{
+		// First and second derivative splines
+		tinyspline::BSpline d1 = s.derive();
+		tinyspline::BSpline d2 = d1.derive();
+
+		std::cout << __LINE__ << ", dim = " << s.dimension() << std::endl;
+		const auto xi = greville_abscissae(s);
+		std::cout << __LINE__ << " " << xi.size() << std::endl;
+		std::vector<float> kappa;
+		kappa.reserve(xi.size());
+		for (double u : xi) {
+			kappa.push_back(curvature_at(s, d1, d2, u));
+		}
+		std::cout << __LINE__ << std::endl;
+		return kappa;
+	}
+	*/
+
+using real_t = tinyspline::real;
+
+inline double sqr(double x) { return x * x; }
+
+// Convert TinySpline result vector of length 2 or 3 to 3D double
+inline void to3(const std::vector<real_t>& v, double out[3]) {
+	if (v.size() == 2) { out[0] = (double)v[0]; out[1] = (double)v[1]; out[2] = 0.0; }
+	else if (v.size() == 3) { out[0] = (double)v[0]; out[1] = (double)v[1]; out[2] = (double)v[2]; }
+	else throw std::runtime_error("Curvature only supported for dim 2 or 3.");
+}
+
+inline double norm3(const double a[3]) {
+	return std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+}
+
+inline void cross3(const double a[3], const double b[3], double out[3]) {
+	out[0] = a[1] * b[2] - a[2] * b[1];
+	out[1] = a[2] * b[0] - a[0] * b[2];
+	out[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+// Compute Greville abscissae for a clamped or open B-spline.
+// For control point i in [0..n-1], xi = (t_{i+1} + ... + t_{i+p}) / p where p = degree.
+inline std::vector<double> greville_abscissae(const tinyspline::BSpline& s)
+{
+	const int p = (int)s.degree();
+	const int nCtrl = (int)s.numControlPoints();
+	if (p <= 0) throw std::runtime_error("Degree must be >= 1 to compute Greville points.");
+
+	const std::vector<real_t> knots = s.knots();
+	if ((int)knots.size() != nCtrl + p + 1)
+		throw std::runtime_error("Unexpected knot vector size.");
+
+	std::vector<double> xi;
+	xi.reserve(nCtrl);
+	for (int i = 0; i < nCtrl; ++i) {
+		double sum = 0.0;
+		for (int j = 1; j <= p; ++j) sum += (double)knots[i + j];
+		xi.push_back(sum / p);
+	}
+
+	// Clamp to the curve domain
+	tinyspline::Domain dom = s.domain();
+	const double umin = (double)dom.min();
+	const double umax = (double)dom.max();
+	for (double& u : xi) {
+		if (u < umin) u = umin;
+		if (u > umax) u = umax;
+	}
+	return xi;
+}
+
+// Core curvature computation at parameter u. Returns NaN if evaluation failed.
+inline double curvature_core(const tinyspline::BSpline& s, double u)
+{
+	// Build derivative splines once per call
+	tinyspline::BSpline d1 = s.derive();
+	tinyspline::BSpline d2 = d1.derive();
+
+	const std::vector<real_t> rp = d1.eval((real_t)u).result();  // r'(u)
+	const std::vector<real_t> rpp = d2.eval((real_t)u).result();  // r''(u)
+
+	double r1[3], r2[3], c[3];
+	to3(rp, r1);
+	to3(rpp, r2);
+
+	const double r1n = norm3(r1);
+	// Strong epsilon relative to data scale
+	const double eps = 1e-14;
+
+	if (!(r1n > eps)) return std::numeric_limits<double>::quiet_NaN();
+
+	cross3(r1, r2, c);
+	const double num = norm3(c);
+	const double den = r1n * r1n * r1n;
+
+	if (!(den > eps)) return std::numeric_limits<double>::quiet_NaN();
+
+	const double kappa = num / den;
+	if (!std::isfinite(kappa)) return std::numeric_limits<double>::quiet_NaN();
+	return abs(kappa);
+}
+
+// Safer curvature with parameter nudging to avoid endpoints and tiny tangents.
+inline float curvature_at(const tinyspline::BSpline& s, double u)
+{
+	tinyspline::Domain dom = s.domain();
+	const double umin = (double)dom.min();
+	const double umax = (double)dom.max();
+	const double span = std::max(umax - umin, 1.0); // avoid zero
+	const double du = 1e-7 * span;                  // small nudge relative to domain
+
+	auto clamp = [&](double x) {
+		if (x < umin) return umin;
+		if (x > umax) return umax;
+		return x;
+		};
+
+	// Try at u
+	double k = curvature_core(s, clamp(u));
+	if (std::isfinite(k)) return (float)k;
+
+	// Try nudged values
+	double k1 = curvature_core(s, clamp(u + du));
+	if (std::isfinite(k1)) return (float)k1;
+
+	double k2 = curvature_core(s, clamp(u - du));
+	if (std::isfinite(k2)) return (float)k2;
+
+	// If still not finite, give up gracefully
+	return 0.f;
+}
+
+// Curvature per control point evaluated at its Greville abscissa (with safety)
+inline std::vector<float> curvature_per_control(const tinyspline::BSpline& s)
+{
+	const auto xi = greville_abscissae(s);
+	std::vector<float> kappa;
+	kappa.reserve(xi.size());
+	for (double u : xi) {
+		kappa.push_back(curvature_at(s, u));
+	}
+	return kappa;
+}
+} // namespace splineutils
 
 namespace poca::geometry {
 	ObjectListPolygon::ObjectListPolygon(const float* _xs, const float* _ys, const float* _zs, 
@@ -139,11 +513,61 @@ namespace poca::geometry {
 			m_outlineLocs = m_locs;
 		}
 
+		//compute curvatures
+		size_t cur = 0, nb = m_polygons.size();
+		for (const auto& polygons : m_polygons) {
+			try {
+				m_curvatures.push_back(std::vector<std::vector <float>>());
+				auto& allCurvatures = m_curvatures.back();
+				size_t curS = 0, nbS = polygons.size();
+				for (const auto& polygon : polygons) {
+					std::cout << "polygon " << cur << " / " << nb << ", spline " << curS << " / " << nbS << ", # points" << polygon.size() << std::endl;
+					/*std::vector<tinyspline::real> points;
+					for (const auto& p : polygon.container()) {
+						points.emplace_back(p.x());
+						points.emplace_back(p.y());
+					}
+					tinyspline::BSpline spline = tinyspline::BSpline(points.size() / 2);
+					auto curvs = splineutils::curvature_per_control(spline);
+					curS++;
+					auto [min_val, max_val] = percentile_bounds_2_98(curvs);
+					float range = max_val - min_val;
+					for (float& v : curvs) v = std::clamp(v, min_val, max_val);
+					std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;
+					std::transform(curvs.begin(), curvs.end(), curvs.begin(), [min_val, range](float val) { return (val - min_val) / range; });
+					allCurvatures.push_back(curvs);*/
+					auto ks = control_polygon_curvatures<K_inexact>(polygon);
+					std::vector<float> abs_vals;
+					abs_vals.reserve(ks.size());
+					std::transform(ks.begin(), ks.end(), std::back_inserter(abs_vals), [](const auto& pr) { return pr.second; });
+					/*auto [min_val, max_val] = percentile_bounds_2_98(abs_vals);
+					float range = max_val - min_val;
+					for (float& v : abs_vals) v = std::clamp(v, min_val, max_val);
+					std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;
+					std::transform(abs_vals.begin(), abs_vals.end(), abs_vals.begin(), [min_val, range](float val) { return (val - min_val) / range; });*/
+					allCurvatures.push_back(abs_vals);
+				}
+			}
+			catch (const std::runtime_error& e) {
+				std::cerr << "Caught runtime_error: " << e.what() << std::endl;
+			}
+			cur++;
+		}
+
+
 		std::vector <poca::core::Vec3mf> outlines;
 		std::vector <uint32_t> nbSegments{ 0 }; //_mesh.number_of_vertices()
-		for (const auto& polygons : m_polygons) {
-			//std::cout << "****************************************" << std::endl;
-			for (const auto& polygon : polygons) {
+		std::vector <float> curvOutlines;
+		//for (const auto& polygons : m_polygons) {
+		for (auto const& t1 : boost::combine(m_polygons, m_curvatures)) {
+			auto const& polygons = t1.get<0>();
+			auto& curvatures = t1.get<1>();
+			std::cout << "****************************************" << polygons.size() << " vs " << curvatures.size() << std::endl;
+			//for (const auto& polygon : polygons) {
+			for (auto const& t2 : boost::combine(polygons, curvatures)) {
+				auto const& polygon = t2.get<0>();
+				auto& curvature = t2.get<1>();
+				std::cout << polygon.size() << " vs " << curvature.size() << std::endl;
 				//std::cout << "Aera = " << fabs(polygon.area()) << ", # verts = " << polygon.size() << std::endl;
 				const auto& points = polygon.container();
 				std::size_t n = points.size();
@@ -154,11 +578,30 @@ namespace poca::geometry {
 
 					outlines.emplace_back(curr.x(), curr.y(), 0.f);
 					outlines.emplace_back(next.x(), next.y(), 0.f);
+
+					curvOutlines.emplace_back(curvature[i]);
+					curvOutlines.emplace_back(curvature[(i + 1) % n]);
 				}
 			}
 			nbSegments.push_back(outlines.size());
 		}
 		m_outlines.initialize(outlines, nbSegments);
+		//float min_val = *std::min_element(curvOutlines.begin(), curvOutlines.end());
+		//float max_val = *std::max_element(curvOutlines.begin(), curvOutlines.end());
+		auto [min_val, max_val] = percentile_bounds_2_98(curvOutlines);
+		float range = max_val - min_val;
+		for (float& v : curvOutlines) v = std::clamp(v, min_val, max_val);
+		std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;
+		std::transform(curvOutlines.begin(), curvOutlines.end(), curvOutlines.begin(), [min_val, range](float val) { return (val - min_val) / range; });
+		m_curvaturesArray.initialize(curvOutlines, nbSegments);
+		m_minCurvature = 0.f;
+		m_maxCurvature = 1.f;
+		m_hasCurvature = true;
+		//for (const auto f : curvOutlines)
+		//	std::cout << f << ", ";
+		//std::cout << std::endl;
+
+		std::cout << "min curv " << m_minCurvature << ", max curv " << m_maxCurvature << std::endl;
 		//std::cout << "****************************************" << std::endl;
 
 		std::vector <poca::core::Vec3mf> triangles;
@@ -286,6 +729,7 @@ namespace poca::geometry {
 				//for (const auto& pol : polygons) {
 				//	std::cout << "\t area -> " << fabs(pol.area()) << std::endl;
 				//}
+
 			}
 		}
 		m_triangles.initialize(triangles, nbTriangles);
@@ -448,12 +892,22 @@ namespace poca::geometry {
 
 	void ObjectListPolygon::getOutlinesFeatureInSelection(std::vector <float>& _features, const std::vector <float>& _values, const std::vector <bool>& _selection, const float _notSelectedValue) const
 	{
-		_features.resize(m_outlines.nbData());// *2);
+		/*_features.resize(m_outlines.nbData());// *2);
 
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_outlines.nbElements(); i++) {
 			for (size_t j = 0; j < m_outlines.nbElementsObject(i); j++) {
 				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
+			}
+		}*/
+
+		std::cout << "getOutlinesFeatureInSelection " << m_curvaturesArray.nbData() << std::endl;
+		_features.resize(m_curvaturesArray.nbData());// *2);
+
+		size_t cpt = 0;
+		for (size_t i = 0; i < m_curvaturesArray.nbElements(); i++) {
+			for (size_t j = 0; j < m_curvaturesArray.nbElementsObject(i); j++) {
+				_features[cpt++] = m_curvaturesArray.elementIObject(i, j);// _selection[i] ? m_curvaturesArray.elementIObject(i, j) : _notSelectedValue;
 			}
 		}
 	}
