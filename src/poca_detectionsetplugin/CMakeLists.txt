@@ -143,6 +143,15 @@ find_package(GLM REQUIRED)
 message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
 include_directories(${GLM_INCLUDE_DIR})
 
+find_package(TinyTIFF)
+target_link_libraries(${targetname} TinyTIFF::TinyTIFF)
+
+find_package(tinysplinecxx)
+include_directories(${TINYSPLINECXX_INCLUDE_DIRS})
+target_link_libraries(${targetname} ${TINYSPLINECXX_LIBRARIES})
+message("tinyspline: ${TINYSPLINECXX_INCLUDE_DIRS}")
+message("tinyspline: ${TINYSPLINECXX_LIBRARIES}")
+
 find_package(OpenMP)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")

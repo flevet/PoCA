@@ -181,6 +181,15 @@ find_package(GLEW REQUIRED)
 include_directories(${GLEW_INCLUDE_DIR})
 target_link_libraries(${targetname} ${GLEW_STATIC_LIBRARIES})
 
+find_package(TinyTIFF)
+target_link_libraries(${targetname} TinyTIFF::TinyTIFF)
+
+find_package(tinysplinecxx)
+include_directories(${TINYSPLINECXX_INCLUDE_DIRS})
+target_link_libraries(${targetname} ${TINYSPLINECXX_LIBRARIES})
+message("tinyspline: ${TINYSPLINECXX_INCLUDE_DIRS}")
+message("tinyspline: ${TINYSPLINECXX_LIBRARIES}")
+
 find_package(TBB COMPONENTS tbb tbbmalloc)
 if(TBB_FOUND)
   include_directories(PRIVATE ${TBB_INCLUDE_DIRS})
