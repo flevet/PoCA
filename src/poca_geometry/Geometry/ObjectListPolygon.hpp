@@ -97,6 +97,9 @@ namespace poca::geometry {
 		inline std::vector <std::vector<std::vector <float>>>& getCurvatures() { return m_curvatures; }
 		inline void setCurvatures(const std::vector <std::vector<std::vector <float>>>& _curvatures) { m_curvatures = _curvatures; }
 
+		virtual const float minCurvature()const { return m_minCurvature; }
+		virtual const float maxCurvature()const { return m_maxCurvature; }
+
 	protected:
 
 	private:
@@ -108,6 +111,10 @@ namespace poca::geometry {
 		std::vector <poca::core::BoundingBox> m_bboxMeshes;
 		std::vector <Constrained_Delaunay_triangulation_2_tag> m_cdts;
 		std::vector <std::vector<std::vector <float>>> m_curvatures;
+
+		//duplicate curvature info, keep for now
+		poca::core::MyArrayFloat m_curvaturesArray;
+		float m_minCurvature, m_maxCurvature;
 
 		//For now duplicate information about the points for compatibility with ObjectListInterface and existing plugins
 		std::vector <float> m_xsDuplicate, m_ysDuplicate;

@@ -87,6 +87,11 @@ namespace poca::geometry {
 
 		virtual const std::vector < std::array<poca::core::Vec3mf, 3>>& getAxisObjects() const { return m_axis; }
 
+		inline const bool hasCurvature() const { return m_hasCurvature; }
+		virtual const float minCurvature()const { return 0.f; }
+		virtual const float maxCurvature()const { return 0.f; }
+
+
 	protected:
 		ObjectListInterface(const std::string& _name) :BasicComponent(_name){}
 		ObjectListInterface(const std::string& _name,
@@ -115,6 +120,7 @@ namespace poca::geometry {
 		poca::core::MyArrayVec3mf m_triangles, m_outlines;
 		std::vector <poca::core::Vec3mf> m_normalOutlineLocs;
 		std::vector < std::array<poca::core::Vec3mf, 3>> m_axis;
+		bool m_hasCurvature{ false };
 	};
 }
 

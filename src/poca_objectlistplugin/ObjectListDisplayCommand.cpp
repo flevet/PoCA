@@ -396,8 +396,14 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 			if (m_lineBuffer.empty() || fill)
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
-			else
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
+			else {
+				if(m_objects->hasCurvature())
+					_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_objects->minCurvature(), m_objects->maxCurvature(), alpha, useUniformColor, uniformColor);
+				else
+					_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_lineBuffer, m_lineFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
+			}
+				//
+				
 		}
 	}
 	GL_CHECK_ERRORS();
@@ -847,7 +853,7 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 		if (!m_outlineLocsFeatureBuffer.empty())
 			m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
 		if (!m_lineBuffer.empty())
-			m_lineFeatureBuffer.updateBuffer(featureOutlines.data());
+			m_lineFeatureBuffer.updateBuffer(featureOutlines);
 
 		if (!m_ellipsoidFeatureBuffer.empty())
 			m_ellipsoidFeatureBuffer.updateBuffer(featureEllipsoid.data());
