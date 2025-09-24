@@ -191,9 +191,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 
-		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
-		if (!omesh) return;
-		poca::geometry::ObjectListMesh* newObjects = omesh->exportFilteredObjects();
+		poca::geometry::ObjectListInterface* newObjects = m_objects->exportFilteredObjects();
 		if (!newObjects) return;
 		ObjectListPlugin::m_plugins->addCommands(newObjects);
 		poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
@@ -204,7 +202,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
 
-		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
+		poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(m_objects);
 		if (!omesh) return;
 		poca::core::BasicComponentInterface* newObjects = omesh->copy(obj->getROIs());
 		if (!newObjects) return;

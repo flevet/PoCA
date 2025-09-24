@@ -88,10 +88,10 @@ protected:
 	poca::opengl::TriangleGLBuffer <float> m_triangleFeatureBuffer;
 
 	//Only used with 2D objects, to display the outline in openGL line mode
-	poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
-	poca::opengl::PointSingleGLBuffer <float> m_lineFeatureBuffer;
-	//poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
-	//poca::opengl::LineSingleGLBuffer <float> m_lineFeatureBuffer;
+	//poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
+	//poca::opengl::PointSingleGLBuffer <float> m_lineFeatureBuffer;
+	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
+	poca::opengl::LineSingleGLBuffer <float> m_lineFeatureBuffer;
 
 	//For now only for ObjectMesh
 	poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_skeletonBuffer, m_linksBuffer;

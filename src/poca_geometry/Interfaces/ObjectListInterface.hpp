@@ -79,6 +79,8 @@ namespace poca::geometry {
 
 		virtual bool hasSkeletons() const = 0;
 
+		virtual ObjectListInterface* exportFilteredObjects() const = 0;
+
 		inline void setOutlineLocs(const std::vector <uint32_t>& _locsOutlines, const std::vector <uint32_t>& _firstLocsOutlines) { m_outlineLocs = poca::core::MyArrayUInt32(_locsOutlines, _firstLocsOutlines); }
 		inline const poca::core::MyArrayUInt32& getLocOutlines() const { return m_outlineLocs; }
 		virtual void generateOutlineLocs(std::vector <poca::core::Vec3mf>&) = 0;

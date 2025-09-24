@@ -1087,4 +1087,15 @@ namespace poca::geometry {
 		}
 		fs.close();
 	}
+
+	poca::geometry::ObjectListInterface* ObjectListPolygon::exportFilteredObjects() const
+	{
+		std::vector <std::vector<Polygon_2>> polygonsSelected;
+
+		for (auto n = 0; n < m_polygons.size(); n++) {
+			if (m_selection[n])
+				polygonsSelected.push_back(m_polygons[n]);
+		}
+		return polygonsSelected.empty() ? NULL : static_cast <poca::geometry::ObjectListInterface*> (new ObjectListPolygon(polygonsSelected));
+	}
 }

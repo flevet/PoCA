@@ -52,7 +52,7 @@ namespace poca::geometry {
 		poca::core::BasicComponentInterface* copy();
 		poca::core::BasicComponentInterface* copy(const std::vector <poca::core::ROIInterface*>&);
 
-		poca::geometry::ObjectListMesh* exportFilteredObjects();
+		ObjectListInterface* exportFilteredObjects() const;
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);
@@ -90,6 +90,7 @@ namespace poca::geometry {
 		inline const poca::core::MyArrayVec3mf& getSkeletons() const { return m_edgesSkeleton; }
 		inline const poca::core::MyArrayVec3mf& getLinks() const { return m_linksSkeleton; }
 		inline const std::vector <Surface_mesh_3_double>& getMeshes() const { return m_meshes; }
+		inline  std::vector <Surface_mesh_3_double>& getMeshes() { return m_meshes; }
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 
 	protected:

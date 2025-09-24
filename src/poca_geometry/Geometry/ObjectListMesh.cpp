@@ -325,7 +325,7 @@ namespace poca::geometry {
 		return new ObjectListMesh(allVertices, allTriangles, false, false);
 	}
 
-	poca::geometry::ObjectListMesh* ObjectListMesh::exportFilteredObjects()
+	poca::geometry::ObjectListInterface* ObjectListMesh::exportFilteredObjects() const
 	{
 		std::vector <std::vector <Point_3_double>> allVertices;
 		std::vector < std::vector <std::vector <std::size_t>>> allTriangles;
@@ -350,7 +350,7 @@ namespace poca::geometry {
 				}
 			}
 		}
-		return allVertices.empty() ? NULL: new ObjectListMesh(allVertices, allTriangles, false, false);
+		return allVertices.empty() ? NULL: static_cast <poca::geometry::ObjectListInterface*> (new ObjectListMesh(allVertices, allTriangles, false, false));
 	}
 	
 	const bool ObjectListMesh::addObjectMesh(std::vector <Point_3_double>& _vertices, std::vector<std::vector<std::size_t> >& _triangles,

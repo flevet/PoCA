@@ -139,6 +139,10 @@ typedef CGAL::Delaunay_triangulation_cell_base_with_circumcenter_3<K_inexact, Cb
 typedef CGAL::Triangulation_cell_base_with_info_3 < int, K_inexact, Cbc_3_inexact > Cbc_int_3_inexact;
 typedef CGAL::Triangulation_data_structure_3<Vb_int_3_inexact, Cbc_int_3_inexact, CGAL::Parallel_tag> Tds_3_inexact;
 typedef CGAL::Delaunay_triangulation_3<K_inexact, Tds_3_inexact> Triangulation_3_inexact;
+
+typedef CGAL::Triangulation_cell_base_with_info_3 < FaceInfoTag, K_inexact, Cbc_3_inexact > Cbc_tag_3_inexact;
+typedef CGAL::Triangulation_data_structure_3<Vb_int_3_inexact, Cbc_tag_3_inexact, CGAL::Parallel_tag> Tds_3_tag_inexact;
+typedef CGAL::Delaunay_triangulation_3<K_inexact, Tds_3_tag_inexact> Triangulation_3_tag_inexact;
 #else
 typedef CGAL::Triangulation_vertex_base_with_info_3 < int, K_inexact > Vb_int_3_inexact;
 typedef CGAL::Triangulation_cell_base_with_info_3 < int, K_inexact > Cb_3_inexact;
