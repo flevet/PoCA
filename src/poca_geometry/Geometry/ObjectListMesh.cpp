@@ -69,6 +69,33 @@ typedef CGAL::Face_filtered_graph<Surface_mesh_3_double> Filtered_graph;
 typedef Surface_mesh_3_double::Property_map<vertex_descriptor, Kernel::Vector_3> Vertex_vector_3_map;
 typedef Surface_mesh_3_double::Property_map<face_descriptor, Kernel::Vector_3> Facet_vector_3_map;
 
+template <class TriangleMesh>
+void extract_precise_skeleton(
+	TriangleMesh& mesh,
+	typename CGAL::Mean_curvature_flow_skeletonization<TriangleMesh>::Skeleton& skel)
+{
+	using MCF = CGAL::Mean_curvature_flow_skeletonization<TriangleMesh>;
+	MCF mcf(mesh);
+
+	// Correct bbox for a TriangleMesh
+	const CGAL::Bbox_3 bb = PMP::bbox(mesh);
+	const double dx = bb.xmax() - bb.xmin();
+	const double dy = bb.ymax() - bb.ymin();
+	const double dz = bb.zmax() - bb.zmin();
+	const double bbox_diag = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+	mcf.set_min_edge_length(0.0002 * bbox_diag);   // keep tiny edges longer
+	mcf.set_max_triangle_angle(95.0);              // split earlier
+	mcf.set_max_iterations(3000);
+	mcf.set_area_variation_factor(2e-5);
+	mcf.set_is_medially_centered(true);
+	mcf.set_medially_centered_speed_tradeoff(0.45); // closer to medial axis, less smoothing
+	mcf.set_quality_speed_tradeoff(0.20);           // quality (docs: larger => better quality)
+
+	mcf.contract_until_convergence();
+	mcf.convert_to_skeleton(skel);
+}
+
 namespace poca::geometry {
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const std::vector <poca::core::ROIInterface*>& _ROIs, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
@@ -730,6 +757,8 @@ namespace poca::geometry {
 	{
 		std::vector <poca::core::Vec3mf> skeletons, links;
 		std::vector <uint32_t> nbSkeletons, nbLinks;
+		nbSkeletons.push_back(0);
+		nbLinks.push_back(0);
 		int cpt = 0;
 		clock_t t1 = clock(), t2;
 		std::cout << std::string(10, '-');
@@ -746,6 +775,8 @@ namespace poca::geometry {
 			//std::cout << "Start skeletonization (" << num_faces(mesh) << " faces)..." << std::endl;
 			Skeleton skeleton;
 			CGAL::extract_mean_curvature_flow_skeleton(mesh, skeleton);
+			//CGAL::Mean_curvature_flow_skeletonization<Surface_mesh_3_double>::Skeleton skeleton;
+			//extract_precise_skeleton(mesh, skeleton);
 
 			//std::cout << "Number of vertices of the skeleton: " << boost::num_vertices(skeleton) << "\n";
 			//std::cout << "Number of edges of the skeleton: " << boost::num_edges(skeleton) << "\n";
