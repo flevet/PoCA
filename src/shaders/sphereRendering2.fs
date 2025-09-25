@@ -6,7 +6,10 @@ uniform float radius;
 uniform sampler1D lutTexture;
 uniform float minFeatureValue;
 uniform float maxFeatureValue;
+uniform float currentMinFeatureValue;
+uniform float currentMaxFeatureValue;
 uniform float nbPoints;
+uniform bool scaleLUT;
 
 uniform bool useSpecialColors;
 uniform vec3 light_position;
@@ -82,10 +85,25 @@ void main()
 	else if(applyUniformColor)
 		colorTmp = uniformColor.rgb;
 	else {
-		if (vfeature < minFeatureValue)
-			discard;
-		float inter = maxFeatureValue - minFeatureValue;
-		colorTmp = vec3(texture(lutTexture, ((vfeature - minFeatureValue) / inter)).xyz);
+		float pos = 0.f;
+		if(scaleLUT){
+			if (vfeature < currentMinFeatureValue)
+				pos = 0.f;
+			else if (vfeature > currentMaxFeatureValue)
+				pos = 1.f;
+			else{
+				float inter = currentMaxFeatureValue - currentMinFeatureValue;
+				pos = (vfeature - currentMinFeatureValue) / inter;
+			}
+		}
+		else{
+			if (vfeature < minFeatureValue || vfeature > maxFeatureValue)
+				discard;
+			float inter = maxFeatureValue - minFeatureValue;
+			pos = (vfeature - currentMinFeatureValue) / inter;
+		}
+		
+		colorTmp = vec3(texture(lutTexture, pos).xyz);
 		/*if (vfeature < minFeatureValue)
 			colorTmp = vec3(0, 0.78, 0);
 		else{

@@ -77,7 +77,8 @@ protected:
 	poca::geometry::DetectionSet * m_dset;
 
 	GLuint m_textureLutID;
-	GLfloat m_minOriginalFeature, m_maxOriginalFeature, m_actualValueFeature, m_alphaValue;
+	GLfloat m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_actualValueFeature, m_alphaValue;
+	bool m_isScaleLUT{ false };
 
 	poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_pointBuffer, m_uncertaintiesBuffer, m_normalBuffer;
 	poca::opengl::PointSingleGLBuffer <float> m_idBuffer;

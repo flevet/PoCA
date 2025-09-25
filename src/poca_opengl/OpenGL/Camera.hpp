@@ -242,10 +242,10 @@ namespace poca::opengl {
 		void drawLineShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const SingleGLBuffer<T>&, const GLfloat, const GLfloat, const GLfloat = 1.f);
 		
 		template < class T, class M >
-		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false, const bool = false, glm::vec4 = glm::vec4());
+		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat, const GLfloat, const bool, const uint32_t = 5, const bool = false, const bool = false, const bool = false, glm::vec4 = glm::vec4());
 
 		template < class T, class M >
-		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const uint32_t = 5, const bool = false, const bool = false);
+		void drawSphereRendering(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat, const GLfloat, const bool, const uint32_t = 5, const bool = false, const bool = false);
 
 
 		template < class T, class M >
@@ -596,7 +596,8 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius, const bool _applyUniformColor, glm::vec4 _uniformColor)
+	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF,
+		const GLfloat _currentMin, const GLfloat _currentMax, const bool _scaleLUT, const uint32_t _radius, const bool _ssao, const bool _screenRadius, const bool _applyUniformColor, glm::vec4 _uniformColor)
 	{
 		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
@@ -640,6 +641,9 @@ namespace poca::opengl {
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
+		shader->setFloat("currentMinFeatureValue", _currentMin);
+		shader->setFloat("currentMaxFeatureValue", _currentMax);
+		shader->setBool("scaleLUT", _scaleLUT);
 		shader->setBool("useSpecialColors", false);
 		shader->setBool("screenRadius", _screenRadius);
 		shader->setVec2("pixelSize", px, py);// px, py);//NDC coordinates are from -1 to 1
@@ -680,7 +684,8 @@ namespace poca::opengl {
 	}
 
 	template < class T, class M >
-	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<T>& _bufferNormal, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, const uint32_t _radius, const bool _ssao, const bool _screenRadius)
+	void Camera::drawSphereRendering(const GLuint _textureLutID, const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<T>& _bufferNormal, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF, const GLfloat _maxF, 
+		const GLfloat _currentMin, const GLfloat _currentMax, const bool _scaleLUT, const uint32_t _radius, const bool _ssao, const bool _screenRadius)
 	{
 		if (_bufferVertex.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = _ssao ? getShader("geometrySSAO") : getShader("sphereRenderingShader");
@@ -712,6 +717,9 @@ namespace poca::opengl {
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
+		shader->setFloat("currentMinFeatureValue", _currentMin);
+		shader->setFloat("currentMaxFeatureValue", _currentMax);
+		shader->setBool("scaleLUT", _scaleLUT);
 		shader->setBool("useSpecialColors", false);
 		shader->setBool("screenRadius", _screenRadius);
 		shader->setVec2("pixelSize", px, py);// px, py);//NDC coordinates are from -1 to 1

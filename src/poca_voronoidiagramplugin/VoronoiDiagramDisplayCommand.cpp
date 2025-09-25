@@ -209,7 +209,7 @@ void VoronoiDiagramDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 
 	if (pointRendering) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, false);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, false);
 	}
 	GL_CHECK_ERRORS();
 	if (polytopeRendering && m_voronoi->hasCells()) {

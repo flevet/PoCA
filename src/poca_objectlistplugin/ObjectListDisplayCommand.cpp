@@ -321,13 +321,13 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	if (pointRendering) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, _ssao);
 	}
 
 	if (outlinePointRendering && !m_outlinePointBuffer.empty()) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_outlinePointBuffer, m_outlineLocsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_outlinePointBuffer, m_outlineLocsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, _ssao);
 	}
 
 	if (cullFaceType == "front")

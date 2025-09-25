@@ -203,12 +203,12 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 		if (pal->getName() == "RandomOneColor") {
 			poca::core::Color4uc c = pal->getColor(0.5f);
 			glm::vec4 color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
-			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates, true, color);
+			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates, true, color);
 		}
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
 	}
 	else
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, pointSize, _ssao, screenCoordinates);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
 
 #ifdef DEBUG_NORMAL
 	if (!m_normalDebugBuffer.empty())
@@ -249,6 +249,7 @@ void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 
 void DetectionSetDisplayCommand::createDisplay()
 {
+	std::cout << "DetectionSetDisplayCommand::createDisplay" << std::endl;
 	GL_CHECK_ERRORS();
 	freeGPUMemory();
 	GL_CHECK_ERRORS();
@@ -296,7 +297,15 @@ void DetectionSetDisplayCommand::createDisplay()
 		m_idBuffer.updateBuffer(ids.data());
 
 		poca::core::HistogramInterface* hist = m_dset->getCurrentHistogram();
-		generateFeatureBuffer(hist);
+		poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(hist);
+		const std::vector<float>& values = histogram->getValues();
+		m_minOriginalFeature = histogram->getMin();
+		m_maxOriginalFeature = histogram->getMax();
+		m_currentMinOriginalFeature = m_minOriginalFeature;
+		m_currentMaxOriginalFeature = m_maxOriginalFeature;
+		m_actualValueFeature = m_maxOriginalFeature;
+		m_featureBuffer.updateBuffer(values);
+		//generateFeatureBuffer(hist);
 		GL_CHECK_ERRORS();
 	}
 	catch (std::runtime_error const& e) {
@@ -325,7 +334,15 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 	if (_histogram == NULL)
 		_histogram = m_dset->getCurrentHistogram();
 	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(_histogram);
-	bool normalBehavior = true;
+	m_minOriginalFeature = histogram->getMin();
+	m_maxOriginalFeature = histogram->getMax();
+	m_currentMinOriginalFeature = histogram->getCurrentMin();
+	m_currentMaxOriginalFeature = histogram->getCurrentMax();
+	m_actualValueFeature = m_maxOriginalFeature;
+	m_isScaleLUT = histogram->scaleLUT();
+	const std::vector<float>& values = histogram->getValues();
+	m_featureBuffer.updateBuffer(values);
+	/*bool normalBehavior = true;
 	if (normalBehavior) {
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = m_dset->getSelection();
@@ -355,7 +372,7 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 				feature[n] = values[n];
 		}
 		m_featureBuffer.updateBuffer(feature);
-	}
+	}*/
 }
 
 QString DetectionSetDisplayCommand::getInfosLocalization(const int _id) const

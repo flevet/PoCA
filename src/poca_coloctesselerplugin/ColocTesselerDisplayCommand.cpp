@@ -126,7 +126,7 @@ void ColocTesselerDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 
 	for(size_t n = 0; n < 2; n++)
 		//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f);
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f, sizeGL, false);
+		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID[n], m_pointBuffer[n], m_locsFeatureBuffer[n], 0.f, 1.f, 0.f, 1.f, false, sizeGL, false);
 
 
 	GL_CHECK_ERRORS();
