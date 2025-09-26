@@ -454,9 +454,36 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	QObject::connect(m_linkToSkeletonRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QWidget* omemptyW = new QWidget;
 	omemptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+	QLabel* tlengthLbl = new QLabel("Target edge length:");
+	tlengthLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_targetLengthLEdit = new QLineEdit("1");
+	m_targetLengthLEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QLabel* iterationsLbl = new QLabel("# iterations:");
+	iterationsLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_iterationRemeshingSpin = new QDoubleSpinBox();
+	m_iterationRemeshingSpin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_iterationRemeshingSpin->setObjectName(QString::fromUtf8("remeshing iteration"));
+	m_iterationRemeshingSpin->setDecimals(0);
+	m_iterationRemeshingSpin->setMinimum(1);
+	m_iterationRemeshingSpin->setMaximum(6);
+	m_iterationRemeshingSpin->setSingleStep(1);
+	m_iterationRemeshingSpin->setValue(1);
+	m_remeshButton = new QPushButton("Remesh");
+	m_remeshButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_remeshButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QHBoxLayout* layoutRemeshParam = new QHBoxLayout;
+	layoutRemeshParam->addWidget(tlengthLbl);
+	layoutRemeshParam->addWidget(m_targetLengthLEdit);
+	layoutRemeshParam->addWidget(iterationsLbl);
+	layoutRemeshParam->addWidget(m_iterationRemeshingSpin);
+	layoutRemeshParam->addWidget(m_remeshButton);
+
 	QVBoxLayout* layoutObjectMeshV = new QVBoxLayout;
 	layoutObjectMeshV->addLayout(layoutObjectMesh);
+	layoutObjectMeshV->addLayout(layoutRemeshParam);
 	layoutObjectMeshV->addWidget(omemptyW);
+
 	m_widgetObjectMesh = new QWidget;
 	m_widgetObjectMesh->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	m_widgetObjectMesh->setLayout(layoutObjectMeshV);
@@ -737,7 +764,16 @@ void ObjectListsWidget::actionNeeded()
 		objList->executeCommand(&ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
-		}
+	}
+	else if (sender == m_remeshButton) {
+		bool ok;
+		float length = 1.f, tmp;
+		tmp = m_targetLengthLEdit->text().toFloat(&ok);
+		if (ok) length = tmp;
+		poca::core::CommandInfo ci(true, "remesh", "targetLength", length, "iterations", (uint32_t)m_iterationRemeshingSpin->value());
+		objList->executeCommand(&ci);
+		m_object->notify("LoadObjCharacteristicsAllWidgets");
+	}
 }
 
 void ObjectListsWidget::actionNeeded(int _val)

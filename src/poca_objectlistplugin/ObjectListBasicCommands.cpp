@@ -436,7 +436,32 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 				objsList->addObjectList(objects, *_infos, "ObjectListPlugin");
 			std::cout << text << std::endl;
 		}
+	}
+	else if (_infos->nameCommand == "remesh") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+
+		float targetLength = _infos->getParameter<float>("targetLength");
+		uint32_t iterations = _infos->getParameter<uint32_t>("iterations");
+
+		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
+		if (!omesh) return;
+		poca::geometry::ObjectListMesh* copymesh = new poca::geometry::ObjectListMesh(omesh->getMeshes(), true, targetLength, iterations);
+		copymesh->remesh(targetLength, iterations);
+		ObjectListPlugin::m_plugins->addCommands(copymesh);
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(copymesh, *_infos, "ObjectListPlugin");
+			ObjectListPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
 		}
+		else {
+			std::string text = _infos->json.dump(4);
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(copymesh, *_infos, "ObjectListPlugin");
+			std::cout << text << std::endl;
+		}
+	}
 }
 
 

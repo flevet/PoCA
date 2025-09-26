@@ -187,6 +187,10 @@ protected:
 	std::vector <QPushButton*> m_listButtons;
 	QButtonGroup* m_listButtonsGroup;
 
+	QLineEdit* m_targetLengthLEdit;
+	QDoubleSpinBox* m_iterationRemeshingSpin;
+	QPushButton* m_remeshButton;
+
 	poca::core::MyObjectInterface* m_object;
 };
 

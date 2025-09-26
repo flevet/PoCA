@@ -68,6 +68,7 @@ typedef CGAL::Face_filtered_graph<Surface_mesh_3_double> Filtered_graph;
 
 typedef Surface_mesh_3_double::Property_map<vertex_descriptor, Kernel::Vector_3> Vertex_vector_3_map;
 typedef Surface_mesh_3_double::Property_map<face_descriptor, Kernel::Vector_3> Facet_vector_3_map;
+using edge_descriptor = boost::graph_traits<Surface_mesh_3_double>::edge_descriptor;
 
 template <class TriangleMesh>
 void extract_precise_skeleton(
@@ -305,6 +306,93 @@ namespace poca::geometry {
 		forceRegenerateSelection();
 	}
 
+	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(false), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
+	{
+		clock_t t1 = clock();
+		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
+		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
+		std::vector <float> volumes;
+		for (auto& mesh : m_meshes) {
+			bool res = processSurfaceMesh(mesh, triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
+			if (!res)
+				m_meshes.pop_back();
+		}
+
+		clock_t t2 = clock();
+		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
+		m_edgesSkeleton.initialize(edges, nbEdges);
+		m_linksSkeleton.initialize(links, nbLinks);
+		m_triangles.initialize(triPoCA, nbTriPoCA);
+
+		m_centroids.resize(m_meshes.size());
+
+		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
+		for (const auto& mesh : m_meshes) {
+			for (const auto& point : mesh.points()) {
+				auto x = point.x(), y = point.y(), z = point.z();
+				m_xs.push_back(x);
+				m_ys.push_back(y);
+				m_zs.push_back(z);
+				if (x < m_bbox[0]) m_bbox[0] = x;
+				if (y < m_bbox[1]) m_bbox[1] = y;
+				if (z < m_bbox[2]) m_bbox[2] = z;
+				if (x > m_bbox[3]) m_bbox[3] = x;
+				if (y > m_bbox[4]) m_bbox[4] = y;
+				if (z > m_bbox[5]) m_bbox[5] = z;
+			}
+			nbPts.push_back(m_xs.size());
+		}
+		points.resize(nbPts.back());
+		std::iota(std::begin(points), std::end(points), 0);
+		m_locs.initialize(points, nbPts);
+		m_outlineLocs = m_locs;
+
+		//Create area feature
+		std::vector <float> nbLocs(m_locs.nbElements(), 0.f);
+		for (size_t i = 0; i < m_triangles.nbElements(); i++)
+			nbLocs[i] = m_locs.nbElementsObject(i);
+		const poca::core::MyArrayUInt32& localizations = m_locs;// m_outlineLocs;
+		ObjectFeaturesFactoryInterface* factory = createObjectFeaturesFactory();
+		std::vector <float> sizes(m_locs.nbElements()), resPCA(factory->nbFeaturesPCA(true));
+		std::vector <float> major(m_locs.nbElements()), minor(m_locs.nbElements()), minor2(m_locs.nbElements()), minMin2(m_locs.nbElements());
+		m_axis.resize(m_locs.nbElements());
+		for (size_t n = 0; n < m_locs.nbElements(); n++) {
+			float* ptr = &resPCA[0];
+			factory->computePCA(m_locs, n, m_xs.data(), m_ys.data(), m_zs.data(), ptr);
+			m_centroids[n].set(resPCA[0], resPCA[1], resPCA[2]);
+			major[n] = resPCA[3];
+			minor[n] = resPCA[4];
+			minor2[n] = resPCA[5];
+			minMin2[n] = minor[n] + minor2[n];
+			sizes[n] = (resPCA[3] + resPCA[4] + resPCA[5]) / 3.f;
+			m_axis[n] = { poca::core::Vec3mf(resPCA[6], resPCA[7], resPCA[8]),
+				poca::core::Vec3mf(resPCA[9], resPCA[10], resPCA[11]) ,
+				poca::core::Vec3mf(resPCA[12], resPCA[13], resPCA[14]) };
+		}
+		delete factory;
+
+		std::vector <float> ids(m_locs.nbElements());
+		std::iota(std::begin(ids), std::end(ids), 1);
+
+		m_data["volume"] = poca::core::generateDataWithLog(volumes);
+		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
+		m_data["size"] = poca::core::generateDataWithLog(sizes);
+		m_data["id"] = poca::core::generateDataWithLog(ids);
+		m_data["major"] = poca::core::generateDataWithLog(major);
+		m_data["minor"] = poca::core::generateDataWithLog(minor);
+		m_data["minor2"] = poca::core::generateDataWithLog(minor2);
+		m_data["minMin2"] = poca::core::generateDataWithLog(minMin2);
+		std::vector <float> zs(triPoCA.size());
+		for (auto n = 0; n < triPoCA.size(); n++)
+			zs[n] = triPoCA[n].z();
+		m_data["z"] = poca::core::generateDataWithLogNoInteraction(zs);
+
+		m_selection.resize(volumes.size());
+		setCurrentHistogramType("volume");
+		forceRegenerateSelection();
+	}
+
 	ObjectListMesh::~ObjectListMesh()
 	{
 	}
@@ -438,15 +526,19 @@ namespace poca::geometry {
 				return false;
 			}
 
-			if (!CGAL::Polygon_mesh_processing::is_outward_oriented(_mesh))
-				CGAL::Polygon_mesh_processing::reverse_face_orientations(_mesh);
+			PMP::orient(_mesh);
 		}
+
+		auto ecm = _mesh.add_property_map<edge_descriptor, bool>("e:is_constrained", false).first;
+		for (edge_descriptor e : edges(_mesh))
+			if (is_border(e, _mesh))
+				put(ecm, e, true);
 
 		if (m_applyRemeshing) {
 			double target_edge_length = 1.;
 			unsigned int nb_iter = 4;
 			//std::cout << "Start smoothing (" << num_faces(mesh) << " faces)..." << std::endl;
-			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations));
+			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations).edge_is_constrained_map(ecm).protect_constraints(true));
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
 		float volume = fabs(PMP::volume(_mesh));
@@ -858,5 +950,11 @@ namespace poca::geometry {
 			fs.write(reinterpret_cast<char*>(triangles.data()), nb * sizeof(size_t));
 		}
 		fs.close();
+	}
+
+	void ObjectListMesh::remesh(const float _target_edge_length, const uint32_t _nb_iter)
+	{
+		for(auto& mesh : m_meshes)
+			PMP::isotropic_remeshing(faces(mesh), _target_edge_length, mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 }
