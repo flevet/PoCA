@@ -462,6 +462,37 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			std::cout << text << std::endl;
 		}
 	}
+	else if (_infos->nameCommand == "exportLocsInObjects") {
+		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+		if (!opol) return;
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
+		if (!obj->hasBasicComponent("DetectionSet"))
+			return;
+		poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(obj->getBasicComponent("DetectionSet"));
+		if (!dset)
+			return;
+
+		std::vector <uint32_t> selectedLocs;
+		const std::vector <float>& xs = dset->getData<float>("x");
+		const std::vector <float>& ys = dset->getData<float>("y");
+		for (auto n = 0; n < xs.size(); n++) {
+			for (const auto& polygons : opol->getPolygons()) {
+				bool inside = polygons[0].bounded_side(Point_2(xs[n], ys[n])) == CGAL::ON_BOUNDED_SIDE, inside_hole = false;
+				if (inside) {
+					for (auto cur = 1; cur < polygons.size(); cur++) {
+						inside_hole |= polygons[cur].bounded_side(Point_2(xs[n], ys[n])) == CGAL::ON_BOUNDED_SIDE;
+					}
+				}
+				if (inside && !inside_hole) {
+					selectedLocs.push_back(n);
+				}
+			}
+		}
+
+		poca::geometry::DetectionSet* newdset = dset->copySelection(selectedLocs);
+		engine->addComponentToObject(obj, newdset);
+	}
 }
 
 
@@ -492,7 +523,7 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 			ci.addParameter("appendToName", _parameters["appendToName"].get<std::string>());
 		return ci;
 	}
-	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons" || _nameCommand == "exportObjectsInROIs") {
+	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons" || _nameCommand == "exportObjectsInROIs" || _nameCommand == "exportLocsInObjects") {
 		return poca::core::CommandInfo(false, _nameCommand);
 	}
 	else if (_nameCommand == "duplicateSelectedObjects") {
