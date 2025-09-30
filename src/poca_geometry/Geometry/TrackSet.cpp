@@ -64,6 +64,10 @@ namespace poca::geometry {
 		m_selection.resize(lengthes.size());
 		setCurrentHistogramType("lengthes");
 		forceRegenerateSelection();
+	
+		m_bbox = poca::core::BoundingBox::initBBox();
+		for (const auto& p : _points)
+			m_bbox.addPointBBox(p.x(), p.y(), p.z());
 	}
 
 	TrackSet::TrackSet(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points, const std::vector <float>& _planes, const std::vector <uint32_t>& _locsToTrackID) :poca::core::BasicComponent("TrackSet"), m_tracks(_points, _firsts), m_planes(_planes), m_locsToTrackID(_locsToTrackID)
@@ -150,6 +154,7 @@ namespace poca::geometry {
 		forceRegenerateSelection();
 
 		std::cout << "max dxyz = " << dxyz << ", max dxy = " << dxy << std::endl;
+		m_bbox = poca::core::BoundingBox::initBBox();
 		for (const auto& p : _points)
 			m_bbox.addPointBBox(p.x(), p.y(), p.z());
 	}
