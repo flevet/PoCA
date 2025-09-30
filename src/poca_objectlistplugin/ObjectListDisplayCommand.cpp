@@ -310,6 +310,8 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	glm::vec3 pos(orientation + _cam->getCenter());
 	pos *= 2 * _cam->getOriginalDistanceOrtho();
 
+	glClear(GL_DEPTH_BUFFER_BIT);
+	
 	glDisable(GL_DEPTH_TEST);
 	if (cullFaceActivated)
 		glEnable(GL_CULL_FACE);
