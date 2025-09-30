@@ -75,6 +75,16 @@ void LoaderCSVFile::loadFile(const QString& _filename, std::map <std::string, st
 	char separator = 0;
 	float multXY = 1.f, multZ = 1.f, multT = 1.f;
 	if (_command->nbParameters() == 1) {//Command has only the path parameter
+		//Test if not a palmtracer file
+		std::string s;
+		std::getline(fs, s);
+		QString firstLine(s.c_str());
+		if (firstLine.startsWith("Width")) {
+			fs.close();
+			return;
+		}
+		fs.seekg(0);
+
 		OpenFileDialog ofd(fs, separator);
 		ofd.setModal(true);
 
