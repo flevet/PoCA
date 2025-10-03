@@ -701,7 +701,7 @@ void MainWindow::setCameraInteraction(bool _on)
 		m_line2DROIAct->setEnabled(true);// _on);
 		m_triangle2DROIAct->setEnabled(dimension == 2);
 		m_circle2DROIAct->setEnabled(dimension == 2);
-		m_square2DROIAct->setEnabled(dimension == 2);
+		m_square2DROIAct->setEnabled(true);
 		m_polyline2DROIAct->setEnabled(dimension == 2);
 		if (!_on) {
 			bool ROI2D = false;
