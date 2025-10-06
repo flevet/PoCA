@@ -337,6 +337,17 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	else
 		glCullFace(GL_BACK);
 
+	if (m_objects->hasSkeletons()) {
+		if (m_skeletonBuffer.empty())
+			createDisplaySkeleton();
+
+		if (skeletonRendering && !m_skeletonBuffer.empty())
+			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_skeletonBuffer, m_colorSkeletonBuffer);
+
+		if (linkRendering && !m_linksBuffer.empty())
+			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_linksBuffer, m_colorLinksBuffer);
+	}
+
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
 	glEnable(GL_BLEND);
 
@@ -350,6 +361,13 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	}
 
 	if (shapeRendering) {
+		GLfloat bkColor[4];
+		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
+		double a = 1 - (0.299 * bkColor[0] + 0.587 * bkColor[1] + 0.114 * bkColor[2]) / 255;
+		if (a < 0.5)
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE); // bright colors
+		else
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // dark colors
 		if (m_objects->dimension() == 3) {
 			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
 			shader->use();
@@ -419,16 +437,6 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	}
 	GL_CHECK_ERRORS();
 
-	if (m_objects->hasSkeletons()) {
-		if (m_skeletonBuffer.empty())
-			createDisplaySkeleton();
-
-		if (skeletonRendering && !m_skeletonBuffer.empty())
-			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_skeletonBuffer, m_colorSkeletonBuffer);
-
-		if (linkRendering && !m_linksBuffer.empty())
-			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_linksBuffer, m_colorLinksBuffer);
-	}
 	//m_skeletonBuffer
 
 	drawEllipsoid(_cam);
