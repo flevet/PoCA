@@ -472,12 +472,16 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_remeshButton = new QPushButton("Remesh");
 	m_remeshButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QObject::connect(m_remeshButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	m_subdivideButton = new QPushButton("Subdivide");
+	m_subdivideButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_subdivideButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QHBoxLayout* layoutRemeshParam = new QHBoxLayout;
 	layoutRemeshParam->addWidget(tlengthLbl);
 	layoutRemeshParam->addWidget(m_targetLengthLEdit);
 	layoutRemeshParam->addWidget(iterationsLbl);
 	layoutRemeshParam->addWidget(m_iterationRemeshingSpin);
 	layoutRemeshParam->addWidget(m_remeshButton);
+	layoutRemeshParam->addWidget(m_subdivideButton);
 
 	QVBoxLayout* layoutObjectMeshV = new QVBoxLayout;
 	layoutObjectMeshV->addLayout(layoutObjectMesh);
@@ -771,6 +775,15 @@ void ObjectListsWidget::actionNeeded()
 		tmp = m_targetLengthLEdit->text().toFloat(&ok);
 		if (ok) length = tmp;
 		poca::core::CommandInfo ci(true, "remesh", "targetLength", length, "iterations", (uint32_t)m_iterationRemeshingSpin->value());
+		objList->executeCommand(&ci);
+		m_object->notify("LoadObjCharacteristicsAllWidgets");
+	}
+	else if (sender == m_subdivideButton) {
+		bool ok;
+		float length = 1.f, tmp;
+		tmp = m_targetLengthLEdit->text().toFloat(&ok);
+		if (ok) length = tmp;
+		poca::core::CommandInfo ci(true, "subdivide", "iterations", (uint32_t)m_iterationRemeshingSpin->value());
 		objList->executeCommand(&ci);
 		m_object->notify("LoadObjCharacteristicsAllWidgets");
 	}

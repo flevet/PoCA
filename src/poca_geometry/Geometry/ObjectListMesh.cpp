@@ -47,6 +47,7 @@
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
 #include <CGAL/Side_of_triangle_mesh.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/subdivision_method_3.h>
 
 #include <General/MyData.hpp>
 #include <General/BasicComponent.hpp>
@@ -956,5 +957,11 @@ namespace poca::geometry {
 	{
 		for(auto& mesh : m_meshes)
 			PMP::isotropic_remeshing(faces(mesh), _target_edge_length, mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+	}
+
+	void ObjectListMesh::subdivide(const uint32_t _nb_iter)
+	{
+		for (auto& mesh : m_meshes)
+			CGAL::Subdivision_method_3::CatmullClark_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 }

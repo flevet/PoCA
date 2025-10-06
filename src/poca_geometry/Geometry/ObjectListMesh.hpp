@@ -47,7 +47,7 @@ namespace poca::geometry {
 	public:
 		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const std::vector <poca::core::ROIInterface*>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
-		ObjectListMesh(const std::vector < Surface_mesh_3_double>&, const bool, const float, const uint32_t);
+		ObjectListMesh(const std::vector < Surface_mesh_3_double>&, const bool = false, const float = 0.f, const uint32_t = 0);
 		~ObjectListMesh();
 
 		poca::core::BasicComponentInterface* copy();
@@ -56,6 +56,7 @@ namespace poca::geometry {
 		ObjectListInterface* exportFilteredObjects() const;
 
 		void remesh(const float, const uint32_t);
+		void subdivide(const uint32_t);
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);
