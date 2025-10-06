@@ -307,7 +307,7 @@ namespace poca::geometry {
 		forceRegenerateSelection();
 	}
 
-	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(false), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
+	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(true), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
 	{
 		clock_t t1 = clock();
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
@@ -539,7 +539,8 @@ namespace poca::geometry {
 			double target_edge_length = 1.;
 			unsigned int nb_iter = 4;
 			//std::cout << "Start smoothing (" << num_faces(mesh) << " faces)..." << std::endl;
-			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations).edge_is_constrained_map(ecm).protect_constraints(true));
+			//PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations).edge_is_constrained_map(ecm).protect_constraints(true));
+			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations));
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
 		float volume = fabs(PMP::volume(_mesh));
@@ -962,6 +963,6 @@ namespace poca::geometry {
 	void ObjectListMesh::subdivide(const uint32_t _nb_iter)
 	{
 		for (auto& mesh : m_meshes)
-			CGAL::Subdivision_method_3::CatmullClark_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+			CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 }

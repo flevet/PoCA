@@ -36,6 +36,13 @@
 #include <glm/gtc/quaternion.hpp>
 #include <math.h>
 #include <tinysplinecxx.h>
+#include <CGAL/subdivision_method_3.h>
+#include <CGAL/Polygon_mesh_processing/remesh.h>
+#include <CGAL/Polygon_mesh_processing/orientation.h>
+#include <CGAL/Polygon_mesh_processing/repair.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/Polygon_mesh_processing/stitch_borders.h>
 
 #include <QtCore/QString>
 #include <QtCore/QFileInfo>
@@ -446,11 +453,15 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
 		if (!omesh) return;
-		poca::geometry::ObjectListMesh* copymesh = new poca::geometry::ObjectListMesh(omesh->getMeshes(), true, targetLength, iterations);
-		copymesh->remesh(targetLength, iterations);
-		ObjectListPlugin::m_plugins->addCommands(copymesh);
+		std::vector <Surface_mesh_3_double> meshes = omesh->getMeshes();
+		for (auto& mesh : meshes)
+			CGAL::Polygon_mesh_processing::isotropic_remeshing(faces(mesh), targetLength, mesh, CGAL::parameters::number_of_iterations(iterations));
+		poca::geometry::ObjectListMesh* newomesh = new poca::geometry::ObjectListMesh(meshes);
+		//poca::geometry::ObjectListMesh* copymesh = new poca::geometry::ObjectListMesh(omesh->getMeshes(), true, targetLength, iterations);
+		//copymesh->remesh(targetLength, iterations);
+		ObjectListPlugin::m_plugins->addCommands(newomesh);
 		if (!obj->hasBasicComponent("ObjectLists")) {
-			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(copymesh, *_infos, "ObjectListPlugin");
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, *_infos, "ObjectListPlugin");
 			ObjectListPlugin::m_plugins->addCommands(objsList);
 			obj->addBasicComponent(objsList);
 		}
@@ -458,7 +469,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			std::string text = _infos->json.dump(4);
 			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
 			if (objsList)
-				objsList->addObjectList(copymesh, *_infos, "ObjectListPlugin");
+				objsList->addObjectList(newomesh, *_infos, "ObjectListPlugin");
 			std::cout << text << std::endl;
 		}
 	}
@@ -470,11 +481,28 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 		poca::geometry::ObjectListMesh* omesh = static_cast <poca::geometry::ObjectListMesh*>(m_objects);
 		if (!omesh) return;
-		poca::geometry::ObjectListMesh* copymesh = new poca::geometry::ObjectListMesh(omesh->getMeshes());
-		copymesh->subdivide(iterations);
-		ObjectListPlugin::m_plugins->addCommands(copymesh);
+		std::vector <Surface_mesh_3_double> meshes = omesh->getMeshes();
+		for (auto& mesh : meshes) {
+			//CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(iterations));
+			CGAL::Polygon_mesh_processing::orient(mesh);
+			CGAL::Polygon_mesh_processing::stitch_borders(mesh);
+			CGAL::Polygon_mesh_processing::remove_isolated_vertices(mesh);
+			CGAL::Polygon_mesh_processing::remove_degenerate_faces(mesh);
+			CGAL::Polygon_mesh_processing::triangulate_faces(mesh);
+
+			// If still open, prefer Loop; if closed, Sqrt3:
+			bool closed = true; for (auto e : edges(mesh)) if (is_border(e, mesh)) { closed = false; break; }
+			std::cout << "is closed " << closed << std::endl;
+			if (closed)
+				CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(iterations));
+			else
+				CGAL::Subdivision_method_3::Loop_subdivision(mesh, CGAL::parameters::number_of_iterations(iterations));
+		}
+		poca::geometry::ObjectListMesh* newomesh = new poca::geometry::ObjectListMesh(meshes);
+		//copymesh->subdivide(iterations);
+		ObjectListPlugin::m_plugins->addCommands(newomesh);
 		if (!obj->hasBasicComponent("ObjectLists")) {
-			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(copymesh, *_infos, "ObjectListPlugin");
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, *_infos, "ObjectListPlugin");
 			ObjectListPlugin::m_plugins->addCommands(objsList);
 			obj->addBasicComponent(objsList);
 		}
@@ -482,7 +510,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			std::string text = _infos->json.dump(4);
 			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
 			if (objsList)
-				objsList->addObjectList(copymesh, *_infos, "ObjectListPlugin");
+				objsList->addObjectList(newomesh, *_infos, "ObjectListPlugin");
 			std::cout << text << std::endl;
 		}
 	}
