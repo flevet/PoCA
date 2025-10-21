@@ -91,8 +91,8 @@ void extract_precise_skeleton(
 	mcf.set_max_iterations(3000);
 	mcf.set_area_variation_factor(2e-5);
 	mcf.set_is_medially_centered(true);
-	mcf.set_medially_centered_speed_tradeoff(0.45); // closer to medial axis, less smoothing
-	mcf.set_quality_speed_tradeoff(0.20);           // quality (docs: larger => better quality)
+	mcf.set_medially_centered_speed_tradeoff(0.7); //0.45 closer to medial axis, less smoothing, increasing this value results in a (less smooth) skeleton closer to the medial axis
+	mcf.set_quality_speed_tradeoff(0.50);           //0.2 quality (docs: larger => better quality)
 
 	mcf.contract_until_convergence();
 	mcf.convert_to_skeleton(skel);
