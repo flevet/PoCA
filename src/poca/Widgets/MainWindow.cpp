@@ -85,6 +85,7 @@
 #include <General/Image.hpp>
 #include <General/Engine.hpp>
 #include <General/Palette.hpp>
+#include <Geometry/ObjectLists.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -916,10 +917,22 @@ void MainWindow::addComponentToCurrentMdi()
 
 	if (filename.isEmpty()) return;
 
-	poca::core::CommandInfo ci(false, "open", "path", std::string(filename.toStdString()));
+	execute(&poca::core::CommandInfo(true, "add", "filename", filename.toStdString()));
+}
+
+void MainWindow::addComponentToCurrentMdi(const QString& _filename)
+{
+	if (m_currentMdi == NULL) return;
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
+	if (cam == NULL) return;
+	poca::core::MyObjectInterface* obj = cam->getObject();
+	if (obj == NULL) return;
+	
+	std::cout << "Filename " << _filename.toStdString() << std::endl;
+	poca::core::CommandInfo ci(false, "open", "path", std::string(_filename.toStdString()));
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
-	if (engine->loadDataAndAddToObject(filename, obj, &ci)) {
+	if (engine->loadDataAndAddToObject(_filename, obj, &ci)) {
 		poca::core::CommandInfo ci(false, "createDisplay");
 		obj->executeGlobalCommand(&ci);
 		obj->notify("LoadObjCharacteristicsAllWidgets");
@@ -1717,6 +1730,50 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 			openFile(info.absoluteFilePath(), _com);
 		}
 	}
+	else if (_com->nameCommand == "add") {
+		if (m_currentMdi == NULL)
+			return;
+		QString filename;
+		if (_com->hasParameter("filename"))
+			filename = (_com->getParameter<std::string>("filename")).c_str();
+		else {
+			poca::core::MyObjectInterface* obj = m_currentMdi->getWidget()->getObject();
+			QString dir = obj->getDir().c_str();
+			QString name = obj->getName().c_str();
+			if (!dir.endsWith('/'))
+				dir.append("/");
+			if (_com->hasParameter("appendToDir")) {
+				std::string addToDir = _com->getParameter<std::string>("appendToDir");
+				dir = dir + addToDir.c_str();
+				if (!dir.endsWith('/'))
+					dir.append("/");
+			}
+			if (_com->hasParameter("appendToName")) {
+				std::string addToFile = _com->getParameter<std::string>("appendToName");
+				int dotIndex = name.lastIndexOf('.');
+
+				if (dotIndex != -1)
+					name.insert(dotIndex, addToFile.c_str());
+				else
+					name.append(addToFile.c_str());
+			}
+
+			if (_com->hasParameter("extension")) {
+				std::string ext = _com->getParameter<std::string>("extension");
+				name.append(ext.c_str());
+			}
+
+			if (_com->hasParameter("replace")) {
+				std::vector < std::vector<std::string>> vals = _com->getParameter< std::vector<std::vector<std::string>>>("replace");
+				for(const auto& vec: vals)
+					if (vec.size() == 2) {
+						name.replace(vec[0].c_str(), vec[1].c_str());
+					}
+			}
+			filename = dir + name;
+		}
+		addComponentToCurrentMdi(filename);
+	}
 	else if (_com->nameCommand == "close") {
 		QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
 		if (m_currentMdi != NULL) {
@@ -1919,6 +1976,20 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				command.addParameter(key, _json[tmp][key].get<size_t>());
 		}
 
+		execute(&command);
+	}
+	else if (tmp == "add") {
+		poca::core::CommandInfo command(false, tmp);
+		if(_json[tmp].contains("filename"))
+			command.addParameter("filename", _json[tmp]["filename"].get<std::string>());
+		if (_json[tmp].contains("appendToDir"))
+			command.addParameter("appendToDir", _json[tmp]["appendToDir"].get<std::string>());
+		if (_json[tmp].contains("appendToName"))
+			command.addParameter("appendToName", _json[tmp]["appendToName"].get<std::string>());
+		if (_json[tmp].contains("extension"))
+			command.addParameter("extension", _json[tmp]["extension"].get<std::string>());
+		if (_json[tmp].contains("replace"))
+			command.addParameter("replace", _json[tmp]["replace"].get< std::vector<std::vector<std::string>>>());
 		execute(&command);
 	}
 	else if (tmp == "close") {

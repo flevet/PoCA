@@ -115,6 +115,8 @@ protected:
 	void loadPositionCamera();
 	void loadPositionCamera(const std::string&, const bool = false, const bool = true, const bool = true, const bool = true, const bool = true, const bool = true);
 
+	void addComponentToCurrentMdi(const QString&);
+
 private slots:
 	void actionNeeded();
 	void openFile();
