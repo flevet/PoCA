@@ -46,6 +46,12 @@
 #include <CGAL/Implicit_surface_3.h>
 #include <CGAL/Kernel/global_functions_2.h>
 #endif
+#include <thrust/host_vector.h>
+#include <thrust\sort.h>
+#include <thrust\functional.h>
+#include <thrust/execution_policy.h>
+#include <thrust/unique.h>
+#include <thrust/binary_search.h>
 
 #include <General/BasicComponent.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
@@ -783,6 +789,11 @@ namespace poca::geometry {
 		double volumeD = 0.;
 		std::vector <uint32_t> allIndexesTriangles;
 
+		//For ObjectListMesh
+		std::vector <std::vector <poca::core::Vec3mf>> meshPoints;
+		std::vector <std::vector <std::vector <std::size_t>>> meshTris;
+		std::vector < Surface_mesh_3_double> meshes;
+
 		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
 			if (!selectionTriangulationFaces[n]) continue;
 			volume = 0.f;
@@ -897,7 +908,8 @@ namespace poca::geometry {
 					computeConvexHullObject3DFromOutline(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
 					break;
 				case ObjectListFactoryInterface::POISSON_SURFACE:
-					computePoissonSurfaceObject(xs, ys, zs, locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, trianglesOfObject, volume);
+					//computePoissonSurfaceObject(xs, ys, zs, locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, trianglesOfObject, volume);
+					computePoissonSurfaceObjectOMesh(xs, ys, zs, locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, volume, meshes);
 					break;
 				case ObjectListFactoryInterface::ALPHA_SHAPE:
 					computeAlphaShape(xs, ys, zs, locsOfOutline, trianglesOfObject, volume);
@@ -913,7 +925,7 @@ namespace poca::geometry {
 				currentFirstLocs += locsOfObject.size();
 				firstsLocs.push_back(currentFirstLocs);
 				std::copy(locsOfObject.begin(), locsOfObject.end(), std::back_inserter(locsAllObjects));
-	
+
 				currentFirstOutlineLocs += locsOfOutline.size();
 				firstOutlineLocs.push_back(currentFirstOutlineLocs);
 				std::copy(locsOfOutline.begin(), locsOfOutline.end(), std::back_inserter(locsAllOutlines));
@@ -924,13 +936,46 @@ namespace poca::geometry {
 
 				computeNormalOfLocsObject(locsOfOutline, indexTrianglesOfObject, normalsTrianglesOfObject, normalOutlineLocObject);
 				std::copy(normalOutlineLocObject.begin(), normalOutlineLocObject.end(), std::back_inserter(normalsAllOutlineLocs));
-	
+
 				volumeObjects.push_back(volume);
-	
+
 				std::copy(indexTrianglesOfObject.begin(), indexTrianglesOfObject.end(), std::back_inserter(allIndexesTriangles));
+
+				//For ObjectListMesh
+				thrust::host_vector <uint32_t> h_triangles(indexTrianglesOfObject), h_data(indexTrianglesOfObject);
+				//std::copy(h_data.begin(), h_data.end(), std::ostream_iterator<uint32_t>(std::cout, " "));
+				//std::cout << std::endl;
+				thrust::sort(thrust::host, h_triangles.begin(), h_triangles.end());
+				thrust::host_vector<uint32_t> h_unique = h_triangles;
+				const auto end = thrust::unique(h_unique.begin(), h_unique.end());
+				auto nbVertices = thrust::distance(h_unique.begin(), end);
+
+				meshPoints.push_back(std::vector <poca::core::Vec3mf>());
+				meshPoints.back().resize(nbVertices);
+				for (auto i = 0; i < nbVertices; i++) {
+					meshPoints.back()[i].set(xs[h_unique[i]], ys[h_unique[i]], zs[h_unique[i]]);
+				}
+
+				//relabel the faces
+				thrust::lower_bound(h_unique.begin(), end, h_data.begin(), h_data.end(), h_triangles.begin());
+				meshTris.push_back(std::vector <std::vector <std::size_t>>());
+				for (auto i = 0; i < h_triangles.size(); i += 3){
+					meshTris.back().push_back(std::vector<std::size_t>{h_triangles[i + 2], h_triangles[i + 1], h_triangles[i]});
+				}
 			}
 		}
-		ObjectListInterface* objs = locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		//ObjectListInterface* objs = locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		
+		ObjectListInterface* objs;
+		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+		if (type == ObjectListFactoryInterface::POISSON_SURFACE) {
+			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshes);
+		}
+		else {
+			std::vector <poca::core::ROIInterface*> ROIs;
+			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshPoints, meshTris, ROIs, true, true, 250, 5);
+		}
+
 		return objs;
 	}
 
@@ -1697,9 +1742,14 @@ namespace poca::geometry {
 		typedef CGAL::Mesh_criteria_3<Tr> Mesh_criteria;
 
 		// Poisson options
-		FT sm_angle = 20.0; // Min triangle angle in degrees.
-		FT sm_radius = 100; // Max triangle size w.r.t. point set average spacing.
-		FT sm_distance = 0.25; // Surface Approximation error w.r.t. point set average spacing.
+		//FT sm_angle = 20.0; // Min triangle angle in degrees.
+		//FT sm_radius = 100; // Max triangle size w.r.t. point set average spacing.
+		//FT sm_distance = 0.25; // Surface Approximation error w.r.t. point set average spacing.
+
+		FT sm_angle = poca::core::Engine::instance()->getGlobalParameters()["angle"].get<double>();
+		FT sm_radius = poca::core::Engine::instance()->getGlobalParameters()["radius"].get<double>();
+		FT sm_distance = poca::core::Engine::instance()->getGlobalParameters()["distance"].get<double>();
+		FT sm_factorAverageSpacing = poca::core::Engine::instance()->getGlobalParameters()["factorAverageSpacing"].get<double>();
 
 		CGAL::Timer time;
 		time.start();
@@ -1728,7 +1778,7 @@ namespace poca::geometry {
 
 		// Computes average spacing
 		FT average_spacing = CGAL::compute_average_spacing<Concurrency_tag>(points, 6 /* knn = 1 ring */, CGAL::parameters::point_map(Point_map()));
-		average_spacing /= 3;
+		average_spacing /= sm_factorAverageSpacing;
 
 		time.stop();
 		std::cout << "Average spacing : " << time.time() << " seconds." << std::endl;
@@ -1881,6 +1931,49 @@ namespace poca::geometry {
 					_triangles.insert(_triangles.begin(), poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
 				} while (++hfc != fi->facet_begin());
 			}
+		}
+		else
+			std::cout << "ERROR !!!!!!!!!!!!!!!!" << std::endl;
+#endif
+	}
+
+	void ObjectListFactory::computePoissonSurfaceObjectOMesh(const float* _xs, const float* _ys, const float* _zs, const std::set <uint32_t>& _locs, const std::vector <uint32_t>& _trianglesIndexes, const std::vector <poca::core::Vec3mf>& _normals, float& _volume, std::vector < Surface_mesh_3_double>& _meshes)
+	{
+		auto maxIndex = *std::max_element(_locs.begin(), _locs.end());
+		std::vector <poca::core::Vec3mf> normalPerLoc;
+
+		std::cout << __LINE__ << " - " << _locs.size() << std::endl;
+
+		computeNormalOfLocsObject(_locs, _trianglesIndexes, _normals, normalPerLoc);
+		std::cout << __LINE__ << std::endl;
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+		PointList points;
+		size_t cpt = 0;
+		for (auto it = _locs.begin(); it != _locs.end(); it++, cpt++) {
+			auto id = *it;
+			points.push_back(std::make_pair(Point_3_inexact(_xs[id], _ys[id], _zs[id]), Vector_3_inexact((double)normalPerLoc[cpt].x(), (double)normalPerLoc[cpt].y(), (double)normalPerLoc[cpt].z())));
+		}
+		std::cout << "\n\n### Parallel mode ###" << std::endl;
+		Polyhedron poly;
+		poisson_reconstruction<CGAL::Parallel_tag>(points, poly);
+		_meshes.push_back(Surface_mesh_3_double());
+		CGAL::copy_face_graph(poly, _meshes.back());
+#else
+		std::vector<pointWnormal_3_inexact> points;
+		size_t cpt = 0;
+		for (auto it = _locs.begin(); it != _locs.end(); it++, cpt++) {
+			auto id = *it;
+			points.push_back(std::make_pair(Point_3_inexact(_xs[id], _ys[id], _zs[id]), Vector_3_inexact((double)normalPerLoc[cpt].x(), (double)normalPerLoc[cpt].y(), (double)normalPerLoc[cpt].z())));
+		}
+
+		Polyhedron_3_inexact poly;
+		double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<pointWnormal_3_inexact>()));
+		//average_spacing /= 3;
+
+		if (CGAL::poisson_surface_reconstruction_delaunay(points.begin(), points.end(), CGAL::First_of_pair_property_map<pointWnormal_3_inexact>(), CGAL::Second_of_pair_property_map<pointWnormal_3_inexact>(), poly, average_spacing))
+		{
+			_meshes.push_back(Surface_mesh_3_double());
+			CGAL::copy_face_graph(poly, _meshes.back());
 		}
 		else
 			std::cout << "ERROR !!!!!!!!!!!!!!!!" << std::endl;
