@@ -604,6 +604,12 @@ poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string
 			return poca::core::CommandInfo(false, _nameCommand, "factorResampling", factorResampling, "nbSmoothSteps", nbSmoothSteps, "windowSize", windowSize);
 		}
 	}
+	else if (_nameCommand == "subdivide") {
+		if (_parameters.contains("iterations")) {
+			uint32_t iterations = _parameters["iterations"].get<uint32_t>();
+			return poca::core::CommandInfo(false, _nameCommand, "iterations", iterations);
+		}
+	}
 	return poca::core::CommandInfo(); 
 }
 
