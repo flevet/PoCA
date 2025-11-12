@@ -118,8 +118,20 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 		dial->setModal(true);
 		if (dial->exec() == QDialog::Accepted) {
 			std::string type = dial->typeObject();
+			double angle = dial->getAngle();
+			double radius = dial->getRadius();
+			double distance = dial->getDistance();
+			double factorAverageSpacing = dial->getFactorAverageSpacing();
 			m_parameters[nameStr]["typeObject"] = type;
 			poca::core::Engine::instance()->getGlobalParameters()["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
+			m_parameters[nameStr]["angle"] = type;
+			poca::core::Engine::instance()->getGlobalParameters()["angle"] = angle;
+			m_parameters[nameStr]["radius"] = radius;
+			poca::core::Engine::instance()->getGlobalParameters()["radius"] = radius;
+			m_parameters[nameStr]["distance"] = type;
+			poca::core::Engine::instance()->getGlobalParameters()["distance"] = distance;
+			m_parameters[nameStr]["factorAverageSpacing"] = factorAverageSpacing;
+			poca::core::Engine::instance()->getGlobalParameters()["factorAverageSpacing"] = factorAverageSpacing;
 		}
 		delete dial;
 	}

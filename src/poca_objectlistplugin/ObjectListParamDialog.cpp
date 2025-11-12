@@ -36,6 +36,7 @@
 #include <QtWidgets/QLabel>
 #include <QtCore/QString>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QLineEdit>
 
 #include <Interfaces/ObjectListFactoryInterface.hpp>
 
@@ -82,6 +83,45 @@ ObjectListParamDialog::ObjectListParamDialog(const std::string _typeObject, QWid
 		break;
 	}
 
+	QGroupBox* gBoxPoisson = new QGroupBox(tr("Poisson surface reconstruction"));
+	gBoxPoisson->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QLabel* lblAngle = new QLabel("Min angle:");
+	lblAngle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	m_leditAngle = new QLineEdit(QString::number(20));
+	m_leditAngle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QHBoxLayout* langle = new QHBoxLayout;
+	langle->addWidget(lblAngle);
+	langle->addWidget(m_leditAngle);
+	QLabel* lblRadius = new QLabel("Radius:");
+	lblRadius->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	m_leditRadius = new QLineEdit(QString::number(100));
+	m_leditRadius->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QHBoxLayout* lradius = new QHBoxLayout;
+	lradius->addWidget(lblRadius);
+	lradius->addWidget(m_leditRadius);
+	QLabel* lblDistance = new QLabel("Distance:");
+	lblDistance->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	m_leditDistance = new QLineEdit(QString::number(0.25));
+	m_leditDistance->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QHBoxLayout* ldistance = new QHBoxLayout;
+	ldistance->addWidget(lblDistance);
+	ldistance->addWidget(m_leditDistance);
+	QLabel* lblFactorAvgSpacing = new QLabel("Factor average spacing:");
+	lblFactorAvgSpacing->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	m_leditFactorAvgSpacing = new QLineEdit(QString::number(1));
+	m_leditFactorAvgSpacing->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	QHBoxLayout* lavgspacing = new QHBoxLayout;
+	lavgspacing->addWidget(lblFactorAvgSpacing);
+	lavgspacing->addWidget(m_leditFactorAvgSpacing);
+
+	
+	QVBoxLayout* layoutPoisson = new QVBoxLayout;
+	layoutPoisson->addLayout(langle);
+	layoutPoisson->addLayout(lradius);
+	layoutPoisson->addLayout(ldistance);
+	layoutPoisson->addLayout(lavgspacing);
+	gBoxPoisson->setLayout(layoutPoisson);
+
 	QPushButton * closeBtn = new QPushButton("Ok", this);
 	QPushButton * cancelBtn = new QPushButton("Cancel", this);
 	QHBoxLayout * layoutButton = new QHBoxLayout;
@@ -92,6 +132,7 @@ ObjectListParamDialog::ObjectListParamDialog(const std::string _typeObject, QWid
 
 	QVBoxLayout * layout = new QVBoxLayout;
 	layout->addWidget(gBoxShow);
+	layout->addWidget(gBoxPoisson);
 	layout->addWidget(widButton);
 
 	this->setLayout(layout);
@@ -111,4 +152,32 @@ ObjectListParamDialog::~ObjectListParamDialog()
 const std::string ObjectListParamDialog::typeObject() const
 {
 	return poca::geometry::ObjectListFactoryInterface::getTypeStr(m_bgroup->checkedId());
+}
+
+const double ObjectListParamDialog::getAngle() const
+{
+	bool ok;
+	double val = m_leditAngle->text().toDouble(&ok);
+	return ok ? val : 20.;
+}
+
+const double ObjectListParamDialog::getRadius() const
+{
+	bool ok;
+	double val = m_leditRadius->text().toDouble(&ok);
+	return ok ? val : 100;
+}
+
+const double ObjectListParamDialog::getDistance() const
+{
+	bool ok;
+	double val = m_leditDistance->text().toDouble(&ok);
+	return ok ? val : 0.25;
+}
+
+const double ObjectListParamDialog::getFactorAverageSpacing() const
+{
+	bool ok;
+	double val = m_leditFactorAvgSpacing->text().toDouble(&ok);
+	return ok ? val : 1;
 }

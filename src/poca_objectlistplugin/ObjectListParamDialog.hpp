@@ -48,6 +48,10 @@ public:
 	~ObjectListParamDialog();
 
 	const std::string typeObject() const;
+	const double getAngle() const;
+	const double getRadius() const;
+	const double getDistance() const;
+	const double getFactorAverageSpacing() const;
 
 protected slots:
 	
@@ -55,6 +59,8 @@ protected slots:
 protected:
 	QCheckBox* m_cboxTriangulation, * m_cboxConvexHull, * m_cboxPoisson, * m_cboxAlpha;
 	QButtonGroup* m_bgroup;
+
+	QLineEdit* m_leditAngle, * m_leditRadius, * m_leditDistance, * m_leditFactorAvgSpacing;
 };
 
 #endif // ColocalizationChoiceDialog_h__
