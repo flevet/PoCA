@@ -294,22 +294,28 @@ namespace poca::geometry {
 		unsigned int nbForUpdate = nbPs / 100., cptTimer = 0;
 		if (nbForUpdate == 0) nbForUpdate = 1;
 		std::printf("Computing Voronoi density: %.2f %%", (0. / nbPs * 100.));
-		std::vector <float> densities(nbFaces(), 0.f);
+		std::vector <float> densities(nbFaces(), 0.f), meanDistance(nbFaces(), 0.f);
 		for (size_t n = 0, cpt = 0; n < nbFaces(); n++) {
-			float sumVol = _volumes[n], nbsTot = 1.f;
+			float sumVol = _volumes[n], nbsTot = 1.f, sumD = 0.f;
+			poca::core::Vec3mf pt(m_xs[n], m_ys[n], m_zs[n]);
 			for (size_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
 				size_t neigh = _neighbors[index];
 				if (neigh != std::numeric_limits<std::size_t>::max()) {
 					sumVol += _volumes[neigh];
 					nbsTot += 1.f;
+
+					poca::core::Vec3mf pt2(m_xs[neigh], m_ys[neigh], m_zs[neigh]);
+					sumD += pt.distance(pt2);
 				}
 			}
 			densities[n] = nbsTot / sumVol;
+			meanDistance[n] = sumD / nbsTot;
 			if (cptTimer++ % nbForUpdate == 0) 	std::printf("\rComputing Voronoi density: %.2f %%", ((double)cptTimer / nbPs * 100.));
 		}
 		std::cout << std::endl;
 		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
 		m_data["density"] = poca::core::generateDataWithLog(densities);
+		m_data["meanDistance"] = poca::core::generateDataWithLog(meanDistance);
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
 		m_data["id"] = poca::core::generateDataWithLog(ids);
