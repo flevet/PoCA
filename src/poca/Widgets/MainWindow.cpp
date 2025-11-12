@@ -2070,4 +2070,25 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		}
 		fs.close();
 	}
+	else if ("organoidFeature") {
+		std::ofstream fs("c:/tmp/values.txt");
+		for (auto window : m_mdiArea->subWindowList()) {
+			MdiChild* child = qobject_cast <MdiChild*>(window);
+			poca::core::MyObjectInterface* object = child->getWidget()->getObject();
+			if (!object) continue;
+			object = object->currentObject();
+			if (!object) continue;
+			/*if (!object->hasBasicComponent("VoronoiDiagram")) continue;
+			poca::geometry::VoronoiDiagram* vor = dynamic_cast<poca::geometry::VoronoiDiagram*>(object->getBasicComponent("VoronoiDiagram"));
+			const std::vector <float>& ds = vor->getData<float>("meanDistance");
+			for (const auto v : ds)
+				fs << v << std::endl;*/
+			if (!object->hasBasicComponent("ObjectLists")) continue;
+			poca::geometry::ObjectLists* objects = dynamic_cast<poca::geometry::ObjectLists*>(object->getBasicComponent("ObjectLists"));
+			auto nbs = objects->getObjectList(0)->nbObjects();
+			const std::vector <float>& vols = objects->getObjectList(1)->getData<float>("volume");
+			fs << nbs << "\t" << vols[0] << std::endl;
+		}
+		fs.close();
+	}
 }
