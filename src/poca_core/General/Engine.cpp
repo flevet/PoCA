@@ -280,6 +280,10 @@ namespace poca::core {
 			return NULL;
 		poca::core::BasicComponentInterface* bci = NULL;
 		for (auto loader : m_loadersFile) {
+			std::cout << finfo.suffix().toStdString();
+			for(auto val : loader->extensions())
+				std::cout << " - " << val.toStdString();
+			std::cout << std::endl;
 			if (!poca::core::utils::isExtensionInList(finfo.suffix(), loader->extensions())) 
 				continue;
 			bci = loader->loadData(_filename, _command);

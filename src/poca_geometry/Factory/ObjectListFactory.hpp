@@ -73,6 +73,7 @@ namespace poca::geometry {
 		void computeConvexHullObject3DFromOutline(const float*, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
 		
 		void computePoissonSurfaceObject(const float*, const float*, const float*, const std::set <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computePoissonSurfaceObjectOMesh(const float*, const float*, const float*, const std::set <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, float&, std::vector < Surface_mesh_3_double>&);
 		void computeAlphaShape(const float*, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
 	
 		void computeNormalOfLocsObject(const std::set <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&);

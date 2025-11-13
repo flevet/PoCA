@@ -98,6 +98,50 @@ void extract_precise_skeleton(
 	mcf.convert_to_skeleton(skel);
 }
 
+// --------------------------------------------------------------------
+// Helper: remove degenerate & duplicate triangles from the soup
+// --------------------------------------------------------------------
+static void drop_bad_and_duplicates(std::vector<Point_3_double>& vertices,
+	std::vector<std::vector<std::size_t>>& triangles)
+{
+	const std::size_t n = vertices.size();
+
+	auto canon_tri = [](std::size_t a, std::size_t b, std::size_t c)
+		-> std::tuple<std::size_t, std::size_t, std::size_t>
+		{
+			// Lexicographically smallest cyclic permutation
+			std::array<std::size_t, 3> r1{ a,b,c }, r2{ b,c,a }, r3{ c,a,b };
+			auto best = std::min({ r1,r2,r3 });
+			return { best[0], best[1], best[2] };
+		};
+
+	struct KeyHash {
+		size_t operator()(const std::tuple<std::size_t, std::size_t, std::size_t>& t) const noexcept {
+			auto [x, y, z] = t;
+			return (x * 1315423911u) ^ (y * 2654435761u) ^ (z * 97531u);
+		}
+	};
+
+	std::unordered_set<std::tuple<std::size_t, std::size_t, std::size_t>, KeyHash> seen;
+	seen.reserve(triangles.size() * 2);
+
+	std::vector<std::vector<std::size_t>> cleaned;
+	cleaned.reserve(triangles.size());
+
+	for (const auto& f : triangles) {
+		if (f.size() != 3) continue;
+		const auto a = f[0], b = f[1], c = f[2];
+		if (a >= n || b >= n || c >= n) continue;
+		if (a == b || b == c || a == c) continue;
+
+		auto key = canon_tri(a, b, c);
+		if (seen.insert(key).second)
+			cleaned.push_back({ a,b,c });
+	}
+
+	triangles.swap(cleaned);
+}
+
 namespace poca::geometry {
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const std::vector <poca::core::ROIInterface*>& _ROIs, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
@@ -478,12 +522,14 @@ namespace poca::geometry {
 		if (_vertices.size() < 5)
 			return false;
 		if (m_repair) {
+			drop_bad_and_duplicates(_vertices, _triangles);
 			PMP::repair_polygon_soup(_vertices, _triangles, CGAL::parameters::erase_all_duplicates(true).require_same_orientation(true));
+			drop_bad_and_duplicates(_vertices, _triangles);
 			if (!PMP::orient_polygon_soup(_vertices, _triangles))
 			{
 				std::cerr << "Some duplication happened during polygon soup orientation" << std::endl;
 				//if this happens, the remeshing crash
-				m_applyRemeshing = false;
+				//m_applyRemeshing = false;
 			}
 			if (!PMP::is_polygon_soup_a_polygon_mesh(_triangles))
 			{
@@ -494,6 +540,7 @@ namespace poca::geometry {
 		m_meshes.push_back(Surface_mesh_3_double());
 		Surface_mesh_3_double& mesh = m_meshes.back();
 		PMP::polygon_soup_to_polygon_mesh(_vertices, _triangles, mesh);
+		PMP::stitch_borders(mesh);
 		if (m_repair) {
 			PMP::keep_large_connected_components(mesh, 10);
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
