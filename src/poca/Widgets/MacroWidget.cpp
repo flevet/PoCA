@@ -122,6 +122,12 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	m_openDirButton->setIcon(QIcon(QPixmap(poca::plot::openDirIcon)));
 	m_openDirButton->setToolTip("Open dir");
 	QObject::connect(m_openDirButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+	m_addDirButton = new QPushButton();
+	m_addDirButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_addDirButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_addDirButton->setIcon(QIcon(QPixmap(poca::plot::plusIcon)));
+	m_addDirButton->setToolTip("Add dir");
+	QObject::connect(m_addDirButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	m_runMacroButton = new QPushButton("Run");
 	m_runMacroButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	QWidget* emptyRunnerW = new QWidget;
@@ -131,6 +137,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	layoutLineRunner->addWidget(m_saveMacroButton);
 	layoutLineRunner->addWidget(m_openFileButton);
 	layoutLineRunner->addWidget(m_openDirButton);
+	layoutLineRunner->addWidget(m_addDirButton);
 	layoutLineRunner->addWidget(emptyRunnerW);
 	layoutLineRunner->addWidget(m_runMacroButton);
 	QVBoxLayout* layoutMacro = new QVBoxLayout;
@@ -244,7 +251,7 @@ void MacroWidget::actionNeeded()
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
 		emit(runMacro(m_jsonRun, filenames));
 	}
-	else if (sender == m_openDirButton) {
+	else if (sender == m_openDirButton || sender == m_addDirButton) {
 		QString path = m_pathForOpening;
 		QString dirName = QFileDialog::getExistingDirectory(0,
 			QObject::tr("Select directory"),
@@ -274,7 +281,8 @@ void MacroWidget::actionNeeded()
 			QString filename = fileInfo.fileName();
 			filenames.push_back(dirName + filename);
 		}
-		m_filesEdit->setPlainText(filenames.join("\n"));
+		QString allFiles = sender == m_openDirButton ? QString() : m_filesEdit->toPlainText() + "\n";
+		m_filesEdit->setPlainText(allFiles + filenames.join("\n"));
 		/*if (filenames.isEmpty()) return;
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
 		emit(runMacro(m_jsonRun, filenames));*/

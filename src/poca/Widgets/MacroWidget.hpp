@@ -80,7 +80,7 @@ protected:
 
 protected:
 	QTextEdit* m_recordEdit, * m_macroEdit, * m_filesEdit;
-	QPushButton* m_runMacroButton, * m_loadMacroButton, * m_saveMacroButton, * m_transferToRunnerButton, * m_transferToClipboardButton, * m_saveRecorderButton, * m_openFileButton, * m_openDirButton;
+	QPushButton* m_runMacroButton, * m_loadMacroButton, * m_saveMacroButton, * m_transferToRunnerButton, * m_transferToClipboardButton, * m_saveRecorderButton, * m_openFileButton, * m_openDirButton, * m_addDirButton;
 
 	QString m_pathForOpening;
 
