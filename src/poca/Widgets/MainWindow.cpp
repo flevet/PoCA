@@ -2149,16 +2149,16 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			if (!object) continue;
 			object = object->currentObject();
 			if (!object) continue;
-			/*if (!object->hasBasicComponent("VoronoiDiagram")) continue;
+			if (!object->hasBasicComponent("VoronoiDiagram")) continue;
 			poca::geometry::VoronoiDiagram* vor = dynamic_cast<poca::geometry::VoronoiDiagram*>(object->getBasicComponent("VoronoiDiagram"));
 			const std::vector <float>& ds = vor->getData<float>("meanDistance");
 			for (const auto v : ds)
-				fs << v << std::endl;*/
-			if (!object->hasBasicComponent("ObjectLists")) continue;
+				fs << v << std::endl;
+			/*if (!object->hasBasicComponent("ObjectLists")) continue;
 			poca::geometry::ObjectLists* objects = dynamic_cast<poca::geometry::ObjectLists*>(object->getBasicComponent("ObjectLists"));
 			auto nbs = objects->getObjectList(0)->nbObjects();
 			const std::vector <float>& vols = objects->getObjectList(1)->getData<float>("volume");
-			fs << nbs << "\t" << vols[0] << std::endl;
+			fs << object->getDir() << "\t" << object->getName() << "\t" << nbs << "\t" << vols[0] << std::endl;*/
 		}
 		fs.close();
 	}
