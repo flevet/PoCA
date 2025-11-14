@@ -360,7 +360,7 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		QString filename;
 
 		if (path.empty()) {
-			 poca::core::Engine* engine = poca::core::Engine::instance();
+			/*poca::core::Engine* engine = poca::core::Engine::instance();
 			poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
 			if (obj == NULL) return;
 
@@ -368,7 +368,31 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 			filename = QString(dir.c_str());
 			if (!filename.endsWith('/'))
 				filename.append('/');
-			filename.append(name.c_str());
+			filename.append(name.c_str());*/
+
+
+			poca::core::Engine* engine = poca::core::Engine::instance();
+			poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
+			QString dir = obj->getDir().c_str();
+			QString name = obj->getName().c_str();
+			if (!dir.endsWith('/'))
+				dir.append("/");
+			if (_infos->hasParameter("appendToDir")) {
+				std::string addToDir = _infos->getParameter<std::string>("appendToDir");
+				dir = dir + addToDir.c_str();
+				if (!dir.endsWith('/'))
+					dir.append("/");
+			}
+			if (_infos->hasParameter("appendToName")) {
+				std::string addToFile = _infos->getParameter<std::string>("appendToName");
+				int dotIndex = name.lastIndexOf('.');
+
+				if (dotIndex != -1)
+					name.insert(dotIndex, addToFile.c_str());
+				else
+					name.append(addToFile.c_str());
+			}
+			filename = dir + name;
 		}
 		else
 			filename = QString(path.c_str());
@@ -463,10 +487,19 @@ poca::core::CommandInfo DetectionSetBasicCommands::createCommand(const std::stri
 		}
 	}
 	else if (_nameCommand == "saveLocalizations") {
+		poca::core::CommandInfo ci(false, _nameCommand);
 		std::string path;
 		if (_parameters.contains("path"))
 			path = _parameters["path"].get<std::string>();
-		return poca::core::CommandInfo(false, _nameCommand, "path", path);
+		ci.addParameter("path",path);
+		if (_parameters.contains("appendToTitle"))
+			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
+		if (_parameters.contains("appendToDir"))
+			ci.addParameter("appendToDir", _parameters["appendToDir"].get<std::string>());
+		if (_parameters.contains("appendToName"))
+			ci.addParameter("appendToName", _parameters["appendToName"].get<std::string>());
+		return ci;
+
 	}
 	else if (_nameCommand == "keepPercentageOfLocalizations") {
 		poca::core::CommandInfo ci(false, _nameCommand);
