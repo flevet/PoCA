@@ -48,6 +48,7 @@
 #include <CGAL/Side_of_triangle_mesh.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/subdivision_method_3.h>
+#include <CGAL/boost/graph/helpers.h>
 
 #include <General/MyData.hpp>
 #include <General/BasicComponent.hpp>
@@ -188,7 +189,8 @@ namespace poca::geometry {
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points()) {
+			for (const auto& vert : mesh.vertices()) {
+				auto point = mesh.point(vert);
 				auto x = point.x(), y = point.y(), z = point.z();
 				m_xs.push_back(x);
 				m_ys.push_back(y);
@@ -287,7 +289,8 @@ namespace poca::geometry {
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points()) {
+			for (const auto& vert : mesh.vertices()) {
+				auto point = mesh.point(vert);
 				auto x = point.x(), y = point.y(), z = point.z();
 				m_xs.push_back(x);
 				m_ys.push_back(y);
@@ -374,7 +377,8 @@ namespace poca::geometry {
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& mesh : m_meshes) {
-			for (const auto& point : mesh.points()) {
+			for (const auto& vert : mesh.vertices()) {
+				auto point = mesh.point(vert);
 				auto x = point.x(), y = point.y(), z = point.z();
 				m_xs.push_back(x);
 				m_ys.push_back(y);
@@ -612,8 +616,13 @@ namespace poca::geometry {
 		_nbTriPoCA.push_back(_trianglesPoCA.size());
 		_volumes.push_back(volume);
 
-		Kernel::Iso_cuboid_3 bbox = CGAL::bounding_box(_mesh.points().begin(), _mesh.points().end());
-		m_bboxMeshes.push_back(poca::core::BoundingBox(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax(), bbox.ymax(), bbox.zmax()));
+		poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+		for (auto v : _mesh.vertices()) {
+			auto p = _mesh.point(v);
+			bbox.addPointBBox(p.x(), p.y(), p.z());
+		}
+
+		m_bboxMeshes.push_back(bbox);
 
 		Facet_vector_3_map facetNormals = _mesh.add_property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
 		PMP::compute_face_normals(_mesh, facetNormals);
@@ -980,15 +989,19 @@ namespace poca::geometry {
 		std::ofstream fs(_filename, std::ifstream::binary);
 		size_t nb = m_meshes.size();
 		fs.write(reinterpret_cast<char*>(&nb), sizeof(size_t));
+		std::map <Surface_mesh_3_double::Vertex_index, int> idx;
 		for (const auto& mesh : m_meshes) {
 			std::vector <poca::core::Vec3mf> vertices;
-			for (const auto& point : mesh.points())
+			for (const auto& vert : mesh.vertices()) {
+				auto point = mesh.point(vert);
+				idx[vert] = vertices.size();
 				vertices.push_back(poca::core::Vec3mf(point.x(), point.y(), point.z()));
+			}
 			std::vector <size_t> triangles;
 			for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
 				CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
 				for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
-					triangles.push_back(*vbegin);
+					triangles.push_back(idx[*vbegin]);
 				}
 			}
 			nb = vertices.size();
