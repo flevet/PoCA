@@ -96,6 +96,7 @@ namespace poca::geometry {
 		inline const std::vector <Surface_mesh_3_double>& getMeshes() const { return m_meshes; }
 		inline  std::vector <Surface_mesh_3_double>& getMeshes() { return m_meshes; }
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
+		inline const std::vector <poca::core::BoundingBox>& getBBoxMeshes() const { return m_bboxMeshes; }
 
 	protected:
 		const bool addObjectMesh(std::vector <Point_3_double>&, std::vector<std::vector<std::size_t> >&, 
