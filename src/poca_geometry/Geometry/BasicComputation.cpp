@@ -30,6 +30,8 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <tinysplinecxx.h>
+
 #include <General/Misc.h>
 
 #include "BasicComputation.hpp"
@@ -130,6 +132,126 @@ namespace poca::geometry {
 			}
 		}
 	}
+
+	void smoothOutline(std::vector<poca::core::Vec3mf>& _originalOutline, std::vector<poca::core::Vec3mf>& _smoothedOutline, uint32_t _nbSmooth, uint32_t _windowSize, float _factor, bool _closed)
+	{
+		std::vector <int> nindices;
+		int half = (int)floor(_windowSize / 2);
+		for (auto n = -half; n <= half; n++)
+			nindices.emplace_back(n);
+
+		std::vector <poca::core::Vec3mf> smoothedOutline;
+		std::cout << __LINE__ << std::endl;
+
+		for (auto n = 0; n < _originalOutline.size(); n++) {
+			auto next = (n + 1) % _originalOutline.size();
+			const auto& p = _originalOutline[n], pn = _originalOutline[next];
+			float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
+			if (d < TS_POINT_EPSILON)
+				std::cout << "Very close" << std::endl;
+		}
+
+		smoothedOutline.resize(_originalOutline.size());
+		for (auto step = 0; step < _nbSmooth; step++) {
+			for (auto n = 0; n < _originalOutline.size(); n++) {
+				float x = 0, y = 0;
+				std::vector <int> final_ids;
+				for (auto nind : nindices) {
+					auto id = n + nind;
+					if (id < 0 || id >= _originalOutline.size()) {
+						if (_closed) {
+							if (id < 0)
+								final_ids.push_back(_originalOutline.size() + id);
+							else if (id >= _originalOutline.size())
+								final_ids.push_back(id % _originalOutline.size());
+						}
+					}
+					else
+						final_ids.push_back(id);
+				}
+				float n_final = final_ids.size();
+				for (auto id : final_ids) {
+					x += _originalOutline[id].x() / n_final;
+					y += _originalOutline[id].y() / n_final;
+				}
+					/*if ((id < 0 || id >= _originalOutline.size()) && _closed)
+					{
+						if (id < 0)
+							id = _originalOutline.size() + id;
+						else if (id >= _originalOutline.size())
+							id = id % _originalOutline.size();
+						x += _originalOutline[id].x() / (float)_windowSize;
+						y += _originalOutline[id].y() / (float)_windowSize;
+					}
+					else {
+						x += _originalOutline[id].x() / (float)_windowSize;
+						y += _originalOutline[id].y() / (float)_windowSize;
+					}
+				}*/
+				smoothedOutline[n].set(x, y, 0.f);
+				/*auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
+				auto x = (outlineTmp[prec].x() + outlineTmp[n].x() * 2.f + outlineTmp[next].x()) / 4.f;
+				auto y = (outlineTmp[prec].y() + outlineTmp[n].y() * 2.f + outlineTmp[next].y()) / 4.f;
+				smoothedOutline[n].set(x, y, 0.f);*/
+			}
+			_originalOutline = smoothedOutline;
+		}
+		std::cout << __LINE__ << std::endl;
+
+		for (auto n = 0; n < smoothedOutline.size(); n++) {
+			auto next = (n + 1) % smoothedOutline.size();
+			const auto& p = smoothedOutline[n], pn = smoothedOutline[next];
+			float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
+			if (d < TS_POINT_EPSILON)
+				std::cout << "Very close" << std::endl;
+		}
+
+		std::vector<tinyspline::real> points;
+		for (const auto& pt : smoothedOutline) {
+			points.push_back(pt.x());
+			points.push_back(pt.y());
+		}
+
+		std::cout << __LINE__ << " " << (points.size() / 2) << std::endl;
+		_smoothedOutline.clear();
+
+		if (points.size() > _windowSize) {
+			try {
+				std::cout << __LINE__ << std::endl;
+				tinyspline::BSpline spline = tinyspline::BSpline(points.size() / 2);
+				std::cout << __LINE__ << std::endl;
+				spline.setControlPoints(points);
+				std::cout << __LINE__ << std::endl;
+				std::vector<tinyspline::real> knotsAct = spline.chordLengths(points.size()).equidistantKnotSeq((points.size() / 2) * _factor);
+				std::cout << __LINE__ << std::endl;
+				for (auto n = 0; n < knotsAct.size(); n++) {
+					try {
+						auto pt = spline.eval(knotsAct[n]).resultVec2();
+						bool addPoint = true;
+						if (!_smoothedOutline.empty()) {
+							const auto& p = _smoothedOutline.back();
+							float d = poca::geometry::distance((float)pt.x(), (float)pt.y(), p.x(), p.y());
+							if (d < TS_POINT_EPSILON)
+								addPoint = false;
+						}
+						if (addPoint) {
+							_smoothedOutline.push_back(poca::core::Vec3mf(pt.x(), pt.y(), 0.f));
+						}
+					}
+					catch (const std::runtime_error& e) {
+						std::cerr << "Caught runtime_error: " << e.what() << " for n = " << n << " and knotsAct " << knotsAct[n] << std::endl;
+					}
+				}
+				std::cout << __LINE__ << std::endl;
+			}
+			catch (const std::runtime_error& e) {
+				std::cerr << "Caught runtime_error: " << e.what() << std::endl;
+			}
+		}
+		else
+			_smoothedOutline = _originalOutline;
+	}
+
 
 	double BasicComputation::distance(const double _x0, const double _y0, const double _x1, const double _y1)
 	{
@@ -280,5 +402,6 @@ namespace poca::geometry {
 		double area = (_r * _r) * acos((_r - h) / _r) - ((_r - h) * sqrt((2. * _r * h) - (h * h)));
 		return area;
 	}
+
 }
 

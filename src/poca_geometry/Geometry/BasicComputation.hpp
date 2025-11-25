@@ -124,6 +124,8 @@ namespace poca::geometry {
 		return count.empty();
 	}
 
+	void smoothOutline(std::vector<poca::core::Vec3mf>&, std::vector<poca::core::Vec3mf>&, uint32_t, uint32_t, float, bool = true);
+
 	class BasicComputation {
 	public:
 		static double distance(const double, const double, const double, const double);
