@@ -141,14 +141,14 @@ namespace poca::geometry {
 			nindices.emplace_back(n);
 
 		std::vector <poca::core::Vec3mf> smoothedOutline;
-		std::cout << __LINE__ << std::endl;
+		//std::cout << __LINE__ << std::endl;
 
 		for (auto n = 0; n < _originalOutline.size(); n++) {
 			auto next = (n + 1) % _originalOutline.size();
 			const auto& p = _originalOutline[n], pn = _originalOutline[next];
 			float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
-			if (d < TS_POINT_EPSILON)
-				std::cout << "Very close" << std::endl;
+			//if (d < TS_POINT_EPSILON)
+			//	std::cout << "Very close" << std::endl;
 		}
 
 		smoothedOutline.resize(_originalOutline.size());
@@ -196,14 +196,14 @@ namespace poca::geometry {
 			}
 			_originalOutline = smoothedOutline;
 		}
-		std::cout << __LINE__ << std::endl;
+		//std::cout << __LINE__ << std::endl;
 
 		for (auto n = 0; n < smoothedOutline.size(); n++) {
 			auto next = (n + 1) % smoothedOutline.size();
 			const auto& p = smoothedOutline[n], pn = smoothedOutline[next];
 			float d = poca::geometry::distance(pn.x(), pn.y(), p.x(), p.y());
-			if (d < TS_POINT_EPSILON)
-				std::cout << "Very close" << std::endl;
+			//if (d < TS_POINT_EPSILON)
+			//	std::cout << "Very close" << std::endl;
 		}
 
 		std::vector<tinyspline::real> points;
@@ -212,18 +212,18 @@ namespace poca::geometry {
 			points.push_back(pt.y());
 		}
 
-		std::cout << __LINE__ << " " << (points.size() / 2) << std::endl;
+		//std::cout << __LINE__ << " " << (points.size() / 2) << std::endl;
 		_smoothedOutline.clear();
 
 		if (points.size() > _windowSize) {
 			try {
-				std::cout << __LINE__ << std::endl;
+				//std::cout << __LINE__ << std::endl;
 				tinyspline::BSpline spline = tinyspline::BSpline(points.size() / 2);
-				std::cout << __LINE__ << std::endl;
+				//std::cout << __LINE__ << std::endl;
 				spline.setControlPoints(points);
-				std::cout << __LINE__ << std::endl;
+				//std::cout << __LINE__ << std::endl;
 				std::vector<tinyspline::real> knotsAct = spline.chordLengths(points.size()).equidistantKnotSeq((points.size() / 2) * _factor);
-				std::cout << __LINE__ << std::endl;
+				//std::cout << __LINE__ << std::endl;
 				for (auto n = 0; n < knotsAct.size(); n++) {
 					try {
 						auto pt = spline.eval(knotsAct[n]).resultVec2();
@@ -242,7 +242,7 @@ namespace poca::geometry {
 						std::cerr << "Caught runtime_error: " << e.what() << " for n = " << n << " and knotsAct " << knotsAct[n] << std::endl;
 					}
 				}
-				std::cout << __LINE__ << std::endl;
+				//std::cout << __LINE__ << std::endl;
 			}
 			catch (const std::runtime_error& e) {
 				std::cerr << "Caught runtime_error: " << e.what() << std::endl;
