@@ -38,7 +38,11 @@
 
 namespace poca::geometry {
 	enum class WalkDirection { CW, CCW };
-
+	enum class PolylineOrientation {
+		Same,
+		Opposite,
+		Indeterminate // not the same curve / unclear
+	};
 	float computeTriangleArea(const double, const double, const double, const double, const double, const double);
 	float computePolygonArea(poca::core::Vec3md*, const unsigned int);
 	float computePolygonArea2D(poca::core::Vec3md*, const unsigned int);
@@ -122,6 +126,125 @@ namespace poca::geometry {
 		}
 
 		return count.empty();
+	}
+
+	template <class T>
+	std::vector<std::vector<T>> extract_contours_from_segments(
+		const std::unordered_map<T, std::vector<T>>& adjacency)
+	{
+		typedef std::pair<T, T> Edge;
+		std::unordered_set<Edge, boost::hash<Edge>> visited_edges;
+		std::vector<std::vector<T>> contours;
+
+		for (const auto& [start_vertex, neighbors] : adjacency) {
+			if (neighbors.size() > 1) continue;
+
+			for (auto neighbor : neighbors) {
+
+				auto edge_key = std::minmax(start_vertex, neighbor);
+				if (visited_edges.count(edge_key)) continue;
+
+				// Decide initial walk direction based on the first two points
+				const auto& p0 = start_vertex->point();
+				const auto& p1 = neighbor->point();
+				poca::geometry::WalkDirection walk_dir = poca::geometry::WalkDirection::CCW; // default
+
+				// Find a third neighbor if possible to decide orientation
+				if (neighbors.size() >= 2) {
+					for (auto n2 : neighbors) {
+						if (n2 == neighbor) continue;
+						const auto& p2 = n2->point();
+						auto orient = CGAL::orientation(p0, p1, p2);
+						if (orient == CGAL::LEFT_TURN) walk_dir = poca::geometry::WalkDirection::CCW;
+						else if (orient == CGAL::RIGHT_TURN) walk_dir = poca::geometry::WalkDirection::CW;
+						break;
+					}
+				}
+
+				std::vector<T> contour;
+				contour.push_back(start_vertex);
+
+				T prev = start_vertex;
+				T current = neighbor;
+				contour.push_back(current);
+				visited_edges.insert(edge_key);
+
+				while (current != start_vertex) {
+					const auto& next_neighbors = adjacency.at(current);
+					T next_vertex = NULL;
+					double best_score = walk_dir == poca::geometry::WalkDirection::CCW ?
+						-std::numeric_limits<double>::infinity() :
+						std::numeric_limits<double>::infinity();
+
+					for (auto candidate : next_neighbors) {
+						if (candidate == prev) continue;
+
+						const auto& pprev = prev->point();
+						const auto& pcurrent = current->point();
+						const auto& pcandidate = candidate->point();
+
+						K_inexact::Vector_2 v1 = pcurrent - pprev;
+						K_inexact::Vector_2 v2 = pcandidate - pcurrent;
+
+						double angle = poca::geometry::angle_between(v1, v2);
+
+						if ((walk_dir == poca::geometry::WalkDirection::CCW && angle > best_score) ||
+							(walk_dir == poca::geometry::WalkDirection::CW && angle < best_score)) {
+							best_score = angle;
+							next_vertex = candidate;
+						}
+					}
+
+					if (next_vertex == NULL) break;  // Should not happen in a closed loop
+
+					prev = current;
+					current = next_vertex;
+					contour.push_back(current);
+
+					visited_edges.insert(std::minmax(prev, current));
+				}
+
+				contours.push_back(contour);
+			}
+		}
+
+		return contours;
+	}
+
+	template <class T>
+	PolylineOrientation compare_polyline_direction(
+		const std::vector<T>& a,
+		const std::vector<T>& b,
+		double tol = 1e-8)
+	{
+		if (a.size() < 2 || b.size() < 2)
+			return PolylineOrientation::Indeterminate;
+
+		// Direction of A and B as first->last
+		double ax = a.back().x() - a.front().x();
+		double ay = a.back().y() - a.front().y();
+		double bx = b.back().x() - b.front().x();
+		double by = b.back().y() - b.front().y();
+
+		double na2 = ax * ax + ay * ay;
+		double nb2 = bx * bx + by * by;
+		if (na2 < tol || nb2 < tol)
+			return PolylineOrientation::Indeterminate; // almost a point
+
+		// Normalize for a pure orientation test
+		double na = std::sqrt(na2);
+		double nb = std::sqrt(nb2);
+		ax /= na; ay /= na;
+		bx /= nb; by /= nb;
+
+		double dot = ax * bx + ay * by; // in [-1, 1]
+
+		if (dot > 0.9)  // angle < ~25°
+			return PolylineOrientation::Same;
+		if (dot < -0.9)  // angle > ~155°
+			return PolylineOrientation::Opposite;
+
+		return PolylineOrientation::Indeterminate; // neither clearly same nor opposite
 	}
 
 	void smoothOutline(std::vector<poca::core::Vec3mf>&, std::vector<poca::core::Vec3mf>&, uint32_t, uint32_t, float, bool = true);
