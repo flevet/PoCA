@@ -35,7 +35,7 @@
 
 namespace poca::plot {
 
-	FilterHistogramWidget::FilterHistogramWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, const std::string& _nameComponent, QWidget* _parent /*= 0*/, Qt::WindowFlags _flags /*= 0 */) : QWidget(_parent, _flags), m_nameComponent(_nameComponent), m_redraw(false)
+	FilterHistogramWidget::FilterHistogramWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, const std::string& _nameComponent, QWidget* _parent /*= 0*/, const int _maxHeight, Qt::WindowFlags _flags /*= 0 */) : QWidget(_parent, _flags), m_nameComponent(_nameComponent), m_redraw(false)
 	{
 		m_mediator = _mediator;
 		m_parent = dynamic_cast <ObserverForMediator*>(_parent);
@@ -44,7 +44,7 @@ namespace poca::plot {
 		this->addActionToObserve("LoadObjCharacteristicsAllWidgets");
 
 		m_customPlot = new QCPHistogram(this);
-		m_customPlot->setMaximumHeight(60);
+		m_customPlot->setMaximumHeight(_maxHeight);
 		m_customPlot->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 		m_customPlot->legend->setTextColor(Qt::black);
 		QFont fontLegend("Helvetica", 9);

@@ -51,7 +51,7 @@ namespace poca::plot {
 		Q_OBJECT
 
 	public:
-		FilterHistogramWidget(poca::core::MediatorWObjectFWidgetInterface*, const std::string&, QWidget* = 0, Qt::WindowFlags = Qt::WindowFlags());
+		FilterHistogramWidget(poca::core::MediatorWObjectFWidgetInterface*, const std::string&, QWidget* = 0, const int = 60, Qt::WindowFlags = Qt::WindowFlags());
 		virtual ~FilterHistogramWidget();
 
 		void setInfos(const QString&, poca::core::HistogramInterface*, const bool, poca::core::PaletteInterface*);
