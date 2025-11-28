@@ -78,7 +78,7 @@ struct FaceInfo2
 
 struct FaceInfoTag
 {
-	poca::geometry::DTriangleTag m_tag = poca::geometry::NOT_DONE;
+	poca::geometry::DTriangleTag m_tag = poca::geometry::OUTSIDE;
 	size_t m_index;
 };
 
