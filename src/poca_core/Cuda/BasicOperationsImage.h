@@ -83,6 +83,10 @@ template <class T, class M>
 void pad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template <class T, class M>
 void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template <class T>
+void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
+
 #endif
 
 #endif

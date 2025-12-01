@@ -738,6 +738,32 @@ void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _o
         unpad3D << <grid, threads >> > (thrust::raw_pointer_cast(_source.data()), thrust::raw_pointer_cast(_output.data()), wdest, hdest, ddest, _pad);
 }
 
+template <class T>
+__global__ void maxProjection_kernel(T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d)
+{
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= _w || y >= _h || z >= _d) { return; }
+
+    const uint32_t id_src = z * _w * _h + y * _w + x, id_dest = y * _w + x;
+
+    atomicMax(reinterpret_cast<unsigned int*>(&dest[id_dest]), (unsigned int)src[id_src]);
+}
+
+template <class T>
+void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d)
+{
+    thrust::device_vector<T> src(_source), dest(_w * _h);
+    _output.resize(_w * _h);
+    thrust::fill(_output.begin(), _output.end(), T(0));
+    dim3 threads = dim3(8, 8, 8);
+    dim3 grid = dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8), (unsigned int)ceil((float)_d / (float)8));
+    maxProjection_kernel << <grid, threads >> > (thrust::raw_pointer_cast(src.data()), thrust::raw_pointer_cast(dest.data()), _w, _h, _d);
+    cudaMemcpy(_output.data(), thrust::raw_pointer_cast(dest.data()), _output.size() * sizeof(T), cudaMemcpyDeviceToHost);
+}
+
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint16_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint32_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
@@ -803,4 +829,9 @@ template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::devic
 template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
 template void unpad(const thrust::device_vector<uint8_t>& _source, thrust::device_vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);
+
+template void maxProjection(const std::vector<uint8_t>& _source, std::vector<uint8_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
+template void maxProjection(const std::vector<uint16_t>& _source, std::vector<uint16_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
+template void maxProjection(const std::vector<uint32_t>& _source, std::vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
+template void maxProjection(const std::vector<float>& _source, std::vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
 #endif
