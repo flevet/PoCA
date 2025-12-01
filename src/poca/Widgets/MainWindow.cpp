@@ -86,6 +86,7 @@
 #include <General/Engine.hpp>
 #include <General/Palette.hpp>
 #include <Geometry/ObjectLists.hpp>
+#include <General/ImagesList.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -2141,7 +2142,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		}
 		fs.close();
 	}
-	else if ("organoidFeature") {
+	else if (tmp == "organoidFeature") {
 		std::ofstream fs("c:/tmp/values.txt");
 		for (auto window : m_mdiArea->subWindowList()) {
 			MdiChild* child = qobject_cast <MdiChild*>(window);
@@ -2161,5 +2162,69 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			fs << object->getDir() << "\t" << object->getName() << "\t" << nbs << "\t" << vols[0] << std::endl;*/
 		}
 		fs.close();
+	}
+	else if (tmp == "organoidFeature_2") {
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::PluginList* plugins = engine->getPlugins();
+
+		QString globalPath("D:/Git/stardist-env/2025_03_03_ihssane_cycleGAN3D/20250217_IND_Incub24h/");
+		QStringList conditions;
+		conditions << "Control/";// << "10uM/" << "33uM/" << "100uM/" << "300uM/" << "600uM/";
+		std::ofstream fs("c:/tmp/values.txt");
+		for (const auto& condition : conditions) {
+			//Get names of files
+			QStringList allFiles;
+			QDir dir(globalPath + condition + "masks");
+			dir.setFilter(QDir::Files);
+			QFileInfoList list = dir.entryInfoList();
+			for (int i = 0; i < list.size(); ++i) {
+				QFileInfo dirInfo = list.at(i);
+				QString fileName = dirInfo.fileName();
+				allFiles << fileName;
+				//std::cout << fileName.toStdString() << std::endl;
+				//if (dirName == "." || dirName == "..") continue;
+			}
+
+			std::vector <float> volumes;
+			for (auto currentFile : allFiles) {
+				QString samName = currentFile, nucleiObjectsName = currentFile, centroidsName = currentFile;
+				samName.replace("w2", "w4");
+				samName.replace("405", "640");
+				nucleiObjectsName.replace(".tif", ".obj");
+				QString orgaObjectName = samName;
+				orgaObjectName.replace(".tif", ".obj");
+				centroidsName.replace(".tif", ".csv");
+				//Determine if all files are present
+				bool labelImageExist = QFileInfo::exists(globalPath + condition + "masks/" + currentFile);
+				bool samImageExist = QFileInfo::exists(globalPath + condition + "SAM2_Actin_Mask/" + samName);
+				bool nucleiObjsExist = QFileInfo::exists(globalPath + condition + "nucleusObjs/" + nucleiObjectsName);
+				bool organoidObjExist = QFileInfo::exists(globalPath + condition + "actinObjs/" + orgaObjectName);
+				bool centroidsExist = QFileInfo::exists(globalPath + condition + "nucleusCentroids/" + centroidsName);
+
+				if (!labelImageExist || !samImageExist || !nucleiObjsExist || !organoidObjExist || !centroidsExist) {
+					std::cout << currentFile.toStdString() << ", not good" << std::endl;
+					continue;
+				}
+
+				//Open actin sam segmentation
+				poca::core::CommandInfo ci;
+				poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(globalPath + condition + "SAM2_Actin_Mask/" + samName, &ci);
+				if (obj == NULL || !obj->hasBasicComponent("ImagesList")) {
+					std::cout << "Loading actin image failed" << std::endl;
+					continue;
+				}
+				poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(obj->getBasicComponent("ImagesList"));
+				poca::core::ImageInterface* ii = imlist->currentImage();
+				ii->executeCommand(false, "changeImageType", poca::core::LABEL);
+				if(!ii->hasData("volume")) {
+					std::cout << "Actin image has not volume" << std::endl;
+					continue;
+				}
+				const std::vector <float>& volume = ii->getData<float>("volume");
+				volumes.push_back(volume[0]);
+			}
+			for(const auto vol : volumes)
+				std::cout << "volume = " << vol << std::endl;
+		}
 	}
 }
