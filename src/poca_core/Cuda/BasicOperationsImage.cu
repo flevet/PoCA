@@ -739,28 +739,58 @@ void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _o
 }
 
 template <class T>
-__global__ void maxProjection_kernel(T* src, T* dest, const uint32_t _w, const uint32_t _h, const uint32_t _d)
+__global__ void maxProjection_kernel(const T* __restrict__ src,
+    T* __restrict__ dest,
+    uint32_t w, uint32_t h, uint32_t d)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-    const uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
 
-    if (x >= _w || y >= _h || z >= _d) { return; }
+    if (x >= w || y >= h) return;
 
-    const uint32_t id_src = z * _w * _h + y * _w + x, id_dest = y * _w + x;
+    // starting index for this (x, y) at z = 0
+    uint32_t id_src = y * w + x;
+    T maxv = src[id_src];
 
-    atomicMax(reinterpret_cast<unsigned int*>(&dest[id_dest]), (unsigned int)src[id_src]);
+    const uint32_t sliceStride = w * h;
+
+    for (uint32_t z = 1; z < d; ++z) {
+        id_src += sliceStride;
+        T v = src[id_src];
+        if (v > maxv) maxv = v;
+    }
+
+    dest[y * w + x] = maxv;
 }
+
 
 template <class T>
 void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint32_t _w, uint32_t _h, uint32_t _d)
 {
-    thrust::device_vector<T> src(_source), dest(_w * _h);
+    // copy input to device
+    thrust::device_vector<T> src(_source);
+    thrust::device_vector<T> dest(_w * _h);
+
     _output.resize(_w * _h);
-    thrust::fill(_output.begin(), _output.end(), T(0));
-    dim3 threads = dim3(8, 8, 8);
-    dim3 grid = dim3((unsigned int)ceil((float)_w / (float)8), (unsigned int)ceil((float)_h / (float)8), (unsigned int)ceil((float)_d / (float)8));
+
+    dim3 threads(16, 16);
+    dim3 grid((_w + threads.x - 1) / threads.x,
+        (_h + threads.y - 1) / threads.y);
+
     maxProjection_kernel << <grid, threads >> > (thrust::raw_pointer_cast(src.data()), thrust::raw_pointer_cast(dest.data()), _w, _h, _d);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel launch error: %s\n", cudaGetErrorString(err));
+        return;
+    }
+
+    err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Kernel execution error: %s\n", cudaGetErrorString(err));
+        return;
+    }
+
     cudaMemcpy(_output.data(), thrust::raw_pointer_cast(dest.data()), _output.size() * sizeof(T), cudaMemcpyDeviceToHost);
 }
 
