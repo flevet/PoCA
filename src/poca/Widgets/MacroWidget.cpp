@@ -130,6 +130,8 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	QObject::connect(m_addDirButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	m_runMacroButton = new QPushButton("Run");
 	m_runMacroButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_runMacroOnFilesButton = new QPushButton("Run on files");
+	m_runMacroOnFilesButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	QWidget* emptyRunnerW = new QWidget;
 	emptyRunnerW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QHBoxLayout* layoutLineRunner = new QHBoxLayout;
@@ -140,6 +142,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	layoutLineRunner->addWidget(m_addDirButton);
 	layoutLineRunner->addWidget(emptyRunnerW);
 	layoutLineRunner->addWidget(m_runMacroButton);
+	layoutLineRunner->addWidget(m_runMacroOnFilesButton);
 	QVBoxLayout* layoutMacro = new QVBoxLayout;
 	layoutMacro->addWidget(splitter);
 	layoutMacro->addLayout(layoutLineRunner);
@@ -149,13 +152,14 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	int index = this->addTab(macroWidget, QObject::tr("Runner"));
 	index = this->addTab(recordWidget, QObject::tr("Recorder"));
 
-	QObject::connect(m_transferToRunnerButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-	QObject::connect(m_transferToClipboardButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-	QObject::connect(m_saveRecorderButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+	QObject::connect(m_transferToRunnerButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_transferToClipboardButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_saveRecorderButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 
-	QObject::connect(m_loadMacroButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-	QObject::connect(m_saveMacroButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-	QObject::connect(m_runMacroButton, SIGNAL(clicked()), this, SLOT(actionNeeded()));
+	QObject::connect(m_loadMacroButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_saveMacroButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_runMacroButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_runMacroOnFilesButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 }
 
 MacroWidget::~MacroWidget()
@@ -167,16 +171,20 @@ void MacroWidget::actionNeeded()
 	QObject* sender = QObject::sender();
 	if (sender == m_runMacroButton) {
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
+		emit(runMacro(m_jsonRun));
+	}
+	else if (sender == m_runMacroOnFilesButton) {
 		if (m_filesEdit->toPlainText().isEmpty()) {
-			emit(runMacro(m_jsonRun));
+			return;
 		}
-		else {
-			QString files = m_filesEdit->toPlainText();
-			if (files.endsWith("\n"))
-				files.chop(1);
-			QStringList listFiles = files.split("\n");
-			emit(runMacro(m_jsonRun, listFiles));
-		}
+
+		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
+		
+		QString files = m_filesEdit->toPlainText();
+		if (files.endsWith("\n"))
+			files.chop(1);
+		QStringList listFiles = files.split("\n");
+		emit(runMacro(m_jsonRun, listFiles));
 	}
 	else if (sender == m_loadMacroButton) {
 		QString path = QDir::currentPath(), tmp = path;
