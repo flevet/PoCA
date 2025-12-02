@@ -60,6 +60,10 @@ namespace poca::core {
 	{
 		delete m_palette;
 		m_palette = NULL;
+
+		for (auto& val : m_data) {
+			delete val.second;
+		}
 	}
 
 	void BasicComponent::setData(const std::map <std::string, std::vector <float>>& _data)
