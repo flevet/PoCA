@@ -43,6 +43,7 @@
 #include <General/Misc.h>
 #include <Cuda/CoreMisc.h>
 #include <General/Histogram.hpp>
+#include <General/Engine.hpp>
 
 namespace poca::core {
 
@@ -100,18 +101,22 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::finalizeImage(const uint32_t _w, const uint32_t _h, const uint32_t _d)
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		m_width = _w; m_height = _h; m_depth = _d;
 		const std::vector<T>& pixels = this->pixels();
 		clock_t t1 = clock(), t2, t3 = clock(), t4;
 		t4 = clock();
 		long elapsed = ((double)t4 - t3) / CLOCKS_PER_SEC * 1000;
-		std::cout << "Time for finding max & min " << elapsed << std::endl;
+		if (engine->verbose())
+			std::cout << "Time for finding max & min " << elapsed << std::endl;
 		t3 = clock();
 		m_bbox.set(0, 0, 0, m_width, m_height, m_depth);
 		m_data["intensity"]->finalizeData();// = new poca::core::MyData(m_pixels, false);
 		t4 = clock();
 		elapsed = ((double)t4 - t3) / CLOCKS_PER_SEC * 1000;
-		std::cout << "Time for creating my data " << elapsed << std::endl;
+		if (engine->verbose())
+			std::cout << "Time for creating my data " << elapsed << std::endl;
 		t3 = clock();
 		m_selection.clear();// .resize(pixels.size(), true);
 		setCurrentHistogramType("intensity");
@@ -119,12 +124,15 @@ namespace poca::core {
 		m_max = getCurrentHistogram()->getMax();
 		t4 = clock();
 		elapsed = ((double)t4 - t3) / CLOCKS_PER_SEC * 1000;
-		std::cout << "Time forsetting the histogram " << elapsed << std::endl;
+		if (engine->verbose())
+			std::cout << "Time forsetting the histogram " << elapsed << std::endl;
 		t3 = clock();
-		std::cout << "Bounding box image " << m_bbox << std::endl;
+		if (engine->verbose())
+			std::cout << "Bounding box image " << m_bbox << std::endl;
 		t2 = clock();
 		elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
-		std::cout << "Time for creating image " << elapsed << std::endl;
+		if (engine->verbose())
+			std::cout << "Time for creating image " << elapsed << std::endl;
 		if(m_typeImage == poca::core::LABEL)
 			addFeatureLabels();
 	}
@@ -132,15 +140,20 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::addFeatureLabels()
 	{
-		std::cout << __LINE__ << std::endl;
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
+		if (engine->verbose())
+			std::cout << __LINE__ << std::endl;
 		if (m_volumes.empty()) return;
-		std::cout << __LINE__ << std::endl;
+		if (engine->verbose())
+			std::cout << __LINE__ << std::endl;
 		std::vector <float> labels(m_volumes.size());
 		std::iota(std::begin(labels), std::end(labels), 1);
 		addFeature("label", poca::core::generateDataWithLog(labels));
 		addFeature("volume", poca::core::generateDataWithLog(m_volumes));
 		setCurrentHistogramType("label");
-		std::cout << __LINE__ << std::endl;
+		if (engine->verbose())
+			std::cout << __LINE__ << std::endl;
 	}
 
 	template <class T>

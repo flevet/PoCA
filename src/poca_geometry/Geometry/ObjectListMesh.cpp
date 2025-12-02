@@ -55,6 +55,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/ROIInterface.hpp>
 #include <General/Misc.h>
+#include <General/Engine.hpp>
 
 #include "ObjectListMesh.hpp"
 #include "BasicComputation.hpp"
@@ -147,13 +148,16 @@ namespace poca::geometry {
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const std::vector <poca::core::ROIInterface*>& _ROIs, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
 		std::vector <float> volumes;
 
 		clock_t t1 = clock(), t2;
 		int precPercent = 0;
-		std::cout << std::string(10, '-');
+		if(engine->verbose())
+			std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
 			bool inROI = true;
 			for (auto cur = 0; cur < _allVertices[n].size() && inROI; cur++) {
@@ -166,10 +170,13 @@ namespace poca::geometry {
 				std::transform(std::execution::par, _allVertices[n].begin(), _allVertices[n].end(), points.begin(), [](const auto& value) {return Point_3_double(value[0], value[1], value[2]); });
 				int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 				if (percent != precPercent || points.size() > 100000) {
-					if (points.size() > 100000)
-						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size() << " vertices";
-					else
-						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+					if (engine->verbose())
+					{
+						if (points.size() > 100000)
+							std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << points.size() << " vertices";
+						else
+							std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+					}
 					precPercent = percent;
 				}
 				m_repair = _repair;
@@ -179,7 +186,8 @@ namespace poca::geometry {
 		}
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
-		std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all CGAL meshes ->  " << elapsed << " seconds.                                       " << std::endl;
+		if (engine->verbose())
+			std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all CGAL meshes ->  " << elapsed << " seconds.                                       " << std::endl;
 		m_edgesSkeleton.initialize(edges, nbEdges);
 		m_linksSkeleton.initialize(links, nbLinks);
 		m_triangles.initialize(triPoCA, nbTriPoCA);
@@ -258,20 +266,26 @@ namespace poca::geometry {
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
 		std::vector <float> volumes;
 
 		clock_t t1 = clock(), t2;
 		int precPercent = 0;
-		std::cout << std::string(10, '-');
+		if (engine->verbose())
+			std::cout << std::string(10, '-');
 		for (auto n = 0; n < _allVertices.size(); n++) {
 			int percent = floor((float)n / (float)_allVertices.size() * 10.f);
 			if (percent != precPercent || _allVertices[n].size() > 100000) {
-				if (_allVertices[n].size() > 100000)
-					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
-				else
-					std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+				if (engine->verbose())
+				{
+					if (_allVertices[n].size() > 100000)
+						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; generating CGAL mesh number " << (n + 1) << " composed of " << _allVertices[n].size() << " vertices";
+					else
+						std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << "                                                                                                                     ";
+				}
 				precPercent = percent;
 			}
 			m_repair = _repair;
@@ -572,9 +586,12 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf>& _linksSkeleton, std::vector <std::uint32_t>& _nbLinks,
 		std::vector <float>& _volumes)
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		if (m_repair) {
 			if (!CGAL::is_triangle_mesh(_mesh)) {
-				std::cout << "Not a triangle mesh" << std::endl;
+				if (engine->verbose())
+					std::cout << "Not a triangle mesh" << std::endl;
 				return false;
 			}
 
@@ -905,19 +922,23 @@ namespace poca::geometry {
 
 	void ObjectListMesh::computeSkeletons()
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		std::vector <poca::core::Vec3mf> skeletons, links;
 		std::vector <uint32_t> nbSkeletons, nbLinks;
 		nbSkeletons.push_back(0);
 		nbLinks.push_back(0);
 		int cpt = 0;
 		clock_t t1 = clock(), t2;
-		std::cout << std::string(10, '-');
+		if (engine->verbose())
+			std::cout << std::string(10, '-');
 		for (auto& mesh : m_meshes) {
 			int percent = floor((float)cpt / (float)m_meshes.size() * 10.f);
 			double target_edge_length = 2;
 			unsigned int nb_iter = 5;
 
-			std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; computing skeleton for mesh " << (cpt + 1) << " composed of " << num_faces(mesh) << " triangles";
+			if (engine->verbose())
+				std::cout << "\r" << std::string(percent, '*') << std::string(10 - percent, '-') << " ; computing skeleton for mesh " << (cpt + 1) << " composed of " << num_faces(mesh) << " triangles";
 			//std::cout << "Start smoothing (" << num_faces(mesh) << " faces)..." << std::endl;
 			//std::cout << "Start remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 			//PMP::isotropic_remeshing(faces(mesh), target_edge_length, mesh, CGAL::parameters::number_of_iterations(nb_iter));
@@ -956,7 +977,8 @@ namespace poca::geometry {
 
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
-		std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all skeletons -> " << elapsed << " seconds.                                       " << std::endl;
+		if (engine->verbose())
+			std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all skeletons -> " << elapsed << " seconds.                                       " << std::endl;
 	}
 
 	void ObjectListMesh::saveAsOBJ(const std::string& _filename) const

@@ -129,6 +129,9 @@ namespace poca::core {
 
 		inline const QStringList& extensions() const { return m_fileExtensions; }
 
+		inline const bool verbose() const { return m_verbose; }
+		inline void setVerbose(const bool _val) { m_verbose = _val; }
+
 	protected:
 		Engine();
 
@@ -150,6 +153,8 @@ namespace poca::core {
 
 		//Replacing both StateSoftwareSingleton & GlobalParametersSingleton
 		nlohmann::json m_stateParameters, m_globalParameters;
+
+		bool m_verbose{ true };
 	};
 }
 

@@ -51,6 +51,7 @@
 #include "../Objects/MyMultipleObject.hpp"
 #include "../Objects/MyObjectDisplayCommand.hpp"
 #include "../General/BasicComponentList.hpp"
+#include "../General/Engine.hpp"
 
 #ifndef NO_PYTHON
 #include "PythonInterpreter.hpp"
@@ -275,15 +276,20 @@ namespace poca::core {
 
 	poca::core::BasicComponentInterface* Engine::loadData(const QString& _filename, poca::core::CommandInfo* _command, poca::core::MyObjectInterface* _obj)
 	{
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		
 		QFileInfo finfo(_filename);
 		if (!finfo.exists())
 			return NULL;
 		poca::core::BasicComponentInterface* bci = NULL;
 		for (auto loader : m_loadersFile) {
-			std::cout << finfo.suffix().toStdString();
-			for(auto val : loader->extensions())
-				std::cout << " - " << val.toStdString();
-			std::cout << std::endl;
+			if (engine->verbose())
+			{
+				std::cout << finfo.suffix().toStdString();
+				for (auto val : loader->extensions())
+					std::cout << " - " << val.toStdString();
+				std::cout << std::endl;
+			}
 			if (!poca::core::utils::isExtensionInList(finfo.suffix(), loader->extensions())) 
 				continue;
 			bci = loader->loadData(_filename, _command);
