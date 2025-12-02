@@ -2166,18 +2166,20 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		fs.close();
 	}
 	else if (tmp == "organoidFeature_2") {
+		std::cout << "Starting organoidFeature_2 macro" << std::endl;
 		poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->setVerbose(false);
+
 		poca::core::PluginList* plugins = engine->getPlugins();
 		float Pixel_Size = 0.3f; // Micrometres
 		float Delta_Z = 1.f; // Micrometres
 		float z_Ratio = Delta_Z / Pixel_Size;
 
-		//QString globalPath("D:/Git/stardist-env/2025_03_03_ihssane_cycleGAN3D/20250217_IND_Incub24h/");
-		QString globalPath("E:/data/2025_03_03_ihssane_cycleGAN3D/20250227_Vc_Incub24h/test_macro/");
+		QString globalPath("D:/Git/stardist-env/2025_03_03_ihssane_cycleGAN3D/20250217_IND_Incub24h/");
 		QStringList conditions;
-		conditions << "";// "Control/" << "33uM/";// << "10uM/" << "33uM/" << "100uM/" << "300uM/" << "600uM/";
-		std::ofstream fs("c:/tmp/values.txt");
-		fs << "Condition\tFile\nAcquired vol\nProj area\nEstimated ratio\nEstimated Vol\nEstimated ratio\nNorm vol organoid\nNorm # nuclei\tOrig vol organoid\tOrig # nuclei" << std::endl;
+		conditions << "Control/" << "10uM/" << "33uM/" << "100uM/" << "300uM/" << "600uM/";
+		std::ofstream fs(globalPath.toStdString() + "values.txt");
+		fs << "Condition\tFile\tAcquired vol\tProj area\tEstimated ratio\tEstimated Vol\tEstimated ratio\tNorm vol organoid\tNorm # nuclei\tOrig vol organoid\tOrig # nuclei" << std::endl;
 		for (const auto& condition : conditions) {
 			//Get names of files
 			QStringList allFiles;
@@ -2193,6 +2195,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			}
 
 			std::vector <float> volumesAcquired, surfaceAcquired, nbNuclei, volOrganoid;
+			std::vector <std::string> names;
 			for (auto currentFile : allFiles) {
 				QString samName = currentFile, nucleiObjectsName = currentFile, centroidsName = currentFile;
 				samName.replace("w2", "w4");
@@ -2216,7 +2219,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 
 				//Open actin sam segmentation
 				poca::core::CommandInfo ci;
-				poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(globalPath + condition + "SAM2_Actin_Mask/" + samName, &ci);
+				/*poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(globalPath + condition + "SAM2_Actin_Mask/" + samName, &ci);
 				if (obj == NULL || !obj->hasBasicComponent("ImagesList")) {
 					std::cout << "Loading actin image failed" << std::endl;
 					continue;
@@ -2229,29 +2232,51 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					continue;
 				}
 				const std::vector <float>& volume = actin->getData<float>("volume");
-				volumesAcquired.push_back(volume[0] * z_Ratio);
+				volumesAcquired.push_back(volume[0] * z_Ratio);*/
 
-				if (actin->type() != poca::core::UINT8) {
-					std::cout << "Actin segmentation should be uint8_t" << std::endl;
-					return;
+				std::cout << "Opening condition " << condition.toStdString() << ", file " << currentFile.toStdString() << std::endl;
+
+				poca::core::BasicComponentInterface* bci = engine->loadData(globalPath + condition + "SAM2_Actin_Mask/" + samName);
+				if (bci == NULL) {
+					std::cout << "Loading actin image failed" << std::endl;
+					continue;
 				}
-				poca::core::Image<uint8_t>* actin8bits = static_cast<poca::core::Image<uint8_t>*>(actin);
+
+				poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(bci);
+
+				poca::core::Image<uint8_t>* actin8bits = static_cast<poca::core::Image<uint8_t>*>(imlist->currentImage());
+				if (actin8bits == NULL) {
+					std::cout << "Actin segmentation should be uint8_t" << std::endl;
+					continue;
+				}
 				std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
-				std::vector <uint8_t> maxProj;
-				maxProjection<uint8_t>(pixelOrig, maxProj, actin->width(), actin->height(), actin->depth());
+
 				thrust::device_vector<float> d_labels, d_counts;
+				thrust::device_vector<float> d_pixels_stack(pixelOrig);
+				count_occurences_label_kernel_gpu< float>(d_pixels_stack, d_labels, d_counts);
+				std::vector <float> volumeActin(d_counts.size() - 1);
+				cudaMemcpy(volumeActin.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volumeActin.size() * sizeof(float), cudaMemcpyDeviceToHost);
+				volumesAcquired.push_back(volumeActin[0] * z_Ratio);
+
+				std::vector <uint8_t> maxProj;
+				maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
 				thrust::device_vector<float> d_pixels(maxProj);
 				count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
 				std::vector <float> surfaceProj(d_counts.size() - 1);
 				cudaMemcpy(surfaceProj.data(), thrust::raw_pointer_cast(d_counts.data() + 1), surfaceProj.size() * sizeof(float), cudaMemcpyDeviceToHost);
 				surfaceAcquired.push_back(surfaceProj[0]);
 
-				poca::core::BasicComponentInterface* bci = engine->loadData(globalPath + condition + "nucleusObjs/" + nucleiObjectsName);
+				bci = engine->loadData(globalPath + condition + "nucleusObjs/" + nucleiObjectsName);
 				nbNuclei.push_back(bci->nbElements());
+				delete bci;
 				bci = engine->loadData(globalPath + condition + "actinObjs/" + orgaObjectName);
 				const std::vector <float>& organoidVolumeObject = bci->getMyData("volume")->getData<float>();
 				volOrganoid.push_back(organoidVolumeObject[0]);
 
+				delete actin8bits;
+				delete bci;
+
+				names.push_back(currentFile.toStdString());
 			}
 			for (auto n = 0; n < volumesAcquired.size(); n++) {
 				float r = sqrt(surfaceAcquired[n] / M_PI);
@@ -2259,9 +2284,9 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				float volRatio = volumesAcquired[n] / volSphere;
 				std::cout << "Acquired Volume = " << volumesAcquired[n] << ", Proj Area = " << surfaceAcquired[n] << ", Estimated Radius = " << r <<
 					", Estimated Volume = " << volSphere << ", Estimated Volume Ratio = " << (volRatio * 100.f) << "%, Norm vol organoid = " << (volOrganoid[n] / volRatio) <<
-					" (orig = " << volOrganoid[n] << "), Norm nb nuclei = " << (nbNuclei[n] / volRatio) << " (orig = " << nbNuclei[n] << std::endl;
-				fs << condition.toStdString() << "\t" << volumesAcquired[n] << "\t" << surfaceAcquired[n] << "\t" << r << "\t" << volSphere << "\t" <<
-					(volRatio * 100.f) << "\t" << (volOrganoid[n] / volRatio) << "\t" << (nbNuclei[n] / volRatio) << "\t" << volOrganoid[n] << "\t" << nbNuclei[n] << std::endl;
+					" (orig = " << volOrganoid[n] << "), Norm nb nuclei = " << int(nbNuclei[n] / volRatio) << " (orig = " << nbNuclei[n] << ")" << std::endl;
+				fs << condition.toStdString() << "\t" << names[n] << "\t" << volumesAcquired[n] << "\t" << surfaceAcquired[n] << "\t" << r << "\t" << volSphere << "\t" <<
+					(volRatio * 100.f) << "\t" << (volOrganoid[n] / volRatio) << "\t" << int(nbNuclei[n] / volRatio) << "\t" << volOrganoid[n] << "\t" << nbNuclei[n] << std::endl;
 			}
 		}
 		fs.close();
