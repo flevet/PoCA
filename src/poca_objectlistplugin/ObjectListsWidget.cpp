@@ -1054,7 +1054,7 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		auto duration2 = std::chrono::high_resolution_clock::now() - start2;
 		long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
 		float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
-		printf("update table %f seconds (%lld microseconds)\n", s, ms);
+		//printf("update table %f seconds (%lld microseconds)\n", s, ms);
 
 		poca::geometry::ObjectListInterface* curObjects = bci->currentObjectList();
 
