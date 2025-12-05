@@ -57,6 +57,12 @@ namespace poca::core {
 
 	void CommandableObject::addCommand(Command* _com)
 	{
+		for (Command* com : m_commands) {
+			if (typeid(*com) == typeid(*_com)) {
+				//Command is already added
+				return;
+			}
+		}
 		m_commands.push_back(_com);
 	}
 
