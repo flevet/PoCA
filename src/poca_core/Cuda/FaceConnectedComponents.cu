@@ -108,6 +108,8 @@ __global__ void face_cc_kernel_3d_iteration(T* cclabels, uint32_t* changed, int 
 
 void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::device_vector<uint32_t>& d_labels, int width, int height, int depth)
 {
+    poca::core::Engine* engine = poca::core::Engine::instance();
+    
     auto start = std::chrono::high_resolution_clock::now();
     dim3 threads = depth == 1 ? dim3(BLOCKDIM_X, BLOCKDIM_Y) : dim3(BLOCKDIM_X, BLOCKDIM_Y, BLOCKDIM_Z);
     dim3 grid = depth == 1 ? dim3((unsigned int)ceil((float)width / (float)BLOCKDIM_X), (unsigned int)ceil((float)height / (float)BLOCKDIM_Y)) : dim3((unsigned int)ceil((float)width / (float)BLOCKDIM_X), (unsigned int)ceil((float)height / (float)BLOCKDIM_Y), (unsigned int)ceil((float)depth / (float)BLOCKDIM_Z));
@@ -148,7 +150,8 @@ void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::
     auto duration2 = std::chrono::high_resolution_clock::now() - start;
     long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration2).count();
     float s = std::chrono::duration_cast<std::chrono::seconds>(duration2).count();
-    printf("total time face connected components took %f seconds (%lld microseconds), with number of iterations: %u\n", s, ms, iteration);
+    if (engine->verbose())
+        printf("total time face connected components took %f seconds (%lld microseconds), with number of iterations: %u\n", s, ms, iteration);
 }
 
 //--------------------------------------------------------------

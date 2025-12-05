@@ -611,6 +611,7 @@ void connectedComponnets3DLabelingBinary(uint8_t* const _pixels, const size_t _n
 
 template <class T>
 poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, const T _thresholdMin, const T _thresholdMax, const uint32_t _w, const uint32_t _h, const uint32_t _d) {
+    poca::core::Engine* engine = poca::core::Engine::instance();
 
     const uint32_t D = _d;
     const uint32_t H = _h;
@@ -642,7 +643,8 @@ poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, con
     //if(_d == 1)
     //    fill_all_holes_2(d_labels, _w, _h);
     uint32_t maxLabel = *thrust::max_element(d_labels.begin(), d_labels.end());
-    std::cout << "Max lbl = " << maxLabel << std::endl;
+    if (engine->verbose())
+        std::cout << "Max lbl = " << maxLabel << std::endl;
     poca::core::ImageInterface* image = NULL;
     /*if (maxLabel < std::numeric_limits<uint8_t>::max()) {
         image = convertAndCreateLabelImage<uint32_t, uint8_t>(d_labels, _w, _h, _d);
