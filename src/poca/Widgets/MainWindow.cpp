@@ -30,6 +30,8 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#define STB_RECT_PACK_IMPLEMENTATION
+
 #include <Windows.h>
 #include <gl/glew.h>
 #include <iostream>
@@ -60,6 +62,8 @@
 #include <QtGui/QImage>
 #include <QtCore/QMimeData>
 #include <qmath.h>
+#include <CGAL/bounding_box.h>
+#include <CGAL/Polygon_mesh_processing/angle_and_area_smoothing.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -87,8 +91,10 @@
 #include <General/Engine.hpp>
 #include <General/Palette.hpp>
 #include <Geometry/ObjectLists.hpp>
+#include <Geometry/ObjectListMesh.hpp>
 #include <General/ImagesList.hpp>
 #include <Cuda/BasicOperationsImage.h>
+#include <Geometry/CGAL_helpers.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -106,7 +112,35 @@
 #include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 
+#include "stb_rect_pack.h"
+
 #undef max 
+
+
+// Simple growth policy: keep doubling the shorter side (or both) up to a cap.
+struct Bin2 { int w, h; };
+
+bool try_pack2(const Bin2& bin, std::vector<stbrp_rect>& rects) {
+	std::vector<stbrp_node> nodes(bin.w); // at least 'w' nodes is a good default
+	stbrp_context ctx;
+	stbrp_init_target(&ctx, bin.w, bin.h, nodes.data(), (int)nodes.size());
+	// No rotation: stb_rect_pack won't rotate unless you pre-rotate your inputs.
+	// Pack; returns 1 if everything packed, 0 if some didn't.
+	return stbrp_pack_rects(&ctx, rects.data(), (int)rects.size()) != 0;
+}
+
+Bin2 grow2(const Bin2& b, int max_w, int max_h) {
+	Bin2 next = b;
+	// Grow the limiting dimension first; adjust as you like (next power of two, etc.)
+	if (next.w <= next.h) next.w = std::min(next.w * 2, max_w);
+	else                  next.h = std::min(next.h * 2, max_h);
+	// If one side is already at cap, grow the other.
+	if (next.w == b.w && next.h == b.h) {
+		if (next.w < max_w) next.w = std::min(next.w * 2, max_w);
+		else if (next.h < max_h) next.h = std::min(next.h * 2, max_h);
+	}
+	return next;
+}
 
 void decomposePathToDirAndFile(const QString& _path, QString& _dirQS, QString& _fileQS)
 {
@@ -2290,5 +2324,136 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			}
 		}
 		fs.close();
+	}
+	else if (tmp == "allMasksSingapour") {
+		std::cout << "Starting allMasksSingapour macro" << std::endl;
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->setVerbose(false);
+		poca::core::PluginList* plugins = engine->getPlugins();
+
+		QStringList paths;
+		//paths << "D:/Git/stardist-env/2021_05_31_trainingFluo/Round5-D10-ScreenCentri3/masks/";
+		//paths << "D:/Git/stardist-env/2021_05_31_trainingFluo/Round5-D10-ScreenCentri-Membrane/masks/";
+		paths << "D:/DataPALMSTORM/nucleus_segmentation/all_masks_singapour/indiv/";
+		std::vector <Surface_mesh_3_double> meshes;
+		std::vector <poca::core::BoundingBox> bboxes;
+		std::vector<stbrp_rect> rects;
+		int cur = 0;
+		uint32_t PADDING_BINS = 2;
+
+		for (const auto& path : paths) {
+			//Get names of files
+			QStringList allFiles;
+			QDir dir(path);
+			dir.setFilter(QDir::Files);
+			QFileInfoList list = dir.entryInfoList();
+			for (int i = 0; i < list.size(); ++i) {
+				QFileInfo dirInfo = list.at(i);
+				QString fileName = dirInfo.fileName();
+				if (!fileName.endsWith(".tif")) continue;
+				std::cout << fileName.toStdString() << std::endl;
+
+				/*poca::core::BasicComponentInterface* bci = engine->loadData(path + fileName);
+				if (bci == NULL) {
+					std::cout << "Loading image failed" << std::endl;
+					continue;
+				}
+				poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(bci);
+				*/
+
+				std::cout << (path + fileName).toStdString() << std::endl;
+
+				poca::core::CommandInfo ci;
+				poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(path + fileName, &ci);
+				if (obj == NULL || !obj->hasBasicComponent("ImagesList")) {
+					std::cout << "Loading actin image failed" << std::endl;
+					continue;
+				}
+				poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(obj->getBasicComponent("ImagesList"));
+
+				plugins->addCommands(imlist);
+
+				poca::core::Image<uint16_t>* labels = static_cast<poca::core::Image<uint16_t>*>(imlist->currentImage());
+				if (labels == NULL) {
+					std::cout << "labels should be uint16_t" << std::endl;
+					continue;
+				}
+				if (labels->depth() == 1) {
+					std::cout << "problem with this image" << std::endl;
+					continue;
+				}
+
+				plugins->addCommands(labels);
+				imlist->executeCommand(false, "thresholdImage", "thresholdMin", 1.5f, "thresholdMax", std::numeric_limits<uint16_t>::max());
+				imlist->currentImage()->executeCommand(false, "scaleZ", 3.f);
+				imlist->executeCommand(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 4.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.f);
+
+				if(!obj->hasBasicComponent("ObjectLists")){
+					std::cout << "problem with marching cube" << std::endl;
+					delete obj;
+					continue;
+				}
+				poca::geometry::ObjectLists* objlist = static_cast <poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+				poca::geometry::ObjectListMesh* omeshes = static_cast <poca::geometry::ObjectListMesh*>(objlist->currentObjectList());
+
+				meshes.push_back(omeshes->getMeshes().front());
+
+				// Smooth with both angle and area criteria + Delaunay flips
+				//CGAL::Polygon_mesh_processing::angle_and_area_smoothing(meshes.back(), CGAL::parameters::number_of_iterations(3).use_safety_constraints(false));
+				poca::geometry::laplacian_smooth(meshes.back(), 5, 0.5);
+
+				auto bbox = CGAL::bounding_box(meshes.back().points().begin(), meshes.back().points().end());
+				bboxes.emplace_back(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax() + PADDING_BINS, bbox.ymax() + PADDING_BINS, bbox.zmax());
+				rects.push_back({ cur++, (int)(bbox.xmax() - bbox.xmin() + PADDING_BINS), (int)(bbox.ymax() - bbox.ymin() + PADDING_BINS), 0, 0, 0 });
+			}
+		}
+
+		Bin2 bin{ 512, 512 };            // start size
+		const int MAX_W = 8192;       // safety caps (tune as needed)
+		const int MAX_H = 8192;
+
+		// Retry with growth until success or we hit caps.
+		while (true) {
+			// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
+			auto work = rects;
+			if (try_pack2(bin, work)) {
+				//std::cout << "Packed in " << bin.w << "x" << bin.h << "\n";
+				for (const auto& r : work) {
+					// was_packed should be 1 for all if try_pack succeeded
+					//std::cout << "id=" << r.id << " x=" << r.x << " y=" << r.y << " w=" << r.w << " h=" << r.h << "\n";
+					float w = bboxes[r.id].realWidth(), h = bboxes[r.id].realHeight();
+					bboxes[r.id].set(r.x, r.y, 0.f, r.x + w, r.y + h, 0.f);
+					/*std::cout << r.id << " -> " << m_spinesTriangles[r.id].size();
+					for (const auto& tmp : m_spinesTriangles[r.id])
+						std::cout << " ; " << tmp->info().m_index;
+					std::cout << std::endl;*/
+				}
+				break;
+			}
+
+			Bin2 next = grow2(bin, MAX_W, MAX_H);
+			if (next.w == bin.w && next.h == bin.h) {
+				std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
+				return;
+			}
+			bin = next;
+		}
+
+		for (auto n = 0; n < meshes.size(); n++) {
+			Kernel::Vector_3 t(bboxes[n][0], bboxes[n][1], 0.f);
+			for (auto v : meshes[n].vertices()) {
+				meshes[n].point(v) = meshes[n].point(v) + t;
+			}
+		}
+
+		poca::geometry::ObjectListMesh* finalOmesh = new poca::geometry::ObjectListMesh(meshes);
+		poca::core::CommandInfo com;
+		poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(finalOmesh, com, "MainWindow");
+		poca::core::MyObjectInterface* obj = engine->createObject("D:/DataPALMSTORM/nucleus_segmentation/all_masks_singapour/", "all_masks.obj", objsList);
+		if (obj == NULL)
+			return;
+		poca::opengl::CameraInterface* cam = createWindows(obj);
+		engine->addCameraToObject(obj, cam);
+
 	}
 }
