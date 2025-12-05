@@ -61,6 +61,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/Skeleton.hpp
   Geometry/VoronoiDiagram.hpp
   Geometry/CGAL_includes.hpp
+  Geometry/CGAL_helpers.hpp
   Geometry/delaunator.hpp
   Geometry/voronator.hpp
   Geometry/dbscan.h
@@ -81,6 +82,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/StraightLine.cpp  
   Geometry/Skeleton.cpp
   Geometry/VoronoiDiagram.cpp
+  Geometry/CGAL_helpers.cpp
   Geometry/delaunator.cpp  
   Geometry/voronator.cpp
   Geometry/kdtree.cpp
