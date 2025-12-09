@@ -157,8 +157,8 @@ void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::
 //--------------------------------------------------------------
 // Watershed Algorithm Host Code
 //--------------------------------------------------------------
-
-void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_labels, int width, int height, int depth) {
+template <class T>
+void run_face_connected_component_pipeline(T* binary, uint32_t* output_labels, int width, int height, int depth) {
     size_t numel = width * height * depth;
 
     thrust::device_vector<uint8_t> d_binary(binary, binary + numel);
@@ -178,3 +178,8 @@ template __global__ void face_cc_kernel_3d_iteration(uint8_t* cclabels, uint32_t
 template __global__ void face_cc_kernel_3d_iteration(uint16_t* cclabels, uint32_t* changed, int width, int height, int depth);
 template __global__ void face_cc_kernel_3d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height, int depth);
 template __global__ void face_cc_kernel_3d_iteration(float* cclabels, uint32_t* changed, int width, int height, int depth);
+
+template void run_face_connected_component_pipeline(uint8_t* binary, uint32_t* output_labels, int width, int height, int depth);
+template void run_face_connected_component_pipeline(uint16_t* binary, uint32_t* output_labels, int width, int height, int depth);
+template void run_face_connected_component_pipeline(uint32_t* binary, uint32_t* output_labels, int width, int height, int depth);
+template void run_face_connected_component_pipeline(float* binary, uint32_t* output_labels, int width, int height, int depth);
