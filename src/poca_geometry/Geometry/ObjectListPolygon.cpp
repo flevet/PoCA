@@ -43,81 +43,14 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/ROIInterface.hpp>
 #include <General/Misc.h>
+#include <Geometry/CGAL_helpers.hpp>
 
 #include "ObjectListPolygon.hpp"
 #include "BasicComputation.hpp"
 #include "DelaunayTriangulation.hpp"
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
 
-template <class K>
-inline double to_d(const typename K::FT& v) { return CGAL::to_double(v); }
 
-template <class K>
-inline double edge_len(const CGAL::Point_2<K>& p, const CGAL::Point_2<K>& q)
-{
-	const double dx = to_d<K>(q.x() - p.x());
-	const double dy = to_d<K>(q.y() - p.y());
-	return std::sqrt(dx * dx + dy * dy);
-}
-
-template <class K>
-inline double signed_area2(const CGAL::Point_2<K>& a,
-	const CGAL::Point_2<K>& b,
-	const CGAL::Point_2<K>& c)
-{
-	const double ax = to_d<K>(a.x()), ay = to_d<K>(a.y());
-	const double bx = to_d<K>(b.x()), by = to_d<K>(b.y());
-	const double cx = to_d<K>(c.x()), cy = to_d<K>(c.y());
-	// 2 * signed area
-	return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-}
-
-// Returns pair: {signed_kappa, abs_kappa}
-template <class K>
-inline std::pair<float, float>
-vertex_curvature_control_polygon(const CGAL::Point_2<K>& A,
-	const CGAL::Point_2<K>& B,
-	const CGAL::Point_2<K>& C)
-{
-	const double ab = edge_len<K>(A, B);
-	const double bc = edge_len<K>(B, C);
-	const double ca = edge_len<K>(C, A);
-
-	const double s2 = signed_area2<K>(A, B, C); // 2 * signed area
-	const double denom = ab * bc * ca;
-	const double eps = 1e-14;
-
-	if (denom <= eps) return { 0.0, 0.0 };  // degenerate or nearly collinear
-
-	const double k_abs = (2.0 * std::abs(s2)) / denom; // equals 1/R
-	const double k_signed = (s2 >= 0.0) ? k_abs : -k_abs;
-	return { (float)k_signed, (float)k_abs };
-}
-
-// Main function: curvature for each vertex of a closed polygon
-// If first point equals last point, the last is ignored.
-template <class K>
-inline std::vector<std::pair<float, float>>
-control_polygon_curvatures(const CGAL::Polygon_2<K>& poly)
-{
-	std::vector<std::pair<float, float>> out;
-	const std::size_t N0 = poly.size();
-	if (N0 < 3) return out;
-
-	// Handle possible duplicated closing vertex
-	std::size_t N = N0;
-	if (N0 >= 2 && poly[0] == poly[N0 - 1]) N = N0 - 1;
-	if (N < 3) return out;
-
-	out.reserve(N);
-	for (std::size_t i = 0; i < N; ++i) {
-		const auto& A = poly[(i + N - 1) % N];
-		const auto& B = poly[i];
-		const auto& C = poly[(i + 1) % N];
-		out.push_back(vertex_curvature_control_polygon<K>(A, B, C));
-	}
-	return out;
-}
 
 // Returns {p2, p98}. Throws if there are no finite values.
 inline std::pair<float, float> percentile_bounds_2_98(const std::vector<float>& x)
