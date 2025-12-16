@@ -305,13 +305,15 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		std::vector <std::vector<Polygon_2>> newObjects;
 		std::vector <std::vector<std::vector <float>>> allCurvatures;
 		for (const auto& polygonWithHoles : polygons) {
-			std::cout << __LINE__ << std::endl;
+			std::cout << "--------------------------------------------" << std::endl;
+			std::cout << __LINE__ << " -> " << polygonWithHoles.size() << std::endl;
 			newObjects.push_back(std::vector <Polygon_2>());
 			allCurvatures.push_back(std::vector<std::vector <float>>());
 			auto& newObject = newObjects.back();
 			auto& newCurvatures = allCurvatures.back();
 
 			for (const auto& polygon : polygonWithHoles) {
+				std::cout << __LINE__ << " -> " << polygon.size() << std::endl;
 				std::vector <poca::core::Vec3mf> originalOutline, smoothedOutline;
 				for (const auto& p : polygon.container())
 					originalOutline.emplace_back(p.x(), p.y(), 0.f);
@@ -325,6 +327,8 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 					newObject.emplace_back(finalPoints.begin(), finalPoints.begin() + finalPoints.size());
 					std::cout << __LINE__ << std::endl;
 				}
+				else
+					std::cout << "this is empty" << std::endl;
 				/*std::vector <poca::core::Vec3mf> smoothedOutline, outlineTmp;
 				std::cout << __LINE__ << std::endl;
 				for (const auto& p : polygon.container())
