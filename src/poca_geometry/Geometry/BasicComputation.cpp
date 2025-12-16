@@ -252,6 +252,43 @@ namespace poca::geometry {
 			_smoothedOutline = _originalOutline;
 	}
 
+	std::pair<float, float> percentile_bounds_2_98(const std::vector<float>& x)
+	{
+		// Copy only finite values
+		std::vector<float> a;
+		a.reserve(x.size());
+		for (float v : x) {
+			if (std::isfinite(v)) a.push_back(v);
+		}
+		if (a.empty())
+			throw std::runtime_error("percentile_bounds_2_98: no finite values");
+
+		std::sort(a.begin(), a.end());
+		const size_t n = a.size();
+
+		auto percentile = [&](double p) -> float {
+			if (p <= 0.0) return a.front();
+			if (p >= 1.0) return a.back();
+			const double pos = p * (n - 1);     // 0-based index position
+			const size_t idx = static_cast<size_t>(pos);
+			const double frac = pos - idx;      // fractional part for interpolation
+			if (idx + 1 < n) {
+				const double v =
+					(1.0 - frac) * static_cast<double>(a[idx]) +
+					frac * static_cast<double>(a[idx + 1]);
+				return static_cast<float>(v);
+			}
+			else {
+				return a[idx];
+			}
+			};
+
+		float lo = percentile(0.02);
+		float hi = percentile(0.98);
+		if (lo > hi) std::swap(lo, hi);
+		return { lo, hi };
+	}
+
 
 	double BasicComputation::distance(const double _x0, const double _y0, const double _x1, const double _y1)
 	{

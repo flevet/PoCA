@@ -52,44 +52,6 @@
 
 
 
-// Returns {p2, p98}. Throws if there are no finite values.
-inline std::pair<float, float> percentile_bounds_2_98(const std::vector<float>& x)
-{
-	// Copy only finite values
-	std::vector<float> a;
-	a.reserve(x.size());
-	for (float v : x) {
-		if (std::isfinite(v)) a.push_back(v);
-	}
-	if (a.empty())
-		throw std::runtime_error("percentile_bounds_2_98: no finite values");
-
-	std::sort(a.begin(), a.end());
-	const size_t n = a.size();
-
-	auto percentile = [&](double p) -> float {
-		if (p <= 0.0) return a.front();
-		if (p >= 1.0) return a.back();
-		const double pos = p * (n - 1);     // 0-based index position
-		const size_t idx = static_cast<size_t>(pos);
-		const double frac = pos - idx;      // fractional part for interpolation
-		if (idx + 1 < n) {
-			const double v =
-				(1.0 - frac) * static_cast<double>(a[idx]) +
-				frac * static_cast<double>(a[idx + 1]);
-			return static_cast<float>(v);
-		}
-		else {
-			return a[idx];
-		}
-		};
-
-	float lo = percentile(0.02);
-	float hi = percentile(0.98);
-	if (lo > hi) std::swap(lo, hi);
-	return { lo, hi };
-}
-
 // Works for dim = 2 or 3.
 // For 2D:   kappa = abs(x' * y'' - y' * x'') / ( (x'^2 + y'^2)^(3/2) )
 // For 3D:   kappa = ||r' cross r''|| / ||r'||^3
@@ -500,7 +462,7 @@ namespace poca::geometry {
 			for (auto const& t2 : boost::combine(polygons, curvatures)) {
 				auto const& polygon = t2.get<0>();
 				auto& curvature = t2.get<1>();
-				std::cout << polygon.size() << " vs " << curvature.size() << std::endl;
+				//std::cout << polygon.size() << " vs " << curvature.size() << std::endl;
 				//std::cout << "Aera = " << fabs(polygon.area()) << ", # verts = " << polygon.size() << std::endl;
 				const auto& points = polygon.container();
 				std::size_t n = points.size();
@@ -521,7 +483,7 @@ namespace poca::geometry {
 		m_outlines.initialize(outlines, nbSegments);
 		//float min_val = *std::min_element(curvOutlines.begin(), curvOutlines.end());
 		//float max_val = *std::max_element(curvOutlines.begin(), curvOutlines.end());
-		auto [min_val, max_val] = percentile_bounds_2_98(curvOutlines);
+		auto [min_val, max_val] = poca::geometry::percentile_bounds_2_98(curvOutlines);
 		float range = max_val - min_val;
 		for (float& v : curvOutlines) v = std::clamp(v, min_val, max_val);
 		std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;

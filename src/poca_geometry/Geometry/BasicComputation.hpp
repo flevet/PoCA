@@ -248,6 +248,9 @@ namespace poca::geometry {
 	}
 
 	void smoothOutline(std::vector<poca::core::Vec3mf>&, std::vector<poca::core::Vec3mf>&, uint32_t, uint32_t, float, bool = true);
+	
+	// Returns {p2, p98}. Throws if there are no finite values.
+	std::pair<float, float> percentile_bounds_2_98(const std::vector<float>&);
 
 	class BasicComputation {
 	public:
