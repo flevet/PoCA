@@ -105,9 +105,9 @@ namespace poca::core {
 			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (unsigned int n = 0; n < m_components.size(); n++) {
 				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
-				for (size_t i = 0; i < 3; i++)
+				for (int i = 0; i < 3; i++)
 					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
-				for (size_t i = 3; i < 6; i++)
+				for (int i = 3; i < 6; i++)
 					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
 			}
 			return m_bbox; 
@@ -143,9 +143,9 @@ namespace poca::core {
 			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (unsigned int n = 0; n < m_components.size(); n++) {
 				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
-				for (size_t i = 0; i < 3; i++)
+				for (int i = 0; i < 3; i++)
 					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
-				for (size_t i = 3; i < 6; i++)
+				for (int i = 3; i < 6; i++)
 					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
 			}
 		}
@@ -158,9 +158,9 @@ namespace poca::core {
 			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (unsigned int n = 0; n < m_components.size(); n++) {
 				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
-				for (size_t i = 0; i < 3; i++)
+				for (int i = 0; i < 3; i++)
 					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
-				for (size_t i = 3; i < 6; i++)
+				for (int i = 3; i < 6; i++)
 					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
 			}
 		}
@@ -172,9 +172,9 @@ namespace poca::core {
 			m_bbox.set(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (unsigned int n = 0; n < m_components.size(); n++) {
 				poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
-				for (size_t i = 0; i < 3; i++)
+				for (int i = 0; i < 3; i++)
 					m_bbox[i] = bboxComp[i] < m_bbox[i] ? bboxComp[i] : m_bbox[i];
-				for (size_t i = 3; i < 6; i++)
+				for (int i = 3; i < 6; i++)
 					m_bbox[i] = bboxComp[i] > m_bbox[i] ? bboxComp[i] : m_bbox[i];
 			}
 		}
