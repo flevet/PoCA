@@ -125,7 +125,7 @@ namespace poca::core {
 		t4 = clock();
 		elapsed = ((double)t4 - t3) / CLOCKS_PER_SEC * 1000;
 		if (engine->verbose())
-			std::cout << "Time forsetting the histogram " << elapsed << std::endl;
+			std::cout << "Time forsetting the histogram " << elapsed << ", min = " << m_min << ", max = " << m_max << std::endl;
 		t3 = clock();
 		if (engine->verbose())
 			std::cout << "Bounding box image " << m_bbox << std::endl;
