@@ -219,8 +219,10 @@ void VoronoiDiagramDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 		else
 			glDisable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
-		if (m_voronoi->dimension() == 3)
-			_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature);
+		if (m_voronoi->dimension() == 3) {
+			glEnable(GL_BLEND);
+			_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, 0.3f);
+		}
 		else {
 			if (fill) {
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature);
