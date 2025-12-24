@@ -81,6 +81,7 @@ extern "C" {
 typedef struct stbrp_context stbrp_context;
 typedef struct stbrp_node    stbrp_node;
 typedef struct stbrp_rect    stbrp_rect;
+typedef struct Bin    Bin;
 
 typedef int            stbrp_coord;
 
@@ -126,6 +127,8 @@ struct stbrp_rect
 
 }; // 16 bytes, nominally
 
+// Simple growth policy: keep doubling the shorter side (or both) up to a cap.
+struct Bin { int w, h; };
 
 STBRP_DEF void stbrp_init_target (stbrp_context *context, int width, int height, stbrp_node *nodes, int num_nodes);
 // Initialize a rectangle packer to:
@@ -158,6 +161,10 @@ STBRP_DEF void stbrp_setup_heuristic (stbrp_context *context, int heuristic);
 // Optionally select which packing heuristic the library should use. Different
 // heuristics will produce better/worse results for different data sets.
 // If you call init again, this will be reset to the default.
+
+
+STBRP_DEF bool try_pack(const Bin& bin, std::vector<stbrp_rect>& rects);
+STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h);
 
 enum
 {
@@ -236,6 +243,28 @@ STBRP_DEF void stbrp_setup_heuristic(stbrp_context *context, int heuristic)
       default:
          STBRP_ASSERT(0);
    }
+}
+
+STBRP_DEF bool try_pack(const Bin& bin, std::vector<stbrp_rect>& rects) {
+    std::vector<stbrp_node> nodes(bin.w); // at least 'w' nodes is a good default
+    stbrp_context ctx;
+    stbrp_init_target(&ctx, bin.w, bin.h, nodes.data(), (int)nodes.size());
+    // No rotation: stb_rect_pack won't rotate unless you pre-rotate your inputs.
+    // Pack; returns 1 if everything packed, 0 if some didn't.
+    return stbrp_pack_rects(&ctx, rects.data(), (int)rects.size()) != 0;
+}
+
+STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h) {
+    Bin next = b;
+    // Grow the limiting dimension first; adjust as you like (next power of two, etc.)
+    if (next.w <= next.h) next.w = std::min(next.w * 2, max_w);
+    else                  next.h = std::min(next.h * 2, max_h);
+    // If one side is already at cap, grow the other.
+    if (next.w == b.w && next.h == b.h) {
+        if (next.w < max_w) next.w = std::min(next.w * 2, max_w);
+        else if (next.h < max_h) next.h = std::min(next.h * 2, max_h);
+    }
+    return next;
 }
 
 STBRP_DEF void stbrp_setup_allow_out_of_mem(stbrp_context *context, int allow_out_of_mem)
