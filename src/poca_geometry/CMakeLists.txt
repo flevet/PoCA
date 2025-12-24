@@ -69,6 +69,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/Polygon.hpp
   Geometry/DelaunayOnSphere.hpp
   Geometry/TrackSet.hpp
+  Geometry/stb_rect_pack.h
   )
 
 set(GEOMETRY_SOURCE_FILES

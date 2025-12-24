@@ -11,7 +11,6 @@ include_directories(${CMAKE_SOURCE_DIR}/../include)
 link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(OTHER_HEADER_FILES
-  stb_rect_pack.h
 )
 
 set(SMLM_OBJECT_HEADER_FILES

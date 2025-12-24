@@ -95,6 +95,7 @@
 #include <General/ImagesList.hpp>
 #include <Cuda/BasicOperationsImage.h>
 #include <Geometry/CGAL_helpers.hpp>
+#include <Geometry/stb_rect_pack.h>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -112,35 +113,7 @@
 #include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 
-#include "stb_rect_pack.h"
-
 #undef max 
-
-
-// Simple growth policy: keep doubling the shorter side (or both) up to a cap.
-struct Bin2 { int w, h; };
-
-bool try_pack2(const Bin2& bin, std::vector<stbrp_rect>& rects) {
-	std::vector<stbrp_node> nodes(bin.w); // at least 'w' nodes is a good default
-	stbrp_context ctx;
-	stbrp_init_target(&ctx, bin.w, bin.h, nodes.data(), (int)nodes.size());
-	// No rotation: stb_rect_pack won't rotate unless you pre-rotate your inputs.
-	// Pack; returns 1 if everything packed, 0 if some didn't.
-	return stbrp_pack_rects(&ctx, rects.data(), (int)rects.size()) != 0;
-}
-
-Bin2 grow2(const Bin2& b, int max_w, int max_h) {
-	Bin2 next = b;
-	// Grow the limiting dimension first; adjust as you like (next power of two, etc.)
-	if (next.w <= next.h) next.w = std::min(next.w * 2, max_w);
-	else                  next.h = std::min(next.h * 2, max_h);
-	// If one side is already at cap, grow the other.
-	if (next.w == b.w && next.h == b.h) {
-		if (next.w < max_w) next.w = std::min(next.w * 2, max_w);
-		else if (next.h < max_h) next.h = std::min(next.h * 2, max_h);
-	}
-	return next;
-}
 
 void decomposePathToDirAndFile(const QString& _path, QString& _dirQS, QString& _fileQS)
 {
@@ -2408,7 +2381,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			}
 		}
 
-		Bin2 bin{ 512, 512 };            // start size
+		Bin bin{ 512, 512 };            // start size
 		const int MAX_W = 8192;       // safety caps (tune as needed)
 		const int MAX_H = 8192;
 
@@ -2416,7 +2389,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		while (true) {
 			// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
 			auto work = rects;
-			if (try_pack2(bin, work)) {
+			if (try_pack(bin, work)) {
 				//std::cout << "Packed in " << bin.w << "x" << bin.h << "\n";
 				for (const auto& r : work) {
 					// was_packed should be 1 for all if try_pack succeeded
@@ -2431,7 +2404,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				break;
 			}
 
-			Bin2 next = grow2(bin, MAX_W, MAX_H);
+			Bin next = grow(bin, MAX_W, MAX_H);
 			if (next.w == bin.w && next.h == bin.h) {
 				std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
 				return;
