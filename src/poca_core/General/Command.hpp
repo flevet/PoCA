@@ -165,7 +165,7 @@ namespace poca::core {
 
 	class Command {
 	public:
-		~Command() {}
+		virtual ~Command() {}
 
 		virtual const std::string& name() const { return m_name; }
 
