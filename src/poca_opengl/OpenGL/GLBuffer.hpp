@@ -207,12 +207,13 @@ namespace poca::opengl {
 	template< class T >
 	void SingleGLBuffer<T>::updateIndices(const std::vector < uint32_t >& _data)
 	{
+		if (_data.empty()) { m_nbIndices = 0; return; } // avoid &_data[0] on empty
 		if(m_bufferIndices == 0)
 			glGenBuffers(1, &m_bufferIndices);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufferIndices);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, _data.size() * sizeof(uint32_t), (void*)(&_data[0]), GL_STATIC_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		m_nbIndices = _data.size();
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		m_nbIndices = (uint32_t)_data.size();
 	}
 
 	template< class T >
