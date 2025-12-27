@@ -33,6 +33,8 @@
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QVBoxLayout>
 #include <iostream>
+#include <CGAL/boost/graph/copy_face_graph.h>
+#include <CGAL/boost/graph/helpers.h> // is_valid_polygon_mesh
 
 #include <Interfaces/MyObjectInterface.hpp>
 #include <Interfaces/CommandableObjectInterface.hpp>
@@ -42,8 +44,12 @@
 #include <General/CommandableObject.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <Geometry/ObjectListMesh.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <General/PluginList.hpp>
 
 #include "VoronoiDiagramWidget.hpp"
+#include "VoronoiDiagramPlugin.hpp"
 
 VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, QWidget* _parent)
 {
@@ -83,11 +89,19 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	emptyLuts->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	layoutLuts->addWidget(emptyLuts);
 
+	m_transferCellsButton = new QPushButton();
+	m_transferCellsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_transferCellsButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_transferCellsButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
+	m_transferCellsButton->setToolTip("Transfer cells");
+	layoutLuts->addWidget(m_transferCellsButton, 0, Qt::AlignRight);
+	QObject::connect(m_transferCellsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	
 	m_invertSelectionButton = new QPushButton();
 	m_invertSelectionButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_invertSelectionButton->setMaximumSize(QSize(maxSize, maxSize));
 	m_invertSelectionButton->setIcon(QIcon(QPixmap(poca::plot::invertIcon)));
-	m_invertSelectionButton->setToolTip("Create objects");
+	m_invertSelectionButton->setToolTip("Invert selection");
 	layoutLuts->addWidget(m_invertSelectionButton, 0, Qt::AlignRight);
 	QObject::connect(m_invertSelectionButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 
@@ -364,6 +378,33 @@ void VoronoiDiagramWidget::actionNeeded()
 		voro->executeCommand(true, "invertSelection");
 		m_object->notifyAll("updateDisplay");
 	}
+	else if (sender == m_transferCellsButton) {
+		poca::geometry::VoronoiDiagram3D* voro3D = dynamic_cast<poca::geometry::VoronoiDiagram3D*>(voro);
+		if (voro3D == NULL) return;
+		if (!voro3D->hasCells()) return;
+		const auto& polyhedrons = voro3D->getPolyhedrons();
+		std::vector < Surface_mesh_3_double> meshes;
+		for (const auto& poly : polyhedrons) {
+			meshes.push_back(Surface_mesh_3_double());
+			CGAL::copy_face_graph(poly, meshes.back());
+			assert(CGAL::is_valid_polygon_mesh(meshes.back()));
+		}
+		poca::geometry::ObjectListMesh* newomesh = new poca::geometry::ObjectListMesh(meshes);
+		VoronoiDiagramPlugin::m_plugins->addCommands(newomesh);
+		poca::core::CommandInfo ci;
+		if (!obj->hasBasicComponent("ObjectLists")) {
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, ci, "VoronoiDiagramPlugin");
+			VoronoiDiagramPlugin::m_plugins->addCommands(objsList);
+			obj->addBasicComponent(objsList);
+		}
+		else {
+			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (objsList)
+				objsList->addObjectList(newomesh, ci, "ObjectListPlugin");
+		}
+		m_object->notify("LoadObjCharacteristicsAllWidgets");
+		m_object->notifyAll("updateDisplay");
+	}
 	else if (sender == m_btnApplyCharacteristics) {
 		bool ok;
 		float tmp = m_leditEnveloppeFeature->text().toFloat(&ok), env = ok ? tmp : 0.999;
@@ -544,6 +585,12 @@ void VoronoiDiagramWidget::update(poca::core::SubjectInterface* _subject, const 
 		m_displayButton->blockSignals(true);
 		m_displayButton->setChecked(selected);
 		m_displayButton->blockSignals(false);
+
+		poca::geometry::VoronoiDiagram3D* voro3D = dynamic_cast<poca::geometry::VoronoiDiagram3D*>(bci);
+		bool displayTransferCells = voro3D && voro3D->hasCells();
+		m_transferCellsButton->blockSignals(true);
+		m_transferCellsButton->setVisible(displayTransferCells);
+		m_transferCellsButton->blockSignals(false);
 	}
 }
 
