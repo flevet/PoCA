@@ -835,7 +835,7 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateCentroids() con
 
 poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateSelectedObjects(const std::set<int>& _selectedObjects) const
 {
-	poca::core::MyObjectInterface* obj = poca::core::Engine::instance()->getObject(m_objects);
+	/*poca::core::MyObjectInterface* obj = poca::core::Engine::instance()->getObject(m_objects);
 	poca::core::MyObjectInterface* oneColorObj = obj->currentObject();
 	poca::core::BasicComponentInterface* bc = oneColorObj->getBasicComponent("DetectionSet");
 	if (bc == NULL) {
@@ -886,6 +886,23 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateSelectedObjects
 	wobj->setDir(dir.c_str());
 	wobj->setName(newName.toLatin1().data());
 	wobj->addBasicComponent(dset);
+	wobj->setDimension(m_objects->dimension());
+
+	return wobj;*/
+	poca::geometry::ObjectListInterface* oli = m_objects->exportSelectedObjects(_selectedObjects);
+	if (oli == NULL) return NULL;
+	poca::core::MyObjectInterface* obj = poca::core::Engine::instance()->getObject(m_objects);
+	const std::string& dir = obj->getDir(), name = obj->getName();
+	QString newName(name.c_str());
+	int index = newName.lastIndexOf(".");
+	newName.insert(index, "_selectedObjects");
+
+	poca::core::MyObject* wobj = new poca::core::MyObject();
+	wobj->setDir(dir.c_str());
+	wobj->setName(newName.toLatin1().data());
+	poca::core::CommandInfo com;
+	poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(oli, com, "ObjectListPlugin");
+	wobj->addBasicComponent(objsList);
 	wobj->setDimension(m_objects->dimension());
 
 	return wobj;
