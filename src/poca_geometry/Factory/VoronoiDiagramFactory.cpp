@@ -303,6 +303,7 @@ namespace poca::geometry {
 
 		float maxVolume = -FLT_MAX;
 		uint32_t cptT = 0, cptNotConstructed = 0;
+		std::vector < Polyhedron_3_inexact> polyhedrons;
 		if (!noConstructionCells) {
 			cptTimer = 0;
 			firstTriangleCell[0] = cptT;
@@ -320,7 +321,8 @@ namespace poca::geometry {
 				if (polyVerticesInexact.size() > 3 && !is_nan) {
 					Polyhedron_3_inexact poly;
 					CGAL::convex_hull_3(polyVerticesInexact.begin(), polyVerticesInexact.end(), poly);
-					for (Polyhedron_3_inexact::Facet_const_iterator fi = poly.facets_begin(); fi != poly.facets_end(); fi++) {
+					polyhedrons.push_back(poly);
+					/*for (Polyhedron_3_inexact::Facet_const_iterator fi = poly.facets_begin(); fi != poly.facets_end(); fi++) {
 						Polyhedron_3_inexact::Halfedge_around_facet_const_circulator hfc = fi->facet_begin();
 						poca::core::Vec3mf prec;
 						bool firstDone = false;
@@ -330,7 +332,7 @@ namespace poca::geometry {
 							triangles.push_back(poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
 							cptT++;
 						} while (++hfc != fi->facet_begin());
-					}
+					}*/
 				}
 				else
 					cptNotConstructed++;
@@ -362,7 +364,7 @@ namespace poca::geometry {
 
 		poca::geometry::VoronoiDiagram3D* voro = NULL;
 		if(!noConstructionCells)
-			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, triangles, firstTriangleCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
+			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, polyhedrons, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
 		else
 			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
 		return voro;
