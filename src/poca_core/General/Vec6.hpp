@@ -39,6 +39,7 @@
 #include <limits>
 
 #include <General/json.hpp>
+#include <General/Vec3.hpp>
 
 namespace poca::core {
 
@@ -139,6 +140,7 @@ namespace poca::core {
 
 		const Vec6 intersect(const Vec6<T>& rhs) const;
 		const bool inside(const T, const T, const T) const;
+		const Vec3<T> centroid() const;
 
 	private:
 
@@ -657,6 +659,15 @@ namespace poca::core {
 		for (size_t n = 3; n < 6; n++)
 			res[n] = _e[n] < rhs._e[n] ? _e[n] : rhs._e[n];
 		return res;
+	}
+
+	template< class T >
+	inline const Vec3<T> Vec6<T>::centroid() const {
+		Vec3<T> cent;
+		cent[0] = _e[0] + (_e[3] - _e[0]) / T(2);
+		cent[1] = _e[1] + (_e[4] - _e[1]) / T(2);
+		cent[2] = _e[2] + (_e[5] - _e[2]) / T(2);
+		return cent;
 	}
 
 	//------------------------------------------------------------------------------
