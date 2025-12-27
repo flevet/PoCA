@@ -83,9 +83,9 @@ protected:
 	poca::opengl::FeatureSingleGLBuffer <float> m_locsFeatureBuffer, m_outlineLocsFeatureBuffer;
 
 	//For objects
-	poca::opengl::TriangleGLBuffer <poca::core::Vec3mf> m_triangleBuffer, m_triangleNormalBuffer;
-	poca::opengl::TriangleGLBuffer <float> m_idBuffer;
-	poca::opengl::TriangleGLBuffer <float> m_triangleFeatureBuffer;
+	poca::opengl::TriangleSingleGLBuffer <poca::core::Vec3mf> m_triangleBuffer, m_triangleNormalBuffer;
+	poca::opengl::TriangleSingleGLBuffer <float> m_idBuffer;
+	poca::opengl::TriangleSingleGLBuffer <float> m_triangleFeatureBuffer;
 
 	//Only used with 2D objects, to display the outline in openGL line mode
 	//poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_lineBuffer;
@@ -103,9 +103,13 @@ protected:
 	poca::opengl::FeatureSingleGLBuffer <float> m_ellipsoidFeatureBuffer;
 
 	bool m_fill;
+	poca::core::Vec3mf m_originalCentroid;
+	bool m_centroidInitialized{ false };
 
 	QOpenGLFramebufferObject* m_pickOneObject;
 	QImage m_imageObject;
+
+	std::vector<float> m_centroidsTriangles;
 };
 #endif // DetectionSetDisplayCommand_h__
 

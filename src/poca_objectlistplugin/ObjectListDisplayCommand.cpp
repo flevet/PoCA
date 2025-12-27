@@ -350,7 +350,10 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	glClear(GL_DEPTH_BUFFER_BIT);
 	
-	glDisable(GL_DEPTH_TEST);
+	if (alpha < 1.f)
+		glDisable(GL_DEPTH_TEST);
+	else
+		glEnable(GL_DEPTH_TEST);
 	if (cullFaceActivated)
 		glEnable(GL_CULL_FACE);
 	else
@@ -407,48 +410,55 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		else
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // dark colors
 		if (m_objects->dimension() == 3) {
-			const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
-			shader->use();
-			shader->setMat4("model", model);
-			shader->setMat4("view", view);
-			shader->setMat4("projection", proj);
-			shader->setInt("lutTexture", 0);
-			shader->setFloat("minFeatureValue", m_minOriginalFeature);
-			shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
-			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
-			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
-			shader->setBool("clip", _cam->clip());
+			if (alpha < 1.f)
+				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha);
+			else {
+				const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+				shader->use();
+				shader->setMat4("model", model);
+				shader->setMat4("view", view);
+				shader->setMat4("projection", proj);
+				shader->setInt("lutTexture", 0);
+				shader->setFloat("minFeatureValue", m_minOriginalFeature);
+				shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+				shader->setVec4v("clipPlanes", _cam->getClipPlanes());
+				shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
+				shader->setBool("clip", _cam->clip());
 
-			shader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
-			shader->setVec3("lightPos", pos);
-			shader->setVec3("viewPos", pos);
-			shader->setBool("applyIllumination", fill ? true : false);
-			shader->setVec3("light_position", _cam->getEye());
+				shader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+				shader->setVec3("lightPos", pos);
+				shader->setVec3("viewPos", pos);
+				shader->setBool("applyIllumination", fill ? true : false);
+				shader->setVec3("light_position", _cam->getEye());
 
-			shader->setFloat("alpha", alpha);
-			shader->setBool("applyUniformColor", useUniformColor);
-			shader->setVec4("uniformColor", uniformColor);
+				shader->setFloat("alpha", alpha);
+				shader->setBool("applyUniformColor", useUniformColor);
+				shader->setVec4("uniformColor", uniformColor);
 
-			glActiveTexture(GL_TEXTURE0); 
-			glBindTexture(GL_TEXTURE_1D, m_textureLutID);
-			const std::vector <size_t>& sizeStrides = m_triangleBuffer.getSizeBuffers();
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(1);
-			glEnableVertexAttribArray(2);
-			for (unsigned int chunk = 0; chunk < m_triangleBuffer.getNbBuffers(); chunk++) {
-				m_triangleBuffer.bindBuffer(chunk, 0);
-				m_triangleNormalBuffer.bindBuffer(chunk, 1);
-				m_triangleFeatureBuffer.bindBuffer(chunk, 2);
-				glDrawArrays(m_triangleBuffer.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(1);
+				glEnableVertexAttribArray(2);
+				m_triangleBuffer.bindBuffer(0);
+				m_triangleNormalBuffer.bindBuffer(1);
+				m_triangleFeatureBuffer.bindBuffer(2);
+
+				if (m_triangleBuffer.getBufferIndices() != 0)
+					glDrawElements(m_triangleBuffer.getMode(), m_triangleBuffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+				else
+					glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+
+				//glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+				glDisableVertexAttribArray(0);
+				glDisableVertexAttribArray(1);
+				glDisableVertexAttribArray(2);
+
+				glBindTexture(GL_TEXTURE_1D, 0); // Unbind any textures
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+				shader->release();
+				GL_CHECK_ERRORS();
 			}
-			glDisableVertexAttribArray(0);
-			glDisableVertexAttribArray(1);
-			glDisableVertexAttribArray(2);
-
-			glBindTexture(GL_TEXTURE_1D, 0); // Unbind any textures
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-			shader->release();
-			GL_CHECK_ERRORS();
 		}
 		else {
 			//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
@@ -646,16 +656,13 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 		shader->setVec3("light_position", _cam->getEye());
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_1D, m_textureLutID);
-		const std::vector <size_t>& sizeStrides = m_triangleBuffer.getSizeBuffers();
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
 		glEnableVertexAttribArray(2);
-		for (unsigned int chunk = 0; chunk < m_triangleBuffer.getNbBuffers(); chunk++) {
-			m_triangleBuffer.bindBuffer(chunk, 0);
-			m_triangleNormalBuffer.bindBuffer(chunk, 1);
-			m_triangleFeatureBuffer.bindBuffer(chunk, 2);
-			glDrawArrays(m_triangleBuffer.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
-		}
+		m_triangleBuffer.bindBuffer(0);
+		m_triangleNormalBuffer.bindBuffer(1);
+		m_triangleFeatureBuffer.bindBuffer(2);
+		glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -681,16 +688,13 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 
 		glDisable(GL_BLEND);
 		glEnable(GL_DEPTH_TEST);
-		const std::vector <size_t>& sizeStrides = m_triangleBuffer.getSizeBuffers();
-		for (unsigned int chunk = 0; chunk < m_triangleBuffer.getNbBuffers(); chunk++) {
-			glEnableVertexAttribArray(0);
-			m_triangleBuffer.bindBuffer(chunk, 0);
-			glEnableVertexAttribArray(2);
-			m_triangleFeatureBuffer.bindBuffer(chunk, 2);
-			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
-			glDisableVertexAttribArray(0);
-			glDisableVertexAttribArray(2);
-		}
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(2);
+		m_triangleBuffer.bindBuffer(0);
+		m_triangleFeatureBuffer.bindBuffer(2);
+		glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(2);
 		glBindTexture(GL_TEXTURE_1D, 0); // Unbind any textures
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		success = m_pickOneObject->release();
@@ -745,14 +749,22 @@ void ObjectListDisplayCommand::createDisplay()
 	//For objects
 	std::vector <poca::core::Vec3mf> triangles;
 	m_objects->generateTriangles(triangles);
+	m_centroidsTriangles.resize(triangles.size());
+	int cur = 0;
+	for (auto n = 0; n < triangles.size(); n+=3) {
+		poca::core::Vec3mf c = (triangles[n] + triangles[n + 1] + triangles[n + 2]) / 3.f;
+		m_centroidsTriangles[cur++] = c.x();
+		m_centroidsTriangles[cur++] = c.y();
+		m_centroidsTriangles[cur++] = c.z();
+	}
 	std::vector <poca::core::Vec3mf> normals;
 	m_objects->generateNormals(normals);
 	std::vector <float> ids;
 	m_objects->generatePickingIndices(ids);
-	m_triangleBuffer.generateBuffer(triangles.size(), 512 * 512, 3, GL_FLOAT);
-	m_triangleNormalBuffer.generateBuffer(normals.size(), 512 * 512, 3, GL_FLOAT);
-	m_triangleFeatureBuffer.generateBuffer(triangles.size(), 512 * 512, 1, GL_FLOAT);
-	m_idBuffer.generateBuffer(triangles.size(), 512 * 512, 1, GL_FLOAT);
+	m_triangleBuffer.generateBuffer(triangles.size(), 3, GL_FLOAT);
+	m_triangleNormalBuffer.generateBuffer(normals.size(), 3, GL_FLOAT);
+	m_triangleFeatureBuffer.generateBuffer(triangles.size(), 1, GL_FLOAT);
+	m_idBuffer.generateBuffer(triangles.size(), 1, GL_FLOAT);
 	m_triangleBuffer.updateBuffer(triangles.data());
 	m_triangleNormalBuffer.updateBuffer(normals.data());
 	m_idBuffer.updateBuffer(ids.data());
@@ -962,11 +974,14 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 	m_pointBuffer.updateIndices(indices);
 #else
 	size_t numData = m_objects->getLocsObjects().nbData();
-	std::vector <uint32_t> indices(numData);
+	std::vector <uint32_t> indices(numData), indicesTriangles(m_centroidsTriangles.size() / 3);
 	std::iota(std::begin(indices), std::end(indices), 0);
+	std::iota(std::begin(indicesTriangles), std::end(indicesTriangles), 0);
 	const float* xs = m_objects->getXs(), * ys = m_objects->getXs(), * zs = m_objects->getXs();
 	if (static_cast <poca::geometry::ObjectListMesh*>(m_objects) != NULL) {
 		sortArrayWRTPoint_GPU(xs, ys, zs, numData, poca::core::Vec3mf(_cameraPosition.x, _cameraPosition.y, _cameraPosition.z), indices);
+		sortCentroidTrianglesWRTPoint_GPU(m_centroidsTriangles, poca::core::Vec3mf(_cameraPosition.x, _cameraPosition.y, _cameraPosition.z), indicesTriangles);
+		m_triangleBuffer.updateIndices(indicesTriangles);
 	}
 	else {
 		const std::vector <uint32_t>& locs = m_objects->getLocsObjects().getData();
