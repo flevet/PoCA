@@ -993,4 +993,14 @@ namespace poca::geometry {
 		}
 		return polygonsSelected.empty() ? NULL : static_cast <poca::geometry::ObjectListInterface*> (new ObjectListPolygon(polygonsSelected));
 	}
+
+	poca::geometry::ObjectListInterface* ObjectListPolygon::exportSelectedObjects(const std::set<int>& _selection) const
+	{
+		std::vector <std::vector<Polygon_2>> polygonsSelected;
+
+		for (auto idx : _selection)
+			polygonsSelected.push_back(m_polygons[idx]);
+
+		return polygonsSelected.empty() ? NULL : static_cast <poca::geometry::ObjectListInterface*> (new ObjectListPolygon(polygonsSelected));
+	}
 }

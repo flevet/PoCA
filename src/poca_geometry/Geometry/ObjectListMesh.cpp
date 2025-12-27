@@ -1047,4 +1047,14 @@ namespace poca::geometry {
 		for (auto& mesh : m_meshes)
 			CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
+
+	poca::geometry::ObjectListInterface* ObjectListMesh::exportSelectedObjects(const std::set<int>& _selection) const
+	{
+		std::vector <Surface_mesh_3_double> meshesSelected;
+
+		for (auto idx : _selection)
+			meshesSelected.push_back(m_meshes[idx]);
+
+		return meshesSelected.empty() ? NULL : static_cast <poca::geometry::ObjectListInterface*> (new ObjectListMesh(meshesSelected));
+	}
 }

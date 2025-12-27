@@ -54,6 +54,7 @@ namespace poca::geometry {
 		poca::core::BasicComponentInterface* copy(const std::vector <poca::core::ROIInterface*>&);
 
 		ObjectListInterface* exportFilteredObjects() const;
+		ObjectListInterface* exportSelectedObjects(const std::set<int>&) const;
 
 		void remesh(const float, const uint32_t);
 		void subdivide(const uint32_t);

@@ -56,6 +56,7 @@ namespace poca::geometry {
 		poca::core::BasicComponentInterface* copy(const std::vector <poca::core::ROIInterface*>&);
 
 		ObjectListInterface* exportFilteredObjects() const;
+		ObjectListInterface* exportSelectedObjects(const std::set<int>&) const;
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);
