@@ -173,5 +173,49 @@ void sortArrayWRTPoint_GPU(const float* _xs, const float* _ys, const float* _zs,
     //Copy values back to host
     thrust::copy(d_values.begin(), d_values.end(), _values.begin());
 }
+
+void sortCentroidTrianglesWRTPoint_GPU(const std::vector<float>& _vertices, const poca::core::Vec3mf& _point, std::vector <uint32_t>& _values)
+{
+    thrust::device_vector<float> d_vertices(_vertices);
+    auto num_data = _vertices.size() / 3;
+    //Second, compute the distance to the point
+    //https://stackoverflow.com/questions/27823951/thrust-vector-distance-calculation
+    int dim = 3;
+    thrust::device_vector<float> d_point(_point.getValues(), _point.getValues() + 3);
+    thrust::device_vector<float> d_distances(num_data);
+    thrust::reduce_by_key(thrust::make_transform_iterator(thrust::make_counting_iterator<int>(0), dkeygen(dim, num_data)),
+        thrust::make_transform_iterator(thrust::make_counting_iterator<int>(dim * num_data), dkeygen(dim, num_data)),
+        thrust::make_transform_iterator(
+            thrust::make_zip_iterator(
+                thrust::make_tuple(
+                    thrust::make_permutation_iterator(d_point.begin(), thrust::make_transform_iterator(thrust::make_counting_iterator<int>(0), c_idx(dim, num_data))),
+                    thrust::make_permutation_iterator(d_vertices.begin(), thrust::make_transform_iterator(thrust::make_counting_iterator<int>(0), d_idx(dim, num_data)))
+                )
+            ),
+            my_dist()),
+        thrust::make_discard_iterator(), d_distances.begin());
+
+    //Third, sort the vector to the point wrt to the distances
+    thrust::device_vector<uint32_t> d_values(_values);
+    thrust::sort_by_key(d_distances.begin(), d_distances.end(), d_values.begin(), thrust::greater<float>());
+
+    thrust::device_vector<uint32_t> out(3 * d_values.size());
+    const uint32_t* triPtr = thrust::raw_pointer_cast(d_values.data());
+    thrust::transform(
+        thrust::make_counting_iterator<size_t>(0),
+        thrust::make_counting_iterator<size_t>(3 * d_values.size()),
+        out.begin(),
+        [triPtr] __device__(size_t i) -> uint32_t {
+        // i is an index into the output index buffer
+        // tri = sortedTriIds[i/3], corner = i%3
+        const uint32_t tri = triPtr[i / 3];
+        return 3u * tri + static_cast<uint32_t>(i % 3);
+    }
+    );
+
+    //Copy values back to host
+    _values.resize(out.size());
+    thrust::copy(out.begin(), out.end(), _values.begin());
+}
 #endif
 
