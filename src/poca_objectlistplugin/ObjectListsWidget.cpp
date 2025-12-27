@@ -412,8 +412,11 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_buttonsWidget->setLayout(layoutButtons);
 	m_buttonsWidgetLine2->setLayout(layoutButtonsLine2);
 
-	m_alphaWidget = new poca::plot::CustomizedSlider(0.1f, 1.f, 100);
+	m_alphaWidget = new poca::plot::CustomizedSlider(0.01f, 1.f, 1000);
 	QObject::connect(m_alphaWidget, SIGNAL(changedValue(float)), this, SLOT(actionNeeded(float)));
+
+	m_explodeWidget = new poca::plot::CustomizedSlider(1.f, 5.f, 100);
+	QObject::connect(m_explodeWidget, SIGNAL(changedValue(float)), this, SLOT(actionNeeded(float)));
 
 	QVBoxLayout* layoutCommonActions = new QVBoxLayout;
 	layoutCommonActions->setContentsMargins(1, 1, 1, 1);
@@ -421,6 +424,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layoutCommonActions->addWidget(m_buttonsWidget);
 	layoutCommonActions->addWidget(m_buttonsWidgetLine2);
 	layoutCommonActions->addWidget(m_alphaWidget);
+	layoutCommonActions->addWidget(m_explodeWidget);
 	QWidget* commonActionsW = new QWidget;
 	commonActionsW->setLayout(layoutCommonActions);
 	commonActionsW->setVisible(true);
@@ -671,17 +675,17 @@ void ObjectListsWidget::actionNeeded()
 		}
 	}
 	else if (sender == m_duplicateSelectedObjectsButton) {
-		/*std::set <int> selectedRows;
-		QList<QTableWidgetSelectionRange> ranges = m_tableObjects->selectedRanges();
-		for (QTableWidgetSelectionRange range : ranges)
-			for (int n = 0; n < range.rowCount(); n++)
-				selectedRows.insert(range.topRow() + n);
+		std::set <int> selectedRows;
+		QItemSelectionModel* sel = m_tableObjects->selectionModel();
+		QModelIndexList rows = sel->selectedRows(); // one index per selected row
+		for (const QModelIndex& idx : rows)
+				selectedRows.insert(idx.row());
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
 		objList->executeCommand(&ci);
 		if (ci.hasParameter("object")) {
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			emit(transferNewObjectCreated(obj));
-		}*/
+		}
 	}
 	else if (sender == m_parametersButton) {
 		poca::core::MyObjectInterface* obj = m_object->currentObject();
@@ -878,6 +882,10 @@ void ObjectListsWidget::actionNeeded(float _val)
 	QObject* sender = QObject::sender();
 	if (sender == m_alphaWidget) {
 		objList->executeCommand(true, "alpha", _val);
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_explodeWidget) {
+		objList->executeCommand(true, "explode", "factor", _val);
 		m_object->notifyAll("updateDisplay");
 	}
 }

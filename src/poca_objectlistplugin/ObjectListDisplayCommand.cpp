@@ -240,6 +240,44 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 		glm::vec3 cameraForward = _infos->getParameter<glm::vec3>("cameraForward");
 		sortWrtCameraPosition(cameraPosition, cameraForward);
 	}
+	else if (_infos->nameCommand == "explode") {
+		if (!m_centroidInitialized) {
+			m_originalCentroid = m_objects->boundingBox().centroid();
+			m_centroidInitialized = true;
+		}
+		float factor = _infos->getParameter<float>("factor");
+		const auto& trianglesPoCA = m_objects->getTrianglesObjects();
+		std::vector <poca::core::Vec3mf> triangles(trianglesPoCA.nbData());
+		const auto& vertices = trianglesPoCA.getData();
+		const auto& firsts = trianglesPoCA.getFirstElements();
+		poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+		for (auto n = 0; n < firsts.size() - 1; n++) {
+			auto f = firsts[n], l = firsts[n + 1];
+			float nbs = l - f;
+			poca::core::Vec3mf centroidPoly;
+			for (auto cur = f; cur < l; cur++) {
+				centroidPoly += vertices[cur] / nbs;
+			}
+			auto vector = centroidPoly - m_originalCentroid;
+			float d = vector.length();
+			vector.normalize();
+			auto newcentroid = m_originalCentroid + d * factor * vector;
+			auto displacement = newcentroid - centroidPoly;
+			for (auto cur = f; cur < l; cur++) {
+				triangles[cur] = vertices[cur] + displacement;
+				bbox.addPointBBox(triangles[cur].x(), triangles[cur].y(), triangles[cur].z());
+			}
+		}
+		int cur = 0;
+		for (auto n = 0; n < triangles.size(); n += 3) {
+			poca::core::Vec3mf c = (triangles[n] + triangles[n + 1] + triangles[n + 2]) / 3.f;
+			m_centroidsTriangles[cur++] = c.x();
+			m_centroidsTriangles[cur++] = c.y();
+			m_centroidsTriangles[cur++] = c.z();
+		}
+		m_objects->setBoundingBox(bbox);
+		m_triangleBuffer.updateBuffer(triangles); 
+	}
 }
 
 poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)

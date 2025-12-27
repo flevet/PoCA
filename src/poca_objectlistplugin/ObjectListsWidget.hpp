@@ -173,7 +173,7 @@ protected:
 	QPushButton* m_computeSkeletonsButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
 	QSpinBox* m_sizePointSpn;
 
-	poca::plot::CustomizedSlider* m_alphaWidget;
+	poca::plot::CustomizedSlider* m_alphaWidget, * m_explodeWidget;
 	QPushButton* m_exportHolesBtn, * m_fillHolesBtn, * m_smoothObjectsBtn;
 	QLineEdit* m_areaHolesFilledLEdit;
 	QLineEdit* m_nbSmoothingStepsLbl, * m_factorResamplingLEdit;
