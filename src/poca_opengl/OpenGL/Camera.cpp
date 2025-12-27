@@ -1616,6 +1616,10 @@ namespace poca::opengl {
 				}
 				else if (m_leftButtonOn) {
 					computeRotation();
+					glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+					glm::vec3 pos(orientation + getCenter());
+					pos *= 2 * getOriginalDistanceOrtho();
+					m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
 				}
 				else if (m_middleButtonOn) {
 					float w = m_currentCrop.realWidth(), h = m_currentCrop.realHeight();
@@ -1759,8 +1763,14 @@ namespace poca::opengl {
 				std::cout << "m_currentCrop = " << cropBox << std::endl;
 				zoomToBoundingBox(m_currentCrop);
 			}
-			if (m_leftButtonOn && !m_scaling)
-				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", m_stateCamera.m_center, "cameraForward", m_stateCamera.m_eye));
+			if (m_leftButtonOn && !m_scaling) {
+				//m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", m_stateCamera.m_center, "cameraForward", m_stateCamera.m_eye));
+			
+				glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+				glm::vec3 pos(orientation + getCenter());
+				pos *= 2 * getOriginalDistanceOrtho();
+				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+			}
 
 			poca::core::CommandInfo ci(false, "pick",
 				"x", _event->pos().x(),
