@@ -41,6 +41,7 @@
 
 #include "DetectionSet.hpp"
 #include "../Interfaces/DelaunayTriangulationInterface.hpp"
+#include "../Geometry/CGAL_includes.hpp"
 
 namespace poca::geometry {
 	class VoronoiDiagram : public poca::core::BasicComponent {
@@ -142,8 +143,7 @@ namespace poca::geometry {
 	class VoronoiDiagram3D : public VoronoiDiagram {
 	public:
 		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
-		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <poca::core::Vec3mf>&,
-			const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
+		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <Polyhedron_3_inexact>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
 		~VoronoiDiagram3D();
 
 		poca::core::BasicComponentInterface* copy();
@@ -163,11 +163,12 @@ namespace poca::geometry {
 
 		inline const std::vector <poca::core::Vec3mf>& getCells() const { return m_cells; }
 		inline const std::vector <uint32_t>& getFirstCells() const { return m_firstCells; }
-
+		inline const std::vector <Polyhedron_3_inexact>& getPolyhedrons() const { return m_polyhedrons; }
 
 	protected:
 		std::vector <poca::core::Vec3mf> m_cells;
 		std::vector <uint32_t> m_firstCells;
+		std::vector <Polyhedron_3_inexact> m_polyhedrons;
 	};
 }
 #endif

@@ -328,14 +328,31 @@ namespace poca::geometry {
 	VoronoiDiagram3D::VoronoiDiagram3D(const uint32_t _nbCells,
 		const std::vector <uint32_t>& _neighbors,
 		const std::vector <uint32_t>& _firstsNeighbors,
-		const std::vector <poca::core::Vec3mf>& _triangles,
-		const std::vector <uint32_t>& _firstTriangleCell,
+		const std::vector <Polyhedron_3_inexact>& _polyhedrons,
 		const std::vector <float>& _volumes,
 		const std::vector <bool>& _borders,
 		const float* _xs, const float* _ys, const float* _zs, 
-		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau),
-																	m_cells(_triangles), m_firstCells(_firstTriangleCell)
+		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau), m_polyhedrons(_polyhedrons)
 	{
+		m_firstCells.resize(m_polyhedrons.size() + 1, 0);
+		uint32_t cptT = 0, curPoly = 0;
+		m_firstCells[curPoly] = cptT;
+		for (const auto& poly : m_polyhedrons) {
+			for (Polyhedron_3_inexact::Facet_const_iterator fi = poly.facets_begin(); fi != poly.facets_end(); fi++) {
+				Polyhedron_3_inexact::Halfedge_around_facet_const_circulator hfc = fi->facet_begin();
+				poca::core::Vec3mf prec;
+				bool firstDone = false;
+				do {
+					Polyhedron_3_inexact::Halfedge_const_handle hh = hfc;
+					Polyhedron_3_inexact::Vertex_const_handle v = hh->vertex();
+					m_cells.push_back(poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
+					cptT++;
+				} while (++hfc != fi->facet_begin());
+			}
+			m_firstCells[curPoly + 1] = cptT;
+			curPoly++;
+		}
+
 		std::vector <float> densities(nbFaces(), 0.f);
 		for (size_t n = 0, cpt = 0; n < nbFaces(); n++) {
 			float sumVol = _volumes[n], nbsTot = 1.f;
