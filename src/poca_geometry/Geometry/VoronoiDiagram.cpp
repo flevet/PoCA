@@ -517,5 +517,20 @@ namespace poca::geometry {
 			}
 		}*/
 	}
+
+	void VoronoiDiagram3D::identifyCellsBorder(std::vector <uint32_t>& _cellIds)
+	{
+		DelaunayTriangulation3D* d3D = dynamic_cast<DelaunayTriangulation3D*>(m_delaunay);
+		if (!d3D) return;
+		Triangulation_3_inexact* delaunay3D = d3D->getDelaunay();
+
+		Vertex_handle_3_inexact infinite = d3D->getDelaunay()->infinite_vertex();
+		std::list < Vertex_handle_3_inexact> vertices;
+		d3D->getDelaunay()->incident_vertices(infinite, std::back_inserter(vertices));
+
+		for (auto v : vertices) {
+			_cellIds.push_back(v->info());
+		}
+	}
 }
 

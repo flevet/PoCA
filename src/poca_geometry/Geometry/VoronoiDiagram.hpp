@@ -161,6 +161,8 @@ namespace poca::geometry {
 		const uint32_t dimension() const { return 3; }
 		const bool hasCells() const { return !m_cells.empty(); }
 
+		void identifyCellsBorder(std::vector <uint32_t>&);
+
 		inline const std::vector <poca::core::Vec3mf>& getCells() const { return m_cells; }
 		inline const std::vector <uint32_t>& getFirstCells() const { return m_firstCells; }
 		inline const std::vector <Polyhedron_3_inexact>& getPolyhedrons() const { return m_polyhedrons; }
