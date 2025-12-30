@@ -739,9 +739,7 @@ void unpad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _o
 }
 
 template <class T>
-__global__ void maxProjection_kernel(const T* __restrict__ src,
-    T* __restrict__ dest,
-    uint32_t w, uint32_t h, uint32_t d)
+__global__ void maxProjection_kernel(const T* __restrict__ src, T* __restrict__ dest, uint32_t w, uint32_t h, uint32_t d)
 {
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -774,8 +772,7 @@ void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint3
     _output.resize(_w * _h);
 
     dim3 threads(16, 16);
-    dim3 grid((_w + threads.x - 1) / threads.x,
-        (_h + threads.y - 1) / threads.y);
+    dim3 grid((_w + threads.x - 1) / threads.x, (_h + threads.y - 1) / threads.y);
 
     maxProjection_kernel << <grid, threads >> > (thrust::raw_pointer_cast(src.data()), thrust::raw_pointer_cast(dest.data()), _w, _h, _d);
 
