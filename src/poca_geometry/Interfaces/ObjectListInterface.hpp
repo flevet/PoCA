@@ -94,6 +94,10 @@ namespace poca::geometry {
 		virtual const float minCurvature()const { return 0.f; }
 		virtual const float maxCurvature()const { return 0.f; }
 
+		inline void setCentroid(const float _x, const float _y, const float _z = 0.f) { m_centroid.set(_x, _y, _z); }
+		inline const poca::core::Vec3mf& getCentroid() const { return m_centroid; }
+		inline poca::core::Vec3mf& getCentroid() { return m_centroid; }
+
 
 	protected:
 		ObjectListInterface(const std::string& _name) :BasicComponent(_name){}
@@ -124,6 +128,7 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf> m_normalOutlineLocs;
 		std::vector < std::array<poca::core::Vec3mf, 3>> m_axis;
 		bool m_hasCurvature{ false };
+		poca::core::Vec3mf m_centroid;
 	};
 }
 
