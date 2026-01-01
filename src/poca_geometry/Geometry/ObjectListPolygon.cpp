@@ -661,6 +661,8 @@ namespace poca::geometry {
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("area");
 		forceRegenerateSelection();
+
+		m_centroid = m_bbox.centroid();
 	}
 
 	ObjectListPolygon::~ObjectListPolygon()

@@ -241,10 +241,6 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 		sortWrtCameraPosition(cameraPosition, cameraForward);
 	}
 	else if (_infos->nameCommand == "explode") {
-		if (!m_centroidInitialized) {
-			m_originalCentroid = m_objects->boundingBox().centroid();
-			m_centroidInitialized = true;
-		}
 		float factor = _infos->getParameter<float>("factor");
 		const auto& trianglesPoCA = m_objects->getTrianglesObjects();
 		std::vector <poca::core::Vec3mf> triangles(trianglesPoCA.nbData());
@@ -258,10 +254,10 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 			for (auto cur = f; cur < l; cur++) {
 				centroidPoly += vertices[cur] / nbs;
 			}
-			auto vector = centroidPoly - m_originalCentroid;
+			auto vector = centroidPoly - m_objects->getCentroid();
 			float d = vector.length();
 			vector.normalize();
-			auto newcentroid = m_originalCentroid + d * factor * vector;
+			auto newcentroid = m_objects->getCentroid() + d * factor * vector;
 			auto displacement = newcentroid - centroidPoly;
 			for (auto cur = f; cur < l; cur++) {
 				triangles[cur] = vertices[cur] + displacement;

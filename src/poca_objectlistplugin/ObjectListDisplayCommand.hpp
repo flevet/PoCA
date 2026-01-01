@@ -103,8 +103,6 @@ protected:
 	poca::opengl::FeatureSingleGLBuffer <float> m_ellipsoidFeatureBuffer;
 
 	bool m_fill;
-	poca::core::Vec3mf m_originalCentroid;
-	bool m_centroidInitialized{ false };
 
 	QOpenGLFramebufferObject* m_pickOneObject;
 	QImage m_imageObject;

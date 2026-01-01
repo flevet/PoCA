@@ -50,6 +50,7 @@ namespace poca::geometry {
 		const std::vector <uint32_t>& _linkTriangulationFacesToObjects)
 		:ObjectListInterface("ObjectListDelaunay", _locsAllObjects, _firstsLocs, _trianglesAllObjects, _firstsTriangles, _outlinesAllObjects, _firstsOutlines), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
 	{
+		m_bbox = poca::core::BoundingBox::initBBox();
 		//Create area feature
 		std::vector <float> areas(m_triangles.nbElements(), 0.f), nbLocs(m_locs.nbElements(), 0.f);
 		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
@@ -58,6 +59,9 @@ namespace poca::geometry {
 				const poca::core::Vec3mf& v2 = m_triangles.elementIObject(i, j + 1);
 				const poca::core::Vec3mf& v3 = m_triangles.elementIObject(i, j + 2);
 				areas[i] += poca::geometry::computeTriangleArea(v1.x(), v1.y(), v2.x(), v2.y(), v3.x(), v3.y());
+				m_bbox.addPointBBox(v1.x(), v1.y(), v1.z());
+				m_bbox.addPointBBox(v2.x(), v2.y(), v2.z());
+				m_bbox.addPointBBox(v3.x(), v3.y(), v3.z());
 			}
 			nbLocs[i] = m_locs.nbElementsObject(i);
 
@@ -83,6 +87,7 @@ namespace poca::geometry {
 		m_selection.resize(areas.size());
 		setCurrentHistogramType("area");
 		forceRegenerateSelection();
+		m_centroid = m_bbox.centroid();
 	}
 
 	ObjectListDelaunay::ObjectListDelaunay(const float* _xs, const float* _ys, const float* _zs,
@@ -93,6 +98,7 @@ namespace poca::geometry {
 		const std::vector <uint32_t>& _locsOutlineAllObject, const std::vector <uint32_t>& _firstsOutlineLocs, const std::vector <poca::core::Vec3mf>& _normalOutlineLocs)
 		:ObjectListInterface("ObjectList", _locsAllObjects, _firstsLocs, _trianglesAllObjects, _firstsTriangles, _locsOutlineAllObject, _firstsOutlineLocs, _normalOutlineLocs), m_xs(_xs), m_ys(_ys), m_zs(_zs), m_linkTriangulationFacesToObjects(_linkTriangulationFacesToObjects)
 	{
+		m_bbox = poca::core::BoundingBox::initBBox();
 		//Create area feature
 		std::vector <float> areas(m_triangles.nbElements(), 0.f), nbLocs(m_locs.nbElements(), 0.f);
 		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
@@ -101,6 +107,9 @@ namespace poca::geometry {
 				const poca::core::Vec3mf& v2 = m_triangles.elementIObject(i, j + 1);
 				const poca::core::Vec3mf& v3 = m_triangles.elementIObject(i, j + 2);
 				areas[i] += poca::geometry::computeTriangleArea(v1.x(), v1.y(), v2.x(), v2.y(), v3.x(), v3.y());
+				m_bbox.addPointBBox(v1.x(), v1.y(), v1.z());
+				m_bbox.addPointBBox(v2.x(), v2.y(), v2.z());
+				m_bbox.addPointBBox(v3.x(), v3.y(), v3.z());
 			}
 			nbLocs[i] = m_locs.nbElementsObject(i);
 
@@ -140,6 +149,8 @@ namespace poca::geometry {
 		m_selection.resize(_volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
+		
+		m_centroid = m_bbox.centroid();
 	}
 
 	ObjectListDelaunay::~ObjectListDelaunay()

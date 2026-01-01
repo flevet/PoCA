@@ -261,6 +261,7 @@ namespace poca::geometry {
 		m_selection.resize(volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
+		m_centroid = m_bbox.centroid();
 	}
 
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
@@ -366,7 +367,8 @@ namespace poca::geometry {
 		m_selection.resize(volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
-	}
+		m_centroid = m_bbox.centroid();
+}
 
 	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(true), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
 	{
@@ -454,6 +456,7 @@ namespace poca::geometry {
 		m_selection.resize(volumes.size());
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
+		m_centroid = m_bbox.centroid();
 	}
 
 	ObjectListMesh::~ObjectListMesh()
