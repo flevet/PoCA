@@ -344,7 +344,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	glm::vec3 pos(orientation + _cam->getCenter());
 	pos *= 2 * _cam->getOriginalDistanceOrtho();
 
-	glClear(GL_DEPTH_BUFFER_BIT);
+	//glClear(GL_DEPTH_BUFFER_BIT);
 	
 	if (alpha < 1.f)
 		glDisable(GL_DEPTH_TEST);
@@ -406,9 +406,10 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		else
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // dark colors
 		if (m_objects->dimension() == 3) {
-			if (alpha < 1.f)
-				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha);
-			else {
+			//if (alpha < 1.f)
+				//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha);
+			//else 
+			{
 				const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
 				shader->use();
 				shader->setMat4("model", model);
