@@ -179,6 +179,10 @@ namespace poca::core {
 						if(changed)
 							forceRegenerateSelection();
 					}
+					else if (action == "resetBounds") {
+						HistogramInterface* hist = getHistogram(type);
+						hist->resetBounds();
+					}
 					else if (action == "changeHistogramBounds") {
 						HistogramInterface* hist = getHistogram(type);
 
