@@ -80,6 +80,8 @@ namespace poca::core {
 
 		virtual void setScaleLUT(const bool) = 0;
 		virtual bool scaleLUT() const = 0;
+
+		virtual void resetBounds() = 0;
 	};
 }
 
