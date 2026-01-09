@@ -36,6 +36,7 @@
 #include <vector>
 
 #include <General/Vec2.hpp>
+#include <General/Vec3.hpp>
 
 #include "../Interfaces/PolygonInterface.hpp"
 #include "../Geometry/CGAL_includes.hpp"
@@ -44,11 +45,17 @@ namespace poca::geometry {
 	class Polygon : public PolygonInterface {
 	public:
 		Polygon(const std::vector <poca::core::Vec2mf>&);
+		Polygon(const std::vector <poca::core::Vec3mf>&);
 		Polygon(const Polygon_2&);
+
+		bool inside(const Point_2&) const;
+		bool inside(const poca::core::Vec2mf&) const;
+		bool inside(const float, const float) const;
 
 		const size_t size() const { return m_poly.size(); }
 
 		inline const Polygon_2& getCGALPolygon() const { return m_poly; }
+		inline const bool failed() const { return m_poly.is_empty(); }
 
 	protected:
 		Polygon_2 m_poly;
