@@ -299,6 +299,19 @@ namespace poca::core {
 		return NULL;
 	}
 
+	BasicComponentList* Engine::mergeComponentLists(BasicComponentInterface* _l1, BasicComponentInterface* _l2)
+	{
+		BasicComponentList* l1 = dynamic_cast <BasicComponentList*>(_l1), *l2 = dynamic_cast <BasicComponentList*>(_l2);
+		if (l1 != NULL && l2 != NULL && typeid(*_l1) == typeid(*_l2)) {
+			l1->copyComponentsPtr(l2);
+			l2->dontDeleteComponents();
+			delete _l2;
+			return l1;
+		}
+		else
+			return NULL;
+	}
+
 	MyObjectInterface* Engine::generateMultipleObject(const std::vector <MyObjectInterface*>& _objs)
 	{
 		for (poca::core::MyObjectInterface* obj : _objs)

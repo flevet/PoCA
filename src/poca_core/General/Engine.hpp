@@ -51,6 +51,7 @@ namespace poca::core {
 	class BasicComponentInterface;
 	class CommandInfo;
 	class MyObjectInterface;
+	class BasicComponentList;
 }
 
 namespace poca::opengl {
@@ -86,6 +87,8 @@ namespace poca::core {
 		void addCommands(BasicComponentInterface*);
 		BasicComponentInterface* loadData(const QString&, CommandInfo* = NULL, MyObjectInterface* = NULL);
 		MyObjectInterface* generateMultipleObject(const std::vector <MyObjectInterface*>&);
+
+		BasicComponentList* mergeComponentLists(BasicComponentInterface*, BasicComponentInterface*);
 
 		void addCameraToObject(poca::core::MyObjectInterface*, poca::opengl::CameraInterface*);
 		void removeDatasetFromList(poca::core::MyObjectInterface*);
