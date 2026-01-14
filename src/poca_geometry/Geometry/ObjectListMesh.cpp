@@ -801,17 +801,36 @@ namespace poca::geometry {
 	void ObjectListMesh::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
 	{
 		_normals.clear();
-		for (const auto& mesh : m_meshes) {
+		bool useVertexNormals = false;
+		if (useVertexNormals) {
+			for (const auto& mesh : m_meshes) {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
-			Vertex_vector_3_map normal_map = mesh.property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").value();
+				Vertex_vector_3_map normal_map = mesh.property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").value();
 #else
-			Vertex_vector_3_map normal_map = mesh.property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
+				Vertex_vector_3_map normal_map = mesh.property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
 #endif
-			for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
-				CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
-				for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
-					const auto& normal = normal_map[*vbegin];
-					_normals.push_back(poca::core::Vec3mf(normal.x(), normal.y(), normal.z()));
+				for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
+					CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
+					for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
+						const auto& normal = normal_map[*vbegin];
+						_normals.emplace_back(normal.x(), normal.y(), normal.z());
+					}
+				}
+			}
+		}
+		else {
+			for (const auto& mesh : m_meshes) {
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+				Facet_vector_3_map normal_map = mesh.property_map<face_descriptor, Kernel::Vector_3>("f:norm").value();
+#else
+				Facet_vector_3_map segmentation_map = mesh.property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
+#endif
+				for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
+					CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
+					const auto& normal = normal_map[fd];
+					for (boost::tie(vbegin, vend) = vertices_around_face(mesh.halfedge(fd), mesh); vbegin != vend; vbegin++) {
+						_normals.emplace_back(normal.x(), normal.y(), normal.z());
+					}
 				}
 			}
 		}
