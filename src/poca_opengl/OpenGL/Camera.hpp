@@ -41,6 +41,7 @@
 #include <glm/glm.hpp>
 #define GLM_FORCE_RADIANS
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include <Interfaces/MyObjectInterface.hpp>
 #include <DesignPatterns/Observer.hpp>
@@ -141,6 +142,9 @@ namespace poca::opengl {
 		virtual const glm::mat4& getModelMatrix() const { return m_matrixModel; }
 		virtual const glm::vec3& getTranslationModel() const { return m_stateCamera.m_translationModel; }
 		virtual const glm::mat4& getRotationMatrix() const { return m_rotationMatrix; }
+
+		virtual void setModelMatrix(const glm::mat4& _matrix) { m_matrixModel = _matrix * glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel); 		std::cout << "matrix model computed " << glm::to_string(m_matrixModel) << std::endl;
+		}
 
 		virtual const std::vector<glm::vec4>& getClipPlanes() const { return m_clip; }
 		virtual std::vector<glm::vec4>& getClipPlanes() { return m_clip; }

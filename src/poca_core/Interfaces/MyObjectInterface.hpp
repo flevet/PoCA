@@ -35,6 +35,7 @@
 
 #include <vector>
 #include <string>
+#include <glm/glm.hpp>
 
 #include "../General/Command.hpp"
 #include "../General/Vec6.hpp"
@@ -122,6 +123,10 @@ namespace poca::core {
 		virtual void loadCommandsParameters(const nlohmann::json&) = 0;
 
 		virtual void reorganizeComponents(int, int) = 0;
+
+		virtual void setModelMatrix(const glm::mat4&) = 0;
+		virtual const glm::mat4& getModelMatrix() const = 0;
+		virtual glm::mat4& getModelMatrix() = 0;
 	};
 }
 

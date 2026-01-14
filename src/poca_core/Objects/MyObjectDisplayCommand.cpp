@@ -97,7 +97,6 @@ do{ GLuint err = glGetError(); \
 MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _obj) :poca::core::Command("MyObjectDisplayCommand")
 {
 	m_object = _obj;
-
 	
 	const nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 	addCommandInfo(poca::core::CommandInfo(false, "zoomFactor", 0.1f));
@@ -208,6 +207,7 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 		if (param.contains("currentDebugSSAO"))
 			loadParameters(poca::core::CommandInfo(false, "currentDebugSSAO", param["currentDebugSSAO"].get<int>()));
 	}
+
 }
 
 MyObjectDisplayCommand::MyObjectDisplayCommand(const MyObjectDisplayCommand& _o) : Command(_o)

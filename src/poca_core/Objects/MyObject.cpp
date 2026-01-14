@@ -33,6 +33,9 @@
 #include <algorithm>
 #include <QtCore/QFileInfo>
 #include <QtCore/QDir>
+#include <glm/gtx/transform.hpp>
+
+#include <OpenGL/Camera.hpp>
 
 #include "../General/Vec4.hpp"
 #include "../General/Histogram.hpp"
@@ -49,6 +52,7 @@ namespace poca::core {
 	MyObject::MyObject() :poca::core::CommandableObject("Object")
 	{
 		m_internalId = poca::core::NbObjects++;
+		m_modelMatrix = glm::mat4(1.f);
 	}
 
 	MyObject::MyObject(const MyObject& _o) :poca::core::CommandableObject(_o), m_dir(_o.m_dir), m_name(_o.m_name)
@@ -115,6 +119,16 @@ namespace poca::core {
 		}
 		if (!found)
 			m_components.insert(m_components.begin(), _bc);
+		
+		/*if (m_components.size() == 1) {
+			const auto& bbox = _bc->boundingBox();
+			float translationX = bbox[0] + (bbox[3] - bbox[0]) / 2.f;
+			float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
+			float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
+
+			m_modelMatrixOG = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
+			m_modelMatrix = m_modelMatrixOG;
+		}*/
 	}
 
 	poca::core::stringList MyObject::getNameBasicComponents() const
@@ -220,6 +234,11 @@ namespace poca::core {
 			setWidth(_ci->getParameter<double>("widthDataset"));
 		else if (_ci->hasParameter("heightDataset"))
 			setHeight(_ci->getParameter<double>("heightDataset"));
+		else if (_ci->nameCommand == "display") {
+			//_ci->addParameter("modelMatrix", m_modelMatrix);
+			poca::opengl::Camera* cam = _ci->getParameterPtr<poca::opengl::Camera>("camera");
+			cam->setModelMatrix(m_modelMatrix);
+		}
 		poca::core::CommandableObject::executeCommand(_ci);
 	}
 

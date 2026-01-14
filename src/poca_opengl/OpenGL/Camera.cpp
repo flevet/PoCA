@@ -743,6 +743,8 @@ namespace poca::opengl {
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		GL_CHECK_ERRORS();
 
+		std::cout << "matrix model " << glm::to_string(m_matrixModel) << std::endl;
+
 		glPointSize(pointSizeGL);
 		GL_CHECK_ERRORS();
 		//glLineWidth(thickness);
@@ -771,6 +773,8 @@ namespace poca::opengl {
 		else {
 			drawSSAO(_buffOffscreen);
 		}
+
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 
 		GL_CHECK_ERRORS();
 
@@ -1227,6 +1231,8 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 		poca::opengl::Shader* shader = getShader("uniformColorShader");
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
+		std::cout << "matrix model grid " << glm::to_string(model) << std::endl;
+
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
 		shader->setVec4("singleColor", colorGrid[0], colorGrid[1], colorGrid[2], colorGrid[3]);
@@ -1628,8 +1634,9 @@ namespace poca::opengl {
 					glm::vec3 diff = p1 - p2;
 					glm::vec3 rightVector = -glm::proj(diff, right);
 					glm::vec3 upVector = glm::proj(diff, m_stateCamera.m_up);
+					auto& modelMatrix = m_object->currentObject()->getModelMatrix();
 					m_translation = m_translation + rightVector + upVector;
-					m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+					modelMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z));
 
 				}
 			}
@@ -2107,6 +2114,7 @@ namespace poca::opengl {
 			m_translation.z = _bbox[2] + (_bbox[5] - _bbox[2]) / 2.f;
 
 			m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+			std::cout << "Translation " << glm::to_string(m_translation) << std::endl;
 		}
 
 		recalcModelView();

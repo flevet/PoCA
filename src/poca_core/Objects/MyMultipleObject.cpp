@@ -132,6 +132,15 @@ void MyMultipleObject::setThick(const float _t)
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 {
 	for (poca::core::MyObjectInterface* obj : m_colors) {
+		if (_ci->nameCommand == "display") {
+			poca::opengl::Camera* cam = _ci->getParameterPtr<poca::opengl::Camera>("camera");
+			poca::core::CommandInfo com(false, "getModelMatrix");
+			obj->executeCommand(&com);
+			if (com.hasParameter("modelMatrix")) {
+				auto mat = com.getParameter<glm::mat4>("modelMatrix");
+				cam->setModelMatrix(mat);
+			}
+		}
 		obj->executeCommand(_ci);
 	}
 	poca::core::MyObject::executeCommand(_ci);
@@ -141,12 +150,23 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 {
 	poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
-	for (poca::core::MyObjectInterface* obj : m_colors) {
-		poca::core::BoundingBox bboxComp = obj->boundingBox();
-		for (size_t i = 0; i < 3; i++)
-			bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
-		for (size_t i = 3; i < 6; i++)
-			bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
+	if (!m_gridSelected) {
+		for (poca::core::MyObjectInterface* obj : m_colors) {
+			poca::core::BoundingBox bboxComp = obj->boundingBox();
+			for (size_t i = 0; i < 3; i++)
+				bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
+			for (size_t i = 3; i < 6; i++)
+				bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
+		}
+	}
+	else {
+		for (const auto& bboxComp : m_gridBBoxes) {
+			for (size_t i = 0; i < 3; i++)
+				bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
+			for (size_t i = 3; i < 6; i++)
+				bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
+		}
+		std::cout << "bbox " << bbox << std::endl;
 	}
 	return bbox;
 }
@@ -176,3 +196,29 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 	}
 }
 
+void MyMultipleObject::resetModelMatrices(const bool _gridSelected) {
+	m_gridSelected = _gridSelected;
+	if (!m_gridSelected) {
+		const auto& bbox = this->boundingBox();
+		float translationX = bbox[0] + (bbox[3] - bbox[0]) / 2.f;
+		float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
+		float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
+
+		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
+		for (auto obj : m_colors)
+			obj->setModelMatrix(matrix);
+	}
+	else {
+		for (auto n = 0; n < m_colors.size(); n++) {
+			const auto& bbox = m_gridBBoxes[n];
+			float translationX = bbox[0] + (bbox[3] - bbox[0]) / 2.f;
+			float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
+			float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
+
+			auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0], bbox[1], bbox[2]));
+			m_colors[n]->setModelMatrix(matrix);
+
+			std::cout << " -- " << bbox << std::endl;
+		}
+	}
+}

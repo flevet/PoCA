@@ -66,15 +66,24 @@ public:
 	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
 	virtual void executeGlobalCommand(poca::core::CommandInfo*);
 
+	void resetModelMatrices(const bool = true);
+
 	const size_t nbColors() const { return m_colors.size(); }
 	poca::core::MyObjectInterface* getObject(const size_t _index) { return m_colors[_index]; }
 	poca::core::MyObjectInterface* currentObject() { return m_colors[m_currentColor]; }
 	size_t currentObjectID() const { return m_currentColor; }
 	void setCurrentObject(const size_t _idx) { m_currentColor = _idx; }
 
+	inline void setGridBBoxes(const std::vector <poca::core::BoundingBox>& _bboxes) { m_gridBBoxes = _bboxes; }
+	inline const std::vector <poca::core::BoundingBox>& getGridBBoxes() const { return m_gridBBoxes; }
+	inline std::vector <poca::core::BoundingBox>& getGridBBoxes() { return m_gridBBoxes; }
+
 protected:
 	std::vector <poca::core::MyObjectInterface*> m_colors;
 	size_t m_currentColor;
+
+	std::vector <poca::core::BoundingBox> m_gridBBoxes;
+	bool m_gridSelected{ true };
 };
 
 #endif // SMLMObject_h__
