@@ -187,6 +187,10 @@ target_link_libraries(${targetname} ${GLEW_STATIC_LIBRARIES})
 find_package(TinyTIFF)
 target_link_libraries(${targetname} TinyTIFF::TinyTIFF)
 
+find_package(GLM REQUIRED)
+message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
+include_directories(${GLM_INCLUDE_DIR})
+
 find_package(tinysplinecxx)
 include_directories(${TINYSPLINECXX_INCLUDE_DIRS})
 target_link_libraries(${targetname} ${TINYSPLINECXX_LIBRARIES})
