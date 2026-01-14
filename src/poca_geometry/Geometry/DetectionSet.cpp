@@ -255,6 +255,13 @@ namespace poca::geometry {
 		return new DetectionSet(data);
 	}
 
+	void DetectionSet::saveDetections(const std::string& _filename)
+	{
+		std::ofstream fs(_filename);
+		saveDetections(fs);
+		fs.close();
+	}
+
 	void DetectionSet::saveDetections(std::ofstream& _fs)
 	{
 		poca::core::stringList nameFeatures = getNameData();

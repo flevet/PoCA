@@ -109,6 +109,7 @@ namespace poca::geometry {
 		const float averageDensity() const;
 		DetectionSet* duplicateSelection() const;
 
+		void saveDetections(const std::string&);
 		void saveDetections(std::ofstream&);
 
 		void getFeaturesOfSelection(const std::vector <uint32_t>&, std::map <std::string, std::vector <float>>&);
