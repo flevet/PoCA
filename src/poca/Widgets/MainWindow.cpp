@@ -2172,6 +2172,374 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		}
 		fs.close();
 	}
+	else if (tmp == "checkAxialRatioOrganoids") {
+		std::cout << "Starting checkAxialRatioOrganoids macro" << std::endl;
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->setVerbose(false);
+
+		poca::core::PluginList* plugins = engine->getPlugins();
+		float Pixel_Size = 0.3f; // Micrometres
+		float Delta_Z = 1.f; // Micrometres
+		float z_Ratio = Delta_Z / Pixel_Size;
+
+		QString globalFolder("D:/Git/stardist-env/2025_03_03_ihssane_cycleGAN3D/");
+		QStringList globalPaths;
+		globalPaths << globalFolder + "20250217_IND_Incub24h/" << globalFolder + "20250227_Vc_Incub24h/" << globalFolder + "20251125_BCs_Maturation/7j/" << globalFolder + "20251125_BCs_Maturation/14j/" << globalFolder + "20251125_BCs_Maturation/21j/";
+
+		std::ofstream fs(globalFolder.toStdString() + "axialRatio.txt");
+		fs << "Folder\tCondition\tFile\tRadius\tVol ratio\t# frames\tAxial Ratio\tAcquired vol\tProj area\tEstimated Vol\tNorm vol organoid\tOrig vol organoid\n";
+
+		for (const auto& globalPath : globalPaths) {
+			QDir dirGlobal(globalPath);
+			std::cout << dirGlobal.dirName().toStdString() << std::endl;
+			QFileInfoList conditions = dirGlobal.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+			for (const auto& condition : conditions) {
+				std::cout << condition.absoluteFilePath().toStdString() << std::endl;
+				QStringList allFiles;
+				QDir dir(condition.absoluteFilePath() + "/masks");
+				QFileInfoList list = dir.entryInfoList(QDir::Files);
+				for (int i = 0; i < list.size(); ++i) {
+					QFileInfo dirInfo = list.at(i);
+					QString fileName = dirInfo.fileName();
+					allFiles << fileName;
+					std::cout << fileName.toStdString() << std::endl;
+					//if (dirName == "." || dirName == "..") continue;
+				}
+
+				for (auto currentFile : allFiles) {
+					QString samName = currentFile, nucleiObjectsName = currentFile, centroidsName = currentFile;
+					samName.replace("w2", "w4");
+					samName.replace("405", "640");
+					nucleiObjectsName.replace(".tif", ".obj");
+					QString orgaObjectName = samName;
+					orgaObjectName.replace(".tif", ".obj");
+					centroidsName.replace(".tif", ".csv");
+					//Determine if all files are present
+					bool labelImageExist = QFileInfo::exists(condition.absoluteFilePath() + "/masks/" + currentFile);
+					bool samImageExist = QFileInfo::exists(condition.absoluteFilePath() + "/SAM2_Actin_Mask/" + samName);
+					if (!labelImageExist || !samImageExist) {
+						fs << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed with non existent file" << std::endl;
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed with non existent file" << std::endl;
+						continue;
+					}
+
+					std::cout << "Opening condition " << dirGlobal.dirName().toStdString() << "/" << condition.fileName().toStdString() << ", file " << currentFile.toStdString() << std::endl;
+
+					poca::core::BasicComponentInterface* bci = engine->loadData(condition.absoluteFilePath() + "/SAM2_Actin_Mask/" + samName);
+					if (bci == NULL) {
+						fs << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed to load actin file" << std::endl;
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed to load actin file" << std::endl;
+						continue;
+					}
+
+					poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(bci);
+
+					poca::core::Image<uint8_t>* actin8bits = static_cast<poca::core::Image<uint8_t>*>(imlist->currentImage());
+					if (actin8bits == NULL) {
+						fs << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed, Actin segmentation should be uint8_t" << std::endl;
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed, Actin segmentation should be uint8_t" << std::endl;
+						continue;
+					}
+					std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
+
+					thrust::device_vector<float> d_labels, d_counts;
+					thrust::device_vector<float> d_pixels_stack(pixelOrig);
+					count_occurences_label_kernel_gpu< float>(d_pixels_stack, d_labels, d_counts);
+					std::vector <float> volumeActin(d_counts.size() - 1);
+					cudaMemcpy(volumeActin.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volumeActin.size() * sizeof(float), cudaMemcpyDeviceToHost);
+					float volumesAcquired = volumeActin[0] * z_Ratio;
+
+					std::vector <uint8_t> maxProj;
+					maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
+					thrust::device_vector<float> d_pixels(maxProj);
+					count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
+					std::vector <float> surfaceProj(d_counts.size() - 1);
+					cudaMemcpy(surfaceProj.data(), thrust::raw_pointer_cast(d_counts.data() + 1), surfaceProj.size() * sizeof(float), cudaMemcpyDeviceToHost);
+					float surfaceAcquired = surfaceProj[0];
+
+					float r = sqrt(surfaceAcquired / M_PI);
+					float volSphere = (4.0 / 3.0) * M_PI * pow(r, 3);
+					float volRatio = volumesAcquired / volSphere;
+					float axialRatio = ((2 * r) * volRatio) / float(actin8bits->depth());
+
+					fs << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" << r << "\t" << volRatio << "\t" << actin8bits->depth() << "\t" << axialRatio <<
+						"\t" << volumesAcquired << "\t" << surfaceAcquired << "\t" << volSphere << "\t" << (volumesAcquired / volRatio) << "\t" << volumeActin[0] << std::endl;
+					std::cout << dirGlobal.dirName().toStdString() << ", " << condition.fileName().toStdString() << ", " << currentFile.toStdString() << ", " << r << ", " << volRatio << ", " << actin8bits->depth() << ", " << axialRatio <<
+						", " << volumesAcquired << ", " << surfaceAcquired << ", " << volSphere << ", " << (volumesAcquired / volRatio) << ", " << volumeActin[0] << std::endl;
+
+					//delete actin8bits;
+					delete bci;
+				}
+			}
+		}
+		fs.close();
+	}
+	else if (tmp == "processOrganoids") {
+		std::cout << "Starting processOrganoids macro" << std::endl;
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->setVerbose(false);
+
+		poca::core::PluginList* plugins = engine->getPlugins();
+		float axial_ration = 3.8f;
+
+		QString globalFolder("D:/Git/stardist-env/2025_03_03_ihssane_cycleGAN3D/");
+		QStringList globalPaths;
+		globalPaths << globalFolder + "20250217_IND_Incub24h/" << globalFolder + "20250227_Vc_Incub24h/" << globalFolder + "20251125_BCs_Maturation/7j/" << globalFolder + "20251125_BCs_Maturation/14j/" << globalFolder + "20251125_BCs_Maturation/21j/";
+
+		for (const auto& globalPath : globalPaths) {
+			QDir dirGlobal(globalPath);
+			std::cout << dirGlobal.dirName().toStdString() << std::endl;
+			QFileInfoList conditions = dirGlobal.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+			for (const auto& condition : conditions) {
+				std::cout << condition.absoluteFilePath().toStdString() << std::endl;
+				QStringList allFiles;
+				QDir dir(condition.absoluteFilePath() + "/masks");
+				QFileInfoList list = dir.entryInfoList(QDir::Files);
+				for (int i = 0; i < list.size(); ++i) {
+					QFileInfo dirInfo = list.at(i);
+					QString fileName = dirInfo.fileName();
+					allFiles << fileName;
+					std::cout << fileName.toStdString() << std::endl;
+					//if (dirName == "." || dirName == "..") continue;
+				}
+
+				for (auto currentFile : allFiles) {
+					QString samName = currentFile, nucleiObjectsName = currentFile, centroidsName = currentFile;
+					samName.replace("w2", "w4");
+					samName.replace("405", "640");
+					nucleiObjectsName.replace(".tif", ".obj");
+					QString orgaObjectName = samName;
+					orgaObjectName.replace(".tif", ".obj");
+					centroidsName.replace(".tif", ".csv");
+					//Determine if all files are present
+					bool labelImageExist = QFileInfo::exists(condition.absoluteFilePath() + "/masks/" + currentFile);
+					bool samImageExist = QFileInfo::exists(condition.absoluteFilePath() + "/SAM2_Actin_Mask/" + samName);
+					if (!labelImageExist || !samImageExist) {
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed with non existent file" << std::endl;
+						continue;
+					}
+
+					std::cout << "Opening condition " << dirGlobal.dirName().toStdString() << "/" << condition.fileName().toStdString() << ", file " << currentFile.toStdString() << std::endl;
+
+					poca::core::BasicComponentInterface* bci = engine->loadData(condition.absoluteFilePath() + "/SAM2_Actin_Mask/" + samName);
+					if (bci == NULL) {
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed to load actin file" << std::endl;
+						continue;
+					}
+					poca::core::BasicComponentInterface* bci2 = engine->loadData(condition.absoluteFilePath() + "/masks/" + currentFile);
+					if (bci == NULL) {
+						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed to load nuclei file" << std::endl;
+						continue;
+					}
+
+					poca::core::ImagesList* imlist = dynamic_cast <poca::core::ImagesList *>(engine->mergeComponentLists(bci, bci2));
+					plugins->addCommands(imlist);
+
+					QDir dirFolders;
+					if (!dirFolders.exists(condition.absoluteFilePath() + "/actinObjs2")) {
+						if (!dir.mkdir(condition.absoluteFilePath() + "/actinObjs2")) {
+							std::cout << "Failed to create " << condition.absoluteFilePath().toStdString() << std::endl;
+							continue;
+						}
+					}
+					if (!dirFolders.exists(condition.absoluteFilePath() + "/nucleusCentroids2")) {
+						if (!dir.mkdir(condition.absoluteFilePath() + "/nucleusCentroids2")) {
+							std::cout << "Failed to create " << condition.absoluteFilePath().toStdString() << std::endl;
+							continue;
+						}
+					}
+					if (!dirFolders.exists(condition.absoluteFilePath() + "/nucleusObjs2")) {
+						if (!dir.mkdir(condition.absoluteFilePath() + "/nucleusObjs2")) {
+							std::cout << "Failed to create " << condition.absoluteFilePath().toStdString() << std::endl;
+							continue;
+						}
+					}
+					if (!dirFolders.exists(condition.absoluteFilePath() + "/voronoiCut")) {
+						if (!dir.mkdir(condition.absoluteFilePath() + "/voronoiCut")) {
+							std::cout << "Failed to create " << condition.absoluteFilePath().toStdString() << std::endl;
+							continue;
+						}
+					}
+
+					std::cout << "Marching cubes actin" << std::endl;
+					imlist->setCurrentComponentIndex(0);
+					plugins->addCommands(imlist->getImage(0));
+					poca::core::CommandInfo ci(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
+					imlist->executeCommand(&ci);
+					if (!ci.hasParameter("objects")) {
+						std::cout << "Failed to marching cube actin " << std::endl;
+						continue;
+					}
+					std::cout << "Subdividing actin" << std::endl;
+					poca::geometry::ObjectListMesh* actin = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					plugins->addCommands(actin);
+					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
+					actin->executeCommand(&ci);
+					if (!ci.hasParameter("objects")) {
+						std::cout << "Failed to subdivide actin " << std::endl;
+						continue;
+					}
+					poca::geometry::ObjectListMesh* actinSmooth = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					
+					std::cout << "Marching cubes nuclei" << std::endl;
+					imlist->setCurrentComponentIndex(1);
+					plugins->addCommands(imlist->getImage(1));
+					ci = poca::core::CommandInfo(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
+					imlist->executeCommand(&ci);
+					if (!ci.hasParameter("objects")) {
+						std::cout << "Failed to marching cube nuclei " << std::endl;
+						continue;
+					}
+					std::cout << "Subdividing nuclei" << std::endl;
+					poca::geometry::ObjectListMesh* noyaux = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					plugins->addCommands(noyaux);
+					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
+					noyaux->executeCommand(&ci);
+					if (!ci.hasParameter("objects")) {
+						std::cout << "Failed to subdivide nuclei " << std::endl;
+						continue;
+					}
+					poca::geometry::ObjectListMesh* noyauxSmooth = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					//delete actin8bits;
+
+					std::cout << "Creation of the nculei centroids" << std::endl;
+					std::vector <poca::core::Vec3mf> centroids(noyauxSmooth->nbElements());
+					for (size_t n = 0; n < noyauxSmooth->nbElements(); n++)
+						centroids[n] = noyauxSmooth->computeBarycenterElement(n);
+					std::vector <bool> selectedNuclei(noyauxSmooth->nbElements());
+					const auto& actinMesh = actinSmooth->getMeshes()[0];
+					CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel> inside(actinMesh);
+					for (auto n = 0; n < noyauxSmooth->nbElements(); n++)
+						selectedNuclei[n] = poca::geometry::insideMesh(inside, centroids[n].x(), centroids[n].y(), centroids[n].z());
+					//Create DetectionSet of the selected centroids
+					std::map <std::string, std::vector <float>> features;
+					std::vector <float> xs, ys, zs;
+					for (size_t n = 0; n < centroids.size(); n++) {
+						if (!selectedNuclei[n]) continue;
+						xs.push_back(centroids[n][0]);
+						ys.push_back(centroids[n][1]);
+						zs.push_back(centroids[n][2]);
+					}
+					features["x"] = xs;
+					features["y"] = ys;
+					features["z"] = zs;
+					std::map <std::string, poca::core::MyData*> featuresObjects = noyauxSmooth->getData();
+					for (const auto& feature : featuresObjects) {
+						if (feature.first != "x" && feature.first != "y" && feature.first != "z") {
+							std::vector <float> selectedValues;
+							const std::vector <float>& values = feature.second->getData<float>();
+							for (size_t n = 0; n < centroids.size(); n++) {
+								if (!selectedNuclei[n]) continue;
+								selectedValues.push_back(values[n]);
+							}
+							features[feature.first] = selectedValues;
+						}
+					}
+					poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
+
+					std::cout << "Filter nuclei wrt actin" << std::endl;
+					const auto& nucleiMeshes = noyauxSmooth->getMeshes();
+					std::vector <Surface_mesh_3_double> selectedMeshes;
+					for (size_t n = 0; n < centroids.size(); n++) {
+						if (!selectedNuclei[n]) continue;
+						selectedMeshes.emplace_back(nucleiMeshes[n]);
+					}
+					poca::geometry::ObjectListMesh* noyauxSmoothFiltered = new poca::geometry::ObjectListMesh(selectedMeshes);
+
+					std::cout << "Creation of the 3D Voronoi" << std::endl;
+					poca::geometry::DelaunayTriangulationFactoryInterface* factory = poca::geometry::createDelaunayTriangulationFactory();
+					poca::geometry::DelaunayTriangulationInterface* delaunay = factory->createDelaunayTriangulation(xs, ys, zs);
+					poca::geometry::VoronoiDiagramFactoryInterface* factoryV = poca::geometry::createVoronoiDiagramFactory();
+					poca::geometry::KdTree_DetectionPoint* kdtree = dset->getKdTree();
+					poca::geometry::VoronoiDiagram* voronoi = factoryV->createVoronoiDiagram(xs, ys, zs, kdtree, delaunay, false);
+					poca::geometry::VoronoiDiagram3D* voro3D = static_cast <poca::geometry::VoronoiDiagram3D*>(voronoi);
+					const auto& polyhedrons = voro3D->getPolyhedrons();
+					std::vector < Surface_mesh_3_double> voronoiCells, voronoiCellsRemeshed, voronoiCellsCut;
+					std::cout << "Cutting of the 3D Voronoi cells" << std::endl;
+					for (const auto& poly : polyhedrons) {
+						voronoiCells.push_back(Surface_mesh_3_double());
+						CGAL::copy_face_graph(poly, voronoiCells.back());
+						assert(CGAL::is_valid_polygon_mesh(voronoiCells.back()));
+					}
+					//Remesh the voronoi cells
+					std::cout << "Remeshing of the 3D Voronoi cells" << std::endl;
+					for (const auto& cell : voronoiCells) {
+						auto rcell = cell;
+						auto eif = get(CGAL::edge_is_feature, rcell);
+						auto pid = get(CGAL::face_patch_id_t<int>(), rcell);
+						auto vip = get(CGAL::vertex_incident_patches_t<int>(), rcell);
+
+						const double sharp_angle_deg = 2.0;
+
+						// 1) Detect feature (sharp) edges
+						CGAL::Polygon_mesh_processing::sharp_edges_segmentation(
+							rcell, sharp_angle_deg, eif, pid,
+							CGAL::parameters::vertex_incident_patches_map(vip)
+						);
+
+						// 2) Collect feature edges
+						using edge_descriptor = boost::graph_traits<decltype(rcell)>::edge_descriptor;
+						std::vector<edge_descriptor> feature_edges;
+						feature_edges.reserve(num_edges(rcell));
+
+						for (edge_descriptor e : edges(rcell))
+							if (get(eif, e))
+								feature_edges.push_back(e);
+
+						// 3) Choose target length (IMPORTANT: use a sane value in your units)
+						const double target_edge_length = 3/* e.g. 0.6 * avg edge length, not a hardcoded 3 */;
+						const unsigned int nb_iter = 3;
+
+						// 4) Split feature edges so they're already close to target
+						CGAL::Polygon_mesh_processing::split_long_edges(feature_edges, target_edge_length, rcell);
+
+						// (Optional but robust) re-run feature detection so newly created edges are marked too
+						CGAL::Polygon_mesh_processing::sharp_edges_segmentation(
+							rcell, sharp_angle_deg, eif, pid,
+							CGAL::parameters::vertex_incident_patches_map(vip)
+						);
+
+						// 5) Now remesh, protecting constraints (feature polyline stays, but now it can have vertices)
+						CGAL::Polygon_mesh_processing::isotropic_remeshing(
+							faces(rcell),
+							target_edge_length,
+							rcell,
+							CGAL::parameters::
+							number_of_iterations(nb_iter).
+							protect_constraints(true).
+							edge_is_constrained_map(eif)
+						);
+
+						voronoiCellsRemeshed.push_back(rcell);
+					}
+
+					std::cout << "Cutting of the 3D Voronoi cells" << std::endl;
+					poca::geometry::meshesInsideMeshWithCutting(actinMesh, voronoiCellsRemeshed, voronoiCellsCut);
+					poca::geometry::ObjectListMesh* voronoiCellsCutMesh = new poca::geometry::ObjectListMesh(voronoiCellsCut);
+
+
+					std::cout << "Saving" << std::endl;
+					actinSmooth->saveAsOBJ((condition.absoluteFilePath() + "/actinObjs2/" + orgaObjectName).toStdString());
+					noyauxSmoothFiltered->saveAsOBJ((condition.absoluteFilePath() + "/nucleusObjs2/" + nucleiObjectsName).toStdString());
+					dset->saveDetections((condition.absoluteFilePath() + "/nucleusCentroids2/" + centroidsName).toStdString());
+					voronoiCellsCutMesh->saveAsOBJ((condition.absoluteFilePath() + "/voronoiCut/" + nucleiObjectsName).toStdString());
+
+					delete voronoiCellsCutMesh;
+					delete factoryV;
+					delete factory;
+					delete delaunay;
+					delete voronoi;
+					delete dset;
+					delete noyauxSmoothFiltered;
+					delete noyauxSmooth;
+					delete actinSmooth;
+					delete noyaux;
+					delete actin;
+					delete bci;
+				}
+			}
+		}
+	}
 	else if (tmp == "organoidFeature_2") {
 		std::cout << "Starting organoidFeature_2 macro" << std::endl;
 		poca::core::Engine* engine = poca::core::Engine::instance();
