@@ -64,6 +64,10 @@
 #include <qmath.h>
 #include <CGAL/bounding_box.h>
 #include <CGAL/Polygon_mesh_processing/angle_and_area_smoothing.h>
+#include <CGAL/boost/graph/copy_face_graph.h>
+#include <CGAL/Polygon_mesh_processing/remesh.h>
+#include <CGAL/Polygon_mesh_processing/detect_features.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -96,6 +100,7 @@
 #include <Cuda/BasicOperationsImage.h>
 #include <Geometry/CGAL_helpers.hpp>
 #include <Geometry/stb_rect_pack.h>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -1410,6 +1415,45 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 
 	poca::core::MyObjectInterface* wobj = engine->generateMultipleObject(objs);
 	if (wobj == NULL) return;
+
+	MyMultipleObject* multiples = static_cast <MyMultipleObject*>(wobj);
+	auto& gridBBoxes = multiples->getGridBBoxes();
+	uint32_t PADDING_BINS = 0;
+	size_t total = 0;
+	std::vector<stbrp_rect> rects;
+	int cur = 0;
+	for (auto n = 0; n < multiples->nbColors(); n++) {
+		auto obj = multiples->getObject(n);
+		const auto& bbox = obj->boundingBox();
+		gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
+		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0});
+		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
+	}
+
+	Bin bin{ total / 4, total  / 4 };            // start size
+	const int MAX_W = total;       // safety caps (tune as needed)
+	const int MAX_H = total;
+
+	// Retry with growth until success or we hit caps.
+	while (true) {
+		// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
+		auto work = rects;
+		if (try_pack(bin, work)) {
+			for (const auto& r : work) {
+				float w = gridBBoxes[r.id].realWidth(), h = gridBBoxes[r.id].realHeight();
+				gridBBoxes[r.id].set(r.x, r.y, -gridBBoxes[r.id].realThick() / 2.f, r.x + w, r.y + h, gridBBoxes[r.id].realThick() / 2.f);
+			}
+			break;
+		}
+
+		Bin next = grow(bin, MAX_W, MAX_H);
+		if (next.w == bin.w && next.h == bin.h) {
+			std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
+			return;
+		}
+		bin = next;
+	}
+	multiples->resetModelMatrices(true);
 
 	if (wobj != NULL) {
 		std::vector <std::string> names;
