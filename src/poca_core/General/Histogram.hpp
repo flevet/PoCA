@@ -93,6 +93,8 @@ namespace poca::core {
 		HistogramInterface* computeLogHistogram() const;
 		const size_t nbElements() const;
 
+		void computeStats();
+
 		const std::size_t getNbValues() const { return m_nbValues; }
 		const std::size_t getNbBins() const { return m_nbBins; }
 		const float getMean() const { return m_stats.getData(ArrayStatistics::Mean); }
@@ -360,6 +362,13 @@ namespace poca::core {
 	const size_t Histogram<T>::nbElements() const
 	{
 		return m_values.size();
+	}
+
+	template <class T>
+	void Histogram<T>::computeStats()
+	{
+		m_stats = ArrayStatistics::generateArrayStatistics(m_values, m_nbValues);
+		resetBounds();
 	}
 
 	template <class T>
