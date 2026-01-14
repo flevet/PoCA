@@ -30,6 +30,11 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <CGAL/Polygon_mesh_processing/intersection.h>
+#include <CGAL/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/Polygon_mesh_processing/self_intersections.h>
+#include <CGAL/Polygon_mesh_processing/orientation.h>
+
 #include "CGAL_helpers.hpp"
 
 namespace poca::geometry {
@@ -78,5 +83,44 @@ namespace poca::geometry {
         }
 
         mesh.remove_property_map(new_positions);
+    }
+
+    bool insideMesh(const Surface_mesh_3_double& _mesh, float _x, float _y, float _z)
+    {
+        CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel> inside(_mesh);
+        return insideMesh(inside, _x, _y, _z);
+    }
+
+    bool insideMesh(const CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel>& _inside, float _x, float _y, float _z)
+    {
+        CGAL::Bounded_side res = _inside(Kernel::Point_3(_x, _y, _z));
+        return res == CGAL::ON_BOUNDED_SIDE;
+    }
+
+    void meshesIntersectingMesh(const Surface_mesh_3_double& _mesh, const std::vector <Surface_mesh_3_double>& _meshes, std::vector <bool>& _selection)
+    {
+        _selection.resize(_meshes.size());
+        for (auto n = 0; n < _meshes.size(); n++) {
+            _selection[n] = CGAL::Polygon_mesh_processing::do_intersect(_mesh, _meshes[n]);
+        }
+    }
+
+    void meshesInsideMeshWithCutting(const Surface_mesh_3_double& _mesh, std::vector <Surface_mesh_3_double>& _meshes, std::vector <Surface_mesh_3_double>& _resultingMeshes)
+    {
+        _resultingMeshes.clear();
+        std::vector <bool> intersected;
+        meshesIntersectingMesh(_mesh, _meshes, intersected);
+        for (auto n = 0; n < intersected.size(); n++) {
+            if(!intersected[n])
+                _resultingMeshes.push_back(_meshes[n]);
+            else {
+                Surface_mesh_3_double out, mesh = _mesh;
+                bool ok = CGAL::Polygon_mesh_processing::corefine_and_compute_intersection(mesh, _meshes[n], out);
+                if (ok)
+                    _resultingMeshes.push_back(out);
+                else
+                    _resultingMeshes.push_back(_meshes[n]);
+            }
+        }
     }
 }

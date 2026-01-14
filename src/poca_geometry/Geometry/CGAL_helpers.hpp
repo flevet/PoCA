@@ -33,6 +33,8 @@
 #ifndef CGAL_helpers_h__
 #define CGAL_helpers_h__
 
+#include <CGAL/Side_of_triangle_mesh.h>
+
 #include "CGAL_includes.hpp"
 
 namespace poca::geometry{
@@ -135,6 +137,12 @@ namespace poca::geometry{
 	}
 
 	void laplacian_smooth(Surface_mesh_3_double&, int, double = 0.5);
+
+	bool insideMesh(const Surface_mesh_3_double&, float, float, float);
+	bool insideMesh(const CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel>&, float, float, float);
+
+	void meshesIntersectingMesh(const Surface_mesh_3_double&, const std::vector <Surface_mesh_3_double>&, std::vector <bool>&);
+	void meshesInsideMeshWithCutting(const Surface_mesh_3_double&, std::vector <Surface_mesh_3_double>&, std::vector <Surface_mesh_3_double>&);
 }
 
 #endif
