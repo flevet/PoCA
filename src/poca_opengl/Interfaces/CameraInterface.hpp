@@ -52,6 +52,8 @@ namespace poca::opengl {
 		//virtual const glm::mat4& getTranslationMatrix() const = 0;
 		virtual const glm::mat4& getRotationMatrix() const = 0;
 
+		virtual void setModelMatrix(const glm::mat4&) = 0;
+
 		virtual const std::vector<glm::vec4>& getClipPlanes() const = 0;
 		virtual std::vector<glm::vec4>& getClipPlanes() = 0;
 		virtual bool clip() const = 0;
