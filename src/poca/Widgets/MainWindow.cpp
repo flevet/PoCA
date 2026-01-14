@@ -1418,19 +1418,22 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 
 	MyMultipleObject* multiples = static_cast <MyMultipleObject*>(wobj);
 	auto& gridBBoxes = multiples->getGridBBoxes();
-	uint32_t PADDING_BINS = 0;
+	uint32_t PADDING_BINS = 50;
 	size_t total = 0;
 	std::vector<stbrp_rect> rects;
 	int cur = 0;
+	float startW = 0.f;
 	for (auto n = 0; n < multiples->nbColors(); n++) {
 		auto obj = multiples->getObject(n);
 		const auto& bbox = obj->boundingBox();
-		gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
+		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
+		gridBBoxes.emplace_back(bbox.x() + startW, bbox.y(), -bbox.realThick() / 2.f, bbox.width() + startW, bbox.height(), bbox.realThick() / 2.f);
 		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0});
 		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
+		startW += bbox.realWidth();
 	}
 
-	Bin bin{ total / 4, total  / 4 };            // start size
+	/*Bin bin{total / 4, total / 4};            // start size
 	const int MAX_W = total;       // safety caps (tune as needed)
 	const int MAX_H = total;
 
@@ -1452,7 +1455,7 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 			return;
 		}
 		bin = next;
-	}
+	}*/
 	multiples->resetModelMatrices(true);
 
 	if (wobj != NULL) {
