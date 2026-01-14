@@ -47,6 +47,8 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 	m_allDatasetsList = new QListWidget;
 	m_datasetsToMergeList = new QListWidget;
 	QPushButton* transferButton = new QPushButton("Transfer Selected");
+	m_cboxGrid = new QCheckBox("Grid");
+	m_cboxGrid->setChecked(true);
 
 	// Fill left list with some example data
 	for (const auto& data : m_datasets)
@@ -69,6 +71,7 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 
 	leftLayout->addWidget(m_allDatasetsList);
 	leftLayout->addWidget(transferButton);
+	leftLayout->addWidget(m_cboxGrid);
 	rightLayout->addWidget(m_datasetsToMergeList);
 
 	hLayout->addLayout(leftLayout);

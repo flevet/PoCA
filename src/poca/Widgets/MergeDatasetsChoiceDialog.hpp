@@ -35,6 +35,7 @@
 
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QCheckBox>
 #include <vector>
 
 class QComboBox;
@@ -50,12 +51,14 @@ public:
 
 	//const uint32_t nbColors() const;
 	std::vector < MdiChild*> getObjects() const;
+	inline const bool gridSelected() const { return m_cboxGrid->isChecked(); }
 
 protected slots:
 
 protected:
 	QListWidget* m_allDatasetsList, * m_datasetsToMergeList;
 	const std::vector < std::pair < QString, MdiChild* > > & m_datasets;
+	QCheckBox* m_cboxGrid;
 };
 
 #endif // MergeDatasetsChoiceDialog_h__
