@@ -488,7 +488,8 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 			// If still open, prefer Loop; if closed, Sqrt3:
 			bool closed = true; for (auto e : edges(mesh)) if (is_border(e, mesh)) { closed = false; break; }
-			std::cout << "is closed " << closed << std::endl;
+			if (engine->verbose())
+				std::cout << "is closed " << closed << std::endl;
 			if (closed)
 				CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(iterations));
 			else
@@ -497,18 +498,22 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 		poca::geometry::ObjectListMesh* newomesh = new poca::geometry::ObjectListMesh(meshes);
 		//copymesh->subdivide(iterations);
 		ObjectListPlugin::m_plugins->addCommands(newomesh);
-		if (!obj->hasBasicComponent("ObjectLists")) {
-			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, *_infos, "ObjectListPlugin");
-			ObjectListPlugin::m_plugins->addCommands(objsList);
-			obj->addBasicComponent(objsList);
+		if (obj) {
+			if (!obj->hasBasicComponent("ObjectLists")) {
+				poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, *_infos, "ObjectListPlugin");
+				ObjectListPlugin::m_plugins->addCommands(objsList);
+				obj->addBasicComponent(objsList);
+			}
+			else {
+				std::string text = _infos->json.dump(4);
+				poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+				if (objsList)
+					objsList->addObjectList(newomesh, *_infos, "ObjectListPlugin");
+				std::cout << text << std::endl;
+			}
 		}
-		else {
-			std::string text = _infos->json.dump(4);
-			poca::geometry::ObjectLists* objsList = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
-			if (objsList)
-				objsList->addObjectList(newomesh, *_infos, "ObjectListPlugin");
-			std::cout << text << std::endl;
-		}
+		else
+			_infos->addParameter("objects", newomesh);
 	}
 	else if (_infos->nameCommand == "exportLocsInObjects") {
 		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
