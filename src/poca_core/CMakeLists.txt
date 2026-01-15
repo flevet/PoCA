@@ -85,6 +85,7 @@ set(GENERAL_HEADER_FILES
   General/Vec3.hpp
   General/Vec4.hpp
   General/Vec6.hpp
+  General/stb_rect_pack.h
   )
   
   set(GENERAL_SOURCE_FILES

@@ -30,7 +30,7 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#define STB_RECT_PACK_IMPLEMENTATION
+//#define STB_RECT_PACK_IMPLEMENTATION
 
 #include <Windows.h>
 #include <gl/glew.h>
@@ -99,7 +99,7 @@
 #include <General/ImagesList.hpp>
 #include <Cuda/BasicOperationsImage.h>
 #include <Geometry/CGAL_helpers.hpp>
-#include <Geometry/stb_rect_pack.h>
+#include <General/stb_rect_pack.h>
 #include <Objects/MyMultipleObject.hpp>
 
 #include "../../include/GuiInterface.hpp"
