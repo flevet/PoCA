@@ -53,6 +53,7 @@ namespace poca::core {
 	{
 		m_internalId = poca::core::NbObjects++;
 		m_modelMatrix = glm::mat4(1.f);
+		m_translation = glm::vec3(0.f);
 	}
 
 	MyObject::MyObject(const MyObject& _o) :poca::core::CommandableObject(_o), m_dir(_o.m_dir), m_name(_o.m_name)
@@ -235,7 +236,6 @@ namespace poca::core {
 		else if (_ci->hasParameter("heightDataset"))
 			setHeight(_ci->getParameter<double>("heightDataset"));
 		else if (_ci->nameCommand == "display") {
-			//_ci->addParameter("modelMatrix", m_modelMatrix);
 			poca::opengl::Camera* cam = _ci->getParameterPtr<poca::opengl::Camera>("camera");
 			cam->setModelMatrix(m_modelMatrix);
 		}

@@ -127,6 +127,10 @@ namespace poca::core {
 		virtual void setModelMatrix(const glm::mat4&) = 0;
 		virtual const glm::mat4& getModelMatrix() const = 0;
 		virtual glm::mat4& getModelMatrix() = 0;
+
+		virtual void setTranslationVector(const glm::vec3&) = 0;
+		virtual const glm::vec3& getTranslationVector() const = 0;
+		virtual glm::vec3& getTranslationVector() = 0;
 	};
 }
 

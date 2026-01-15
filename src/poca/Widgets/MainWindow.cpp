@@ -1418,22 +1418,23 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 
 	MyMultipleObject* multiples = static_cast <MyMultipleObject*>(wobj);
 	auto& gridBBoxes = multiples->getGridBBoxes();
-	uint32_t PADDING_BINS = 50;
+	uint32_t PADDING_BINS = 0;
 	size_t total = 0;
 	std::vector<stbrp_rect> rects;
 	int cur = 0;
-	float startW = 0.f;
+	float startW = 0.f, startH = 0.f;
 	for (auto n = 0; n < multiples->nbColors(); n++) {
 		auto obj = multiples->getObject(n);
 		const auto& bbox = obj->boundingBox();
 		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
-		gridBBoxes.emplace_back(bbox.x() + startW, bbox.y(), -bbox.realThick() / 2.f, bbox.width() + startW, bbox.height(), bbox.realThick() / 2.f);
+		gridBBoxes.emplace_back(startW, 0.f, 0.f, startW + bbox.realWidth(), bbox.realHeight(), bbox.realThick());
 		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0});
 		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
-		startW += bbox.realWidth();
+		//startW += bbox.realWidth();
+		std::cout << "GridBBox " << gridBBoxes.back() << std::endl;
 	}
 
-	/*Bin bin{total / 4, total / 4};            // start size
+	Bin bin{total / 8, total / 8};            // start size
 	const int MAX_W = total;       // safety caps (tune as needed)
 	const int MAX_H = total;
 
@@ -1444,7 +1445,8 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		if (try_pack(bin, work)) {
 			for (const auto& r : work) {
 				float w = gridBBoxes[r.id].realWidth(), h = gridBBoxes[r.id].realHeight();
-				gridBBoxes[r.id].set(r.x, r.y, -gridBBoxes[r.id].realThick() / 2.f, r.x + w, r.y + h, gridBBoxes[r.id].realThick() / 2.f);
+				//gridBBoxes[r.id].set(r.x, r.y, -gridBBoxes[r.id].realThick() / 2.f, r.x + w, r.y + h, gridBBoxes[r.id].realThick() / 2.f);
+				gridBBoxes[r.id].set(r.x, r.y, 0, r.x + w, r.y + h, gridBBoxes[r.id].realThick());
 			}
 			break;
 		}
@@ -1455,7 +1457,7 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 			return;
 		}
 		bin = next;
-	}*/
+	}
 	multiples->resetModelMatrices(true);
 
 	if (wobj != NULL) {

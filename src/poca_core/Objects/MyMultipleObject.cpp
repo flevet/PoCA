@@ -132,7 +132,7 @@ void MyMultipleObject::setThick(const float _t)
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 {
 	for (poca::core::MyObjectInterface* obj : m_colors) {
-		if (_ci->nameCommand == "display") {
+		/*if (_ci->nameCommand == "display") {
 			poca::opengl::Camera* cam = _ci->getParameterPtr<poca::opengl::Camera>("camera");
 			poca::core::CommandInfo com(false, "getModelMatrix");
 			obj->executeCommand(&com);
@@ -140,7 +140,7 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 				auto mat = com.getParameter<glm::mat4>("modelMatrix");
 				cam->setModelMatrix(mat);
 			}
-		}
+		}*/
 		obj->executeCommand(_ci);
 	}
 	poca::core::MyObject::executeCommand(_ci);
@@ -166,7 +166,6 @@ const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 			for (size_t i = 3; i < 6; i++)
 				bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
 		}
-		std::cout << "bbox " << bbox << std::endl;
 	}
 	return bbox;
 }
@@ -187,7 +186,8 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 {
-	executeCommand(_ci);
+	//executeCommand(_ci);
+	poca::core::MyObject::executeCommand(_ci);
 	for (poca::core::MyObjectInterface* obj : m_colors)
 		obj->executeGlobalCommand(_ci);
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
@@ -204,21 +204,22 @@ void MyMultipleObject::resetModelMatrices(const bool _gridSelected) {
 		float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
 		float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
 
-		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
+		//auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
+		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0], bbox[1], bbox[2]));
 		for (auto obj : m_colors)
 			obj->setModelMatrix(matrix);
 	}
 	else {
 		for (auto n = 0; n < m_colors.size(); n++) {
+			auto obj = m_colors[n];
+			const auto& bboxObj = obj->boundingBox();
 			const auto& bbox = m_gridBBoxes[n];
 			float translationX = bbox[0] + (bbox[3] - bbox[0]) / 2.f;
 			float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
 			float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
 
-			auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0] - 75, bbox[1] - 75, bbox[2]));
+			auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0] - bboxObj[0], bbox[1] - bboxObj[1], bbox[2] - bboxObj[2]));
 			m_colors[n]->setModelMatrix(matrix);
-
-			std::cout << " -- " << bbox << std::endl;
 		}
 	}
 }

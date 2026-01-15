@@ -121,6 +121,10 @@ namespace poca::core {
 		size_t currentObjectID() const { return 0; }
 		void setCurrentObject(const size_t) {}
 
+		virtual void setTranslationVector(const glm::vec3& _v) { m_translation = _v; }
+		virtual const glm::vec3& getTranslationVector() const { return m_translation; }
+		virtual glm::vec3& getTranslationVector() { return m_translation; }
+
 		virtual void setModelMatrix(const glm::mat4& _mat) { m_modelMatrix = _mat; }
 		virtual const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 		virtual glm::mat4& getModelMatrix() { return m_modelMatrix; }
@@ -151,6 +155,7 @@ namespace poca::core {
 		std::vector <poca::core::ROIInterface*> m_ROIs;
 	
 		glm::mat4 m_modelMatrixOG, m_modelMatrix;
+		glm::vec3 m_translation;
 };
 }
 

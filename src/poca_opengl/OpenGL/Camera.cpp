@@ -741,9 +741,8 @@ namespace poca::opengl {
 
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
-		GL_CHECK_ERRORS();
 
-		std::cout << "matrix model " << glm::to_string(m_matrixModel) << std::endl;
+		GL_CHECK_ERRORS();
 
 		glPointSize(pointSizeGL);
 		GL_CHECK_ERRORS();
@@ -810,6 +809,8 @@ namespace poca::opengl {
 
 		GL_CHECK_ERRORS();
 
+		if (m_debugPointBuffer.getNbElements() != 0)
+			this->drawUniformShader(m_debugPointBuffer, poca::core::Color4D(1.f, 0.f, 1.f, 1.f));
 
 		poca::opengl::Shader* shader = this->getShader("uniformColorShader");
 		float w = width(), h = height();
@@ -1231,7 +1232,6 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 		poca::opengl::Shader* shader = getShader("uniformColorShader");
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
-		std::cout << "matrix model grid " << glm::to_string(model) << std::endl;
 
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
@@ -1634,10 +1634,16 @@ namespace poca::opengl {
 					glm::vec3 diff = p1 - p2;
 					glm::vec3 rightVector = -glm::proj(diff, right);
 					glm::vec3 upVector = glm::proj(diff, m_stateCamera.m_up);
-					auto& modelMatrix = m_object->currentObject()->getModelMatrix();
-					m_translation = m_translation + rightVector + upVector;
-					modelMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z));
-
+					if (_event->modifiers() == Qt::ControlModifier) {
+						auto& translation = m_object->currentObject()->getTranslationVector();
+						auto& modelMatrix = m_object->currentObject()->getModelMatrix();
+						translation = translation + rightVector + upVector;
+						modelMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-translation.x, -translation.y, -translation.z));
+					}
+					else {
+						m_translation = m_translation + rightVector + upVector;
+						m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+					}
 				}
 			}
 		}
@@ -2114,7 +2120,7 @@ namespace poca::opengl {
 			m_translation.z = _bbox[2] + (_bbox[5] - _bbox[2]) / 2.f;
 
 			m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
-			std::cout << "Translation " << glm::to_string(m_translation) << std::endl;
+			//std::cout << "Translation " << glm::to_string(m_translation) << std::endl;
 		}
 
 		recalcModelView();
@@ -3004,6 +3010,13 @@ namespace poca::opengl {
 
 		if(m_currentStepPath > 1.f && m_timerCameraPath->isActive())
 			m_timerCameraPath->stop();*/
+	}
+
+	void Camera::setModelMatrix(const glm::mat4& _matrix)
+	{
+		//glm::vec3 t1 = glm::vec3(_matrix[3]); // or matA[3].xyz
+
+		m_matrixModel = _matrix * glm::translate(glm::mat4(1.0f), m_stateCamera.m_translationModel);
 	}
 }
 
