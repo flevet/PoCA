@@ -1417,7 +1417,7 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 	if (wobj == NULL) return;
 
 	MyMultipleObject* multiples = static_cast <MyMultipleObject*>(wobj);
-	auto& gridBBoxes = multiples->getGridBBoxes();
+	/*auto& gridBBoxes = multiples->getGridBBoxes();
 	uint32_t PADDING_BINS = 0;
 	size_t total = 0;
 	std::vector<stbrp_rect> rects;
@@ -1458,7 +1458,7 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		}
 		bin = next;
 	}
-	multiples->resetModelMatrices(true);
+	multiples->resetModelMatrices(true);*/
 
 	if (wobj != NULL) {
 		std::vector <std::string> names;

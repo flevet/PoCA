@@ -30,6 +30,8 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#define STB_RECT_PACK_IMPLEMENTATION
+
 #include <algorithm>
 
 #include <General/Vec4.hpp>
@@ -37,12 +39,55 @@
 #include <General/MyData.hpp>
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
+#include <General/stb_rect_pack.h>
 
 #include "MyMultipleObject.hpp"
 
 MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors) :MyObject(), m_colors(_colors), m_currentColor(0)
 {
 	m_internalId = poca::core::NbObjects++;
+
+	uint32_t PADDING_BINS = 0;
+	size_t total = 0;
+	std::vector<stbrp_rect> rects;
+	int cur = 0;
+	float startW = 0.f, startH = 0.f;
+	for (auto n = 0; n < nbColors(); n++) {
+		auto obj = getObject(n);
+		const auto& bbox = obj->boundingBox();
+		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
+		m_gridBBoxes.emplace_back(startW, 0.f, 0.f, startW + bbox.realWidth(), bbox.realHeight(), bbox.realThick());
+		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0 });
+		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
+		//startW += bbox.realWidth();
+		std::cout << "GridBBox " << m_gridBBoxes.back() << std::endl;
+	}
+
+	Bin bin{ total / 8, total / 8 };            // start size
+	const int MAX_W = total;       // safety caps (tune as needed)
+	const int MAX_H = total;
+
+	// Retry with growth until success or we hit caps.
+	while (true) {
+		// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
+		auto work = rects;
+		if (try_pack(bin, work)) {
+			for (const auto& r : work) {
+				float w = m_gridBBoxes[r.id].realWidth(), h = m_gridBBoxes[r.id].realHeight();
+				//gridBBoxes[r.id].set(r.x, r.y, -gridBBoxes[r.id].realThick() / 2.f, r.x + w, r.y + h, gridBBoxes[r.id].realThick() / 2.f);
+				m_gridBBoxes[r.id].set(r.x, r.y, 0, r.x + w, r.y + h, m_gridBBoxes[r.id].realThick());
+			}
+			break;
+		}
+
+		Bin next = grow(bin, MAX_W, MAX_H);
+		if (next.w == bin.w && next.h == bin.h) {
+			std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
+			return;
+		}
+		bin = next;
+	}
+	resetModelMatrices(true);
 }
 
 MyMultipleObject::~MyMultipleObject()
