@@ -63,6 +63,8 @@ class LoaderImageInterface;
 class GuiInterface;
 class PluginInterface;
 
+class ColorButtonGridWidget;
+
 namespace poca::core {
 	class PluginList;
 	class BasicComponent;
@@ -133,7 +135,7 @@ private slots:
 	void resetViewer();
 	void toggleBoundingBoxDisplay();
 	void computeColocalization();
-	void changeColorObject(QAbstractButton*);
+	void changeColorObject(int);
 	void duplicate();
 	void setCameraInteraction();
 	void setCameraInteraction(bool);
@@ -149,7 +151,6 @@ private slots:
 	void setParametersPython();
 
 	void currentCameraForPath();
-
 
 public slots:
 	void setPermanentStatusText(const QString &);
@@ -190,9 +191,11 @@ private:
 
 	double m_infosCreationDatasets[8];
 
-	QWidget* m_widgetColors;
+	/*QWidget* m_widgetColors;
 	std::vector <QPushButton*> m_colorButtons;
-	QButtonGroup* m_colorButtonsGroup;
+	QButtonGroup* m_colorButtonsGroup;*/
+
+	ColorButtonGridWidget* m_widgetColors;
 
 	uint32_t m_currentDuplicate;
 };

@@ -117,6 +117,7 @@
 #include "../Widgets/MacroWidget.hpp"
 #include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
+#include "../Widgets/ColorButtonGridWidget.hpp"
 
 #undef max 
 
@@ -247,7 +248,20 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	m_tabWidget->setCurrentWidget(m_macroW);
 
-	QHBoxLayout* layoutColor = new QHBoxLayout;
+	m_widgetColors = new ColorButtonGridWidget(this);
+	m_widgetColors->setMaxPerRow(20);
+	m_widgetColors->setRightButtonText("+");
+
+	QObject::connect(m_widgetColors, SIGNAL(indexClicked(int)), this, SLOT(changeColorObject(int)));
+	QObject::connect(m_widgetColors, &ColorButtonGridWidget::rightButtonClicked, this, 
+		[]() {
+			poca::core::Engine::instance()->toggleGlobalCommands();
+		}
+	);
+
+	//connect(grid, &ColorButtonGridWidget::rightButtonClicked, this, &YourClass::onAddObject);
+
+	/*QHBoxLayout* layoutColor = new QHBoxLayout;
 	layoutColor->setContentsMargins(0, 0, 0, 0);
 	layoutColor->setSpacing(0);
 	QWidget* emptyWleft = new QWidget;
@@ -263,12 +277,12 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	colorW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	colorW->setLayout(layoutColor);
 	m_colorButtonsGroup = new QButtonGroup;
-	QObject::connect(m_colorButtonsGroup, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(changeColorObject(QAbstractButton*)));
+	QObject::connect(m_colorButtonsGroup, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(changeColorObject(QAbstractButton*)));*/
 
 	QVBoxLayout* layoutAll = new QVBoxLayout;
 	layoutAll->setContentsMargins(0, 0, 0, 0);
 	layoutAll->setSpacing(0);
-	layoutAll->addWidget(colorW);
+	layoutAll->addWidget(m_widgetColors);
 	layoutAll->addWidget(m_tabWidget);
 	QWidget* widgetAll = new QWidget;
 	widgetAll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
@@ -1119,7 +1133,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		m_currentMdi = _mdiChild;
 
 		int maxSize = 20;
-		QHBoxLayout* layout = NULL;
+		/*QHBoxLayout* layout = NULL;
 		size_t nbColors = wobj->nbColors();
 		if (m_colorButtons.empty()) {
 			layout = new QHBoxLayout;
@@ -1155,7 +1169,9 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 				m_colorButtons[n]->setVisible(n < nbColors);
 		}
 		m_colorButtonsGroup->button(wobj->currentObjectID())->setChecked(true);
-		m_widgetColors->updateGeometry();
+		m_widgetColors->updateGeometry();*/
+		m_widgetColors->setCount(int(wobj->nbColors()));
+		m_widgetColors->setCurrentIndex(int(wobj->currentObjectID()));
 
 		size_t dimension = wobj->dimension();
 		m_line2DROIAct->setEnabled(true);// dimension == 2);
@@ -1417,48 +1433,6 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 	if (wobj == NULL) return;
 
 	MyMultipleObject* multiples = static_cast <MyMultipleObject*>(wobj);
-	/*auto& gridBBoxes = multiples->getGridBBoxes();
-	uint32_t PADDING_BINS = 0;
-	size_t total = 0;
-	std::vector<stbrp_rect> rects;
-	int cur = 0;
-	float startW = 0.f, startH = 0.f;
-	for (auto n = 0; n < multiples->nbColors(); n++) {
-		auto obj = multiples->getObject(n);
-		const auto& bbox = obj->boundingBox();
-		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
-		gridBBoxes.emplace_back(startW, 0.f, 0.f, startW + bbox.realWidth(), bbox.realHeight(), bbox.realThick());
-		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0});
-		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
-		//startW += bbox.realWidth();
-		std::cout << "GridBBox " << gridBBoxes.back() << std::endl;
-	}
-
-	Bin bin{total / 8, total / 8};            // start size
-	const int MAX_W = total;       // safety caps (tune as needed)
-	const int MAX_H = total;
-
-	// Retry with growth until success or we hit caps.
-	while (true) {
-		// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
-		auto work = rects;
-		if (try_pack(bin, work)) {
-			for (const auto& r : work) {
-				float w = gridBBoxes[r.id].realWidth(), h = gridBBoxes[r.id].realHeight();
-				//gridBBoxes[r.id].set(r.x, r.y, -gridBBoxes[r.id].realThick() / 2.f, r.x + w, r.y + h, gridBBoxes[r.id].realThick() / 2.f);
-				gridBBoxes[r.id].set(r.x, r.y, 0, r.x + w, r.y + h, gridBBoxes[r.id].realThick());
-			}
-			break;
-		}
-
-		Bin next = grow(bin, MAX_W, MAX_H);
-		if (next.w == bin.w && next.h == bin.h) {
-			std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
-			return;
-		}
-		bin = next;
-	}
-	multiples->resetModelMatrices(true);*/
 
 	if (wobj != NULL) {
 		std::vector <std::string> names;
@@ -1473,7 +1447,9 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 			delete mc;
 		}
 
-		poca::opengl::Camera* cam = new poca::opengl::Camera(wobj, wobj->dimension(), this);
+		createWidget(multiples);
+
+		/*poca::opengl::Camera* cam = new poca::opengl::Camera(wobj, wobj->dimension(), this);
 		engine->addCameraToObject(wobj, cam);
 
 		int indexVoronoiTab = 0;
@@ -1513,11 +1489,11 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		child->show();
 
 		wobj->notify("LoadObjCharacteristicsAllWidgets");
-		updateTabWidget();
+		updateTabWidget();*/
 	}
 }
 
-void MainWindow::changeColorObject(QAbstractButton* _button)
+void MainWindow::changeColorObject(int _index)
 {
 	if (m_currentMdi == NULL) return;
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
@@ -1525,8 +1501,8 @@ void MainWindow::changeColorObject(QAbstractButton* _button)
 	poca::core::MyObjectInterface* obj = cam->getObject();
 	if (obj == NULL) return;
 
-	int index = m_colorButtonsGroup->id(_button);
-	obj->setCurrentObject(index);
+	//int index = m_colorButtonsGroup->id(_button);
+	obj->setCurrentObject(_index);
 	obj->notify("LoadObjCharacteristicsAllWidgets");
 	obj->notifyAll("updateDisplay");
 }
@@ -2013,6 +1989,8 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 
 void MainWindow::runMacro(const nlohmann::json& _json)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	
 	if (_json.empty()) return;
 	const auto tmp = _json.begin().key();
 	if (tmp == "open") {
@@ -2105,7 +2083,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		for (auto n = 0; n < 50; n++) {
 			poca::geometry::VoronoiDiagram* voro = factoryVoronoi->createVoronoiDiagram(object, true, plugins, false);
 			if (voro == NULL) return;
-			voro->executeCommand(&poca::core::CommandInfo(false, "densityFactor", "factor", 1.6f));
+			engine->executeCommand(voro, &poca::core::CommandInfo(false, "densityFactor", "factor", 1.6f));
 			const std::vector <bool>& selection = voro->getSelection();
 			poca::geometry::ObjectIndicesFactoryInterface* factory = poca::geometry::createObjectIndicesFactory();
 			std::vector <uint32_t> indices = factory->createObjects(object, selection, (size_t)3);
@@ -2181,14 +2159,14 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			if (curObj->hasBasicComponent("DetectionSet")) {
 				poca::core::BasicComponentInterface* bci = curObj->getBasicComponent("DetectionSet");
 				bci->setPalette(new poca::core::Palette(color, color, "RandomOneColor"));
-				bci->executeCommand(false, "changeLUT");
+				engine->executeCommand(bci, false, "changeLUT");
 			}
 			if (curObj->hasBasicComponent("ObjectLists")) {
 				poca::core::BasicComponentInterface* bci = curObj->getBasicComponent("ObjectLists");
 				poca::core::BasicComponentList* bclist = static_cast <poca::core::BasicComponentList*>(bci);
 				poca::core::BasicComponent* bc = bclist->currentComponent();
 				bc->setPalette(new poca::core::Palette(color, color, "RandomOneColor"));
-				bc->executeCommand(false, "changeLUT");
+				engine->executeCommand(bc, false, "changeLUT");
 
 				const std::vector <float>& nbs = bc->getData<float>("nbLocs");
 				const std::vector <float>& area = bc->getData<float>("area");
@@ -2414,7 +2392,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					imlist->setCurrentComponentIndex(0);
 					plugins->addCommands(imlist->getImage(0));
 					poca::core::CommandInfo ci(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
-					imlist->executeCommand(&ci);
+					engine->executeCommand(imlist, &ci);
 					if (!ci.hasParameter("objects")) {
 						std::cout << "Failed to marching cube actin " << std::endl;
 						continue;
@@ -2423,7 +2401,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					poca::geometry::ObjectListMesh* actin = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
 					plugins->addCommands(actin);
 					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
-					actin->executeCommand(&ci);
+					engine->executeCommand(actin, &ci);
 					if (!ci.hasParameter("objects")) {
 						std::cout << "Failed to subdivide actin " << std::endl;
 						continue;
@@ -2434,7 +2412,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					imlist->setCurrentComponentIndex(1);
 					plugins->addCommands(imlist->getImage(1));
 					ci = poca::core::CommandInfo(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
-					imlist->executeCommand(&ci);
+					engine->executeCommand(imlist, &ci);
 					if (!ci.hasParameter("objects")) {
 						std::cout << "Failed to marching cube nuclei " << std::endl;
 						continue;
@@ -2443,7 +2421,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					poca::geometry::ObjectListMesh* noyaux = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
 					plugins->addCommands(noyaux);
 					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
-					noyaux->executeCommand(&ci);
+					engine->executeCommand(noyaux, &ci);
 					if (!ci.hasParameter("objects")) {
 						std::cout << "Failed to subdivide nuclei " << std::endl;
 						continue;
@@ -2650,7 +2628,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				}
 				poca::core::ImagesList* imlist = static_cast <poca::core::ImagesList*>(obj->getBasicComponent("ImagesList"));
 				poca::core::ImageInterface* actin = imlist->currentImage();
-				actin->executeCommand(false, "changeImageType", poca::core::LABEL);
+				engine->executeCommand(actin, false, "changeImageType", poca::core::LABEL);
 				if (!actin->hasData("volume")) {
 					std::cout << "Actin image has not volume" << std::endl;
 					continue;
@@ -2774,9 +2752,9 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				}
 
 				plugins->addCommands(labels);
-				imlist->executeCommand(false, "thresholdImage", "thresholdMin", 1.5f, "thresholdMax", std::numeric_limits<uint16_t>::max());
-				imlist->currentImage()->executeCommand(false, "scaleZ", 3.f);
-				imlist->executeCommand(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 4.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.f);
+				engine->executeCommand(imlist, false, "thresholdImage", "thresholdMin", 1.5f, "thresholdMax", std::numeric_limits<uint16_t>::max());
+				engine->executeCommand(imlist->currentImage(), false, "scaleZ", 3.f);
+				engine->executeCommand(imlist, false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 4.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.f);
 
 				if(!obj->hasBasicComponent("ObjectLists")){
 					std::cout << "problem with marching cube" << std::endl;

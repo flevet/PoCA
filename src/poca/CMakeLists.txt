@@ -40,6 +40,7 @@ set(WIDGET_HEADER_FILES
   Widgets/PythonWidget.hpp
   Widgets/ROIGeneralWidget.hpp
   Widgets/ReorganizeRenderingWidget.hpp
+  Widgets/ColorButtonGridWidget.hpp
   )
 
 set(WIDGET_SOURCE_FILES
@@ -53,6 +54,7 @@ set(WIDGET_SOURCE_FILES
   Widgets/PythonWidget.cpp
   Widgets/ROIGeneralWidget.cpp
   Widgets/ReorganizeRenderingWidget.cpp
+  Widgets/ColorButtonGridWidget.cpp
  )
 
 if(ADD_PYTHON)
@@ -67,6 +69,7 @@ if(ADD_PYTHON)
 	  Widgets/PythonWidget.hpp
 	  Widgets/ROIGeneralWidget.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
+	  Widgets/ColorButtonGridWidget.hpp
 	)
 else()
 	set(FOO_MOC_HEADERS
@@ -79,6 +82,7 @@ else()
 	  Widgets/ROIGeneralWidget.hpp
 	  Widgets/PythonParametersDialog.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
+	  Widgets/ColorButtonGridWidget.cpp
 	)
 
 endif()
@@ -95,6 +99,7 @@ if(ADD_PYTHON)
 	  Widgets/PythonWidget.cpp
 	  Widgets/ROIGeneralWidget.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
+	  Widgets/ColorButtonGridWidget.hpp
 	  )
 else()
 	set(FOO_SOURCE_FILES
@@ -107,6 +112,7 @@ else()
 	  Widgets/ROIGeneralWidget.cpp
 	  Widgets/PythonParametersDialog.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
+	  Widgets/ColorButtonGridWidget.cpp
 	  )
 
 endif()
