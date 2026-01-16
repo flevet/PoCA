@@ -59,6 +59,7 @@
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
 #include <Geometry/CGAL_includes.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "Camera.hpp"
 #include "Shader.hpp"
@@ -1625,7 +1626,8 @@ namespace poca::opengl {
 					glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
 					glm::vec3 pos(orientation + getCenter());
 					pos *= 2 * getOriginalDistanceOrtho();
-					m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+					if(m_object->nbColors() == 1)
+						m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
 				}
 				else if (m_middleButtonOn) {
 					float w = m_currentCrop.realWidth(), h = m_currentCrop.realHeight();
@@ -1782,7 +1784,14 @@ namespace poca::opengl {
 				glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
 				glm::vec3 pos(orientation + getCenter());
 				pos *= 2 * getOriginalDistanceOrtho();
-				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+				auto start = std::chrono::high_resolution_clock::now();
+				if (m_object->nbColors() == 1)
+					m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+				auto end = std::chrono::high_resolution_clock::now();
+				auto duration = std::chrono::high_resolution_clock::now() - start;
+				long long ms = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+				float s = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+				printf("sortWRTCameraPosition, took %f seconds (%lld microseconds)\n", s, ms);
 			}
 
 			poca::core::CommandInfo ci(false, "pick",
@@ -1939,7 +1948,8 @@ namespace poca::opengl {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glBindTexture(GL_TEXTURE_2D, 0);
 		
-		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
+		if(m_object->nbColors() == 1)
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
 		m_ssaoShader.update(w, h);
 
 		update();
