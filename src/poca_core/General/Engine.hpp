@@ -111,6 +111,35 @@ namespace poca::core {
 		void runMacro(std::vector<nlohmann::json>, QStringList);
 		void runMacro(const nlohmann::json&);
 
+		void executeCommand(BasicComponentInterface*, const bool, const std::string&);
+		void executeCommand(BasicComponentInterface*, CommandInfo*);
+
+		template<typename T>
+		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _name, const T& _param) {
+			CommandInfo ci(_record, _name, _param);
+			executeCommand(_bci, &ci);
+		}
+
+		template<typename T>
+		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _name, T* _param) {
+			CommandInfo ci(_record, _name, _param);
+			executeCommand(_bci, &ci);
+		}
+
+		template<typename T, typename... Args>
+		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) {
+			CommandInfo ci(_record, _nameCommand);
+			ci.addParameters(_nameParameter, _param, more...);
+			executeCommand(_bci, &ci);
+		}
+
+		template<typename T, typename... Args>
+		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) {
+			CommandInfo ci(_record, _nameCommand);
+			ci.addParameters(_nameParameter, _param, more...);
+			executeCommand(_bci, &ci);
+		}
+
 		inline const std::any& getSingleton(const std::string& _name) const { return m_singletons.at(_name); }
 		inline std::any& getSingleton(const std::string& _name) { return m_singletons.at(_name); }
 
@@ -135,6 +164,10 @@ namespace poca::core {
 		inline const bool verbose() const { return m_verbose; }
 		inline void setVerbose(const bool _val) { m_verbose = _val; }
 
+		inline const bool globalCommands() const { return m_globalParameters; }
+		inline void setGlobalCommands(const bool _val) { m_globalParameters = _val; }
+		inline void toggleGlobalCommands() { m_globalCommands = !m_globalCommands; }
+
 	protected:
 		Engine();
 
@@ -157,7 +190,7 @@ namespace poca::core {
 		//Replacing both StateSoftwareSingleton & GlobalParametersSingleton
 		nlohmann::json m_stateParameters, m_globalParameters;
 
-		bool m_verbose{ true };
+		bool m_verbose{ true }, m_globalCommands{ false };
 	};
 }
 

@@ -635,4 +635,43 @@ namespace poca::core {
 			//execute(&command);
 		}
 	}
+
+	void Engine::executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand)
+	{
+		CommandInfo ci(_record, _nameCommand);
+		auto object = getObject(_bci);
+		if (object->nbColors() > 1 || m_globalCommands) {
+			for (auto n = 0; n < object->nbColors(); n++) {
+				auto obj = object->getObject(n);
+				if (obj->hasBasicComponent(_bci->getName())) {
+					auto bc = obj->getBasicComponent(_bci->getName());
+					CommandableObject* co = static_cast <CommandableObject*>(bc);
+					co->executeCommand(&ci);
+				}
+			}
+		}
+		else {
+			CommandableObject* co = static_cast <CommandableObject*>(_bci);
+			co->executeCommand(&ci);
+		}
+	}
+
+	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com)
+	{
+		auto object = getObject(_bci);
+		if (object->nbColors() > 1 || m_globalCommands) {
+			for (auto n = 0; n < object->nbColors(); n++) {
+				auto obj = object->getObject(n);
+				if (obj->hasBasicComponent(_bci->getName())) {
+					auto bc = obj->getBasicComponent(_bci->getName());
+					CommandableObject* co = static_cast <CommandableObject*>(bc);
+					co->executeCommand(_com);
+				}
+			}
+		}
+		else {
+			CommandableObject* co = static_cast <CommandableObject*>(_bci);
+			co->executeCommand(_com);
+		}
+	}
 }
