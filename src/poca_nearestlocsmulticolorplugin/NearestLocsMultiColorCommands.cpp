@@ -318,13 +318,15 @@ void NearestLocsMultiColorCommands::transferObjects() const
 	 poca::geometry::ObjectListInterface* objs = dynamic_cast <poca::geometry::ObjectListInterface*>(bc);
 	 if (objs == NULL) return;
 
+	 poca::core::Engine* engine = poca::core::Engine::instance();
+	 
 	 std::vector <bool> selection(objs->nbElements(), false);
 
 	 for (auto n = 0; n < m_idxObjects.size(); n++)
 		 selection[m_idxObjects[n] - 1] = true;
 
 	 objs->setSelection(selection);
-	 objs->executeCommand(false, "updateFeature");
+	 engine->executeCommand(objs, false, "updateFeature");
 }
 
 void NearestLocsMultiColorCommands::saveDistances(const std::string& _path) const

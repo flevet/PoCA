@@ -86,6 +86,7 @@ VoronoiDiagramDisplayCommand::~VoronoiDiagramDisplayCommand()
 
 void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
@@ -149,7 +150,7 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 	}
 	else if (_infos->nameCommand == "selectedBorderCells") {
 		m_voronoi->setSelection(m_voronoi->borderLocalizations());
-		m_voronoi->executeCommand(false, "updateFeature");
+		engine->executeCommand(m_voronoi, false, "updateFeature");
 	}
 }
 

@@ -92,6 +92,8 @@ VoronoiDiagramBasicCommands::~VoronoiDiagramBasicCommands()
 
 void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -162,12 +164,12 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		for (size_t n = 0; n < feature.size(); n++)
 			selection[n] = (feature[n] >= (factor * meanD)) && !borderLocs[n];
 
-		m_voronoi->executeCommand(false, "updateFeature");
+		engine->executeCommand(m_voronoi, false, "updateFeature");
 	}
 	else if (_infos->nameCommand == "invertSelection") {
 		std::vector <bool>& selection = m_voronoi->getSelection();
 		selection.flip();
-		m_voronoi->executeCommand(false, "updateFeature");
+		engine->executeCommand(m_voronoi, false, "updateFeature");
 	}
 	else if (_infos->nameCommand == "randomPointOnTheSphere") {
 		poca::geometry::VoronoiDiagram2DOnSphere* voro = dynamic_cast<poca::geometry::VoronoiDiagram2DOnSphere*>(m_voronoi);
@@ -216,7 +218,7 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		t1 = clock();
 		for (auto factor = from; factor <= to; factor += step, n++) {
 			execute(&poca::core::CommandInfo(false, "densityFactor", "factor", factor));
-			dset->executeCommand(false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n, "object", obj);
+			engine->executeCommand(dset, false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n, "object", obj);
 		}
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;

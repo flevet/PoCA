@@ -122,7 +122,7 @@ namespace poca::core {
 		//virtual const size_t nbCommands() const = 0;
 
 		//For CommandableObject
-		virtual void executeCommand(CommandInfo* _com) { CommandableObject::executeCommand(_com); }
+		//virtual void executeCommand(CommandInfo* _com) { CommandableObject::executeCommand(_com); }
 		virtual CommandInfo createCommand(const std::string& _name, const nlohmann::json& _com) { return CommandableObject::createCommand(_name, _com); }
 
 		const bool hasParameter(const std::string& _nameCommand) { return CommandableObject::hasParameter(_nameCommand); }
@@ -142,7 +142,7 @@ namespace poca::core {
 
 		const size_t nbCommands() const { return CommandableObject::nbCommands(); }
 
-		void executeCommand(const bool _record, const std::string& _name) { CommandableObject::executeCommand(_record, _name); }
+		/*void executeCommand(const bool _record, const std::string& _name) { CommandableObject::executeCommand(_record, _name); }
 		template<typename T>
 		void executeCommand(const bool _record, const std::string& _name, const T& _param) { CommandableObject::executeCommand(_record, _name, _param); }
 		template<typename T>
@@ -150,7 +150,7 @@ namespace poca::core {
 		template<typename T, typename... Args>
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) { CommandableObject::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { CommandableObject::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
+		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { CommandableObject::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }*/
 
 	protected:
 		BasicComponentInterface(const std::string& _name): CommandableObject(_name){}

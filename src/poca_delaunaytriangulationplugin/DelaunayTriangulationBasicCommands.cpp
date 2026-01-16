@@ -104,6 +104,7 @@ DelaunayTriangulationBasicCommands::~DelaunayTriangulationBasicCommands()
 
 void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -227,12 +228,12 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 				selection[n] = !(d0 > dMaxSqr || d1 > dMaxSqr || d2 > dMaxSqr);
 			}
 		}
-		m_delaunay->executeCommand(false, "updateFeature");
+		engine->executeCommand(m_delaunay, false, "updateFeature");
 	}
 	else if (_infos->nameCommand == "invertSelection") {
 		std::vector <bool>& selection = m_delaunay->getSelection();
 		selection.flip();
-		m_delaunay->executeCommand(false, "updateFeature");
+		engine->executeCommand(m_delaunay, false, "updateFeature");
 	}
 }
 

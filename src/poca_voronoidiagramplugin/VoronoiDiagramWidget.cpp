@@ -47,6 +47,7 @@
 #include <Geometry/ObjectListMesh.hpp>
 #include <Geometry/ObjectLists.hpp>
 #include <General/PluginList.hpp>
+#include <General/Engine.hpp>
 
 #include "VoronoiDiagramWidget.hpp"
 #include "VoronoiDiagramPlugin.hpp"
@@ -317,14 +318,15 @@ void VoronoiDiagramWidget::actionNeeded()
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
 	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
-	poca::core::CommandableObject* voro = dynamic_cast <poca::core::CommandableObject*>(bc);
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	QObject* sender = QObject::sender();
 	bool found = false;
 	for (size_t n = 0; n < m_lutButtons.size() && !found; n++) {
 		found = (m_lutButtons[n].first == sender);
 		if (found) {
-			voro->executeCommand(true, "changeLUT", "LUT", m_lutButtons[n].second);
+			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
 			for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");
@@ -347,14 +349,7 @@ void VoronoiDiagramWidget::actionNeeded()
 		if (ok && m_cboxApplyMaxArea->isChecked())	maxArea = val;
 		bool inROIs = m_cboxInROIs->isChecked();
 
-		/*voro->executeCommand(true, "objectCreationParameters",
-			"cutDistance", cutD,
-			"minLocs", minLocs,
-			"maxLocs", maxLocs,
-			"minArea", minArea,
-			"maxArea", maxArea,
-			"inROIs", inROIs);*/
-		voro->executeCommand(true, "createFilteredObjects",
+		engine->executeCommand(bc, true, "createFilteredObjects",
 			"cutDistance", cutD,
 			"minLocs", minLocs,
 			"maxLocs", maxLocs,
@@ -370,16 +365,16 @@ void VoronoiDiagramWidget::actionNeeded()
 		float factor = getDensityFactor(&ok);
 		if (!ok) return;
 		bool inROIs = m_cboxInROIs->isChecked();
-		voro->executeCommand(true, "densityFactor", "factor", factor, "inROIs", inROIs);
+		engine->executeCommand(bc, true, "densityFactor", "factor", factor, "inROIs", inROIs);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_invertSelectionButton) {
-		voro->executeCommand(true, "invertSelection");
+		engine->executeCommand(bc, true, "invertSelection");
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_transferCellsButton) {
-		poca::geometry::VoronoiDiagram3D* voro3D = dynamic_cast<poca::geometry::VoronoiDiagram3D*>(voro);
+		poca::geometry::VoronoiDiagram3D* voro3D = dynamic_cast<poca::geometry::VoronoiDiagram3D*>(bc);
 		if (voro3D == NULL) return;
 		if (!voro3D->hasCells()) return;
 		const auto& polyhedrons = voro3D->getPolyhedrons();
@@ -411,7 +406,7 @@ void VoronoiDiagramWidget::actionNeeded()
 		unsigned int tmp2 = m_leditNbBinsCharacteristics->text().toUInt(&ok), nbBins = ok ? tmp2 : 100;
 		unsigned int tmp3 = m_leditDegreePolynome->text().toUInt(&ok), degreePoly = ok ? tmp3 : 3;
 		bool onROIs = m_cboxROIsCharacteristics->isChecked();
-		voro->executeCommand(true, "voronoiCharacteristics", "env", env, "onROIs", onROIs, "nbBins", nbBins, "degreePolynome", degreePoly);
+		engine->executeCommand(bc, true, "voronoiCharacteristics", "env", env, "onROIs", onROIs, "nbBins", nbBins, "degreePolynome", degreePoly);
 		m_object->notify("LoadObjCharacteristicsVoronoiDiagramWidget");
 		m_object->notifyAll("updateDisplay");
 	}
@@ -421,7 +416,7 @@ void VoronoiDiagramWidget::actionNeeded()
 		auto count = std::count(selection.begin(), selection.end(), true);
 		std::cout << "# of border cells: " << count << " / " << voro->nbFaces() << std::endl;
 		voro->setSelection(selection);
-		voro->executeCommand(false, "updateFeature");
+		engine->executeCommand(bc, false, "updateFeature");
 	}
 }
 
@@ -430,31 +425,31 @@ void VoronoiDiagramWidget::actionNeeded(bool _val)
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
 	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
-	poca::core::CommandableObject* voro = dynamic_cast <poca::core::CommandableObject*>(bc);
+	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	QObject* sender = QObject::sender();
 	if (sender == m_displayButton) {
-		voro->executeCommand(true, "selected", _val);
+		engine->executeCommand(bc, true, "selected", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	if (sender == m_fillButton) {
-		voro->executeCommand(true, "fill", _val);
+		engine->executeCommand(bc, true, "fill", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	if (sender == m_pointRenderButton) {
-		voro->executeCommand(true, "pointRendering", _val);
+		engine->executeCommand(bc, true, "pointRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	if (sender == m_polyRenderButton) {
-		voro->executeCommand(true, "polytopeRendering", _val);
+		engine->executeCommand(bc, true, "polytopeRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	if (sender == m_bboxSelectionButton) {
-		voro->executeCommand(true, "bboxSelection", _val);
+		engine->executeCommand(bc, true, "bboxSelection", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
@@ -465,12 +460,12 @@ void VoronoiDiagramWidget::actionNeeded(int _val)
 	poca::core::MyObjectInterface* obj = m_object->currentObject();
 	poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 	if (!bc) return;
-	poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(bc);
+	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	QObject* sender = QObject::sender();
 	if (sender == m_sizePointSpn) {
 		unsigned int valD = this->pointSize();
-		comObj->executeCommand(true, "pointSizeGL", valD);
+		engine->executeCommand(bc, true, "pointSizeGL", valD);
 		m_object->notifyAll("updateDisplay");
 	}
 }
@@ -481,6 +476,7 @@ void VoronoiDiagramWidget::performAction(poca::core::MyObjectInterface* _obj, po
 		update(NULL, "");
 		return;
 	}
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "polytopeRendering") {
@@ -490,7 +486,7 @@ void VoronoiDiagramWidget::performAction(poca::core::MyObjectInterface* _obj, po
 				_ci->addParameter("dir", obj->getDir());
 		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
-		bc->executeCommand(_ci);
+		engine->executeCommand(bc, _ci);
 		actionDone = true;
 	}
 

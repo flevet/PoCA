@@ -82,6 +82,8 @@ VoronoiDiagramCharacteristicsCommands::~VoronoiDiagramCharacteristicsCommands()
 
 void VoronoiDiagramCharacteristicsCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -100,7 +102,7 @@ void VoronoiDiagramCharacteristicsCommands::execute(poca::core::CommandInfo* _in
 
 		std::cout << "Threshold is " << m_threshold << ", not normalized = " << (m_threshold * m_normalization) << std::endl;
 
-		m_voronoi->executeCommand(false, "histogram", "feature", m_voronoi->dimension() == 2 ? std::string("area") : std::string("volume"), "action", std::string("changeBoundsCustom"), "max", m_threshold * m_normalization);
+		engine->executeCommand(m_voronoi, false, "histogram", "feature", m_voronoi->dimension() == 2 ? std::string("area") : std::string("volume"), "action", std::string("changeBoundsCustom"), "max", m_threshold * m_normalization);
 	}
 }
 

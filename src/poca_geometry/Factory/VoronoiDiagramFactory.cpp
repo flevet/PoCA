@@ -47,6 +47,7 @@
 #include <Interfaces/MyObjectInterface.hpp>
 #include <General/Histogram.hpp>
 #include <General/PluginList.hpp>
+#include <General/Engine.hpp>
 
 #include "VoronoiDiagramFactory.hpp"
 #include "DelaunayTriangulationFactory.hpp"
@@ -78,6 +79,8 @@ namespace poca::geometry {
 	{
 		if (_obj == NULL) return NULL;
 
+		poca::core::Engine* engine = poca::core::Engine::instance();
+
 		poca::geometry::VoronoiDiagram* voro = nullptr;
 		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DetectionSet");
 		if (bci == NULL)
@@ -88,7 +91,7 @@ namespace poca::geometry {
 		bci = _obj->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* delaunay = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (delaunay == NULL || delaunay && dynamic_cast <DelaunayTriangulation2DOnSphere*>(delaunay)) {
-			dset->executeCommand(false, "computeDelaunay");
+			engine->executeCommand(dset, false, "computeDelaunay");
 			bci = _obj->getBasicComponent("DelaunayTriangulation");
 			delaunay = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 			if (!delaunay)
@@ -131,6 +134,8 @@ namespace poca::geometry {
 	{
 		if (_obj == NULL) return NULL;
 
+		poca::core::Engine* engine = poca::core::Engine::instance();
+
 		poca::geometry::VoronoiDiagram* voro = nullptr;
 		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DetectionSet");
 		if (bci == NULL)
@@ -141,7 +146,7 @@ namespace poca::geometry {
 		bci = _obj->getBasicComponent("DelaunayTriangulation");
 		poca::geometry::DelaunayTriangulationInterface* delaunay = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(bci);
 		if (delaunay == NULL || delaunay && !dynamic_cast <DelaunayTriangulation2DOnSphere*>(delaunay)) {
-			dset->executeCommand(false, "computeDelaunay", "onSphere", true);
+			engine->executeCommand(dset, false, "computeDelaunay", "onSphere", true);
 			bci = _obj->getBasicComponent("DelaunayTriangulation");
 			if (bci == NULL)
 				return NULL;

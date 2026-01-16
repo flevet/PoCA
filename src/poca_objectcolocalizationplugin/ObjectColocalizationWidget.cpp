@@ -44,6 +44,7 @@
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
 #include <General/MyData.hpp>
+#include <General/Engine.hpp>
 
 #include "ObjectColocalizationWidget.hpp"
 #include "ObjectColocalization.hpp"
@@ -219,8 +220,9 @@ void ObjectColocalizationWidget::actionNeeded()
 	if (!bc) return;
 	ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bc);
 	if (!coloc) return;
-	poca::core::CommandableObject* colocCommand = static_cast <poca::core::CommandableObject*>(bc);
-	poca::core::CommandableObject* objList = dynamic_cast <poca::core::CommandableObject*>(coloc->getObjectsOverlap());
+	auto objList = coloc->getObjectsOverlap();
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	QObject* sender = QObject::sender();
 	bool found = false;
@@ -232,16 +234,16 @@ void ObjectColocalizationWidget::actionNeeded()
 				m_hilowButton.first->setChecked(false);
 				m_hilowButton.first->blockSignals(false);
 			}
-			objList->executeCommand(true, "changeLUT", "LUT", m_lutButtons[n].second);
-			colocCommand->executeCommand(true, "changeLUT", "LUT", m_lutButtons[n].second);
+			engine->executeCommand(objList, true, "changeLUT", "LUT", m_lutButtons[n].second);
+			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
 			for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");
 		}
 	}
 	if (sender == m_hilowButton.first) {
-		objList->executeCommand(true, "changeLUT", m_hilowButton.second);
-		colocCommand->executeCommand(true, "changeLUT", m_hilowButton.second);
+		engine->executeCommand(objList, true, "changeLUT", m_hilowButton.second);
+		engine->executeCommand(bc, true, "changeLUT", m_hilowButton.second);
 		for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 			histW->redraw();
 		m_object->notifyAll("updateDisplay");
@@ -341,7 +343,7 @@ void ObjectColocalizationWidget::actionNeeded()
 				selectedRows.insert(range.topRow() + n);
 		if (selectedRows.empty()) return;
 		if (selectedRows.size() == 1) {
-			coloc->executeCommand(false, "setIDObjectPicked", *selectedRows.begin());
+			engine->executeCommand(coloc, false, "setIDObjectPicked", *selectedRows.begin());
 			m_object->notify("updateInfosObjectOverlap");
 			m_object->notifyAll("updateDisplay");
 		}
@@ -352,8 +354,8 @@ void ObjectColocalizationWidget::actionNeeded()
 			for (int idx : selectedRows)
 				selection[idx] = true;
 			coloc->getObjectsOverlap()->setSelection(selection);
-			objList->executeCommand(false, "setIDObjectPicked", -1);
-			objList->executeCommand(false, "updateFeature");
+			engine->executeCommand(objList, false, "setIDObjectPicked", -1);
+			engine->executeCommand(objList, false, "updateFeature");
 			m_object->notifyAll("updateDisplay");
 		}
 	}
@@ -363,36 +365,36 @@ void ObjectColocalizationWidget::actionNeeded(bool _val)
 {
 	poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
 	if (!bc) return;
-	poca::core::CommandableObject* coloc = dynamic_cast <poca::core::CommandableObject*>(bc);
+	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	QObject* sender = QObject::sender();
 	if (sender == m_displayButton) {
-		coloc->executeCommand(true, "selected", _val);
+		engine->executeCommand(bc, true, "selected", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_pointRenderButton) {
-		coloc->executeCommand(true, "pointRendering", _val);
+		engine->executeCommand(bc, true, "pointRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_shapeRenderButton) {
-		coloc->executeCommand(true, "shapeRendering", _val);
+		engine->executeCommand(bc, true, "shapeRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_fillButton) {
-		coloc->executeCommand(true, "fill", _val);
+		engine->executeCommand(bc, true, "fill", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_bboxSelectionButton) {
-		coloc->executeCommand(true, "bboxSelection", _val);
+		engine->executeCommand(bc, true, "bboxSelection", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_selectionButton) {
-		coloc->executeCommand(true, "togglePicking", _val);
+		engine->executeCommand(bc, true, "togglePicking", _val);
 		return;
 	}
 }
@@ -403,6 +405,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		update(NULL, "");
 		return;
 	}
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	m_object = _obj;
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT") {
@@ -413,12 +416,12 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		if (!bc) return;
 		ObjectColocalization* coloc = dynamic_cast <ObjectColocalization*>(bc);
 		if (!coloc) return;
-		coloc->getObjectsOverlap()->executeCommand(_ci);
+		engine->executeCommand(coloc->getObjectsOverlap(), _ci);
 		actionDone = true;
 	}
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" ||_ci->nameCommand == "selected" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering" || _ci->nameCommand == "fill" || _ci->nameCommand == "delaunayRendering" || _ci->nameCommand == "selectedDelaunayRendering") {
 		poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
-		bc->executeCommand(_ci);
+		engine->executeCommand(bc, _ci);
 		actionDone = true;
 	}
 	/*else if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT") {

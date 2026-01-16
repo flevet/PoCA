@@ -206,10 +206,10 @@ namespace poca::core {
 
 		inline void dontDeleteComponents() { m_dontDeleteComponents = true; }
 
-		void executeCommand(CommandInfo* _com) { poca::core::BasicComponentInterface::executeCommand(_com); }
+		//void executeCommand(CommandInfo* _com) { poca::core::BasicComponentInterface::executeCommand(_com); }
 		CommandInfo createCommand(const std::string& _name, const nlohmann::json& _com) { return poca::core::BasicComponentInterface::createCommand(_name, _com); }
 
-		void executeCommand(const bool _record, const std::string& _name) { poca::core::BasicComponentInterface::executeCommand(_record, _name); }
+		/*void executeCommand(const bool _record, const std::string& _name) { poca::core::BasicComponentInterface::executeCommand(_record, _name); }
 		template<typename T>
 		void executeCommand(const bool _record, const std::string& _name, const T& _param) { poca::core::BasicComponentInterface::executeCommand(_record, _name, _param); }
 		template<typename T>
@@ -217,7 +217,7 @@ namespace poca::core {
 		template<typename T, typename... Args>
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) { poca::core::BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { poca::core::BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
+		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { poca::core::BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }*/
 
 		/*
 		void executeCommand(CommandInfo* _com) { m_components[m_currentComponent]->executeCommand(_com); }

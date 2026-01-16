@@ -72,6 +72,8 @@ DetectionSetBasicCommands::~DetectionSetBasicCommands()
 
 void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	if (_infos->nameCommand == "selectLocsInROIs") {
 		try {
 			 poca::core::Engine* engine = poca::core::Engine::instance();
@@ -89,7 +91,7 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 				selection[i] = inside;
 			}
 			m_dset->setSelection(selection);
-			m_dset->executeCommand(false, "updateFeature");
+			engine->executeCommand(m_dset, false, "updateFeature");
 			obj->notifyAll("updateDisplay");
 		}
 		catch (std::runtime_error const& e) {
@@ -301,8 +303,8 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		QString filename = (_infos->getParameter<std::string>("filename")).c_str();
 		rescaleFromGNN(filename);
 		poca::core::CommandInfo ci = poca::core::CommandInfo(false, "regenerateDisplay");
-		m_dset->executeCommand(&ci);
-		 poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->executeCommand(m_dset, &ci);
+		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
 		obj->notifyAll("updateDisplay");
 	}
@@ -313,8 +315,8 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		rotateLocsXY(angle);
 		m_dset->computeBBoxFromPoints();
 		poca::core::CommandInfo ci = poca::core::CommandInfo(false, "regenerateDisplay");
-		m_dset->executeCommand(&ci);
-		 poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->executeCommand(m_dset, &ci);
+		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* obj = engine->getObject(m_dset);
 		obj->notifyAll("updateDisplay");
 	}

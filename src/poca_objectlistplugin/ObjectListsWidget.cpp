@@ -46,6 +46,7 @@
 #include <General/Histogram.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <General/Engine.hpp>
 
 #include "ObjectListsWidget.hpp"
 
@@ -594,6 +595,8 @@ void ObjectListsWidget::actionNeeded()
 	poca::geometry::ObjectLists* objs = dynamic_cast <poca::geometry::ObjectLists*>(bc);
 	poca::core::CommandableObject* objList = dynamic_cast <poca::core::CommandableObject*>(objs);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	bool found = false;
 	for (size_t n = 0; n < m_lutButtons.size() && !found; n++) {
@@ -604,14 +607,14 @@ void ObjectListsWidget::actionNeeded()
 				m_hilowButton.first->setChecked(false);
 				m_hilowButton.first->blockSignals(false);
 			}
-			objList->executeCommand(true, "changeLUT", "LUT", m_lutButtons[n].second);
+			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
 			for(poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");
 		}
 	}
 	if (sender == m_hilowButton.first) {
-		objList->executeCommand(true, "changeLUT", "LUT", m_hilowButton.second);
+		engine->executeCommand(bc, true, "changeLUT", "LUT", m_hilowButton.second);
 		for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 			histW->redraw();
 		m_object->notifyAll("updateDisplay");
@@ -626,7 +629,7 @@ void ObjectListsWidget::actionNeeded()
 			filename = filename.mid(0, filename.lastIndexOf("."));
 		filename.append("_statsObjs").append(extension);
 		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save stats..."), filename, QObject::tr("Stats files (*.csv)"), 0, QFileDialog::DontUseNativeDialog);
-		objList->executeCommand(true, "saveStatsObjs", "filename", filename.toStdString(), "separator", separator.toStdString());
+		engine->executeCommand(bc, true, "saveStatsObjs", "filename", filename.toStdString(), "separator", separator.toStdString());
 	}
 	else if (sender == m_exportLocsButton) {
 		QString filename, separator(","), extension(".csv");
@@ -637,7 +640,7 @@ void ObjectListsWidget::actionNeeded()
 			filename = filename.mid(0, filename.lastIndexOf("."));
 		filename.append("_locsObjs").append(extension);
 		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save locs objects..."), filename, QObject::tr("Info files (*.csv)"), 0, QFileDialog::DontUseNativeDialog);
-		objList->executeCommand(true, "saveLocsObjs", "filename", filename.toStdString(), "separator", separator.toStdString());
+		engine->executeCommand(bc, true, "saveLocsObjs", "filename", filename.toStdString(), "separator", separator.toStdString());
 	}
 	else if(sender == m_tableObjects){
 		/*std::set <int> selectedRows;
@@ -647,7 +650,7 @@ void ObjectListsWidget::actionNeeded()
 				selectedRows.insert(range.topRow() + n);
 		if (selectedRows.empty()) return;
 		if (selectedRows.size() == 1) {
-			objList->executeCommand(false, "setIDObjectPicked", *selectedRows.begin());
+			engine->executeCommand(bc, false, "setIDObjectPicked", *selectedRows.begin());
 			m_object->notify("updateInfosObject");
 			m_object->notifyAll("updateDisplay");
 		}
@@ -661,14 +664,14 @@ void ObjectListsWidget::actionNeeded()
 			poca::core::BasicComponentInterface* bci = obj->getBasicComponent("ObjectList");
 			if (bci == NULL) return;
 			bci->setSelection(selection);
-			objList->executeCommand(false, "setIDObjectPicked", -1);
-			objList->executeCommand(false, "updateFeature");
+			engine->executeCommand(bc, false, "setIDObjectPicked", -1);
+			engine->executeCommand(bc, false, "updateFeature");
 			m_object->notifyAll("updateDisplay");
 		}*/
 	}
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		if (ci.hasParameter("object")) {
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			emit(transferNewObjectCreated(obj));
@@ -681,7 +684,7 @@ void ObjectListsWidget::actionNeeded()
 		for (const QModelIndex& idx : rows)
 				selectedRows.insert(idx.row());
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		if (ci.hasParameter("object")) {
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			emit(transferNewObjectCreated(obj));
@@ -715,7 +718,7 @@ void ObjectListsWidget::actionNeeded()
 		filename.append(m_object->getName().c_str());
 		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save objects as SVG..."), filename, QObject::tr("svg files (*.svg)"), 0, QFileDialog::DontUseNativeDialog);
 		if (!filename.isEmpty()) {
-			bc->executeCommand(true, "saveAsSVG", "filename", filename.toStdString());
+			engine->executeCommand(bc, true, "saveAsSVG", "filename", filename.toStdString());
 		}
 	}
 	else if (sender == m_saveOBJButton) {
@@ -730,28 +733,28 @@ void ObjectListsWidget::actionNeeded()
 				filename.append(".pol");
 		filename = QFileDialog::getSaveFileName(this, QObject::tr("Save objects..."), filename, QObject::tr("object files (*.obj *.pol)"), 0, QFileDialog::DontUseNativeDialog);
 		if (!filename.isEmpty()) {
-			bc->executeCommand(true, "saveAsOBJ", "filename", filename.toStdString());
+			engine->executeCommand(bc, true, "saveAsOBJ", "filename", filename.toStdString());
 		}
 		}
 	else if (sender == m_computeSkeletonsButton) {
-		objList->executeCommand(true, "computeSkeletons");
+		engine->executeCommand(bc, true, "computeSkeletons");
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_exportFilteredObjsButton) {
 		poca::core::CommandInfo ci(true, "exportFilteredObjects");
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_exportObjsROIsButton) {
 		poca::core::CommandInfo ci(true, "exportObjectsInROIs");
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_exportHolesBtn) {
 		poca::core::CommandInfo ci(true, "exportHolesObjects");
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
@@ -759,7 +762,7 @@ void ObjectListsWidget::actionNeeded()
 		bool ok;
 		float tmp = m_areaHolesFilledLEdit->text().toFloat(&ok), minArea = ok ? tmp : 0;
 		poca::core::CommandInfo ci(true, "fillHolesObjects", "minArea", minArea);
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
@@ -769,7 +772,7 @@ void ObjectListsWidget::actionNeeded()
 		uint32_t tmp2 = m_nbSmoothingStepsLbl->text().toUInt(&ok), nbSmooth = ok ? tmp2 : 3;
 		uint32_t windowSize = m_windowSizeCbox->currentText().toUInt(&ok);
 		poca::core::CommandInfo ci(true, "smoothObjects", "factorResampling", factor, "nbSmoothSteps", nbSmooth, "windowSize", windowSize);
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
@@ -779,7 +782,7 @@ void ObjectListsWidget::actionNeeded()
 		tmp = m_targetLengthLEdit->text().toFloat(&ok);
 		if (ok) length = tmp;
 		poca::core::CommandInfo ci(true, "remesh", "targetLength", length, "iterations", (uint32_t)m_iterationRemeshingSpin->value());
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notify("LoadObjCharacteristicsAllWidgets");
 	}
 	else if (sender == m_subdivideButton) {
@@ -788,7 +791,7 @@ void ObjectListsWidget::actionNeeded()
 		tmp = m_targetLengthLEdit->text().toFloat(&ok);
 		if (ok) length = tmp;
 		poca::core::CommandInfo ci(true, "subdivide", "iterations", (uint32_t)m_iterationRemeshingSpin->value());
-		objList->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		m_object->notify("LoadObjCharacteristicsAllWidgets");
 	}
 }
@@ -800,10 +803,12 @@ void ObjectListsWidget::actionNeeded(int _val)
 	if (!bc) return;
 	poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	if (sender == m_sizePointSpn) {
 		unsigned int valD = this->pointSize();
-		comObj->executeCommand(true, "pointSizeGL", valD);
+		engine->executeCommand(bc, true, "pointSizeGL", valD);
 		m_object->notifyAll("updateDisplay");
 	}
 }
@@ -815,58 +820,60 @@ void ObjectListsWidget::actionNeeded(bool _val)
 	if (!bc) return;
 	poca::core::CommandableObject* objList = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	
 	QObject* sender = QObject::sender();
 	if (sender == m_displayButton) {
-		objList->executeCommand(true, "selected", _val);
+		engine->executeCommand(bc, true, "selected", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_fillButton) {
-		objList->executeCommand(true, "fill", _val);
+		engine->executeCommand(bc, true, "fill", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_pointRenderButton) {
-		objList->executeCommand(true, "pointRendering", _val);
+		engine->executeCommand(bc, true, "pointRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_outlinePointRenderButton) {
-		objList->executeCommand(true, "outlinePointRendering", _val);
+		engine->executeCommand(bc, true, "outlinePointRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_shapeRenderButton) {
-		objList->executeCommand(true, "shapeRendering", _val);
+		engine->executeCommand(bc, true, "shapeRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_bboxSelectionButton) {
-		objList->executeCommand(true, "bboxSelection", _val);
+		engine->executeCommand(bc, true, "bboxSelection", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_selectionButton) {
-		objList->executeCommand(true, "togglePicking", _val);
+		engine->executeCommand(bc, true, "togglePicking", _val);
 		return;
 	}
 	else if (sender == m_ellipsoidRenderButton) {
-		objList->executeCommand(true, "ellipsoidRendering", _val);
+		engine->executeCommand(bc, true, "ellipsoidRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_cullfaceButton) {
-		objList->executeCommand(true, "cullFaceType", _val ? std::string("front") : std::string("back"));
+		engine->executeCommand(bc, true, "cullFaceType", _val ? std::string("front") : std::string("back"));
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_skeletonRenderButton) {
-		objList->executeCommand(true, "skeletonRendering", _val);
+		engine->executeCommand(bc, true, "skeletonRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_linkToSkeletonRenderButton) {
-		objList->executeCommand(true, "linkRendering", _val);
+		engine->executeCommand(bc, true, "linkRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
@@ -879,13 +886,15 @@ void ObjectListsWidget::actionNeeded(float _val)
 	if (!bc) return;
 	poca::core::CommandableObject* objList = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	if (sender == m_alphaWidget) {
-		objList->executeCommand(true, "alpha", _val);
+		engine->executeCommand(bc, true, "alpha", _val);
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_explodeWidget) {
-		objList->executeCommand(true, "explode", "factor", _val);
+		engine->executeCommand(bc, true, "explode", "factor", _val);
 		m_object->notifyAll("updateDisplay");
 	}
 }

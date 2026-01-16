@@ -124,7 +124,7 @@ namespace poca::core {
 		virtual inline const bool isHiLow() const { return m_hilow; }
 		virtual const unsigned int getNbSelection() const { return m_nbSelection; }
 
-		void executeCommand(const bool _record, const std::string& _name) { BasicComponentInterface::executeCommand(_record, _name); }
+		/*void executeCommand(const bool _record, const std::string& _name) { BasicComponentInterface::executeCommand(_record, _name); }
 		template<typename T>
 		void executeCommand(const bool _record, const std::string& _name, const T& _param) { BasicComponentInterface::executeCommand(_record, _name, _param); }
 		template<typename T>
@@ -132,7 +132,7 @@ namespace poca::core {
 		template<typename T, typename... Args>
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
+		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { BasicComponentInterface::executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }*/
 
 	protected:
 		BasicComponent(const std::string&, std::string = "HotCold2");
