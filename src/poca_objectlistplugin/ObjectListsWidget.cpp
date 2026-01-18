@@ -1157,11 +1157,23 @@ void ObjectListsWidget::changeListObject(QAbstractButton* _button)
 {
 	if (m_object == NULL) return;
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	int index = m_listButtonsGroup->id(_button);
-	poca::core::MyObjectInterface* objOneColor = m_object->currentObject();
-	poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(objOneColor->getBasicComponent("ObjectLists"));
-	if (!bci) return;
-	bci->setCurrentComponentIndex(index);
+	if (m_object->nbColors() == 1 || (m_object->nbColors() > 1 && !engine->globalCommands())) {
+		poca::core::MyObjectInterface* objOneColor = m_object->currentObject();
+		poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(objOneColor->getBasicComponent("ObjectLists"));
+		if (!bci) return;
+		bci->setCurrentComponentIndex(index);
+	}
+	else {
+		for (auto n = 0; n < m_object->nbColors(); n++) {
+			auto obj = m_object->getObject(n);
+			poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			if (!bci) continue;
+			bci->setCurrentComponentIndex(index);
+		}
+	}
 	m_object->notify("LoadObjCharacteristicsObjectListsWidget");
 	m_object->notifyAll("updateDisplay");
 }
