@@ -164,8 +164,8 @@ namespace poca::core {
 		inline const bool verbose() const { return m_verbose; }
 		inline void setVerbose(const bool _val) { m_verbose = _val; }
 
-		inline const bool globalCommands() const { return m_globalParameters; }
-		inline void setGlobalCommands(const bool _val) { m_globalParameters = _val; }
+		inline const bool globalCommands() const { return m_globalCommands; }
+		inline void setGlobalCommands(const bool _val) { m_globalCommands = _val; }
 		inline void toggleGlobalCommands() { m_globalCommands = !m_globalCommands; }
 
 	protected:
