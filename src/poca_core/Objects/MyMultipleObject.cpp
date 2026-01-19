@@ -48,7 +48,7 @@ MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _
 	m_internalId = poca::core::NbObjects++;
 
 	uint32_t PADDING_BINS = 0;
-	size_t total = 0;
+	size_t total = 0, maxD = 0;
 	std::vector<stbrp_rect> rects;
 	int cur = 0;
 	float startW = 0.f, startH = 0.f;
@@ -58,18 +58,22 @@ MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _
 		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
 		m_gridBBoxes.emplace_back(startW, 0.f, 0.f, startW + bbox.realWidth(), bbox.realHeight(), bbox.realThick());
 		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0 });
-		total += bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
+		auto tmp = bbox.realWidth() > bbox.realHeight() ? bbox.realWidth() : bbox.realHeight();
+		total += tmp;
+		maxD = std::max(maxD, (size_t)tmp);
 		//startW += bbox.realWidth();
 		std::cout << "GridBBox " << m_gridBBoxes.back() << std::endl;
 	}
 
-	Bin bin{ total / 8, total / 8 };            // start size
+	Bin bin{ maxD * 4, maxD * 4};            // start size
 	const int MAX_W = total;       // safety caps (tune as needed)
 	const int MAX_H = total;
 
 	// Retry with growth until success or we hit caps.
 	while (true) {
 		// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
+		std::cout << " ----------------------- Bin size " << bin.w << ", " << bin.h << std::endl;
+		
 		auto work = rects;
 		if (try_pack(bin, work)) {
 			for (const auto& r : work) {
@@ -80,7 +84,8 @@ MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _
 			break;
 		}
 
-		Bin next = grow(bin, MAX_W, MAX_H);
+
+		Bin next = grow(bin, MAX_W, MAX_H, 1.25f);
 		if (next.w == bin.w && next.h == bin.h) {
 			std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
 			return;
