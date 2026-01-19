@@ -640,7 +640,7 @@ namespace poca::core {
 	{
 		CommandInfo ci(_record, _nameCommand);
 		auto object = getObject(_bci);
-		if (object->nbColors() > 1 || m_globalCommands) {
+		if (object->nbColors() > 1 && m_globalCommands) {
 			for (auto n = 0; n < object->nbColors(); n++) {
 				auto obj = object->getObject(n);
 				if (obj->hasBasicComponent(_bci->getName())) {
@@ -659,7 +659,7 @@ namespace poca::core {
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com)
 	{
 		auto object = getObject(_bci);
-		if (object->nbColors() > 1 || m_globalCommands) {
+		if (object->nbColors() > 1 && m_globalCommands) {
 			for (auto n = 0; n < object->nbColors(); n++) {
 				auto obj = object->getObject(n);
 				if (obj->hasBasicComponent(_bci->getName())) {

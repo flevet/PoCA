@@ -239,18 +239,19 @@ namespace poca::core {
 				}
 			}
 			else if (_ci->nameCommand == "changeLUT") {
-				if (!_ci->hasParameter("LUT")) return;
-				bool hilowPrec = m_hilow;
-				std::string nameLut = _ci->getParameter<std::string>("LUT");
-				Palette pal = Palette::getStaticLut(nameLut);
-				if (pal.null()) {
-					std::cout << "LUT " << nameLut << " does not exist. Aborting." << std::endl;
-					return;
+				if (_ci->hasParameter("LUT")) {
+					bool hilowPrec = m_hilow;
+					std::string nameLut = _ci->getParameter<std::string>("LUT");
+					Palette pal = Palette::getStaticLut(nameLut);
+					if (pal.null()) {
+						std::cout << "LUT " << nameLut << " does not exist. Aborting." << std::endl;
+						return;
+					}
+					m_palette->setPalette(pal);
+					m_hilow = pal.isHiLow();
+					if (hilowPrec != m_hilow)
+						_ci->addParameter("regenerateFeatureBuffer", bool(true));
 				}
-				m_palette->setPalette(pal);
-				m_hilow = pal.isHiLow();
-				if (hilowPrec != m_hilow)
-					_ci->addParameter("regenerateFeatureBuffer", bool(true));
 			}
 			else if (_ci->nameCommand == "selected") {
 				bool val = _ci->getParameter<bool>("selected");
