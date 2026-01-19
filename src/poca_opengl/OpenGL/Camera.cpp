@@ -72,6 +72,7 @@ char* vs = "#version 330 core\n"
 "layout(location = 3) in vec4 vertexColor;\n"
 "layout(location = 4) in vec3 vertexNormal;\n"
 "uniform mat4 MVP;\n"
+"uniform mat4 model;\n"
 "const int MAX_CLIPPING_PLANES = 50;\n"
 "uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
 "uniform int nbClipPlanes;\n"
@@ -87,7 +88,7 @@ char* vs = "#version 330 core\n"
 "	normal = vertexNormal;\n"
 "	vclipDistance = 3.402823466e+38;\n"
 "	for(int n = 0; n < nbClipPlanes; n++){\n"
-"		float d = dot(pos, clipPlanes[n]);\n"
+"		float d = dot(model * pos, clipPlanes[n]);\n"
 "		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
 "	}\n"
 "}";
@@ -133,6 +134,7 @@ char* vsPick = "#version 330 core\n"
 "layout(location = 2) in float vertexFeature;\n"
 "#define FLT_MAX 3.402823466e+38;\n"
 "uniform mat4 MVP;\n"
+"uniform mat4 model;\n"
 "uniform bool hasFeature;\n"
 "const int MAX_CLIPPING_PLANES = 50;\n"
 "uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];\n"
@@ -147,7 +149,7 @@ char* vsPick = "#version 330 core\n"
 "	feature = hasFeature ? vertexFeature : FLT_MAX;\n"
 "	vclipDistance = 3.402823466e+38;\n"
 "	for(int n = 0; n < nbClipPlanes; n++){\n"
-"		float d = dot(pos, clipPlanes[n]);\n"
+"		float d = dot(model * pos, clipPlanes[n]);\n"
 "		vclipDistance = d < vclipDistance ? d : vclipDistance;\n"
 "	}\n"
 "}";
@@ -740,8 +742,8 @@ namespace poca::opengl {
 		color *= 255.f;
 		GL_CHECK_ERRORS();
 
-		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
-		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
+		m_matrixModel = glm::mat4(1.f);
+		m_stateCamera.m_matrixView = m_stateCamera.m_matrix * glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 
 		GL_CHECK_ERRORS();
 
@@ -774,7 +776,7 @@ namespace poca::opengl {
 			drawSSAO(_buffOffscreen);
 		}
 
-		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
+		m_matrixModel = glm::mat4(1.f);
 
 		GL_CHECK_ERRORS();
 
@@ -1201,6 +1203,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setUVec4("viewport", getViewport());
 		shader->setVec2("resolution", width(), height());
 		shader->setFloat("thickness", (_thickness + 1) * 2.f);
@@ -1236,6 +1239,7 @@ namespace poca::opengl {
 
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setVec4("singleColor", colorGrid[0], colorGrid[1], colorGrid[2], colorGrid[3]);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -3024,9 +3028,7 @@ namespace poca::opengl {
 
 	void Camera::setModelMatrix(const glm::mat4& _matrix)
 	{
-		//glm::vec3 t1 = glm::vec3(_matrix[3]); // or matA[3].xyz
-
-		m_matrixModel = _matrix * glm::translate(glm::mat4(1.0f), m_stateCamera.m_translationModel);
+		m_matrixModel = _matrix;
 	}
 }
 

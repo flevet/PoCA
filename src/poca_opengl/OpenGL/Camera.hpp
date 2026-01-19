@@ -426,6 +426,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
@@ -478,6 +479,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setFloat("alpha", _alpha);
 		shader->setBool("useSpecialColors", true);
 		shader->setVec4v("clipPlanes", m_clip);
@@ -533,6 +535,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setBool("hasFeature", true);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setVec4v("clipPlanes", m_clip);
@@ -577,6 +580,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setBool("hasFeature", false);
 		shader->setFloat("minFeatureValue", 0.f);
 		shader->setVec4v("clipPlanes", m_clip);
@@ -851,6 +855,7 @@ namespace poca::opengl {
 		Shader* shader = getShader("uniformColorShader");
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -888,6 +893,7 @@ namespace poca::opengl {
 		Shader* shader = getShader("uniformColorShader");
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setVec4("singleColor", _color[0], _color[1], _color[2], _color[3]);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -1038,6 +1044,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setInt("lutTexture", 0);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setFloat("maxFeatureValue", _maxF);
@@ -1091,6 +1098,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setFloat("useSpecialColors", 1);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -1134,6 +1142,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setFloat("useSpecialColors", 1);
 		shader->setVec4v("clipPlanes", m_clip);
 		shader->setInt("nbClipPlanes", nbClippingPlanes());
@@ -1161,6 +1170,7 @@ namespace poca::opengl {
 		const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view * model);
+		shader->setMat4("model", model);
 		shader->setBool("hasFeature", true);
 		shader->setFloat("minFeatureValue", _minF);
 		shader->setVec4v("clipPlanes", m_clip);

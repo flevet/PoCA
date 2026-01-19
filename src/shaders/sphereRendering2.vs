@@ -7,6 +7,7 @@ layout(location = 3) in vec4 vertexColor;
 const int MAX_CLIPPING_PLANES = 50;
 uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
 uniform int nbClipPlanes;
+uniform mat4 model;
 
 out vec3 v_normal;
 out float v_feature;
@@ -22,7 +23,7 @@ void main()
 	v_color = vertexColor.rgb;
 	v_clipDistance = 3.402823466e+38;
 	for(int n = 0; n < nbClipPlanes; n++){
-		float d = dot(pos, clipPlanes[n]);
+		float d = dot(model * pos, clipPlanes[n]);
 		v_clipDistance = d < v_clipDistance ? d : v_clipDistance;
 	}
 };

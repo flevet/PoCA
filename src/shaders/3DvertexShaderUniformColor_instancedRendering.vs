@@ -5,6 +5,7 @@ layout(location = 9) in float feature;
 layout(location = 5) in mat4 model_matrix;
 
 uniform mat4 MVP;
+uniform mat4 model;
 
 const int MAX_CLIPPING_PLANES = 50;
 uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
@@ -22,7 +23,7 @@ void main(){
 
 	vclipDistance = 3.402823466e+38;
 	for(int n = 0; n < nbClipPlanes; n++){
-		float d = dot(pos, clipPlanes[n]);
+		float d = dot(model * pos, clipPlanes[n]);
 		vclipDistance = d < vclipDistance ? d : vclipDistance;
 	}
 }

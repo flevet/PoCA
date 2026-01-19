@@ -22,7 +22,7 @@ void main() {
 	feature = vertexFeature;
 	vclipDistance = 3.402823466e+38;
 	for(int n = 0; n < nbClipPlanes; n++){
-		float d = dot(pos, clipPlanes[n]);
+		float d = dot(model * pos, clipPlanes[n]);
 		vclipDistance = d < vclipDistance ? d : vclipDistance;
 	}
 }

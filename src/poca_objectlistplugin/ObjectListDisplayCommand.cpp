@@ -503,6 +503,7 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 	const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
 	shader->use();
 	shader->setMat4("MVP", proj * view * model);
+	shader->setMat4("model", model);
 	shader->setBool("useSingleColor", false);
 
 	shader->setInt("lutTexture", 0);
