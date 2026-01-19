@@ -164,7 +164,8 @@ STBRP_DEF void stbrp_setup_heuristic (stbrp_context *context, int heuristic);
 
 
 STBRP_DEF bool try_pack(const Bin& bin, std::vector<stbrp_rect>& rects);
-STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h);
+STBRP_DEF Bin grow_rectangle(const Bin& b, int max_w, int max_h, float = 2.f);
+STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h, float = 2.f);
 
 enum
 {
@@ -254,16 +255,39 @@ STBRP_DEF bool try_pack(const Bin& bin, std::vector<stbrp_rect>& rects) {
     return stbrp_pack_rects(&ctx, rects.data(), (int)rects.size()) != 0;
 }
 
-STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h) {
+STBRP_DEF Bin grow_rectangle(const Bin& b, int max_w, int max_h, float _factor) {
     Bin next = b;
     // Grow the limiting dimension first; adjust as you like (next power of two, etc.)
-    if (next.w <= next.h) next.w = std::min(next.w * 2, max_w);
-    else                  next.h = std::min(next.h * 2, max_h);
+    if (next.w <= next.h) next.w = std::min((int)(next.w * _factor), max_w);
+    else                  next.h = std::min((int)(next.h * _factor), max_h);
     // If one side is already at cap, grow the other.
     if (next.w == b.w && next.h == b.h) {
-        if (next.w < max_w) next.w = std::min(next.w * 2, max_w);
-        else if (next.h < max_h) next.h = std::min(next.h * 2, max_h);
+        if (next.w < max_w) next.w = std::min((int)(next.w * _factor), max_w);
+        else if (next.h < max_h) next.h = std::min((int)(next.h * _factor), max_h);
     }
+    return next;
+}
+
+STBRP_DEF Bin grow(const Bin& b, int max_w, int max_h, float factor)
+{
+    Bin next = b;
+
+    int cur = std::max(b.w, b.h);
+    int grown = std::max(cur + 1, int(cur * factor));
+
+    int max_square = std::min(max_w, max_h);
+
+    if (grown <= max_square) {
+        // Perfect square growth
+        next.w = grown;
+        next.h = grown;
+    }
+    else {
+        // Can't keep square anymore — clamp independently
+        next.w = std::min(std::max(b.w, grown), max_w);
+        next.h = std::min(std::max(b.h, grown), max_h);
+    }
+
     return next;
 }
 
