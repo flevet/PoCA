@@ -58,6 +58,9 @@ namespace poca::opengl {
 		const GLuint generateLutTexture(poca::core::PaletteInterface* = NULL);
 		void generateTexture(const GLuint, const QImage&);
 
+		void removeLutTextures(const std::vector<std::string>&);
+		void removeLutTexture(const std::string&);
+
 		poca::opengl::QuadSingleGLBuffer <float>& getEllipsoidBuffer();
 		poca::opengl::QuadSingleGLBuffer <float>& getEllipsoidNormalsBuffer();
 		poca::opengl::QuadSingleGLBuffer <GLushort>& getEllipsoidIndicesBuffer();

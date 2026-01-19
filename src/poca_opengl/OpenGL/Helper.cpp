@@ -101,7 +101,7 @@ namespace poca::opengl {
 			glBindTexture(GL_TEXTURE_1D, 0);
 			m_textures[_pal->getName()] = textureLutID;
 		}
-		else if (_pal->getName() == "Random" || _pal->getName() == "RandomOneColor") {
+		else if (_pal->getName() == "Random" || _pal->getName() == "RandomOneColor" || _pal->getName() == "") {
 			unsigned int sizeLut = (_pal->getName() == "Random") ? 10000 : 512;
 			unsigned int cpt = 0;
 			std::vector <float> lutValues(sizeLut * 4);
@@ -133,6 +133,20 @@ namespace poca::opengl {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+	void HelperSingleton::removeLutTextures(const std::vector<std::string>& _nameTextures)
+	{
+		for (const auto& name : _nameTextures)
+			removeLutTexture(name);
+	}
+
+	void HelperSingleton::removeLutTexture(const std::string& _nameTexture)
+	{
+		if (m_textures.find(_nameTexture) != m_textures.end()) {
+			glDeleteTextures(1, &m_textures[_nameTexture]);
+			m_textures.erase(_nameTexture);
+		}
 	}
 
 	poca::opengl::QuadSingleGLBuffer <float>& HelperSingleton::getEllipsoidBuffer()
