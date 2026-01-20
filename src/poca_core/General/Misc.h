@@ -353,6 +353,25 @@ namespace poca::geometry {
 		_bx = (_p1x + _p2x + _p3x) / (T)3;
 		_by = (_p1y + _p2y + _p3y) / (T)3;
 	}
+
+	struct PackingCircle {
+		float x = 0, y = 0, r = 1;
+		int id;
+	};
+
+	void initSpiral(std::vector<PackingCircle>&, const std::vector<int>&, float);
+
+	/*int relaxationPacking(std::vector<PackingCircle>&,
+		int = 200,
+		float = 0.0025f,  // attraction strength per iter
+		float = 0.5f,      // how strongly to resolve overlaps
+		float = 1e-3f);*/
+
+	int packCirclesFast(std::vector<PackingCircle>&,
+		int = 200,
+		float = 0.0025f,  // attraction strength per iter
+		float = 0.5f,      // how strongly to resolve overlaps
+		float = 1e-3f);
 }
 
 namespace poca::core::utils {

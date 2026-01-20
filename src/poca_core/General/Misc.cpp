@@ -433,6 +433,369 @@ namespace poca::geometry {
 		float area = (_r * _r) * acos((_r - h) / _r) - ((_r - h) * sqrt((2. * _r * h) - (h * h)));
 		return area;
 	}
+
+	static inline float sqr(float v) { return v * v; }
+
+	// 64-bit key from 2D integer cell coords
+	static inline std::uint64_t cellKey(int cx, int cy) {
+		// pack signed ints into uint64 (offset bias to avoid UB)
+		std::uint64_t ux = (std::uint32_t)(cx ^ 0x80000000);
+		std::uint64_t uy = (std::uint32_t)(cy ^ 0x80000000);
+		return (ux << 32) | uy;
+	}
+
+	float medianRadiusInPlace(std::vector<PackingCircle>& circles)
+	{
+		if (circles.empty())
+			return 0.f;
+
+		auto mid = circles.begin() + circles.size() / 2;
+
+		std::nth_element(
+			circles.begin(), mid, circles.end(),
+			[](const PackingCircle& a, const PackingCircle& b)
+			{
+				return a.r < b.r;
+			}
+		);
+
+		if (circles.size() % 2 == 0)
+		{
+			auto mid2 = circles.begin() + circles.size() / 2 - 1;
+			std::nth_element(
+				circles.begin(), mid2, circles.end(),
+				[](const PackingCircle& a, const PackingCircle& b)
+				{
+					return a.r < b.r;
+				}
+			);
+			return 0.5f * (mid->r + mid2->r);
+		}
+
+		return mid->r;
+	}
+
+	// Golden-angle spiral init (tight-ish, deterministic)
+	void initSpiral(std::vector<PackingCircle>& circles, const std::vector<int>& order, float rMed) {
+		if (order.empty()) return;
+
+		const float golden = 2.39996322972865332f;
+		const float step = 0.15f * rMed; // adjust 0.8..1.5
+
+		// Spatial hash grid just for init overlap tests
+		float maxR = 0.f;
+		for (auto& c : circles) maxR = std::max(maxR, c.r);
+		float cellSize = std::max(1e-6f, 2.f * maxR);
+
+		std::unordered_map<std::uint64_t, std::vector<int>> grid;
+		grid.reserve(circles.size() * 2);
+
+		auto insertCircle = [&](int idx) {
+			auto& C = circles[idx];
+			int cx = (int)std::floor(C.x / cellSize);
+			int cy = (int)std::floor(C.y / cellSize);
+			grid[cellKey(cx, cy)].push_back(idx);
+			};
+
+		auto overlapsAny = [&](int idx)->bool {
+			const auto& A = circles[idx];
+			int cx = (int)std::floor(A.x / cellSize);
+			int cy = (int)std::floor(A.y / cellSize);
+
+			for (int dy = -1; dy <= 1; ++dy)
+				for (int dx = -1; dx <= 1; ++dx)
+				{
+					auto it = grid.find(cellKey(cx + dx, cy + dy));
+					if (it == grid.end()) continue;
+					for (int j : it->second)
+					{
+						const auto& B = circles[j];
+						float dx = A.x - B.x, dy = A.y - B.y;
+						float minD = A.r + B.r;
+						if (dx * dx + dy * dy < minD * minD) return true;
+					}
+				}
+			return false;
+			};
+
+		// place first (largest) at origin
+		circles[order[0]].x = 0.f;
+		circles[order[0]].y = 0.f;
+		insertCircle(order[0]);
+
+		// place others
+		for (size_t k = 1; k < order.size(); ++k)
+		{
+			int idx = order[k];
+			auto& C = circles[idx];
+
+			// spiral search
+			bool placed = false;
+			for (int t = 1; t < 20000; ++t) // cap attempts
+			{
+				float a = golden * (float)t;
+				float rad = step * std::sqrt((float)t);
+
+				C.x = rad * std::cos(a);
+				C.y = rad * std::sin(a);
+
+				if (!overlapsAny(idx))
+				{
+					insertCircle(idx);
+					placed = true;
+					break;
+				}
+			}
+
+			// fallback if not placed (rare): just put far away
+			if (!placed)
+			{
+				C.x = step * std::sqrt((float)k) * 10.f;
+				C.y = 0.f;
+				insertCircle(idx);
+			}
+		}
+	}
+
+	// Packs circles in-place. Radii must already be set.
+	// Returns number of iterations actually run.
+	int packCirclesFast(std::vector<PackingCircle>& circles,
+		int maxIters,
+		float centerPull,  // attraction strength per iter
+		float pushFactor,      // how strongly to resolve overlaps
+		float stopEps)        // early-stop overlap threshold
+	{
+		if (circles.empty()) return 0;
+
+		float rMed = medianRadiusInPlace(circles);
+
+		// Optional: sort by radius descending for better packing
+		std::vector<int> order(circles.size());
+		for (int i = 0; i < (int)circles.size(); ++i) order[i] = i;
+		std::sort(order.begin(), order.end(),
+			[&](int a, int b) { return circles[a].r > circles[b].r; });
+
+		for (int idx : order)
+			std::cout << "Order = " << circles[idx].r << std::endl;
+
+		initSpiral(circles, order, rMed);
+
+		float total = 0.f;
+		for (size_t i = 0; i < circles.size(); ++i)
+		{
+			for (size_t j = i + 1; j < circles.size(); ++j)
+			{
+				float dx = circles[i].x - circles[j].x;
+				float dy = circles[i].y - circles[j].y;
+				float dist = std::sqrt(dx * dx + dy * dy);
+				float minDist = circles[i].r + circles[j].r;
+				if (dist < minDist)
+					total += (minDist - dist);
+			}
+		}
+		std::cout << "Brute overlap after init = "
+			<< total << std::endl;
+
+		// Choose grid cell size ~ max diameter (good neighbor locality)
+		float maxR = 0.f;
+		for (auto& c : circles) maxR = std::max(maxR, c.r);
+		float cellSize = std::max(1e-6f, 2.f * maxR);
+
+		std::unordered_map<std::uint64_t, std::vector<int>> grid;
+		grid.reserve(circles.size() * 2);
+
+		auto rebuildGrid = [&]() {
+			grid.clear();
+			for (int idx : order) {
+				const auto& c = circles[idx];
+				int cx = (int)std::floor(c.x / cellSize);
+				int cy = (int)std::floor(c.y / cellSize);
+				grid[cellKey(cx, cy)].push_back(idx);
+			}
+			};
+
+		auto neighbors = [&](int idx, std::vector<int>& out) {
+			out.clear();
+			const auto& c = circles[idx];
+			int cx = (int)std::floor(c.x / cellSize);
+			int cy = (int)std::floor(c.y / cellSize);
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					auto it = grid.find(cellKey(cx + dx, cy + dy));
+					if (it != grid.end()) {
+						const auto& v = it->second;
+						out.insert(out.end(), v.begin(), v.end());
+					}
+				}
+			}
+			};
+
+		std::vector<int> neigh;
+		neigh.reserve(64);
+
+		int it = 0;
+		for (; it < maxIters; ++it) {
+			std::cout << "iteration " << it << std::endl;
+			rebuildGrid();
+
+			float totalOverlap = 0.f;
+
+			// One sweep: resolve overlaps
+			for (int ia = 0; ia < (int)order.size(); ++ia) {
+				int a = order[ia];
+				PackingCircle& A = circles[a];
+
+				neighbors(a, neigh);
+
+				float ax = A.x, ay = A.y;
+				float dxSum = 0.f, dySum = 0.f;
+
+				for (int b : neigh) {
+					if (b == a) continue;
+
+					PackingCircle& B = circles[b];
+
+					float dx = ax - B.x;
+					float dy = ay - B.y;
+					float dist2 = dx * dx + dy * dy;
+
+					float minDist = A.r + B.r;
+					float minDist2 = minDist * minDist;
+
+					if (dist2 < minDist2) {
+						float dist = std::sqrt(std::max(dist2, 1e-12f));
+						float overlap = (minDist - dist);
+						totalOverlap += overlap;
+
+						// Normalize direction (handle near-coincident centers)
+						float nx = (dist > 0.f) ? (dx / dist) : 1.f;
+						float ny = (dist > 0.f) ? (dy / dist) : 0.f;
+
+						// Push A away from B (accumulate displacement)
+						dxSum += nx * overlap;
+						dySum += ny * overlap;
+					}
+				}
+
+				// Apply displacement (damped)
+				A.x = ax + dxSum * pushFactor;
+				A.y = ay + dySum * pushFactor;
+
+				// Gentle pull toward origin to compact
+				A.x *= (1.f - centerPull);
+				A.y *= (1.f - centerPull);
+			}
+			std::cout << "total overlap " << totalOverlap << std::endl;
+			if (totalOverlap < stopEps) break;
+		}
+
+		return it;
+	}
+
+	// Packs circles in-place. Radii must already be set.
+	// Returns number of iterations actually run.
+	/*int relaxationPacking(std::vector<PackingCircle>& circles,
+		int maxIters = 200,
+		float centerPull = 0.0025f,  // attraction strength per iter
+		float pushFactor = 0.5f,      // how strongly to resolve overlaps
+		float stopEps = 1e-3f)        // early-stop overlap threshold
+	{
+		if (circles.empty()) return 0;
+
+		// Choose grid cell size ~ max diameter (good neighbor locality)
+		float maxR = 0.f;
+		for (auto& c : circles) maxR = std::max(maxR, c.r);
+		float cellSize = std::max(1e-6f, 2.f * maxR);
+
+		std::unordered_map<std::uint64_t, std::vector<int>> grid;
+		grid.reserve(circles.size() * 2);
+
+		auto rebuildGrid = [&]() {
+			grid.clear();
+			for (auto idx : order) {
+				const auto& c = circles[idx];
+				int cx = (int)std::floor(c.x / cellSize);
+				int cy = (int)std::floor(c.y / cellSize);
+				grid[cellKey(cx, cy)].push_back(idx);
+			}
+			};
+
+		auto neighbors = [&](int idx, std::vector<int>& out) {
+			out.clear();
+			const auto& c = circles[idx];
+			int cx = (int)std::floor(c.x / cellSize);
+			int cy = (int)std::floor(c.y / cellSize);
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					auto it = grid.find(cellKey(cx + dx, cy + dy));
+					if (it != grid.end()) {
+						const auto& v = it->second;
+						out.insert(out.end(), v.begin(), v.end());
+					}
+				}
+			}
+			};
+
+		std::vector<int> neigh;
+		neigh.reserve(64);
+
+		int it = 0;
+		for (; it < maxIters; ++it) {
+			rebuildGrid();
+
+			float totalOverlap = 0.f;
+
+			// One sweep: resolve overlaps
+			for (int ia = 0; ia < (int)order.size(); ++ia) {
+				int a = order[ia];
+				PackingCircle& A = circles[a];
+
+				neighbors(a, neigh);
+
+				float ax = A.x, ay = A.y;
+				float dxSum = 0.f, dySum = 0.f;
+
+				for (int b : neigh) {
+					if (b == a) continue;
+
+					PackingCircle& B = circles[b];
+
+					float dx = ax - B.x;
+					float dy = ay - B.y;
+					float dist2 = dx * dx + dy * dy;
+
+					float minDist = A.r + B.r;
+					float minDist2 = minDist * minDist;
+
+					if (dist2 < minDist2) {
+						float dist = std::sqrt(std::max(dist2, 1e-12f));
+						float overlap = (minDist - dist);
+						totalOverlap += overlap;
+
+						// Normalize direction (handle near-coincident centers)
+						float nx = (dist > 0.f) ? (dx / dist) : 1.f;
+						float ny = (dist > 0.f) ? (dy / dist) : 0.f;
+
+						// Push A away from B (accumulate displacement)
+						dxSum += nx * overlap;
+						dySum += ny * overlap;
+					}
+				}
+
+				// Apply displacement (damped)
+				A.x = ax + dxSum * pushFactor;
+				A.y = ay + dySum * pushFactor;
+
+				// Gentle pull toward origin to compact
+				A.x *= (1.f - centerPull);
+				A.y *= (1.f - centerPull);
+			}
+
+			if (totalOverlap < stopEps) break;
+		}
+
+		return it;
+	}*/
 }
 
 namespace poca::core::utils {
