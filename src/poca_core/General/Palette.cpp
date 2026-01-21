@@ -794,6 +794,8 @@ namespace poca::core {
 		}
 		else {
 			std::set <std::pair<float, Color4uc>>::iterator it = m_gradient.begin(), it_next = it;
+			if (_pos < it->first)
+				return it->second;
 			it_next++;
 			for (; it_next != m_gradient.end(); it++, it_next++) {
 				float pos1 = it->first, pos2 = it_next->first;
@@ -813,6 +815,8 @@ namespace poca::core {
 					return Color4uc(red, green, blue, alpha);
 				}
 			}
+			if (_pos > it->first)
+				return it->second;
 			return m_gradient.begin()->second;
 		}
 	}
