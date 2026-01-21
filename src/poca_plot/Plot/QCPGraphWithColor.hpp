@@ -44,12 +44,14 @@ namespace poca::plot {
 		QCPGraphWithColor(QCPAxis*, QCPAxis*);
 		~QCPGraphWithColor();
 
-		void setInfos(const QVector<double>&, poca::core::PaletteInterface*);
+		void setInfos(const QVector<double>&, poca::core::PaletteInterface*, bool = false, float = 0.f, float = 1.f);
 		void drawFill(QCPPainter*, QVector<QPointF>*) const;
 
 	protected:
 		QVector<double> m_colors;
 		poca::core::PaletteInterface* m_palette;
+		float m_min{ 0.f }, m_max{ 1.f };
+		bool m_useMinMax{ false };
 	};
 }
 

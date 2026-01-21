@@ -45,12 +45,15 @@ namespace poca::plot {
             delete m_palette;
     }
 
-    void QCPGraphWithColor::setInfos(const QVector<double>& _colors, poca::core::PaletteInterface* _palette)
+    void QCPGraphWithColor::setInfos(const QVector<double>& _colors, poca::core::PaletteInterface* _palette, bool _useMinMax, float _min, float _max)
     {
         m_colors = _colors;
         if (m_palette != NULL)
             delete m_palette;
         m_palette = (_palette == NULL) ? _palette : _palette->copy();
+        m_useMinMax = _useMinMax;
+        m_min = _min;
+        m_max = _max;
     }
 
     void QCPGraphWithColor::drawFill(QCPPainter* painter, QVector<QPointF>* lines) const
@@ -65,6 +68,7 @@ namespace poca::plot {
             QVector<QCPDataRange> segments = getNonNanSegments(lines, keyAxis()->orientation());
             if (!mChannelFillGraph)
             {
+                auto keyAxis = this->keyAxis();
                 // draw base fill under graph, fill goes all the way to the zero-value-line:
                 for (int i = 0; i < segments.size(); ++i) {
                     QPolygonF result(segments[i].size() + 2);
@@ -78,7 +82,16 @@ namespace poca::plot {
                         poly.push_back(QPointF(p2.x(), p2.y()));
                         poly.push_back(QPointF(p2.x(), lineBase.y()));
 
-                        poca::core::Color4uc color = m_palette->getColor(m_colors.at(n));
+                        poca::core::Color4uc color;
+                        if (m_useMinMax) {
+                            float x = (p2.x() - p1.x()) + p1.x(), inter = m_max - m_min;
+                            x = keyAxis->pixelToCoord(x);
+                            x = (x - m_min) / inter;
+                            color = m_palette->getColor(x);
+                        }
+                        else {
+                            color = m_palette->getColor(n < m_colors.size() ? m_colors.at(n) : m_colors.back());
+                        }
                         QColor c(color[0], color[1], color[2]);
                         painter->setBrush(c);
                         painter->drawPolygon(poly);
