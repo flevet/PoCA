@@ -132,6 +132,8 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	m_runMacroButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_runMacroOnFilesButton = new QPushButton("Run on files");
 	m_runMacroOnFilesButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_runMacroOnOpenedDataButton = new QPushButton("Run on opened data");
+	m_runMacroOnOpenedDataButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	QWidget* emptyRunnerW = new QWidget;
 	emptyRunnerW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QHBoxLayout* layoutLineRunner = new QHBoxLayout;
@@ -143,6 +145,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	layoutLineRunner->addWidget(emptyRunnerW);
 	layoutLineRunner->addWidget(m_runMacroButton);
 	layoutLineRunner->addWidget(m_runMacroOnFilesButton);
+	layoutLineRunner->addWidget(m_runMacroOnOpenedDataButton);
 	QVBoxLayout* layoutMacro = new QVBoxLayout;
 	layoutMacro->addWidget(splitter);
 	layoutMacro->addLayout(layoutLineRunner);
@@ -160,6 +163,7 @@ MacroWidget::MacroWidget(poca::core::MediatorWObjectFWidget * _mediator, QWidget
 	QObject::connect(m_saveMacroButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QObject::connect(m_runMacroButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QObject::connect(m_runMacroOnFilesButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	QObject::connect(m_runMacroOnOpenedDataButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 }
 
 MacroWidget::~MacroWidget()
@@ -171,7 +175,11 @@ void MacroWidget::actionNeeded()
 	QObject* sender = QObject::sender();
 	if (sender == m_runMacroButton) {
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
-		emit(runMacro(m_jsonRun));
+		emit(runMacro(m_jsonRun, false));
+	}
+	else if (sender == m_runMacroOnOpenedDataButton) {
+		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
+		emit(runMacro(m_jsonRun, true));
 	}
 	else if (sender == m_runMacroOnFilesButton) {
 		if (m_filesEdit->toPlainText().isEmpty()) {
@@ -179,7 +187,7 @@ void MacroWidget::actionNeeded()
 		}
 
 		getJsonsFromTextEdit(m_macroEdit, m_jsonRun);
-		
+
 		QString files = m_filesEdit->toPlainText();
 		if (files.endsWith("\n"))
 			files.chop(1);
@@ -397,7 +405,8 @@ void MacroWidget::getJsonsFromTextEdit(QTextEdit* _textEdit, std::vector <nlohma
 {
 	_jsons.clear();
 	try {
-		const QString text = _textEdit->toPlainText();
+		QString text = _textEdit->toPlainText();
+		text.replace("\n\n", "\n");
 		std::stringstream ss;
 		ss.str(text.toStdString());
 		nlohmann::json js;

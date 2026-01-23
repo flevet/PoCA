@@ -154,7 +154,7 @@ private slots:
 
 public slots:
 	void setPermanentStatusText(const QString &);
-	void runMacro(std::vector<nlohmann::json>);
+	void runMacro(std::vector<nlohmann::json>, bool);
 	void runMacro(std::vector<nlohmann::json>, QStringList);
 	void createObjectFromFeatures(const std::map <std::string, std::vector <float>>&, const std::string, const std::string);
 	void zoomToCropCurrentMdi(poca::core::BoundingBox);

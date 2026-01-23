@@ -318,7 +318,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	setAcceptDrops(true);
 
-	QObject::connect(m_macroW, SIGNAL(runMacro(std::vector<nlohmann::json>)), this, SLOT(runMacro(std::vector<nlohmann::json>)));
+	QObject::connect(m_macroW, SIGNAL(runMacro(std::vector<nlohmann::json>, bool)), this, SLOT(runMacro(std::vector<nlohmann::json>, bool)));
 	QObject::connect(m_macroW, SIGNAL(runMacro(std::vector<nlohmann::json>, QStringList)), this, SLOT(runMacro(std::vector<nlohmann::json>, QStringList)));
 }
 
@@ -971,6 +971,7 @@ void MainWindow::addComponentToCurrentMdi(const QString& _filename)
 
 void MainWindow::openFile(const QString& _filename, poca::core::CommandInfo* _command)
 {
+	std::cout << __LINE__ << _filename.toStdString() << std::endl;
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::PluginList* plugins = engine->getPlugins();
 	poca::core::MyObjectInterface* obj = engine->loadDataAndCreateObject(_filename, _command);
@@ -981,6 +982,7 @@ void MainWindow::openFile(const QString& _filename, poca::core::CommandInfo* _co
 	cam->makeCurrent();
 	poca::core::CommandInfo ci(false, "createDisplay");
 	obj->executeGlobalCommand(&ci);
+	std::cout << __LINE__ << _filename.toStdString() << std::endl;
 }
 
 void MainWindow::duplicate()
@@ -1859,68 +1861,79 @@ void MainWindow::actionNeeded()
 {
 }
 
-void MainWindow::runMacro(std::vector<nlohmann::json> _macro)
+void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedFiles)
 {
-	for (auto json : _macro) {
-		if (json.empty()) continue;
-
-		const auto nameComp = json.begin().key();
-		if (nameComp == "MainWindow")
-			runMacro(json[nameComp]);
-		else if (nameComp == "PythonWidget") {
-			nlohmann::json jsonCommand = json[nameComp];
-			for (auto& [nameCommand, value] : jsonCommand.items()) {
-				nlohmann::json parameters;
-				poca::core::CommandInfo command = m_pythonW->createCommand(nameCommand, jsonCommand[nameCommand]);
-				if (!command.empty())
-					m_pythonW->execute(&command);
-				else
-					std::cout << "Widget [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
-			}
+	std::vector<MdiChild*> mdis;
+	if (_onAllOpenedFiles) {
+		QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
+		for (auto window : windows) {
+			mdis.push_back(static_cast <MdiChild*>(window));
 		}
-		else {
-			if (m_currentMdi == NULL) continue;
-			poca::core::CommandableObject* comObj = NULL;
-			poca::core::MyObjectInterface* obj = m_currentMdi->getWidget()->getObject();
-			if (nameComp == "Object")
-				comObj = dynamic_cast<poca::core::CommandableObject*>(obj);
-			else {
-				comObj = dynamic_cast<poca::core::CommandableObject*>(obj->getBasicComponent(nameComp));
-			}
-			if (comObj != NULL) {
+	}
+	else
+		mdis.push_back(m_currentMdi);
+	for (auto currentMdi : mdis) {
+		for (auto json : _macro) {
+			if (json.empty()) continue;
+
+			const auto nameComp = json.begin().key();
+			if (nameComp == "MainWindow")
+				runMacro(json[nameComp]);
+			else if (nameComp == "PythonWidget") {
 				nlohmann::json jsonCommand = json[nameComp];
 				for (auto& [nameCommand, value] : jsonCommand.items()) {
 					nlohmann::json parameters;
-					poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
-					if (!command.empty()) {
-						comObj->executeCommand(&command);
-						if (command.hasParameter("newObject")) {
-							poca::geometry::DetectionSet* dset = command.getParameterPtr<poca::geometry::DetectionSet>("newObject");
-							if (dset == NULL) return;
-							poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
-							const std::string& dir = obj->getDir(), name = obj->getName();
-							QString newName(name.c_str());
-							int index = newName.lastIndexOf(".");
-							newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
-							createWindows(newDset, QString(dir.c_str()), newName);
-						}
-						else if (command.hasParameter("object")) {
-							poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
-							createWidget(obj);
-						}
-					}
+					poca::core::CommandInfo command = m_pythonW->createCommand(nameCommand, jsonCommand[nameCommand]);
+					if (!command.empty())
+						m_pythonW->execute(&command);
 					else
-						std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+						std::cout << "Widget [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
 				}
 			}
-			else
-				std::cout << "Component [" << nameComp << "] does not exist, command " << json.dump() << " was not executed." << std::endl;
-		}
+			else {
+				if (currentMdi == NULL) continue;
+				poca::core::CommandableObject* comObj = NULL;
+				poca::core::MyObjectInterface* obj = currentMdi->getWidget()->getObject();
+				if (nameComp == "Object")
+					comObj = dynamic_cast<poca::core::CommandableObject*>(obj);
+				else {
+					comObj = dynamic_cast<poca::core::CommandableObject*>(obj->getBasicComponent(nameComp));
+				}
+				if (comObj != NULL) {
+					nlohmann::json jsonCommand = json[nameComp];
+					for (auto& [nameCommand, value] : jsonCommand.items()) {
+						nlohmann::json parameters;
+						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
+						if (!command.empty()) {
+							comObj->executeCommand(&command);
+							if (command.hasParameter("newObject")) {
+								poca::geometry::DetectionSet* dset = command.getParameterPtr<poca::geometry::DetectionSet>("newObject");
+								if (dset == NULL) return;
+								poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
+								const std::string& dir = obj->getDir(), name = obj->getName();
+								QString newName(name.c_str());
+								int index = newName.lastIndexOf(".");
+								newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
+								createWindows(newDset, QString(dir.c_str()), newName);
+							}
+							else if (command.hasParameter("object")) {
+								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+								createWidget(obj);
+							}
+						}
+						else
+							std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
+					}
+				}
+				else
+					std::cout << "Component [" << nameComp << "] does not exist, command " << json.dump() << " was not executed." << std::endl;
+			}
 
-	}
-	if (m_currentMdi != NULL) {
-		m_currentMdi->getWidget()->getObject()->notify("updateDisplay");
-		m_currentMdi->getWidget()->getObject()->notify("LoadObjCharacteristicsAllWidgets");
+		}
+		if (currentMdi != NULL) {
+			currentMdi->getWidget()->getObject()->notify("updateDisplay");
+			currentMdi->getWidget()->getObject()->notify("LoadObjCharacteristicsAllWidgets");
+		}
 	}
 }
 

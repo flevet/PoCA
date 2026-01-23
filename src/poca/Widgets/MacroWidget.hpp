@@ -68,7 +68,7 @@ public:
 	std::vector <nlohmann::json>* getJson() { return &m_jsonRecord; }
 
 signals:
-	void runMacro(std::vector<nlohmann::json>);
+	void runMacro(std::vector<nlohmann::json>, bool);
 	void runMacro(std::vector<nlohmann::json>, QStringList);
 
 protected slots:
@@ -80,7 +80,7 @@ protected:
 
 protected:
 	QTextEdit* m_recordEdit, * m_macroEdit, * m_filesEdit;
-	QPushButton* m_runMacroButton, * m_runMacroOnFilesButton, * m_loadMacroButton, * m_saveMacroButton, * m_transferToRunnerButton, * m_transferToClipboardButton, * m_saveRecorderButton, * m_openFileButton, * m_openDirButton, * m_addDirButton;
+	QPushButton* m_runMacroButton, * m_runMacroOnFilesButton, * m_runMacroOnOpenedDataButton, * m_loadMacroButton, * m_saveMacroButton, * m_transferToRunnerButton, * m_transferToClipboardButton, * m_saveRecorderButton, * m_openFileButton, * m_openDirButton, * m_addDirButton;
 
 	QString m_pathForOpening;
 
