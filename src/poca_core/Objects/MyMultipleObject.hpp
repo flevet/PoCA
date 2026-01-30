@@ -67,6 +67,7 @@ public:
 	virtual void executeGlobalCommand(poca::core::CommandInfo*);
 
 	void resetModelMatrices(const bool = true);
+	void recomputeGrid();
 
 	const size_t nbColors() const { return m_colors.size(); }
 	poca::core::MyObjectInterface* getObject(const size_t _index) { return m_colors[_index]; }
