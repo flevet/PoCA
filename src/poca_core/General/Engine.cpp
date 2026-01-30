@@ -442,19 +442,60 @@ namespace poca::core {
 		}
 	}
 
+	MyObjectInterface* Engine::getTopObject(BasicComponentInterface* _bci)
+	{
+		for (auto data : m_datasets) {
+			auto obj = std::get<0>(data);
+			for (auto n = 0; n < obj->nbColors(); n++) {
+				auto curObj = obj->getObject(n);
+				for (auto n = 0; n < curObj->nbBasicComponents(); n++) {
+					auto comp = curObj->getBasicComponent(n);
+					if (_bci == comp)
+						return obj;
+				}
+				for (auto n = 0; n < curObj->nbBasicComponents(); n++) {
+					poca::core::BasicComponentList* blist = dynamic_cast <poca::core::BasicComponentList*>(curObj->getBasicComponent(n));
+					if (blist) {
+						for (auto i = 0; i < blist->nbComponents(); i++) {
+							auto comp = blist->getComponent(i);
+							if (_bci == comp)
+								return obj;
+						}
+					}
+				}
+			}
+		}
+		return NULL;
+	}
+
 	MyObjectInterface* Engine::getObject(BasicComponentInterface* _bci)
 	{
 		for (auto data : m_datasets) {
 			auto obj = std::get<0>(data);
 			for (auto n = 0; n < obj->nbColors(); n++) {
 				auto curObj = obj->getObject(n);
-				BasicComponentInterface* bci = curObj->getBasicComponent(_bci->getName());
-				if (bci == _bci)
-					return obj;
-				for (auto comp : curObj->getComponents()) {
-					if (comp->hasComponent(_bci))
-						return obj;
+				for (auto n = 0; n < curObj->nbBasicComponents(); n++) {
+					auto comp = curObj->getBasicComponent(n);
+					if (_bci == comp)
+						return curObj;
 				}
+				for (auto n = 0; n < curObj->nbBasicComponents(); n++) {
+					poca::core::BasicComponentList* blist = dynamic_cast <poca::core::BasicComponentList*>(curObj->getBasicComponent(n));
+					if (blist) {
+						for (auto i = 0; i < blist->nbComponents(); i++) {
+							auto comp = blist->getComponent(i);
+							if (_bci == comp)
+								return curObj;
+						}
+					}
+				}
+				/*BasicComponentInterface* bci = curObj->getBasicComponent(_bci->getName());
+					if (bci == _bci)
+						return obj;
+					for (auto comp : curObj->getComponents()) {
+						if (comp->hasComponent(_bci))
+							return obj;
+					}*/
 			}
 		}
 		return NULL;
@@ -639,7 +680,30 @@ namespace poca::core {
 	void Engine::executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand)
 	{
 		CommandInfo ci(_record, _nameCommand);
-		auto object = getObject(_bci);
+		executeCommand(_bci, &ci);
+
+		/*if (m_globalCommands) {
+			auto object = getTopObject(_bci);
+			if (object->nbColors() > 1) {
+				for (auto n = 0; n < object->nbColors(); n++) {
+					auto obj = object->getObject(n);
+					if (obj->hasBasicComponent(_bci->getName())) {
+						auto bc = obj->getBasicComponent(_bci->getName());
+						CommandableObject* co = static_cast <CommandableObject*>(bc);
+						co->executeCommand(&ci);
+					}
+				}
+			}
+		}
+		else {
+			auto object = getObject(_bci);
+			if (object == NULL) return;
+			CommandableObject* co = static_cast <CommandableObject*>(_bci);
+			co->executeCommand(&ci);
+		}*/
+
+		/*auto object = getObject(_bci);
+		if (object == NULL) return;
 		if (object->nbColors() > 1 && m_globalCommands) {
 			for (auto n = 0; n < object->nbColors(); n++) {
 				auto obj = object->getObject(n);
@@ -653,12 +717,36 @@ namespace poca::core {
 		else {
 			CommandableObject* co = static_cast <CommandableObject*>(_bci);
 			co->executeCommand(&ci);
-		}
+		}*/
 	}
 
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com)
 	{
+		auto object = getTopObject(_bci);
+		if (object == NULL) return;
+
+		if (object->nbColors() > 1 && m_globalCommands) {
+			if (object->nbColors() > 1) {
+				for (auto n = 0; n < object->nbColors(); n++) {
+					auto obj = object->getObject(n);
+					if (obj->hasBasicComponent(_bci->getName())) {
+						auto bc = obj->getBasicComponent(_bci->getName());
+						CommandableObject* co = static_cast <CommandableObject*>(bc);
+						co->executeCommand(_com);
+					}
+				}
+			}
+		}
+		else {
+			auto obj = getObject(_bci);
+			if (obj == NULL) return;
+			CommandableObject* co = static_cast <CommandableObject*>(_bci);
+			co->executeCommand(_com);
+		}
+
+		/*
 		auto object = getObject(_bci);
+		if (object == NULL) return;
 		if (object->nbColors() > 1 && m_globalCommands) {
 			for (auto n = 0; n < object->nbColors(); n++) {
 				auto obj = object->getObject(n);
@@ -672,6 +760,6 @@ namespace poca::core {
 		else {
 			CommandableObject* co = static_cast <CommandableObject*>(_bci);
 			co->executeCommand(_com);
-		}
+		}*/
 	}
 }

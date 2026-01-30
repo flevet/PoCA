@@ -99,6 +99,7 @@ namespace poca::core {
 		void removeCamera(poca::opengl::CameraInterface*, const bool = true);
 		void removeObjectAndCamera(poca::core::MyObjectInterface*);
 		void removeObjectAndCamera(poca::opengl::CameraInterface*);
+		MyObjectInterface* getTopObject(BasicComponentInterface*);
 		MyObjectInterface* getObject(BasicComponentInterface*);
 		MyObjectInterface* getObject(MyObjectInterface*);
 		poca::opengl::CameraInterface* getCamera(BasicComponentInterface*);
