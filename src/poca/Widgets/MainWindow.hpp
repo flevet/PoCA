@@ -152,6 +152,10 @@ private slots:
 
 	void currentCameraForPath();
 
+	void onGridReleased();
+	void onToggleGridCentered(bool);
+	void onExportAllObjects();
+
 public slots:
 	void setPermanentStatusText(const QString &);
 	void runMacro(std::vector<nlohmann::json>, bool);

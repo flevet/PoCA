@@ -68,6 +68,7 @@
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
+#include <CGAL/Polygon_mesh_processing/bbox.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -251,6 +252,21 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_widgetColors = new ColorButtonGridWidget(this);
 	m_widgetColors->setMaxPerRow(20);
 	m_widgetColors->setRightButtonText("+");
+
+	connect(m_widgetColors->parametersButton(), &QPushButton::clicked, this, [this]() {
+
+		auto* dlg = new ParametersDialog(this);
+		dlg->setAttribute(Qt::WA_DeleteOnClose, true); // auto cleanup
+		dlg->setWindowFlag(Qt::Tool, true);        // small tool window behavior
+		dlg->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+
+		// Forward signals to another window/controller
+		connect(dlg, &ParametersDialog::gridReleased, this, &MainWindow::onGridReleased);
+		connect(dlg, &ParametersDialog::toggleGridCentered, this, &MainWindow::onToggleGridCentered);
+		connect(dlg, &ParametersDialog::exportAllObjects, this, &MainWindow::onExportAllObjects);
+
+		dlg->show(); // or dlg->show()
+		});
 
 	QObject::connect(m_widgetColors, SIGNAL(indexClicked(int)), this, SLOT(changeColorObject(int)));
 	QObject::connect(m_widgetColors, &ColorButtonGridWidget::rightButtonClicked, this, 
@@ -2837,4 +2853,122 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		engine->addCameraToObject(obj, cam);
 
 	}
+}
+
+void MainWindow::onGridReleased()
+{
+	if (m_currentMdi == NULL) return;
+	MyMultipleObject* mobject = dynamic_cast <MyMultipleObject*>(m_currentMdi->getWidget()->getObject());
+	if (!mobject) return;
+
+	mobject->recomputeGrid();
+	mobject->notifyAll("updateDisplay");
+	resetViewer();
+}
+
+void MainWindow::onToggleGridCentered(bool _on)
+{
+	if (m_currentMdi == NULL) return;
+	MyMultipleObject* mobject = dynamic_cast <MyMultipleObject*>(m_currentMdi->getWidget()->getObject());
+	if (!mobject) return;
+
+	mobject->resetModelMatrices(_on);
+	mobject->notifyAll("updateDisplay");
+	resetViewer();
+}
+
+void MainWindow::onExportAllObjects()
+{
+	if (m_currentMdi == NULL) return;
+	MyMultipleObject* mobject = dynamic_cast <MyMultipleObject*>(m_currentMdi->getWidget()->getObject());
+	if (!mobject) return;
+
+	std::vector <Surface_mesh_3_double> allObjects;
+	for (auto n = 0; n < mobject->nbColors(); n++) {
+		auto curobj = mobject->getObject(n);
+		if (!curobj->hasBasicComponent("ObjectLists")) continue;
+		auto bci = curobj->getBasicComponent("ObjectLists");
+		poca::core::BasicComponentList* bclist = static_cast <poca::core::BasicComponentList*>(bci);
+		poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(bclist->currentComponent());
+		const auto& meshes = omesh->getMeshes();
+		for (const auto& mesh : meshes) {
+			allObjects.push_back(mesh);
+			auto& addedMesh = allObjects.back();
+			auto bbox = CGAL::Polygon_mesh_processing::bbox(addedMesh);
+			//auto bbox = CGAL::bounding_box(addedMesh.points().begin(), addedMesh.points().end());
+			std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
+			Kernel::Vector_3 t(bbox.xmin(), bbox.ymin(), bbox.zmin());
+			for (auto v : addedMesh.vertices()) {
+				addedMesh.point(v) = addedMesh.point(v) - t;
+			}
+			bbox = CGAL::Polygon_mesh_processing::bbox(addedMesh);
+			//bbox = CGAL::bounding_box(addedMesh.points().begin(), addedMesh.points().end());
+			std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
+		}
+	}
+
+	std::vector <poca::core::BoundingBox> bboxes;
+	std::vector<stbrp_rect> rects;
+	int cur = 0;
+	uint32_t PADDING_BINS = 2;
+
+	for (auto& mesh : allObjects) {
+		// Smooth with both angle and area criteria + Delaunay flips
+		//CGAL::Polygon_mesh_processing::angle_and_area_smoothing(meshes.back(), CGAL::parameters::number_of_iterations(3).use_safety_constraints(false));
+		poca::geometry::laplacian_smooth(mesh, 5, 0.5);
+
+		auto bbox = CGAL::Polygon_mesh_processing::bbox(mesh);
+		//auto bbox = CGAL::bounding_box(mesh.points().begin(), mesh.points().end());
+		std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
+		bboxes.emplace_back(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax() + PADDING_BINS, bbox.ymax() + PADDING_BINS, bbox.zmax());
+		rects.push_back({ cur++, (int)(bbox.xmax() - bbox.xmin() + PADDING_BINS), (int)(bbox.ymax() - bbox.ymin() + PADDING_BINS), 0, 0, 0 });
+	}
+
+	Bin bin{ 512, 512 };            // start size
+	const int MAX_W = 50000;       // safety caps (tune as needed)
+	const int MAX_H = 50000;
+
+	// Retry with growth until success or we hit caps.
+	while (true) {
+		// Make a working copy because stbrp_rect gets filled in-place (x,y,was_packed).
+		auto work = rects;
+		if (try_pack(bin, work)) {
+			//std::cout << "Packed in " << bin.w << "x" << bin.h << "\n";
+			for (const auto& r : work) {
+				// was_packed should be 1 for all if try_pack succeeded
+				//std::cout << "id=" << r.id << " x=" << r.x << " y=" << r.y << " w=" << r.w << " h=" << r.h << "\n";
+				float w = bboxes[r.id].realWidth(), h = bboxes[r.id].realHeight();
+				bboxes[r.id].set(r.x, r.y, 0.f, r.x + w, r.y + h, 0.f);
+				/*std::cout << r.id << " -> " << m_spinesTriangles[r.id].size();
+				for (const auto& tmp : m_spinesTriangles[r.id])
+					std::cout << " ; " << tmp->info().m_index;
+				std::cout << std::endl;*/
+			}
+			break;
+		}
+
+		Bin next = grow(bin, MAX_W, MAX_H);
+		if (next.w == bin.w && next.h == bin.h) {
+			std::cerr << "Cannot fit within caps " << MAX_W << "x" << MAX_H << "\n";
+			return;
+		}
+		bin = next;
+	}
+
+	for (auto n = 0; n < allObjects.size(); n++) {
+		Kernel::Vector_3 t(bboxes[n][0], bboxes[n][1], 0.f);
+		for (auto v : allObjects[n].vertices()) {
+			allObjects[n].point(v) = allObjects[n].point(v) - t;
+		}
+	}
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	poca::geometry::ObjectListMesh* finalOmesh = new poca::geometry::ObjectListMesh(allObjects);
+	poca::core::CommandInfo com;
+	poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(finalOmesh, com, "MainWindow");
+	poca::core::MyObjectInterface* obj = engine->createObject(mobject->getDir(), "all_objects.obj", objsList);
+	if (obj == NULL)
+		return;
+	poca::opengl::CameraInterface* cam = createWindows(obj);
+	engine->addCameraToObject(obj, cam);
 }
