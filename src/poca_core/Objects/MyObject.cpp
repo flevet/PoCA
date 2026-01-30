@@ -298,6 +298,13 @@ namespace poca::core {
 		for (unsigned int n = 0; n < m_components.size(); n++)
 			if (m_components[n]->getName() == _nameBC)
 				return m_components[n];
+		for (unsigned int n = 0; n < m_components.size(); n++) {
+			poca::core::BasicComponentList* blist = dynamic_cast <poca::core::BasicComponentList*>(m_components[n]);
+			if (blist && blist->nbComponents() > 0) {
+				if (blist->getComponent(0)->getName() == _nameBC)
+					return m_components[n];
+			}
+		}
 		return NULL;
 	}
 
