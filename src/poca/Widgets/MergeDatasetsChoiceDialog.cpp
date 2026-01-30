@@ -84,9 +84,18 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 	QObject::connect(transferButton, &QPushButton::clicked, [&]() {
 		QList<QListWidgetItem*> selectedItems = m_allDatasetsList->selectedItems();
 
-		for (QListWidgetItem* item : selectedItems) {
-			m_datasetsToMergeList->addItem(item->text());
-			delete m_allDatasetsList->takeItem(m_allDatasetsList->row(item));
+		if (!selectedItems.empty()) {
+			for (QListWidgetItem* item : selectedItems) {
+				m_datasetsToMergeList->addItem(item->text());
+				delete m_allDatasetsList->takeItem(m_allDatasetsList->row(item));
+			}
+		}
+		else {
+			while (m_allDatasetsList->count() > 0) {
+				QListWidgetItem* item = m_allDatasetsList->takeItem(0);
+				m_datasetsToMergeList->addItem(item->text());
+				delete item;
+			}
 		}
 	});
 
