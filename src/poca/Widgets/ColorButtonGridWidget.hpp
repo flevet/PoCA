@@ -54,9 +54,29 @@
 #include <QVector>
 #include <QWidget>
 #include <QScrollArea>
+#include <QDialog>
 
 class QHBoxLayout;
 class QVBoxLayout;
+class QDialogButtonBox;
+
+class ParametersDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit ParametersDialog(QWidget* parent = nullptr);
+
+signals:
+    void gridReleased();
+    void toggleGridCentered(bool);
+    void exportAllObjects();
+
+private:
+    QPushButton* m_gridBtn = nullptr;
+    QPushButton* m_centeredBtn = nullptr;
+    QPushButton* m_exportAllObjectsBtn = nullptr;
+    QDialogButtonBox* m_buttons = nullptr;
+};
 
 class ColorButtonGridWidget : public QWidget
 {
@@ -79,9 +99,12 @@ public:
     void setCollapsed(bool on);
     bool isCollapsed() const;
 
+    QToolButton* parametersButton() { return m_parametersButton; }
+
 signals:
     void indexClicked(int idx);
     void rightButtonClicked();
+    void parametersButtonClicked();
 
 private slots:
     void onAnyButtonClicked(QAbstractButton* b);
@@ -92,11 +115,13 @@ private:
     void ensureButtonSizing();
     void rebuild();
 
-    static void clearLayout(QLayout*);
+    void clearLayout(QLayout*);
     int computeTwoRowHeightPx() const;
-    int contentHeightPx() const;
+    int contentHeightPxForRows(int rows) const;
 
     void updateAuxVisibility(int);
+
+    int rowHeightPx() const;
 
 private:
     // Layouts
@@ -107,12 +132,16 @@ private:
     // Buttons
     QVector<QPushButton*> m_buttons;
     QPushButton* m_rightButton = nullptr;
+    QToolButton* m_parametersButton = nullptr;
     QButtonGroup* m_group = nullptr;
 
     QScrollArea* m_scrollArea = nullptr;
     QWidget* m_rightColumn = nullptr;
     QVBoxLayout* m_rightVBox = nullptr;
     QToolButton* m_toggleButton = nullptr;
+
+    QWidget* m_rightTopRow = nullptr;
+    QHBoxLayout* m_rightTopHBox = nullptr;
 
     bool m_collapsed = false;
 
