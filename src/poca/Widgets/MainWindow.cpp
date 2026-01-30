@@ -2894,15 +2894,14 @@ void MainWindow::onExportAllObjects()
 		for (const auto& mesh : meshes) {
 			allObjects.push_back(mesh);
 			auto& addedMesh = allObjects.back();
+			//poca::geometry::laplacian_smooth(addedMesh, 5, 0.5);
 			auto bbox = CGAL::Polygon_mesh_processing::bbox(addedMesh);
-			//auto bbox = CGAL::bounding_box(addedMesh.points().begin(), addedMesh.points().end());
 			std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
 			Kernel::Vector_3 t(bbox.xmin(), bbox.ymin(), bbox.zmin());
 			for (auto v : addedMesh.vertices()) {
 				addedMesh.point(v) = addedMesh.point(v) - t;
 			}
 			bbox = CGAL::Polygon_mesh_processing::bbox(addedMesh);
-			//bbox = CGAL::bounding_box(addedMesh.points().begin(), addedMesh.points().end());
 			std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
 		}
 	}
@@ -2910,18 +2909,13 @@ void MainWindow::onExportAllObjects()
 	std::vector <poca::core::BoundingBox> bboxes;
 	std::vector<stbrp_rect> rects;
 	int cur = 0;
-	uint32_t PADDING_BINS = 2;
+	uint32_t PADDING_BINS = 0;
 
 	for (auto& mesh : allObjects) {
-		// Smooth with both angle and area criteria + Delaunay flips
-		//CGAL::Polygon_mesh_processing::angle_and_area_smoothing(meshes.back(), CGAL::parameters::number_of_iterations(3).use_safety_constraints(false));
-		poca::geometry::laplacian_smooth(mesh, 5, 0.5);
-
 		auto bbox = CGAL::Polygon_mesh_processing::bbox(mesh);
-		//auto bbox = CGAL::bounding_box(mesh.points().begin(), mesh.points().end());
 		std::cout << bbox.xmin() << " " << bbox.ymin() << " " << bbox.zmin() << " " << bbox.xmax() << " " << bbox.ymax() << " " << bbox.zmax() << std::endl;
 		bboxes.emplace_back(bbox.xmin(), bbox.ymin(), bbox.zmin(), bbox.xmax() + PADDING_BINS, bbox.ymax() + PADDING_BINS, bbox.zmax());
-		rects.push_back({ cur++, (int)(bbox.xmax() - bbox.xmin() + PADDING_BINS), (int)(bbox.ymax() - bbox.ymin() + PADDING_BINS), 0, 0, 0 });
+		rects.push_back({ cur++, (int)std::ceil(bbox.xmax() - bbox.xmin() + PADDING_BINS), (int)std::ceil(bbox.ymax() - bbox.ymin() + PADDING_BINS), 0, 0, 0 });
 	}
 
 	Bin bin{ 512, 512 };            // start size
@@ -2935,14 +2929,8 @@ void MainWindow::onExportAllObjects()
 		if (try_pack(bin, work)) {
 			//std::cout << "Packed in " << bin.w << "x" << bin.h << "\n";
 			for (const auto& r : work) {
-				// was_packed should be 1 for all if try_pack succeeded
-				//std::cout << "id=" << r.id << " x=" << r.x << " y=" << r.y << " w=" << r.w << " h=" << r.h << "\n";
 				float w = bboxes[r.id].realWidth(), h = bboxes[r.id].realHeight();
 				bboxes[r.id].set(r.x, r.y, 0.f, r.x + w, r.y + h, 0.f);
-				/*std::cout << r.id << " -> " << m_spinesTriangles[r.id].size();
-				for (const auto& tmp : m_spinesTriangles[r.id])
-					std::cout << " ; " << tmp->info().m_index;
-				std::cout << std::endl;*/
 			}
 			break;
 		}
@@ -2958,7 +2946,7 @@ void MainWindow::onExportAllObjects()
 	for (auto n = 0; n < allObjects.size(); n++) {
 		Kernel::Vector_3 t(bboxes[n][0], bboxes[n][1], 0.f);
 		for (auto v : allObjects[n].vertices()) {
-			allObjects[n].point(v) = allObjects[n].point(v) - t;
+			allObjects[n].point(v) = allObjects[n].point(v) + t;
 		}
 	}
 
