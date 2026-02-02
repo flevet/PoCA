@@ -258,6 +258,66 @@ void count_occurences_label_kernel(std::vector <int32_t>& _labels, std::vector <
 
 }
 
+__global__ void increment_plane_counts_kernel(const uint32_t* unique_labels,
+    size_t n_unique,
+    uint32_t* planeCounts)
+{
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n_unique) {
+        uint32_t lab = unique_labels[i];
+        atomicAdd(&planeCounts[lab], 1u);
+    }
+}
+
+// Computes: planeCounts[label] = number of z-planes where label appears at least once.
+// Assumes labels are dense in [0..maxLabel].
+// Output planeCounts size = maxLabel+1.
+void count_zplanes_dense_labels_gpu(const thrust::device_vector<uint32_t>& d_pixels,
+    thrust::device_vector<uint32_t>& d_planeCounts,
+    uint32_t width, uint32_t height, uint32_t depth)
+{
+    const size_t wh = size_t(width) * size_t(height);
+    const size_t n = d_pixels.size(); // should be wh*depth
+
+    // 1) find max label (dense range size)
+    uint32_t maxLabel = *thrust::max_element(thrust::device, d_pixels.begin(), d_pixels.end());
+
+    d_planeCounts.resize(size_t(maxLabel) + 1);
+    thrust::fill(thrust::device, d_planeCounts.begin(), d_planeCounts.end(), 0u);
+
+    // reusable buffers for one slice
+    thrust::device_vector<uint32_t> d_slice(wh);
+
+    const int block = 256;
+
+    for (uint32_t z = 0; z < depth; ++z) {
+        // 2) copy slice to temp buffer
+        const size_t offset = size_t(z) * wh;
+        thrust::copy(thrust::device,
+            d_pixels.begin() + offset,
+            d_pixels.begin() + offset + wh,
+            d_slice.begin());
+
+        // 3) sort and unique to get labels present in this plane
+        thrust::sort(thrust::device, d_slice.begin(), d_slice.end());
+        auto end_unique = thrust::unique(thrust::device, d_slice.begin(), d_slice.end());
+        size_t m = size_t(thrust::distance(d_slice.begin(), end_unique));
+
+        // 4) increment plane count once per unique label
+        if (m > 0) {
+            int grid = int((m + block - 1) / block);
+            increment_plane_counts_kernel << <grid, block >> > (
+                thrust::raw_pointer_cast(d_slice.data()),
+                m,
+                thrust::raw_pointer_cast(d_planeCounts.data()));
+        }
+    }
+
+    // If you want strict error reporting:
+    // cudaError_t err = cudaDeviceSynchronize();
+    // if (err != cudaSuccess) { ... }
+}
+
 void relabelI32(std::vector <uint32_t>& _labels, std::vector <uint32_t>& _relabels)
 {
     _relabels.resize(_labels.size());
@@ -267,40 +327,80 @@ void relabelI32(std::vector <uint32_t>& _labels, std::vector <uint32_t>& _relabe
     std::cout << "Here" << std::endl;
 }
 
+template <typename HostT>
+thrust::device_vector<HostT> upload_to_device(const std::vector<HostT>& h)
+{
+    thrust::device_vector<HostT> d(h.size());
+    cudaMemcpy(thrust::raw_pointer_cast(d.data()),
+        h.data(),
+        h.size() * sizeof(HostT),
+        cudaMemcpyHostToDevice);
+    return d;
+}
+
+template <typename InT>
+thrust::device_vector<uint32_t> to_u32(const thrust::device_vector<InT>& d_in)
+{
+    thrust::device_vector<uint32_t> d_out(d_in.size());
+    thrust::transform(thrust::device,  d_in.begin(), d_in.end(), d_out.begin(), [] __host__ __device__(InT v) { return static_cast<uint32_t>(v); });
+    return d_out;
+}
+
+void copy_u32_to_host_float(const thrust::device_vector<uint32_t>& d_u32, std::vector<float>& h_f, size_t offset = 0)
+{
+    const size_t n = d_u32.size() - offset;
+    thrust::device_vector<float> d_f(n);
+
+    thrust::transform(thrust::device,  d_u32.begin() + offset, d_u32.end(), d_f.begin(), [] __host__ __device__(uint32_t v) { return static_cast<float>(v); });
+
+    h_f.resize(n);
+    cudaMemcpy(h_f.data(),  thrust::raw_pointer_cast(d_f.data()), n * sizeof(float), cudaMemcpyDeviceToHost);
+}
+
+
 void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
 {
-    thrust::device_vector<float> d_labels, d_counts;
+    thrust::device_vector<uint32_t> d_labels, d_counts;
     switch (_image->type())
     {
     case poca::core::UINT8:
     {
         poca::core::Image<uint8_t>* casted = static_cast <poca::core::Image<uint8_t>*>(_image);
-        thrust::device_vector<float> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
+        auto d_u8 = upload_to_device<uint8_t>(casted->pixels());   // no thrust cross-system copy
+        auto d_pixels = to_u32<uint8_t>(d_u8);
+        //thrust::device_vector<uint32_t> d_pixels(casted->pixels());
+        count_occurences_label_kernel_gpu< uint32_t>(d_pixels, d_labels, d_counts);
     }
     break;
     case poca::core::UINT16:
     {
         poca::core::Image<uint16_t>* casted = static_cast <poca::core::Image<uint16_t>*>(_image);
-        thrust::device_vector<float> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu<float>(d_pixels, d_labels, d_counts);
+        auto d_u16 = upload_to_device<uint16_t>(casted->pixels());   // no thrust cross-system copy
+        auto d_pixels = to_u32<uint16_t>(d_u16);
+        //thrust::device_vector<uint32_t> d_pixels(casted->pixels());
+        count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
     }
     break;
     case poca::core::UINT32:
     {
         poca::core::Image<uint32_t>* casted = static_cast <poca::core::Image<uint32_t>*>(_image);
-        thrust::device_vector<float> d_pixels(casted->pixels());
-        count_occurences_label_kernel_gpu<float>(d_pixels, d_labels, d_counts);
+        auto d_pixels = upload_to_device<uint32_t>(casted->pixels());   // no thrust cross-system copy
+        count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
     }
     break;
     default:
         break;
     }
     std::vector <float>& volume = _image->volumes();
-    volume.resize(d_counts.size() - 1);
-    std::vector <float> label(d_counts.size() - 1);
-    cudaMemcpy(label.data(), thrust::raw_pointer_cast(d_labels.data() + 1), label.size() * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(volume.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volume.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    //volume.resize(d_counts.size() - 1);
+    std::vector <float> label;// (d_counts.size() - 1);
+
+    // skip background (index 0) like your original code
+    copy_u32_to_host_float(d_labels, label, 1);
+    copy_u32_to_host_float(d_counts, volume, 1);
+
+    //cudaMemcpy(label.data(), thrust::raw_pointer_cast(d_labels.data() + 1), label.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(volume.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volume.size() * sizeof(float), cudaMemcpyDeviceToHost);
     _image->addFeature("label", poca::core::generateDataWithLog(label));
     _image->addFeature("volume", poca::core::generateDataWithLog(volume));
     _image->setCurrentHistogramType("label");
