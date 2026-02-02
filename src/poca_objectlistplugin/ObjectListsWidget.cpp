@@ -480,6 +480,9 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_subdivideButton = new QPushButton("Subdivide");
 	m_subdivideButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QObject::connect(m_subdivideButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	m_smoothButton = new QPushButton("Smooth");
+	m_smoothButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	QObject::connect(m_smoothButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QHBoxLayout* layoutRemeshParam = new QHBoxLayout;
 	layoutRemeshParam->addWidget(tlengthLbl);
 	layoutRemeshParam->addWidget(m_targetLengthLEdit);
@@ -487,6 +490,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layoutRemeshParam->addWidget(m_iterationRemeshingSpin);
 	layoutRemeshParam->addWidget(m_remeshButton);
 	layoutRemeshParam->addWidget(m_subdivideButton);
+	layoutRemeshParam->addWidget(m_smoothButton);
 
 	QVBoxLayout* layoutObjectMeshV = new QVBoxLayout;
 	layoutObjectMeshV->addLayout(layoutObjectMesh);
@@ -794,6 +798,15 @@ void ObjectListsWidget::actionNeeded()
 		engine->executeCommand(bc, &ci);
 		m_object->notify("LoadObjCharacteristicsAllWidgets");
 	}
+	else if(sender == m_smoothButton){
+		bool ok;
+		float lambda = 0.5f, tmp;
+		tmp = m_targetLengthLEdit->text().toFloat(&ok);
+		if (ok) lambda = tmp;
+		poca::core::CommandInfo ci(true, "laplacianSmooth", "lambda", lambda, "iterations", (uint32_t)m_iterationRemeshingSpin->value());
+		engine->executeCommand(bc, &ci);
+		m_object->notify("LoadObjCharacteristicsAllWidgets");
+		}
 }
 
 void ObjectListsWidget::actionNeeded(int _val)

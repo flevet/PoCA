@@ -189,7 +189,7 @@ protected:
 
 	QLineEdit* m_targetLengthLEdit;
 	QDoubleSpinBox* m_iterationRemeshingSpin;
-	QPushButton* m_remeshButton, * m_subdivideButton;
+	QPushButton* m_remeshButton, * m_subdivideButton, * m_smoothButton;
 
 	poca::core::MyObjectInterface* m_object;
 };
