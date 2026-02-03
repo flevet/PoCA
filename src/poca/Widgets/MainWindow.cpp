@@ -2681,20 +2681,13 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					continue;
 				}
 				std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
-
-				thrust::device_vector<float> d_labels, d_counts;
-				thrust::device_vector<float> d_pixels_stack(pixelOrig);
-				count_occurences_label_kernel_gpu< float>(d_pixels_stack, d_labels, d_counts);
-				std::vector <float> volumeActin(d_counts.size() - 1);
-				cudaMemcpy(volumeActin.data(), thrust::raw_pointer_cast(d_counts.data() + 1), volumeActin.size() * sizeof(float), cudaMemcpyDeviceToHost);
+				std::vector<uint8_t> volumeActin, labelsActin;
+				count_occurences_label(pixelOrig, labelsActin, volumeActin, 1);
 				volumesAcquired.push_back(volumeActin[0] * z_Ratio);
 
-				std::vector <uint8_t> maxProj;
+				std::vector <uint8_t> maxProj, surfaceProj;
 				maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
-				thrust::device_vector<float> d_pixels(maxProj);
-				count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
-				std::vector <float> surfaceProj(d_counts.size() - 1);
-				cudaMemcpy(surfaceProj.data(), thrust::raw_pointer_cast(d_counts.data() + 1), surfaceProj.size() * sizeof(float), cudaMemcpyDeviceToHost);
+				count_occurences_label(maxProj, labelsActin, surfaceProj, 1);
 				surfaceAcquired.push_back(surfaceProj[0]);
 
 				bci = engine->loadData(globalPath + condition + "nucleusObjs/" + nucleiObjectsName);
