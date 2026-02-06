@@ -46,6 +46,7 @@
 #include <General/EquationFit.hpp>
 #include <Geometry/DetectionSet.hpp>
 #include <General/CommandableObject.hpp>
+#include <General/Engine.hpp>
 
 #include "DetectionSetWidget.hpp"
 
@@ -482,12 +483,14 @@ void DetectionSetWidget::actionNeeded()
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	bool found = false;
 	for (size_t n = 0; n < m_lutButtons.size() && !found; n++) {
 		found = (m_lutButtons[n].first == sender);
 		if (found) {
-			dset->executeCommand(true, "changeLUT", "LUT", m_lutButtons[n].second);
+			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
 			for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");
@@ -497,7 +500,7 @@ void DetectionSetWidget::actionNeeded()
 	for (size_t n = 0; n < m_lutHeatmapButtons.size() && !found; n++) {
 		found = (m_lutHeatmapButtons[n].first == sender);
 		if (found) {
-			dset->executeCommand(true, "changeLUTHeatmap", m_lutHeatmapButtons[n].second);
+			engine->executeCommand(bc, true, "changeLUTHeatmap", m_lutHeatmapButtons[n].second);
 			m_object->notifyAll("updateDisplay");
 			return;
 		}
@@ -517,14 +520,14 @@ void DetectionSetWidget::actionNeeded()
 		m_radiusSlider->blockSignals(true);
 		m_radiusSlider->setSliderPosition(val);
 		m_radiusSlider->blockSignals(false);
-		dset->executeCommand(true, "radiusHeatmap", val);
+		engine->executeCommand(bc, true, "radiusHeatmap", val);
 		m_object->notifyAll("updateDisplay");
 	}
 	if (sender == m_intensityEdit) {
 		bool ok;
 		float val = m_intensityEdit->text().toFloat(&ok);
 		if (!ok) return;
-		dset->executeCommand(true, "intensityHeatmap", val);
+		engine->executeCommand(bc, true, "intensityHeatmap", val);
 		m_object->notifyAll("updateDisplay");
 	}
 	if (sender == m_cleanButton) {
@@ -535,14 +538,14 @@ void DetectionSetWidget::actionNeeded()
 		if (!ok) return;
 		bool fixedDT = m_fixedDarkTcbox->isChecked();
 		poca::core::CommandInfo ci(true, "clean", "radius", radius, "maxDarkTime", maxDT, "fixedDarkTime", fixedDT);
-		dset->executeCommand(&ci);
+		engine->executeCommand(bc, &ci);
 		if (ci.hasParameter("object")) {
 			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
 			emit(transferNewObjectCreated(obj));
 		}
 	}
 	if (sender == m_saveFramesButton) {
-		dset->executeCommand(true, "saveFramesMergedLocs");
+		engine->executeCommand(bc, true, "saveFramesMergedLocs");
 	}
 	if (sender == m_saveDetectionsButton) {
 		QString name = m_object->getName().c_str(), filename(m_object->getDir().c_str());
@@ -552,12 +555,12 @@ void DetectionSetWidget::actionNeeded()
 		QString extension = name.indexOf(".") != -1 ? name.right(name.size() - name.indexOf(".")) : ".csv";
 		filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save detections..."), filename, QString("Stats files (*" + extension + ")"), 0, QFileDialog::DontUseNativeDialog);
 		if (filename.isEmpty()) return;
-		dset->executeCommand(true, "saveLocalizations", "path", filename.toStdString());
+		engine->executeCommand(bc, true, "saveLocalizations", "path", filename.toStdString());
 	}
 	if (sender == m_creationObjectsOnLabelsButton) {
 		//m_object->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(true, "createDBSCANObjects",
 		//	"myObject", m_object));
-		dset->executeCommand(true, "createObjectsOnLabels");
+		engine->executeCommand(bc, true, "createObjectsOnLabels");
 		m_object->notifyAll("updateDisplay");
 	}
 }
@@ -570,59 +573,61 @@ void DetectionSetWidget::actionNeeded(bool _val)
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	if (sender == m_displayButton) {
-		dset->executeCommand(true, "selected", _val);
+		engine->executeCommand(bc, true, "selected", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_pointRenderButton) {
-		dset->executeCommand(true, "pointRendering", _val);
+		engine->executeCommand(bc, true, "pointRendering", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_heatmapButton) {
-		dset->executeCommand(true, "displayHeatmap", _val);
+		engine->executeCommand(bc, true, "displayHeatmap", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_displayCleanButton) {
-		dset->executeCommand(true, "displayCleanedLocs", _val);
+		engine->executeCommand(bc, true, "displayCleanedLocs", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_radiusScreenHeatCbox) {
-		dset->executeCommand(true, "radiusHeatmapType", "radiusScreenHeatmap", _val, "radiusWorldHeatmap", !_val);
+		engine->executeCommand(bc, true, "radiusHeatmapType", "radiusScreenHeatmap", _val, "radiusWorldHeatmap", !_val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_radiusWorldHeatCbox) {
-		dset->executeCommand(true, "radiusHeatmapType", "radiusScreenHeatmap", !_val, "radiusWorldHeatmap", _val);
+		engine->executeCommand(bc, true, "radiusHeatmapType", "radiusScreenHeatmap", !_val, "radiusWorldHeatmap", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_interpolateLUTHeatmapCbox) {
-		dset->executeCommand(true, "interpolateHeatmapLUT", _val);
+		engine->executeCommand(bc, true, "interpolateHeatmapLUT", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_gaussianButton) {
-		dset->executeCommand(true, "displayGaussian", _val);
+		engine->executeCommand(bc, true, "displayGaussian", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_fixedSizeGaussCBox) {
-		dset->executeCommand(true, "fixedSizeGaussian", _val);
+		engine->executeCommand(bc, true, "fixedSizeGaussian", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_worldButton) {
-		dset->executeCommand(true, "screenCoordinates", !_val);
+		engine->executeCommand(bc, true, "screenCoordinates", !_val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
 	else if (sender == m_screenButton) {
-		dset->executeCommand(true, "screenCoordinates", _val);
+		engine->executeCommand(bc, true, "screenCoordinates", _val);
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
@@ -635,12 +640,14 @@ void DetectionSetWidget::actionNeeded(int _val)
 	if (!bc) return;
 	poca::core::CommandableObject* dset = dynamic_cast <poca::core::CommandableObject*>(bc);
 
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	QObject* sender = QObject::sender();
 	if (sender == m_radiusSlider) {
 		m_currentRadiusEdit->blockSignals(true);
 		m_currentRadiusEdit->setText(QString::number(_val));
 		m_currentRadiusEdit->blockSignals(false);
-		dset->executeCommand(true, "radiusHeatmap", (float)_val);
+		engine->executeCommand(bc, true, "radiusHeatmap", (float)_val);
 		m_object->notifyAll("updateDisplay");
 	}
 	if (sender == m_intensitySlider) {
@@ -648,7 +655,7 @@ void DetectionSetWidget::actionNeeded(int _val)
 		m_intensityEdit->blockSignals(true);
 		m_intensityEdit->setText(QString::number(val));
 		m_intensityEdit->blockSignals(false);
-		dset->executeCommand(true, "intensityHeatmap", val);
+		engine->executeCommand(bc, true, "intensityHeatmap", val);
 		m_object->notifyAll("updateDisplay");
 	}
 	if (sender == m_alphaGaussianSlider) {
@@ -656,12 +663,12 @@ void DetectionSetWidget::actionNeeded(int _val)
 		m_alphaGaussianSlider->blockSignals(true);
 		m_alphaValueLbl->setText("Alpha: " + QString::number(val));
 		m_alphaGaussianSlider->blockSignals(false);
-		dset->executeCommand(true, "alphaGaussian", val);
+		engine->executeCommand(bc, true, "alphaGaussian", val);
 		m_object->notifyAll("updateDisplay");
 	}
 	if (sender == m_sizePointSpn) {
 		unsigned int valD = this->pointSize();
-		dset->executeCommand(true, "pointSizeGL", valD);
+		engine->executeCommand(bc, true, "pointSizeGL", valD);
 		m_object->notifyAll("updateDisplay");
 	}
 }
@@ -681,7 +688,9 @@ void DetectionSetWidget::performAction(poca::core::MyObjectInterface* _obj, poca
 				_ci->addParameter("dir", _obj->getDir());
 		}
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
-		bc->executeCommand(_ci);
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		engine->executeCommand(bc, _ci);
+		//bc->executeCommand(_ci);
 		actionDone = true;
 	}
 	if (actionDone) {

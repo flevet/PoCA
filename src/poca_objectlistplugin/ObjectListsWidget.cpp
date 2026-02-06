@@ -919,6 +919,7 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 		return;
 	}
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
+	poca::core::Engine* engine = poca::core::Engine::instance();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "hilow" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering") {
 		if (_ci->nameCommand == "histogram") {
@@ -927,7 +928,7 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 				_ci->addParameter("dir", _obj->getDir());
 		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
-		bc->executeCommand(_ci);
+		engine->executeCommand(bc, _ci);
 		actionDone = true;
 	}
 	else if (_ci->nameCommand == "selectObject") {
@@ -938,7 +939,7 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 		poca::core::CommandInfo ci3(false, "getObjectPickedID");
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
 		if (bc != NULL) {
-			bc->executeCommand(&ci3);
+			engine->executeCommand(bc, _ci);
 			if (!ci3.json.empty() && ci3.hasParameter("id")) {
 				int id = ci3.getParameter<int>("id");
 				if (id != -1)
