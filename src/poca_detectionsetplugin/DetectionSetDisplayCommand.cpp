@@ -341,14 +341,10 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 	m_actualValueFeature = m_maxOriginalFeature;
 	m_isScaleLUT = histogram->scaleLUT();
 	const std::vector<float>& values = histogram->getValues();
-	m_featureBuffer.updateBuffer(values);
-	/*bool normalBehavior = true;
+	const std::vector<bool>& selection = m_dset->getSelection();
+	//m_featureBuffer.updateBuffer(values);
+	bool normalBehavior = true;
 	if (normalBehavior) {
-		const std::vector<float>& values = histogram->getValues();
-		const std::vector<bool>& selection = m_dset->getSelection();
-		m_minOriginalFeature = histogram->getMin();
-		m_maxOriginalFeature = histogram->getMax();
-		m_actualValueFeature = m_maxOriginalFeature;
 
 		std::vector <float> feature(values.size());
 		for (size_t n = 0; n < values.size(); n++)
@@ -356,12 +352,6 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 		m_featureBuffer.updateBuffer(feature);
 	}
 	else {
-		const std::vector<float>& values = histogram->getValues();
-		const std::vector<bool>& selection = m_dset->getSelection();
-		m_minOriginalFeature = histogram->getCurrentMin();
-		m_maxOriginalFeature = histogram->getCurrentMax();
-		m_actualValueFeature = m_maxOriginalFeature;
-
 		std::vector <float> feature(values.size());
 		for (size_t n = 0; n < values.size(); n++) {
 			if (values[n] < m_minOriginalFeature)
@@ -372,7 +362,7 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 				feature[n] = values[n];
 		}
 		m_featureBuffer.updateBuffer(feature);
-	}*/
+	}
 }
 
 QString DetectionSetDisplayCommand::getInfosLocalization(const int _id) const
