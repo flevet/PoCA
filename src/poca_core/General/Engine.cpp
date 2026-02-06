@@ -321,12 +321,15 @@ namespace poca::core {
 		poca::core::CommandInfo ciHeatmap(false, "DetectionSet", "displayHeatmap", false);
 		poca::core::CommandInfo ci(false, "All", "freeGPU", true);
 		for (poca::core::MyObjectInterface* obj : _objs) {
-			removeDatasetFromList(obj);
+			auto cam = getCamera(obj);
+			if (cam != nullptr)
+				cam->makeCurrent();
 			obj->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(false, "displayHeatmap", false));
 			obj->executeGlobalCommand(&poca::core::CommandInfo(false, "freeGPU"));
 			poca::core::SubjectInterface* subject = dynamic_cast <poca::core::SubjectInterface*>(obj);
 			if (subject)
 				singleton->UnregisterFromAllObservers(subject);
+			removeDatasetFromList(obj);
 		}
 
 		MyMultipleObject* wobj = new MyMultipleObject(_objs);
