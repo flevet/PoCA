@@ -52,15 +52,17 @@ public:
 	const double getRadius() const;
 	const double getDistance() const;
 	const double getFactorAverageSpacing() const;
+	const double getMeshTargetLength() const;
+	const int getMeshIterations() const;
 
 protected slots:
 	
 
 protected:
-	QCheckBox* m_cboxTriangulation, * m_cboxConvexHull, * m_cboxPoisson, * m_cboxAlpha;
+	QCheckBox* m_cboxTriangulation, * m_cboxConvexHull, * m_cboxPoisson, * m_cboxAlpha, * m_cboxMesh;
 	QButtonGroup* m_bgroup;
 
-	QLineEdit* m_leditAngle, * m_leditRadius, * m_leditDistance, * m_leditFactorAvgSpacing;
+	QLineEdit* m_leditAngle, * m_leditRadius, * m_leditDistance, * m_leditFactorAvgSpacing, * m_leditTargetLength, * m_leditIterations;
 };
 
 #endif // ColocalizationChoiceDialog_h__

@@ -122,6 +122,8 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 			double radius = dial->getRadius();
 			double distance = dial->getDistance();
 			double factorAverageSpacing = dial->getFactorAverageSpacing();
+			double targetLength = dial->getMeshTargetLength();
+			int iterations = dial->getMeshIterations();
 			m_parameters[nameStr]["typeObject"] = type;
 			poca::core::Engine::instance()->getGlobalParameters()["typeObject"] = poca::geometry::ObjectListFactoryInterface::getTypeId(type);
 			m_parameters[nameStr]["angle"] = type;
@@ -132,6 +134,10 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 			poca::core::Engine::instance()->getGlobalParameters()["distance"] = distance;
 			m_parameters[nameStr]["factorAverageSpacing"] = factorAverageSpacing;
 			poca::core::Engine::instance()->getGlobalParameters()["factorAverageSpacing"] = factorAverageSpacing;
+			m_parameters[nameStr]["meshTargetLength"] = targetLength;
+			poca::core::Engine::instance()->getGlobalParameters()["meshTargetLength"] = targetLength;
+			m_parameters[nameStr]["meshIterations"] = iterations;
+			poca::core::Engine::instance()->getGlobalParameters()["meshIterations"] = iterations;
 		}
 		delete dial;
 	}

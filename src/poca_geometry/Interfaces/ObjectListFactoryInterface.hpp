@@ -46,7 +46,7 @@ namespace poca::geometry {
 
 	class ObjectListFactoryInterface {
 	public:
-		enum TypeShape { TRIANGULATION = 0, CONVEX_HULL = 1, POISSON_SURFACE = 2, ALPHA_SHAPE = 3 };
+		enum TypeShape { TRIANGULATION = 0, CONVEX_HULL = 1, POISSON_SURFACE = 2, ALPHA_SHAPE = 3, MESH = 4 };
 		
 		virtual ObjectListInterface* createObjectList(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;
 		virtual ObjectListInterface* createObjectListFromDelaunay(poca::core::MyObjectInterface*, const std::vector <bool>&, const float = std::numeric_limits < float >::max(), const size_t = 3, const size_t = std::numeric_limits < float >::max(), const float = 0.f, const float = std::numeric_limits < float >::max(), const bool = false) = 0;

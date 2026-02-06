@@ -971,9 +971,15 @@ namespace poca::geometry {
 		if (type == ObjectListFactoryInterface::POISSON_SURFACE) {
 			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshes);
 		}
+		else if (type == ObjectListFactoryInterface::TRIANGULATION) {
+			objs = locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		}
 		else {
+			double targetLength = poca::core::Engine::instance()->getGlobalParameters()["meshTargetLength"].get<double>();
+			int iterations = poca::core::Engine::instance()->getGlobalParameters()["meshIterations"].get<int>();
+
 			std::vector <poca::core::ROIInterface*> ROIs;
-			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshPoints, meshTris, ROIs, true, true, 250, 5);
+			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshPoints, meshTris, ROIs, true, true, targetLength, iterations);
 		}
 
 		return objs;
