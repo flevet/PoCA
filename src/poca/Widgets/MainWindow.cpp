@@ -1889,6 +1889,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 	else
 		mdis.push_back(m_currentMdi);
 	for (auto currentMdi : mdis) {
+		setActiveMdiChild(currentMdi);
 		for (auto json : _macro) {
 			if (json.empty()) continue;
 
