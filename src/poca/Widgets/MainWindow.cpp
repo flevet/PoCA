@@ -2297,7 +2297,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 						std::cout << dirGlobal.dirName().toStdString() << "\t" << condition.fileName().toStdString() << "\t" << currentFile.toStdString() << "\t" "Failed, Actin segmentation should be uint8_t" << std::endl;
 						continue;
 					}
-					std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
+					/*std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
 
 					thrust::device_vector<float> d_labels, d_counts;
 					thrust::device_vector<float> d_pixels_stack(pixelOrig);
@@ -2312,7 +2312,17 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
 					std::vector <float> surfaceProj(d_counts.size() - 1);
 					cudaMemcpy(surfaceProj.data(), thrust::raw_pointer_cast(d_counts.data() + 1), surfaceProj.size() * sizeof(float), cudaMemcpyDeviceToHost);
-					float surfaceAcquired = surfaceProj[0];
+					float surfaceAcquired = surfaceProj[0];*/
+
+					float volumesAcquired = 0.f, surfaceAcquired = 0.f;
+					const std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
+					std::vector<uint8_t> volumeActin, labelsActin;
+					count_occurences_label(pixelOrig, labelsActin, volumeActin, 1);
+					volumesAcquired = volumeActin[0] * z_Ratio;
+					std::vector <uint8_t> maxProj, surfaceProj;
+					maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
+					count_occurences_label(maxProj, labelsActin, surfaceProj, 1);
+					surfaceAcquired = surfaceProj[0];
 
 					float r = sqrt(surfaceAcquired / M_PI);
 					float volSphere = (4.0 / 3.0) * M_PI * pow(r, 3);
