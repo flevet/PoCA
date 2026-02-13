@@ -894,13 +894,13 @@ void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint3
 template <class T>
 void count_occurences_label(const std::vector<T>& h_pixels, std::vector<T>& h_labels, std::vector<T>& h_counts, int offset)
 {
-    thrust::device_vector<float> d_labels, d_counts;
-    thrust::device_vector<float> d_pixels(h_pixels);
-    count_occurences_label_kernel_gpu< float>(d_pixels, d_labels, d_counts);
+    thrust::device_vector<T> d_labels, d_counts;
+    thrust::device_vector<T> d_pixels(h_pixels);
+    count_occurences_label_kernel_gpu<T>(d_pixels, d_labels, d_counts);
     h_counts.resize(d_counts.size() - offset);
-    cudaMemcpy(h_counts.data(), thrust::raw_pointer_cast(d_counts.data() + offset), h_counts.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_counts.data(), thrust::raw_pointer_cast(d_counts.data() + offset), h_counts.size() * sizeof(T), cudaMemcpyDeviceToHost);
     h_labels.resize(d_labels.size() - offset);
-    cudaMemcpy(h_labels.data(), thrust::raw_pointer_cast(d_labels.data() + offset), h_labels.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_labels.data(), thrust::raw_pointer_cast(d_labels.data() + offset), h_labels.size() * sizeof(T), cudaMemcpyDeviceToHost);
 }
 
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
