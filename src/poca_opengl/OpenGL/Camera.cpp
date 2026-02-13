@@ -1798,6 +1798,8 @@ namespace poca::opengl {
 				printf("sortWRTCameraPosition, took %f seconds (%lld microseconds)\n", s, ms);
 			}
 
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+
 			poca::core::CommandInfo ci(false, "pick",
 				"x", _event->pos().x(),
 				"y", _event->pos().y(),
@@ -1812,6 +1814,7 @@ namespace poca::opengl {
 			break;
 		}
 		case Qt::MiddleButton:
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 			break;
 		case Qt::RightButton:
 			poca::core::CommandInfo ci(false, "pick",
