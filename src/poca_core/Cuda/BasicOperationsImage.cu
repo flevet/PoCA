@@ -892,15 +892,16 @@ void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint3
 }
 
 template <class T>
-void count_occurences_label(const std::vector<T>& h_pixels, std::vector<T>& h_labels, std::vector<T>& h_counts, int offset)
+void count_occurences_label(const std::vector<T>& h_pixels, std::vector<uint32_t>& h_labels, std::vector<uint32_t>& h_counts, int offset)
 {
-    thrust::device_vector<T> d_labels, d_counts;
-    thrust::device_vector<T> d_pixels(h_pixels);
-    count_occurences_label_kernel_gpu<T>(d_pixels, d_labels, d_counts);
+    auto d_t = upload_to_device<T>(h_pixels);
+    auto d_pixels = to_u32<T>(d_t);
+    thrust::device_vector<uint32_t> d_labels, d_counts;
+    count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
     h_counts.resize(d_counts.size() - offset);
-    cudaMemcpy(h_counts.data(), thrust::raw_pointer_cast(d_counts.data() + offset), h_counts.size() * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_counts.data(), thrust::raw_pointer_cast(d_counts.data() + offset), h_counts.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     h_labels.resize(d_labels.size() - offset);
-    cudaMemcpy(h_labels.data(), thrust::raw_pointer_cast(d_labels.data() + offset), h_labels.size() * sizeof(T), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_labels.data(), thrust::raw_pointer_cast(d_labels.data() + offset), h_labels.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 }
 
 template poca::core::ImageInterface* convertAndCreateLabelImage<uint32_t, uint8_t>(thrust::device_vector<uint32_t>& d_labels, const uint32_t _w, const uint32_t _h, const uint32_t _d);
@@ -974,9 +975,9 @@ template void maxProjection(const std::vector<uint16_t>& _source, std::vector<ui
 template void maxProjection(const std::vector<uint32_t>& _source, std::vector<uint32_t>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
 template void maxProjection(const std::vector<float>& _source, std::vector<float>& _output, uint32_t _w, uint32_t _h, uint32_t _d);
 
-template void count_occurences_label(const std::vector<uint8_t>& d_pixels, std::vector<uint8_t>& d_labels, std::vector<uint8_t>& d_counts, int offset = 0);
-template void count_occurences_label(const std::vector<uint16_t>& d_pixels, std::vector<uint16_t>& d_labels, std::vector<uint16_t>& d_counts, int offset = 0);
+template void count_occurences_label(const std::vector<uint8_t>& d_pixels, std::vector<uint32_t>& d_labels, std::vector<uint32_t>& d_counts, int offset = 0);
+template void count_occurences_label(const std::vector<uint16_t>& d_pixels, std::vector<uint32_t>& d_labels, std::vector<uint32_t>& d_counts, int offset = 0);
 template void count_occurences_label(const std::vector<uint32_t>& d_pixels, std::vector<uint32_t>& d_labels, std::vector<uint32_t>& d_counts, int offset = 0);
-template void count_occurences_label(const std::vector<float>& d_pixels, std::vector<float>& d_labels, std::vector<float>& d_counts, int offset = 0);
+template void count_occurences_label(const std::vector<float>& d_pixels, std::vector<uint32_t>& d_labels, std::vector<uint32_t>& d_counts, int offset = 0);
 
 #endif

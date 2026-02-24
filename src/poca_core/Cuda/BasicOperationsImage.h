@@ -88,6 +88,6 @@ void maxProjection(const std::vector<T>& _source, std::vector<T>& _output, uint3
 #endif
 
 template <class T>
-void count_occurences_label(const std::vector<T>& h_pixels, std::vector<T>& h_labels, std::vector<T>& h_counts, int offset = 0);
+void count_occurences_label(const std::vector<T>& h_pixels, std::vector<uint32_t>& h_labels, std::vector<uint32_t>& h_counts, int offset = 0);
 
 #endif
