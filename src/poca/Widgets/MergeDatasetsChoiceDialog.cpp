@@ -51,8 +51,11 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 	m_cboxGrid->setChecked(true);
 
 	// Fill left list with some example data
-	for (const auto& data : m_datasets)
-		m_allDatasetsList->addItem(data.first);
+	for (int i = 0; i < (int)m_datasets.size(); ++i) {
+		auto* it = new QListWidgetItem(m_datasets[i].first);
+		it->setData(Qt::UserRole, i);          // store original index
+		m_allDatasetsList->addItem(it);
+	}
 
 	// Enable multi-selection (Ctrl/Maj)
 	m_allDatasetsList->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -86,15 +89,15 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 
 		if (!selectedItems.empty()) {
 			for (QListWidgetItem* item : selectedItems) {
-				m_datasetsToMergeList->addItem(item->text());
-				delete m_allDatasetsList->takeItem(m_allDatasetsList->row(item));
+				int row = m_allDatasetsList->row(item);
+				QListWidgetItem* taken = m_allDatasetsList->takeItem(row); // removes without deleting
+				m_datasetsToMergeList->addItem(taken);                      // reuses same item (keeps UserRole)
 			}
 		}
 		else {
 			while (m_allDatasetsList->count() > 0) {
-				QListWidgetItem* item = m_allDatasetsList->takeItem(0);
-				m_datasetsToMergeList->addItem(item->text());
-				delete item;
+				QListWidgetItem* taken = m_allDatasetsList->takeItem(0);
+				m_datasetsToMergeList->addItem(taken);
 			}
 		}
 	});
@@ -113,34 +116,19 @@ MergeDatasetsChoiceDialog::~MergeDatasetsChoiceDialog()
 
 }
 
-
-
-/*const uint32_t MergeDatasetsChoiceDialog::nbColors() const
-{
-	uint32_t nbColors = 0;
-	for (QComboBox* c : m_comboDats) {
-		if (!c->currentText().isEmpty())
-			nbColors++;
-	}
-	return nbColors;
-}*/
-
 std::vector <MdiChild*> MergeDatasetsChoiceDialog::getObjects() const
 {
 	std::vector<MdiChild*> data;
+	data.reserve(m_datasetsToMergeList->count());
 
 	for (int i = 0; i < m_datasetsToMergeList->count(); ++i) {
-		QString itemText = m_datasetsToMergeList->item(i)->text();
+		QListWidgetItem* item = m_datasetsToMergeList->item(i);
+		const int idx = item->data(Qt::UserRole).toInt();
 
-		auto it = std::find_if(m_datasets.begin(), m_datasets.end(),
-			[&](const std::pair<QString, MdiChild*>& p) {
-				return p.first == itemText;
-			});
-
-		if (it != m_datasets.end()) {
-			data.push_back(it->second);
-		}
+		if (0 <= idx && idx < (int)m_datasets.size())
+			data.push_back(m_datasets[idx].second);
 	}
+
 	return data;
 }
 

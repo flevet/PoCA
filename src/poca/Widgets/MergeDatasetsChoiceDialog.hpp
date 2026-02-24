@@ -49,7 +49,6 @@ public:
 	MergeDatasetsChoiceDialog(const std::vector < std::pair < QString, MdiChild* > > &, QWidget * = 0, Qt::WindowFlags = 0);
 	~MergeDatasetsChoiceDialog();
 
-	//const uint32_t nbColors() const;
 	std::vector < MdiChild*> getObjects() const;
 	inline const bool gridSelected() const { return m_cboxGrid->isChecked(); }
 
