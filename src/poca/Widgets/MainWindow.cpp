@@ -2316,10 +2316,11 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 
 					float volumesAcquired = 0.f, surfaceAcquired = 0.f;
 					const std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
-					std::vector<uint8_t> volumeActin, labelsActin;
+					std::vector<uint32_t> volumeActin, labelsActin;
 					count_occurences_label(pixelOrig, labelsActin, volumeActin, 1);
 					volumesAcquired = volumeActin[0] * z_Ratio;
-					std::vector <uint8_t> maxProj, surfaceProj;
+					std::vector <uint8_t> maxProj;
+					std::vector<uint32_t> surfaceProj;
 					maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
 					count_occurences_label(maxProj, labelsActin, surfaceProj, 1);
 					surfaceAcquired = surfaceProj[0];
@@ -2692,11 +2693,12 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					continue;
 				}
 				std::vector <uint8_t>& pixelOrig = actin8bits->pixels();
-				std::vector<uint8_t> volumeActin, labelsActin;
+				std::vector<uint32_t> volumeActin, labelsActin;
 				count_occurences_label(pixelOrig, labelsActin, volumeActin, 1);
 				volumesAcquired.push_back(volumeActin[0] * z_Ratio);
 
-				std::vector <uint8_t> maxProj, surfaceProj;
+				std::vector <uint8_t> maxProj;
+				std::vector<uint32_t> surfaceProj;
 				maxProjection<uint8_t>(pixelOrig, maxProj, actin8bits->width(), actin8bits->height(), actin8bits->depth());
 				count_occurences_label(maxProj, labelsActin, surfaceProj, 1);
 				surfaceAcquired.push_back(surfaceProj[0]);
