@@ -218,6 +218,7 @@ typedef SphereTraits::Point_3                                     SpherePoint_3;
 typedef SphereTraits::Segment_3                                   SphereSegment_3;
 
 typedef Kernel::Point_3 Point_3_double;
+typedef Kernel::Vector_3 Vector_3_double;
 typedef CGAL::Surface_mesh<Point_3_double> Surface_mesh_3_double;
 typedef boost::graph_traits<Surface_mesh_3_double>::vertex_descriptor    vertex_descriptor;
 typedef boost::graph_traits<Surface_mesh_3_double>::halfedge_descriptor         halfedge_descriptor;
