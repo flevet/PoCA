@@ -152,28 +152,29 @@ namespace poca::geometry {
 		}
 
 		smoothedOutline.resize(_originalOutline.size());
-		for (auto step = 0; step < _nbSmooth; step++) {
-			for (auto n = 0; n < _originalOutline.size(); n++) {
-				float x = 0, y = 0;
-				std::vector <int> final_ids;
-				for (auto nind : nindices) {
-					auto id = n + nind;
-					if (id < 0 || id >= _originalOutline.size()) {
-						if (_closed) {
-							if (id < 0)
-								final_ids.push_back(_originalOutline.size() + id);
-							else if (id >= _originalOutline.size())
-								final_ids.push_back(id % _originalOutline.size());
+		if (_nbSmooth > 0) {
+			for (auto step = 0; step < _nbSmooth; step++) {
+				for (auto n = 0; n < _originalOutline.size(); n++) {
+					float x = 0, y = 0;
+					std::vector <int> final_ids;
+					for (auto nind : nindices) {
+						auto id = n + nind;
+						if (id < 0 || id >= _originalOutline.size()) {
+							if (_closed) {
+								if (id < 0)
+									final_ids.push_back(_originalOutline.size() + id);
+								else if (id >= _originalOutline.size())
+									final_ids.push_back(id % _originalOutline.size());
+							}
 						}
+						else
+							final_ids.push_back(id);
 					}
-					else
-						final_ids.push_back(id);
-				}
-				float n_final = final_ids.size();
-				for (auto id : final_ids) {
-					x += _originalOutline[id].x() / n_final;
-					y += _originalOutline[id].y() / n_final;
-				}
+					float n_final = final_ids.size();
+					for (auto id : final_ids) {
+						x += _originalOutline[id].x() / n_final;
+						y += _originalOutline[id].y() / n_final;
+					}
 					/*if ((id < 0 || id >= _originalOutline.size()) && _closed)
 					{
 						if (id < 0)
@@ -188,14 +189,17 @@ namespace poca::geometry {
 						y += _originalOutline[id].y() / (float)_windowSize;
 					}
 				}*/
-				smoothedOutline[n].set(x, y, 0.f);
-				/*auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
-				auto x = (outlineTmp[prec].x() + outlineTmp[n].x() * 2.f + outlineTmp[next].x()) / 4.f;
-				auto y = (outlineTmp[prec].y() + outlineTmp[n].y() * 2.f + outlineTmp[next].y()) / 4.f;
-				smoothedOutline[n].set(x, y, 0.f);*/
+					smoothedOutline[n].set(x, y, 0.f);
+					/*auto prec = n == 0 ? outlineTmp.size() - 1 : n - 1, next = (n + 1) % outlineTmp.size();
+					auto x = (outlineTmp[prec].x() + outlineTmp[n].x() * 2.f + outlineTmp[next].x()) / 4.f;
+					auto y = (outlineTmp[prec].y() + outlineTmp[n].y() * 2.f + outlineTmp[next].y()) / 4.f;
+					smoothedOutline[n].set(x, y, 0.f);*/
+				}
+				_originalOutline = smoothedOutline;
 			}
-			_originalOutline = smoothedOutline;
 		}
+		else
+			smoothedOutline = _originalOutline;
 		//std::cout << __LINE__ << std::endl;
 
 		for (auto n = 0; n < smoothedOutline.size(); n++) {

@@ -269,6 +269,32 @@ namespace poca::core {
 		return true;
 	}
 
+	bool Engine::addComponentToComponentList(MyObjectInterface* _obj, const std::string& _componentListName, BasicComponentInterface* _comp)
+	{
+		if (!_obj->hasBasicComponent(_componentListName))
+			return false;
+
+		BasicComponentList* blist = dynamic_cast<BasicComponentList*>(_obj->getBasicComponent(_componentListName));
+		if (!blist)
+			return false;
+
+		BasicComponent* bc = dynamic_cast <BasicComponent*>(_comp);
+		if (!bc)
+			return false;
+
+		m_plugins->addCommands(_comp);
+		blist->addComponent(bc);
+
+		return true;
+	}
+
+	bool Engine::addComponentToComponentList(BasicComponentList* _list, BasicComponent* _comp)
+	{
+		m_plugins->addCommands(_comp);
+		_list->addComponent(_comp);
+		return true;
+	}
+
 	void Engine::addCommands(BasicComponentInterface* _comp)
 	{
 		m_plugins->addCommands(_comp);
@@ -339,6 +365,7 @@ namespace poca::core {
 			name.append(obj->getName().c_str()).append(",");
 		name.append("]");
 		wobj->setName(name.toStdString());
+		wobj->addCommand(new MyObjectDisplayCommand(wobj));
 
 		m_plugins->addCommands(wobj);
 

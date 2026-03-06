@@ -563,6 +563,8 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
 	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	QScrollArea* scroll = new QScrollArea;
+	scroll->setWidget(m_delaunayTriangulationFilteringWidget);
 	//m_tableObjects = new QTableWidget;
 	m_tableObjects = new QTableView;
 	m_model = new TableModel();

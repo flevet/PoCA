@@ -52,6 +52,7 @@ namespace poca::core {
 	class CommandInfo;
 	class MyObjectInterface;
 	class BasicComponentList;
+	class BasicComponent;
 }
 
 namespace poca::opengl {
@@ -84,6 +85,8 @@ namespace poca::core {
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);
 		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);
+		bool addComponentToComponentList(MyObjectInterface*, const std::string&, BasicComponentInterface*);
+		bool addComponentToComponentList(BasicComponentList*, BasicComponent*);
 		void addCommands(BasicComponentInterface*);
 		BasicComponentInterface* loadData(const QString&, CommandInfo* = NULL, MyObjectInterface* = NULL);
 		MyObjectInterface* generateMultipleObject(const std::vector <MyObjectInterface*>&);

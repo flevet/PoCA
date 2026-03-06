@@ -102,6 +102,7 @@
 #include <Geometry/CGAL_helpers.hpp>
 #include <General/stb_rect_pack.h>
 #include <Objects/MyMultipleObject.hpp>
+#include <Geometry/ObjectListPolygon.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -2858,6 +2859,79 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		poca::opengl::CameraInterface* cam = createWindows(obj);
 		engine->addCameraToObject(obj, cam);
 
+	}
+	else if (tmp == "embedShapeLatentSpace") {
+		QString pathPolygons("M:/everyone/embedShape");
+		QStringList allFiles;
+		QDir dir(pathPolygons);
+		dir.setFilter(QDir::Files);
+		QFileInfoList list = dir.entryInfoList();
+		std::vector <poca::core::MyObjectInterface*> objects;
+		for (int i = 0; i < list.size(); ++i) {
+			QFileInfo dirInfo = list.at(i);
+			QString fileName = dirInfo.filePath();
+			if (!fileName.endsWith(".csv")) continue;
+			//std::cout << fileName.toStdString() << std::endl;
+			std::ifstream fs(fileName.toLatin1().data());
+			std::string s;
+			std::vector <Point_2> points, translatedPoints;
+			float xmin = FLT_MAX, xmax = -FLT_MAX, ymin = FLT_MAX, ymax = -FLT_MAX;
+			while (std::getline(fs, s)) {
+				std::vector < std::string > values;
+				values = poca::core::split(s, ',', values);
+				float x = ::atof(values[0].c_str()), y = ::atof(values[1].c_str());
+				points.emplace_back(x, y);
+				if (x < xmin) xmin = x;
+				if (x > xmax) xmax = x;
+				if (y < ymin) ymin = y;
+				if (y > ymax) ymax = y;
+			}
+			fs.close();
+			for (auto& pt : points) 
+				translatedPoints.emplace_back(pt.x() - xmin, pt.y() - ymin);
+			Polygon_2 poly(translatedPoints.begin(), translatedPoints.end());
+			poca::geometry::ObjectListPolygon* objPoly = new poca::geometry::ObjectListPolygon(std::vector <Polygon_2> { poly });
+			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objPoly, poca::core::CommandInfo(), "MainWindow::embedShapeLatentSpace");
+			auto* polyObj = engine->createObject(dirInfo.absolutePath().toStdString(), dirInfo.completeBaseName().toStdString(), objsList);
+			if (polyObj != NULL)
+				objects.push_back(polyObj);
+			if (i % 250 == 0) {
+				std::cout << "Polygon " << i << std::endl;
+			}
+		}
+		QString latentspacePath("M:/everyone/embedShapeResults/results_all_the_data/dataframe_modified.csv");
+		std::vector <std::string> names;
+		std::vector <poca::core::Vec3mf> translations;
+		std::ifstream fs(latentspacePath.toLatin1().data());
+		std::string s;
+		std::getline(fs, s);
+		while (std::getline(fs, s)) {
+			std::vector < std::string > values;
+			values = poca::core::split(s, ',', values);
+			names.push_back(values[2]);
+			//translations.emplace_back(::atof(values[values.size() - 2].c_str()) * 1000.f, ::atof(values[values.size() - 1].c_str()) * 1000.f, 0.f);//UMAP
+			translations.emplace_back(::atof(values[3].c_str()) * 100.f, ::atof(values[4].c_str()) * 100.f, 0.f);//PCA
+		}
+		fs.close();
+
+		if (translations.size() != objects.size())
+			std::cout << "This is a big problem" << std::endl;
+
+		MyMultipleObject* mobjects = static_cast <MyMultipleObject*>(engine->generateMultipleObject(objects));
+		std::vector <poca::core::BoundingBox>& gbboxes = mobjects->getGridBBoxes();
+		for (auto n = 0; n < mobjects->nbColors(); n++) {
+			auto* curObj = mobjects->getObject(n);
+			const auto& bbox = curObj->boundingBox();
+			auto w = bbox.realWidth(), h = bbox.realHeight(), d = bbox.realThick();
+			gbboxes[n].set(translations[n][0], translations[n][1], translations[n][2], translations[n][0] + w, translations[n][1] + h, translations[n][2]);
+		}
+		mobjects->resetModelMatrices(true);
+
+		poca::opengl::CameraInterface* cam = createWindows(mobjects);
+		engine->addCameraToObject(mobjects, cam);
+		cam->makeCurrent();
+		poca::core::CommandInfo ci(false, "createDisplay");
+		mobjects->executeGlobalCommand(&ci);
 	}
 }
 

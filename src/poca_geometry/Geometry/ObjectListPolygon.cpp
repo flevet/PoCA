@@ -416,7 +416,7 @@ namespace poca::geometry {
 				auto& allCurvatures = m_curvatures.back();
 				size_t curS = 0, nbS = polygons.size();
 				for (const auto& polygon : polygons) {
-					std::cout << "polygon " << cur << " / " << nb << ", spline " << curS << " / " << nbS << ", # points" << polygon.size() << std::endl;
+					//std::cout << "polygon " << cur << " / " << nb << ", spline " << curS << " / " << nbS << ", # points" << polygon.size() << std::endl;
 					/*std::vector<tinyspline::real> points;
 					for (const auto& p : polygon.container()) {
 						points.emplace_back(p.x());
@@ -457,7 +457,7 @@ namespace poca::geometry {
 		for (auto const& t1 : boost::combine(m_polygons, m_curvatures)) {
 			auto const& polygons = t1.get<0>();
 			auto& curvatures = t1.get<1>();
-			std::cout << "****************************************" << polygons.size() << " vs " << curvatures.size() << std::endl;
+			//std::cout << "****************************************" << polygons.size() << " vs " << curvatures.size() << std::endl;
 			//for (const auto& polygon : polygons) {
 			for (auto const& t2 : boost::combine(polygons, curvatures)) {
 				auto const& polygon = t2.get<0>();
@@ -486,7 +486,7 @@ namespace poca::geometry {
 		auto [min_val, max_val] = poca::geometry::percentile_bounds_2_98(curvOutlines);
 		float range = max_val - min_val;
 		for (float& v : curvOutlines) v = std::clamp(v, min_val, max_val);
-		std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;
+		//std::cout << "min curv " << min_val << ", max curv " << max_val << std::endl;
 		std::transform(curvOutlines.begin(), curvOutlines.end(), curvOutlines.begin(), [min_val, range](float val) { return (val - min_val) / range; });
 		m_curvaturesArray.initialize(curvOutlines, nbSegments);
 		m_minCurvature = 0.f;
@@ -496,7 +496,7 @@ namespace poca::geometry {
 		//	std::cout << f << ", ";
 		//std::cout << std::endl;
 
-		std::cout << "min curv " << m_minCurvature << ", max curv " << m_maxCurvature << std::endl;
+		//std::cout << "min curv " << m_minCurvature << ", max curv " << m_maxCurvature << std::endl;
 		//std::cout << "****************************************" << std::endl;
 
 		std::vector <poca::core::Vec3mf> triangles;
@@ -543,8 +543,8 @@ namespace poca::geometry {
 			for (const auto& polygons : m_polygons) {
 				//std::cout << "****************************************\n# polygons " << polygons.size() << std::endl;
 
-				for(const auto& pol : polygons)
-					std::cout << "Polygon, # locs " << pol.size() << ", area " << pol.area() << std::endl;
+				//for(const auto& pol : polygons)
+				//	std::cout << "Polygon, # locs " << pol.size() << ", area " << pol.area() << std::endl;
 
 				Polygon_with_holes_2_inexact pwh(polygons.front());
 				for (auto n = 1; n < polygons.size(); n++)

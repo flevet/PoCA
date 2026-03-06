@@ -60,6 +60,7 @@
 #include <OpenGL/Helper.h>
 #include <Geometry/CGAL_includes.hpp>
 #include <Objects/MyMultipleObject.hpp>
+#include <General/Engine.hpp>
 
 #include "Camera.hpp"
 #include "Shader.hpp"
@@ -2891,6 +2892,8 @@ namespace poca::opengl {
 
 		if (!comObj->hasParameter("fontDisplay"))
 			return;
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
 
 		bool displayFont = comObj->getParameter<bool>("fontDisplay");
 		displayFont = !displayFont;
