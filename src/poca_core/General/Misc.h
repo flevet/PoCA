@@ -372,6 +372,12 @@ namespace poca::geometry {
 		float = 0.0025f,  // attraction strength per iter
 		float = 0.5f,      // how strongly to resolve overlaps
 		float = 1e-3f);
+
+	int relaxationCircles(std::vector<PackingCircle>&,
+		int = 200,
+		float = 0.0025f,  // attraction strength per iter
+		float = 0.5f,      // how strongly to resolve overlaps
+		float = 1e-3f);
 }
 
 namespace poca::core::utils {

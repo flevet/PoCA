@@ -580,6 +580,26 @@ namespace poca::geometry {
 
 		initSpiral(circles, order, rMed);
 
+		return relaxationCircles(circles, maxIters, centerPull, pushFactor, stopEps);
+	}
+
+	int relaxationCircles(std::vector<PackingCircle>& circles,
+		int maxIters,
+		float centerPull,  // attraction strength per iter
+		float pushFactor,      // how strongly to resolve overlaps
+		float stopEps)        // early-stop overlap threshold
+	{
+		if (circles.empty()) return 0;
+
+		// Optional: sort by radius descending for better packing
+		std::vector<int> order(circles.size());
+		for (int i = 0; i < (int)circles.size(); ++i) order[i] = i;
+		std::sort(order.begin(), order.end(),
+			[&](int a, int b) { return circles[a].r > circles[b].r; });
+
+		for (int idx : order)
+			std::cout << "Order = " << circles[idx].r << std::endl;
+
 		float total = 0.f;
 		for (size_t i = 0; i < circles.size(); ++i)
 		{
