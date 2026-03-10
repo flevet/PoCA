@@ -34,7 +34,7 @@
 
 #ifndef NO_CUDA
 #define cuda_check(x) if (x!=cudaSuccess) exit(1);
-#define IF_VERBOSE(x) //x
+#define IF_VERBOSE(x) x
 
 static
 void
@@ -78,7 +78,7 @@ template <class T> struct GPUBuffer {
 
     T* cpu_data;
     T* gpu_data;
-    int size;
+    size_t size;
 };
 
 template <class T> struct JustGPUBuffer {
@@ -94,7 +94,7 @@ template <class T> struct JustGPUBuffer {
     void cpu2gpu() { cuda_check(cudaMemcpy(gpu_data, cpu_data, size * sizeof(T), cudaMemcpyHostToDevice)); }
 
     T* gpu_data;
-    int size;
+    size_t size;
 };
 
 __global__ void kernel_getHist(float* array, std::size_t size, float* histo, std::size_t buckets, float minV, float step)
@@ -259,7 +259,30 @@ void computeStats_GPUU8(const uint8_t* values, const size_t nbValues, std::vecto
 
     // compute summary statistics
     summary_stats_data<float> result = thrust::transform_reduce(thrust::device_pointer_cast(out_array.gpu_data), thrust::device_pointer_cast(out_array.gpu_data) + nbValues, unary_op, init, binary_op);
-    thrust::sort(thrust::device_pointer_cast(out_array.gpu_data), thrust::device_pointer_cast(out_array.gpu_data) + nbValues);
+
+    size_t free_b = 0, total_b = 0;
+    cudaMemGetInfo(&free_b, &total_b);
+    std::cout << "Before sort - free MB: " << free_b / (1024.0 * 1024.0) << '\n';
+
+    cudaError_t prev = cudaGetLastError();
+    if (prev != cudaSuccess)
+        std::cout << "Previous error: " << cudaGetErrorString(prev) << '\n';
+
+    try {
+        thrust::sort(thrust::device_pointer_cast(out_array.gpu_data), thrust::device_pointer_cast(out_array.gpu_data) + nbValues);
+
+        cudaError_t e1 = cudaGetLastError();
+        cudaError_t e2 = cudaDeviceSynchronize();
+
+        std::cout << "After sort last error: " << cudaGetErrorString(e1) << '\n';
+        std::cout << "After sort sync error: " << cudaGetErrorString(e2) << '\n';
+    }
+    catch (const thrust::system_error& e) {
+        std::cerr << "Thrust system_error: " << e.what() << '\n';
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Exception: " << e.what() << '\n';
+    }
 
     out_array.gpu2cpu();
 
