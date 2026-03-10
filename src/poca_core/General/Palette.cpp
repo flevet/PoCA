@@ -300,6 +300,15 @@ namespace poca::core {
 		else if (_lut == std::string("AllBlack")) {
 			return Palette(Color4uc(0, 0, 0, 255), Color4uc(0, 0, 0, 255), _lut);
 		}
+		else if (_lut == std::string("AllYellow")) {
+			return Palette(Color4uc(230, 205, 13, 255), Color4uc(230, 205, 13, 255), _lut);
+			}
+		else if (_lut == std::string("AllGrey1")) {
+			return Palette(Color4uc(190, 190, 190, 255), Color4uc(190, 190, 190, 255), _lut);
+			}
+		else if (_lut == std::string("AllPinkish")) {
+			return Palette(Color4uc(246, 211, 198, 255), Color4uc(246, 211, 198, 255), _lut);
+			}
 		else if (_lut == std::string("HotCold")) {
 			Palette palette(Color4uc(0, 0, 255, 255), Color4uc(170, 0, 255, 255), _lut);
 			palette.setColor(0.1f, Color4uc(0, 170, 255, 255));
