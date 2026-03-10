@@ -74,6 +74,11 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlue")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllWhite")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlack")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllCyan")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllPinkish")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllYellow")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllOrange")));
+	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllGrey1")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Gray")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Random")));
 	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("RandomOneColor")));
