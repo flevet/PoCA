@@ -52,6 +52,7 @@ public:
 
 protected:
 	void saveAsSVG(const QString&) const;
+	void computeVoronoiDensityRankN(int, std::vector <float>&);
 
 protected:
 	poca::geometry::VoronoiDiagram* m_voronoi;

@@ -232,6 +232,13 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		filename.insert(filename.lastIndexOf("."), "_voronoi");
 		saveAsSVG(filename);
 	}
+	else if (_infos->nameCommand == "computeVoronoiDensityRankN") {
+		uint32_t rank = _infos->getParameter<uint32_t>("rank");
+		std::vector <float> densities;
+		computeVoronoiDensityRankN(rank, densities);
+		QString nameFeature("voronoiDensityRank_" + QString::number(rank));
+		m_voronoi->addFeature(nameFeature.toStdString(), poca::core::generateDataWithLog(densities));
+}
 }
 
 poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -256,6 +263,12 @@ poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::st
 		if (_parameters.contains("factor")) {
 			float val = _parameters["factor"].get<float>();
 			return poca::core::CommandInfo(false, _nameCommand, "factor", val);
+		}
+	}
+	else if (_nameCommand == "computeVoronoiDensityRankN") {
+		if (_parameters.contains("rank")) {
+			uint32_t val = _parameters["rank"].get<uint32_t>();
+			return poca::core::CommandInfo(false, _nameCommand, "rank", val);
 		}
 	}
 	else if (_nameCommand == "invertSelection" || _nameCommand == "randomPointOnTheSphere") {
@@ -390,4 +403,46 @@ void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
 		}
 	}
 	fs.close();
+}
+
+void VoronoiDiagramBasicCommands::computeVoronoiDensityRankN(int _rank, std::vector <float>& _densities)
+{
+	double nbPs = m_voronoi->nbFaces();
+	unsigned int nbForUpdate = nbPs / 100., cptTimer = 0;
+	if (nbForUpdate == 0) nbForUpdate = 1;
+	std::printf("Computing Voronoi density: %.2f %%", (0. / nbPs * 100.));
+	_densities.resize(m_voronoi->nbFaces(), 0.f);
+	std::vector <float>& volumes = m_voronoi->getMyData("volume")->getData<float>();
+	const poca::core::MyArrayUInt32& allNeighs = m_voronoi->getNeighbors();
+	const auto& firsts = allNeighs.getFirstElements();
+	const auto& data = allNeighs.getData();
+	for (size_t n = 0, cpt = 0; n < m_voronoi->nbFaces(); n++) {
+		std::set <uint32_t> neighs;
+		std::vector <uint32_t> queue;
+		neighs.insert(n);
+		queue.push_back(n);
+		size_t cur = 0, size = queue.size();
+		for (auto r = 0; r < _rank; r++) {
+			for (auto s = cur; s < size; s++) {
+				auto curId = queue[s];
+				for (size_t index = firsts[curId]; index < firsts[curId + 1]; index++) {
+					size_t neigh = data[index];
+					if (neigh != std::numeric_limits<std::size_t>::max() && neighs.find(neigh) == neighs.end()) {
+						neighs.insert(neigh);
+						queue.push_back(neigh);
+					}
+				}
+			}
+			cur = size;
+			size = queue.size();
+		}
+
+		float sumVol = 0.f, nbsTot = 0.f, sumD = 0.f;
+		for (auto id : neighs) {
+			sumVol += volumes[id];
+			nbsTot += 1.f;
+		}
+		_densities[n] = nbsTot / sumVol;
+		if (cptTimer++ % nbForUpdate == 0) 	std::printf("\rComputing Voronoi density: %.2f %%", ((double)cptTimer / nbPs * 100.));
+	}
 }
