@@ -69,6 +69,7 @@
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
 #include <CGAL/Polygon_mesh_processing/bbox.h>
+#include <CGAL/Aff_transformation_2.h>
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -103,6 +104,7 @@
 #include <General/stb_rect_pack.h>
 #include <Objects/MyMultipleObject.hpp>
 #include <Geometry/ObjectListPolygon.hpp>
+#include <General/Misc.h>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -2909,13 +2911,37 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			std::vector < std::string > values;
 			values = poca::core::split(s, ',', values);
 			names.push_back(values[2]);
-			//translations.emplace_back(::atof(values[values.size() - 2].c_str()) * 1000.f, ::atof(values[values.size() - 1].c_str()) * 1000.f, 0.f);//UMAP
-			translations.emplace_back(::atof(values[3].c_str()) * 100.f, ::atof(values[4].c_str()) * 100.f, 0.f);//PCA
+			translations.emplace_back(::atof(values[values.size() - 2].c_str()) * 1000.f, ::atof(values[values.size() - 1].c_str()) * 1000.f, 0.f);//UMAP
+			//translations.emplace_back(::atof(values[3].c_str()) * 100.f, ::atof(values[4].c_str()) * 100.f, 0.f);//PCA
 		}
 		fs.close();
 
 		if (translations.size() != objects.size())
 			std::cout << "This is a big problem" << std::endl;
+
+		std::vector<poca::geometry::PackingCircle> circles;
+		for (auto n = 0; n < objects.size(); n++) {
+			auto obj = objects.at(n);
+			const auto& t = translations.at(n);
+			const auto& bbox = obj->boundingBox();
+			const auto& centroid = bbox.centroid();
+			float r = (poca::core::Vec3mf(bbox[3], bbox[4], bbox[5]) - poca::core::Vec3mf(bbox[0], bbox[1], bbox[2])).length() / 2.f;
+
+			circles.push_back({ t[0] + centroid[0], t[1] + centroid[1], r, n });
+		}
+
+		int iterations = poca::geometry::relaxationCircles(circles, 200, 0.0015f, 0.55f);
+		std::cout << "# iterations = " << iterations << std::endl;
+
+		for (auto n = 0; n < objects.size(); n++) {
+			auto obj = objects.at(n);
+			auto& t = translations.at(n);
+			const auto& bbox = obj->boundingBox();
+			const auto& centroid = bbox.centroid();
+			const auto& c = circles.at(n);
+
+			t.set(c.x - centroid[0], c.y - centroid[1], t[0]);
+		}
 
 		MyMultipleObject* mobjects = static_cast <MyMultipleObject*>(engine->generateMultipleObject(objects));
 		std::vector <poca::core::BoundingBox>& gbboxes = mobjects->getGridBBoxes();
@@ -2933,6 +2959,78 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		poca::core::CommandInfo ci(false, "createDisplay");
 		mobjects->executeGlobalCommand(&ci);
 	}
+	else if (tmp == "embedShapeLatentSpaceExport") {
+		auto obj = m_currentMdi->getWidget()->getObject();
+		auto mobjects = dynamic_cast <MyMultipleObject*>(obj);
+		if (!mobjects) return;
+		std::vector <poca::core::BoundingBox>& gbboxes = mobjects->getGridBBoxes();
+		std::vector <Polygon_2> polygons;
+		for (auto n = 0; n < mobjects->nbColors(); n++) {
+			auto o = mobjects->getObject(n);
+			if (!o->hasBasicComponent("ObjectLists")) continue;
+			auto olist = static_cast <poca::geometry::ObjectLists*>(o->getBasicComponent("ObjectLists"));
+			if (olist->nbComponents() == 0) continue;
+			poca::geometry::ObjectListPolygon* opoly = dynamic_cast <poca::geometry::ObjectListPolygon*>(olist->getComponent(0));
+			if (!opoly) continue;
+			const auto& vpol = opoly->getPolygons();
+			const auto& t = gbboxes[n];
+			for (const auto& pol : vpol) {
+				auto newpoly = pol.at(0);
+				CGAL::Aff_transformation_2<K_inexact> translate(CGAL::TRANSLATION, CGAL::Vector_2<K_inexact> (t.x(), t.y()));
+				newpoly = CGAL::transform(translate, newpoly);
+				polygons.push_back(newpoly);
+			}
+		}
+		poca::geometry::ObjectListPolygon* objPoly = new poca::geometry::ObjectListPolygon(polygons);
+		poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(objPoly, poca::core::CommandInfo(), "MainWindow::embedShapeLatentSpaceExport");
+		auto* polyObj = engine->createObject(mobjects->getDir(), "embedAllObjects", objsList);
+		poca::opengl::CameraInterface* cam = createWindows(polyObj);
+		engine->addCameraToObject(polyObj, cam);
+		cam->makeCurrent();
+		poca::core::CommandInfo ci(false, "createDisplay");
+		polyObj->executeGlobalCommand(&ci);
+	}
+	else if (tmp == "locsDomino") {
+		auto obj = m_currentMdi->getWidget()->getObject();
+		auto mobjects = dynamic_cast <MyMultipleObject*>(obj);
+		if (!mobjects) return;
+		std::vector <float> xs, ys, zs, frame, label;
+		for (auto n = 0; n < mobjects->nbColors(); n++) {
+			auto obj = mobjects->getObject(n);
+			if (!obj->hasBasicComponent("DetectionSet")) continue;
+			poca::geometry::DetectionSet* dset = static_cast <poca::geometry::DetectionSet*>(obj->getBasicComponent("DetectionSet"));
+			std::vector <float>& oxs = dset->getMyData("x")->getData<float>();
+			std::vector <float>& oys = dset->getMyData("y")->getData<float>();
+			std::vector <float>& ozs = dset->getMyData("z")->getData<float>();
+			std::vector <float>& oframes = dset->getMyData("frame")->getData<float>();
+			std::vector <float> olabel(oxs.size(), n);
+			
+			std::copy(oxs.begin(), oxs.end(), std::back_inserter(xs));
+			std::copy(oys.begin(), oys.end(), std::back_inserter(ys));
+			std::copy(ozs.begin(), ozs.end(), std::back_inserter(zs));
+			std::copy(oframes.begin(), oframes.end(), std::back_inserter(frame));
+			std::copy(olabel.begin(), olabel.end(), std::back_inserter(label));
+		}
+	
+		std::map <std::string, std::vector <float>> features;
+
+		features["x"] = xs;
+		features["y"] = ys;
+		features["z"] = zs;
+		features["frame"] = frame;
+		features["label"] = label;
+
+		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::PluginList* plugins = engine->getPlugins();
+		poca::core::MyObjectInterface* newobj = engine->createObject(mobjects->getDir(), "merged.csv", dset);
+		if (newobj == NULL)
+			return;
+		poca::opengl::CameraInterface* cam = createWindows(newobj);
+		engine->addCameraToObject(newobj, cam);
+	}
+
 }
 
 void MainWindow::onGridReleased()
