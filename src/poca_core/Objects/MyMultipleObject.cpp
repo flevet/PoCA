@@ -210,7 +210,8 @@ void MyMultipleObject::resetModelMatrices(const bool _gridSelected) {
 		float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
 
 		//auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
-		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0], bbox[1], bbox[2]));
+		//auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0], bbox[1], bbox[2]));
+		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(0, 0, 0));
 		for (auto obj : m_colors)
 			obj->setModelMatrix(matrix);
 	}
