@@ -100,7 +100,7 @@ void main()
 			if (vfeature < minFeatureValue || vfeature > maxFeatureValue)
 				discard;
 			float inter = maxFeatureValue - minFeatureValue;
-			pos = (vfeature - currentMinFeatureValue) / inter;
+			pos = (vfeature - minFeatureValue) / inter;
 		}
 		
 		colorTmp = vec3(texture(lutTexture, pos).xyz);
