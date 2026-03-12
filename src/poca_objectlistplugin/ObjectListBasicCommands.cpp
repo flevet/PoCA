@@ -974,9 +974,8 @@ void ObjectListBasicCommands::saveSelectedObjectsForVectorHeat(const std::set<in
 void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
-	poca::opengl::CameraInterface* cam = engine->getCamera(m_objects);
-	poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
 
+	poca::core::PaletteInterface* pal = m_objects->getPalette();
 	poca::core::BoundingBox bbox = m_objects->boundingBox();
 	std::ofstream fs(_filename.toLatin1().data());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
@@ -989,94 +988,124 @@ void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 	fs << "<defs>\n";
 	fs << "</defs>\n";
 
-	std::vector <poca::core::Vec3mf> triangles;
-	m_objects->generateTriangles(triangles);
-	std::vector <poca::core::Vec3mf> normals;
-	m_objects->generateNormals(normals);
+	poca::geometry::ObjectListMesh* omesh = dynamic_cast <poca::geometry::ObjectListMesh*>(m_objects);
+	if (omesh) {
+		poca::opengl::CameraInterface* cam = engine->getCamera(m_objects);
+		poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
 
-	poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(m_objects->getCurrentHistogram());
-	const std::vector<float>& values = histogram->getValues();
-	const std::vector<bool>& selection = m_objects->getSelection();
-	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
+		std::vector <poca::core::Vec3mf> triangles;
+		m_objects->generateTriangles(triangles);
+		std::vector <poca::core::Vec3mf> normals;
+		m_objects->generateNormals(normals);
 
-	std::vector <float> featureValues;
-	m_objects->getFeatureInSelection(featureValues, values, selection, std::numeric_limits <float>::max());
+		poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(m_objects->getCurrentHistogram());
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = m_objects->getSelection();
+		float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
 
-	bool fill = false;
-	if (m_objects->hasParameter("fill"))
-		fill = m_objects->getParameter<bool>("fill");
+		std::vector <float> featureValues;
+		m_objects->getFeatureInSelection(featureValues, values, selection, std::numeric_limits <float>::max());
 
-	/*glm::vec3 orientation = cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
-	glm::vec3 posTmp(orientation + cam->getCenter());
-	posTmp *= 2 * cam->getOriginalDistanceOrtho(); 
-	poca::core::Vec3mf lightPos(posTmp.x, posTmp.y, posTmp.z), lightColor(1.0f, 1.0f, 1.0f);
-	poca::core::Vec3mf viewPos(lightPos);*/
+		bool fill = false;
+		if (m_objects->hasParameter("fill"))
+			fill = m_objects->getParameter<bool>("fill");
 
-	poca::core::Vec3mf lightPos = direction * 2, lightColor(1.0f, 1.0f, 1.0f);
-	poca::core::Vec3mf viewPos(lightPos);
+		/*glm::vec3 orientation = cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+		glm::vec3 posTmp(orientation + cam->getCenter());
+		posTmp *= 2 * cam->getOriginalDistanceOrtho();
+		poca::core::Vec3mf lightPos(posTmp.x, posTmp.y, posTmp.z), lightColor(1.0f, 1.0f, 1.0f);
+		poca::core::Vec3mf viewPos(lightPos);*/
 
-	char col[32], black[32];
-	unsigned char rb = 0, gb = 0, bb = 0;
-	poca::core::getColorStringUC(rb, gb, bb, black);
-	poca::core::PaletteInterface* pal = m_objects->getPalette();
+		poca::core::Vec3mf lightPos = direction * 2, lightColor(1.0f, 1.0f, 1.0f);
+		poca::core::Vec3mf viewPos(lightPos);
 
-	for (size_t n = 0; n < triangles.size(); n += 3) {
-		if (featureValues[n] == std::numeric_limits <float>::max()) continue;
-		float valPal = (featureValues[n] - minH) / interH;
-		poca::core::Color4uc c = pal->getColor(valPal);
-		unsigned char r = c[0], g = c[1], b = c[2];
-		poca::core::getColorStringUC(r, g, b, col);
+		char col[32], black[32];
+		unsigned char rb = 0, gb = 0, bb = 0;
+		poca::core::getColorStringUC(rb, gb, bb, black);
 
-		poca::core::Vec3mf normal = (normals[n] + normals[n + 1] + normals[n + 2]) / 3.f;
-		normal.normalize();
+		for (size_t n = 0; n < triangles.size(); n += 3) {
+			if (featureValues[n] == std::numeric_limits <float>::max()) continue;
+			float valPal = (featureValues[n] - minH) / interH;
+			poca::core::Color4uc c = pal->getColor(valPal);
+			unsigned char r = c[0], g = c[1], b = c[2];
+			poca::core::getColorStringUC(r, g, b, col);
 
-		if (direction.dot(normal) < 0.f) {
-			/*poca::core::Vec3mf centroid = (triangles[n] + triangles[n + 1] + triangles[n + 2]) / 3.f;
+			poca::core::Vec3mf normal = (normals[n] + normals[n + 1] + normals[n + 2]) / 3.f;
+			normal.normalize();
 
-			float ambientStrength = 0.1;
-			poca::core::Vec3mf ambient = ambientStrength * lightColor;
-			// diffuse \n"
-			poca::core::Vec3mf lightDir = (centroid - lightPos).normalize();
-			float diff = fabs(normal.dot(lightDir));
-			poca::core::Vec3mf diffuse = diff * lightColor;
-			// specular\n"
-			float specularStrength = 0.5;
-			poca::core::Vec3mf viewDir = (viewPos - centroid).normalize();
-			poca::core::Vec3mf reflectDir = lightDir - normal * 2.0 * normal.dot(lightDir);
-			float spec = pow(fabs(viewDir.dot(reflectDir)), 32);
-			poca::core::Vec3mf specular = specularStrength * spec * lightColor;
-			poca::core::Vec3mf result;
-			poca::core::Vec3mf newColor(c[0], c[1], c[2]); 
-			newColor = newColor * (ambient + diffuse + specular);
-			unsigned char r = newColor[0], g = newColor[1], b = newColor[2];
-			poca::core::getColorStringUC(r, g, b, col);*/
+			if (direction.dot(normal) < 0.f) {
+				/*poca::core::Vec3mf centroid = (triangles[n] + triangles[n + 1] + triangles[n + 2]) / 3.f;
 
-			if (fill) {
-				glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(triangles[n].x(), triangles[n].y(), triangles[n].z()));
-				glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(triangles[n + 1].x(), triangles[n + 1].y(), triangles[n + 1].z()));
-				glm::vec2 p3 = cam->worldToScreenCoordinates(glm::vec3(triangles[n + 2].x(), triangles[n + 2].y(), triangles[n + 2].z()));
+				float ambientStrength = 0.1;
+				poca::core::Vec3mf ambient = ambientStrength * lightColor;
+				// diffuse \n"
+				poca::core::Vec3mf lightDir = (centroid - lightPos).normalize();
+				float diff = fabs(normal.dot(lightDir));
+				poca::core::Vec3mf diffuse = diff * lightColor;
+				// specular\n"
+				float specularStrength = 0.5;
+				poca::core::Vec3mf viewDir = (viewPos - centroid).normalize();
+				poca::core::Vec3mf reflectDir = lightDir - normal * 2.0 * normal.dot(lightDir);
+				float spec = pow(fabs(viewDir.dot(reflectDir)), 32);
+				poca::core::Vec3mf specular = specularStrength * spec * lightColor;
+				poca::core::Vec3mf result;
+				poca::core::Vec3mf newColor(c[0], c[1], c[2]);
+				newColor = newColor * (ambient + diffuse + specular);
+				unsigned char r = newColor[0], g = newColor[1], b = newColor[2];
+				poca::core::getColorStringUC(r, g, b, col);*/
 
-				fs << "<polygon points =\"";
-				fs << p1.x << ",";
-				fs << p1.y << " ";
-				fs << p2.x << ",";
-				fs << p2.y << " ";
-				fs << p3.x << ",";
-				fs << p3.y << "\" stroke=\"" << col << "\" fill=\"" << col << "\" stroke-width=\"0.1\"/>\n";
-			}
-			else {
-				size_t idx[] = { n, n + 1, n + 2 };
-				for (size_t i = 0; i < 3; i++) {
-					size_t i1 = idx[i], i2 = idx[(i + 1) % 3];
-					glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(triangles[i1].x(), triangles[i1].y(), triangles[i1].z()));
-					glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(triangles[i2].x(), triangles[i2].y(), triangles[i2].z()));
-					fs << "<line x1 =\"";
-					fs << p1.x << "\" y1=\"";
-					fs << p1.y << "\" x2=\"";
-					fs << p2.x << "\" y2=\"";
-					fs << p2.y << "\" stroke=\"" << black << "\" stroke-width=\"1\"/>\n";
+				if (fill) {
+					glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(triangles[n].x(), triangles[n].y(), triangles[n].z()));
+					glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(triangles[n + 1].x(), triangles[n + 1].y(), triangles[n + 1].z()));
+					glm::vec2 p3 = cam->worldToScreenCoordinates(glm::vec3(triangles[n + 2].x(), triangles[n + 2].y(), triangles[n + 2].z()));
+
+					fs << "<polygon points =\"";
+					fs << p1.x << ",";
+					fs << p1.y << " ";
+					fs << p2.x << ",";
+					fs << p2.y << " ";
+					fs << p3.x << ",";
+					fs << p3.y << "\" stroke=\"" << col << "\" fill=\"" << col << "\" stroke-width=\"0.1\"/>\n";
+				}
+				else {
+					size_t idx[] = { n, n + 1, n + 2 };
+					for (size_t i = 0; i < 3; i++) {
+						size_t i1 = idx[i], i2 = idx[(i + 1) % 3];
+						glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(triangles[i1].x(), triangles[i1].y(), triangles[i1].z()));
+						glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(triangles[i2].x(), triangles[i2].y(), triangles[i2].z()));
+						fs << "<line x1 =\"";
+						fs << p1.x << "\" y1=\"";
+						fs << p1.y << "\" x2=\"";
+						fs << p2.x << "\" y2=\"";
+						fs << p2.y << "\" stroke=\"" << black << "\" stroke-width=\"1\"/>\n";
+					}
 				}
 			}
+		}
+	}
+	poca::geometry::ObjectListPolygon* opol = dynamic_cast <poca::geometry::ObjectListPolygon*>(m_objects);
+	if (opol) {
+		poca::core::Histogram<float>* histogram = dynamic_cast <poca::core::Histogram<float>*>(m_objects->getCurrentHistogram());
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = m_objects->getSelection();
+		float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
+
+		size_t cur = 0;
+		char col[32];
+		const auto& polygons = opol->getPolygons();
+		for (const auto& polygonWithHoles : polygons) {
+			float valPal = (values[cur] - minH) / interH;
+			poca::core::Color4uc c = pal->getColor(valPal);
+			unsigned char r = c[0], g = c[1], b = c[2];
+			poca::core::getColorStringUC(r, g, b, col);
+			fs << "<path fill = \"" << col << "\" fill-rule = \"evenodd\" d = \" ";
+			for (const auto& polygon : polygonWithHoles) {
+				fs << "M";
+				for (const auto& vertex : polygon)
+					fs << " " << vertex.x() << "," << vertex.y();
+				fs << std::endl;
+			}
+			fs << "\"/>" << std::endl;
 		}
 	}
 	fs.close();
