@@ -427,7 +427,7 @@ void VoronoiDiagramBasicCommands::computeVoronoiDensityRankN(int _rank, std::vec
 				auto curId = queue[s];
 				for (size_t index = firsts[curId]; index < firsts[curId + 1]; index++) {
 					size_t neigh = data[index];
-					if (neigh != std::numeric_limits<std::size_t>::max() && neighs.find(neigh) == neighs.end()) {
+					if (neigh != std::numeric_limits<std::uint32_t>::max() && neighs.find(neigh) == neighs.end()) {
 						neighs.insert(neigh);
 						queue.push_back(neigh);
 					}

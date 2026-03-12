@@ -295,12 +295,12 @@ namespace poca::geometry {
 		if (nbForUpdate == 0) nbForUpdate = 1;
 		std::printf("Computing Voronoi density: %.2f %%", (0. / nbPs * 100.));
 		std::vector <float> densities(nbFaces(), 0.f), meanDistance(nbFaces(), 0.f);
-		for (size_t n = 0, cpt = 0; n < nbFaces(); n++) {
+		for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
 			float sumVol = _volumes[n], nbsTot = 1.f, sumD = 0.f;
 			poca::core::Vec3mf pt(m_xs[n], m_ys[n], m_zs[n]);
-			for (size_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
-				size_t neigh = _neighbors[index];
-				if (neigh != std::numeric_limits<std::size_t>::max()) {
+			for (uint32_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
+				uint32_t neigh = _neighbors[index];
+				if (neigh != std::numeric_limits<std::uint32_t>::max()) {
 					sumVol += _volumes[neigh];
 					nbsTot += 1.f;
 
@@ -354,11 +354,11 @@ namespace poca::geometry {
 		}
 
 		std::vector <float> densities(nbFaces(), 0.f);
-		for (size_t n = 0, cpt = 0; n < nbFaces(); n++) {
+		for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
 			float sumVol = _volumes[n], nbsTot = 1.f;
-			for (size_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
-				size_t neigh = _neighbors[index];
-				if (neigh != std::numeric_limits<std::size_t>::max()) {
+			for (uint32_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
+				uint32_t neigh = _neighbors[index];
+				if (neigh != std::numeric_limits<std::uint32_t>::max()) {
 					sumVol += _volumes[neigh];
 					nbsTot += 1.f;
 				}

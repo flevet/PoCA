@@ -356,9 +356,21 @@ namespace poca::geometry {
 			maxVolume = *itmax;
 		}
 
-		for (size_t n = 0; n < nbCells; n++)
-			if (volumeCUDA[n] <= 0.f || (!(volumeCUDA[n] == volumeCUDA[n])))
+		std::vector<uint8_t> invalidCell(nbCells, 0);
+
+		//Test if computation of voilume for cell n failed, if yes volume of the cell is set to maxVolume
+		//and for all cells neighbors of this we need to change the neighbor id from n to std::
+		for (uint32_t n = 0; n < nbCells; n++)
+			if (volumeCUDA[n] <= 0.f || (!(volumeCUDA[n] == volumeCUDA[n]))) {
 				volumeCUDA[n] = maxVolume;
+				invalidCell[n] = 1;
+			}
+
+		for (uint32_t& id : neighbors) {
+			if (id < nbCells && invalidCell[id]) {
+				id = std::numeric_limits<std::uint32_t>::max();
+			}
+		}
 
 		t2 = clock();
 		elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
