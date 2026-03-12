@@ -427,6 +427,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layoutCommonActions->addWidget(m_alphaWidget);
 	layoutCommonActions->addWidget(m_explodeWidget);
 	QWidget* commonActionsW = new QWidget;
+	commonActionsW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	commonActionsW->setLayout(layoutCommonActions);
 	commonActionsW->setVisible(true);
 
@@ -549,7 +550,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 
 
 	m_allActionsTab = new QTabWidget;
-	m_objectPolygonW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	m_allActionsTab->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	m_allActionsTab->addTab(commonActionsW, "Common");
 	m_allActionsTab->addTab(m_widgetObjectMesh, "Object mesh");
 	m_allActionsTab->addTab(m_objectPolygonW, "Object polygon");
@@ -559,7 +560,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 		m_allActionsTab->setTabVisible(n, false);
 #endif
 	}
-	m_allActionsTab->setMaximumHeight(300);
+	//m_allActionsTab->setMaximumHeight(300);
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
 	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
