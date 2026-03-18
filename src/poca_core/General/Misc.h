@@ -36,6 +36,7 @@
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
 #include <QtCore/QString>
+#include <glm/glm.hpp>
 
 #include <vector>
 #include <map>
