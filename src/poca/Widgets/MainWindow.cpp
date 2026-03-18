@@ -906,7 +906,7 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	_obj->notify("LoadObjCharacteristicsAllWidgets");
 	_obj->notifyAll("updateDisplay");
 
-	engine->addData(_obj, cam);
+	engine->addCameraToObject(_obj, cam);
 }
 
 
@@ -3030,7 +3030,50 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		poca::opengl::CameraInterface* cam = createWindows(newobj);
 		engine->addCameraToObject(newobj, cam);
 	}
+	else if (tmp == "domino_exportColorsByCouple") {
+		auto obj = m_currentMdi->getWidget()->getObject();
+		if (!obj->hasBasicComponent("DetectionSet")) return;
+		poca::geometry::DetectionSet* dset = static_cast <poca::geometry::DetectionSet*>(obj->getBasicComponent("DetectionSet"));
+		std::vector <std::string> labels = { "gamma2", "gephyrin", "gluN1", "munc13", "psd95" };
+		std::vector <std::array <int, 2>> couples = { {2, 0}, {2, 1}, {2, 3}, {2, 4} };
+		std::vector <float>& oxs = dset->getMyData("x")->getData<float>();
+		std::vector <float>& oys = dset->getMyData("y")->getData<float>();
+		std::vector <float>& ozs = dset->getMyData("z")->getData<float>();
+		std::vector <float>& oframes = dset->getMyData("frame")->getData<float>();
+		std::vector <float> olabel = dset->getMyData("label")->getData<float>();
 
+		const std::string dir = obj->getDir();
+		const std::string& name = obj->getName();
+
+		for (const auto& couple : couples) {
+			std::vector <float> xs, ys, zs, frame, label;
+			for (auto n = 0; n < oxs.size(); n++) {
+				if (olabel[n] == couple[0] || olabel[n] == couple[1]) {
+					xs.push_back(oxs[n]);
+					ys.push_back(oys[n]);
+					zs.push_back(ozs[n]);
+					frame.push_back(oframes[n]);
+					if (olabel[n] == couple[0])
+						label.push_back(1);
+					else
+						label.push_back(2);
+				}
+			}
+			std::map <std::string, std::vector <float>> features;
+
+			features["x"] = xs;
+			features["y"] = ys;
+			features["z"] = zs;
+			features["frame"] = frame;
+			features["label"] = label;
+
+			poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
+
+			std::string filename = dir + "/" + name + "_" + labels[couple[0]] + "_" + labels[couple[1]] + ".csv";
+			dset->saveDetections(filename);
+			delete dset;
+		}
+	}
 }
 
 void MainWindow::onGridReleased()
