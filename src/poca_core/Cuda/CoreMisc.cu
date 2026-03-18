@@ -34,7 +34,7 @@
 
 #ifndef NO_CUDA
 #define cuda_check(x) if (x!=cudaSuccess) exit(1);
-#define IF_VERBOSE(x) x
+#define IF_VERBOSE(x) //x
 
 static
 void
