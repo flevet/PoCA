@@ -83,7 +83,7 @@ protected:
 	QWidget* m_lutsWidget, * m_detectionSetFilteringWidget, *m_emptyWidget, * m_line2Widget;
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons, m_lutHeatmapButtons;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
-	QPushButton * m_displayButton, * m_heatmapButton, * m_pointRenderButton, * m_saveDetectionsButton, * m_gaussianButton, * m_parametersButton, * m_creationObjectsOnLabelsButton;
+	QPushButton * m_displayButton, * m_heatmapButton, * m_pointRenderButton, * m_saveDetectionsSVGButton, * m_saveDetectionsButton, * m_gaussianButton, * m_parametersButton, * m_creationObjectsOnLabelsButton;
 	QPushButton* m_worldButton, * m_screenButton;
 	QLineEdit* m_minRadiusEdit, * m_maxRadiusEdit, * m_currentRadiusEdit, * m_intensityEdit;
 	QSlider* m_radiusSlider, * m_intensitySlider;

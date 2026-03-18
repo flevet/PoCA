@@ -79,7 +79,7 @@ protected:
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
 	QPushButton* m_displayButton, * m_fillButton, * m_creationFlteredObjectsButton, * m_applyFactorButton, * m_pointRenderButton, * m_polyRenderButton, * m_bboxSelectionButton, * m_invertSelectionButton;
-	QPushButton* m_transferCellsButton;
+	QPushButton* m_transferCellsButton, * m_saveAsSVGButton;
 	QLineEdit* m_cutDistanceEdit, * m_factorEdit, * m_minLocLEdit, * m_maxLocLEdit, * m_minAreaLEdit, * m_maxAreaLEdit;
 	QCheckBox* m_cboxApplyCutDistance, * m_cboxApplyMinLocs, * m_cboxApplyMaxLocs, * m_cboxApplyMinArea, * m_cboxApplyMaxArea, * m_cboxInROIs;
 	QSpinBox* m_sizePointSpn;

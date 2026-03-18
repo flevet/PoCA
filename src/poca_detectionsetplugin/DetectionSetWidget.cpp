@@ -103,6 +103,14 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	emptyLuts->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	layoutLuts->addWidget(emptyLuts);
 
+	m_saveDetectionsSVGButton = new QPushButton();
+	m_saveDetectionsSVGButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_saveDetectionsSVGButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_saveDetectionsSVGButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
+	m_saveDetectionsSVGButton->setToolTip("Save detections as SVG");
+	layoutLuts->addWidget(m_saveDetectionsSVGButton, 0, Qt::AlignRight);
+	QObject::connect(m_saveDetectionsSVGButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+
 	m_saveDetectionsButton = new QPushButton();
 	m_saveDetectionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_saveDetectionsButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -561,6 +569,16 @@ void DetectionSetWidget::actionNeeded()
 		filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save detections..."), filename, QString("Stats files (*" + extension + ")"), 0, QFileDialog::DontUseNativeDialog);
 		if (filename.isEmpty()) return;
 		engine->executeCommand(bc, true, "saveLocalizations", "path", filename.toStdString());
+	}
+	if (sender == m_saveDetectionsSVGButton) {
+		QString name = m_object->getName().c_str(), filename(m_object->getDir().c_str());
+		if (!filename.endsWith("/"))
+			filename.append("/");
+		filename.append(name);
+		QString extension = name.indexOf(".") != -1 ? name.right(name.size() - name.indexOf(".")) : ".svg";
+		filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save detections as SVG..."), filename, QString("svg files (*svg)"), 0, QFileDialog::DontUseNativeDialog);
+		if (filename.isEmpty()) return;
+		engine->executeCommand(bc, true, "saveAsSVG", "filename", filename.toStdString());
 	}
 	if (sender == m_creationObjectsOnLabelsButton) {
 		//m_object->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(true, "createDBSCANObjects",

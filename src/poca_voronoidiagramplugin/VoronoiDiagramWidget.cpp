@@ -167,11 +167,21 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	m_lutsWidget->setLayout(layoutLuts);
 
 	m_buttonsWidget = new QWidget;
-	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	m_buttonsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	QHBoxLayout* layoutButtons = new QHBoxLayout;
 	QWidget* emptyButtons = new QWidget;
 	emptyButtons->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	layoutButtons->addWidget(emptyButtons);
+
+	m_saveAsSVGButton = new QPushButton();
+	m_saveAsSVGButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_saveAsSVGButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_saveAsSVGButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
+	m_saveAsSVGButton->setToolTip("Save voronoi as SVG");
+	layoutButtons->addWidget(m_saveAsSVGButton, 0, Qt::AlignRight);
+	QObject::connect(m_saveAsSVGButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+
+
 	QLabel* sizePointLbl = new QLabel();
 	sizePointLbl->setMaximumSize(QSize(maxSize, maxSize));
 	sizePointLbl->setPixmap(QPixmap(poca::plot::pointSizeIcon).scaled(maxSize, maxSize, Qt::KeepAspectRatio));
@@ -417,6 +427,16 @@ void VoronoiDiagramWidget::actionNeeded()
 		std::cout << "# of border cells: " << count << " / " << voro->nbFaces() << std::endl;
 		voro->setSelection(selection);
 		engine->executeCommand(bc, false, "updateFeature");
+	}
+	else if (sender == m_saveAsSVGButton) {
+		QString name = m_object->getName().c_str(), filename(m_object->getDir().c_str());
+		if (!filename.endsWith("/"))
+			filename.append("/");
+		filename.append(name);
+		QString extension = name.indexOf(".") != -1 ? name.right(name.size() - name.indexOf(".")) : ".svg";
+		filename = QFileDialog::getSaveFileName(NULL, QObject::tr("Save voronoi as SVG..."), filename, QString("svg files (*svg)"), 0, QFileDialog::DontUseNativeDialog);
+		if (filename.isEmpty()) return;
+		engine->executeCommand(bc, true, "saveAsSVG", "filename", filename.toStdString());
 	}
 }
 
