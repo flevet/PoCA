@@ -34,6 +34,7 @@
 #define H_MISC_H
 
 #include <vector>
+#include <glm/glm.hpp>
 
 #include <General/Vec3.hpp>
 
@@ -46,5 +47,9 @@
 	void sortArrayWRTKeys_CPU(std::vector <float>&, std::vector <uint32_t>&);
 
 	void sortArrayWRTKeys(std::vector <float>&, std::vector <uint32_t>&);
+
+	namespace poca::utils {
+		void sortWrtCameraPosition(const glm::vec3& _cameraPosition, const glm::vec3& _cameraForwardVec, const std::vector <float>& _xs, const std::vector <float>& _ys, const std::vector <float>& _zs, std::vector <uint32_t>& _indices);
+	}
 
 #endif

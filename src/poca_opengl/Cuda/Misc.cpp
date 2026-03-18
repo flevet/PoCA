@@ -34,6 +34,7 @@
 #include <numeric>
 #include <algorithm>
 #include <iostream>
+#include <stdexcept>
 #ifndef NO_CUDA
 #include <cuda_runtime.h>
 #endif
@@ -63,4 +64,27 @@ void sortArrayWRTKeys(std::vector <float>& _keys, std::vector <uint32_t>& _value
 #else
 	sortArrayWRTKeys_CPU(_keys, _values);
 #endif
+}
+
+namespace poca::utils {
+	void sortWrtCameraPosition(const glm::vec3& _cameraPosition, const glm::vec3& _cameraForwardVec, const std::vector <float>& _xs, const std::vector <float>& _ys, const std::vector <float>& _zs, std::vector <uint32_t>& _indices)
+	{
+		try {
+			_indices.resize(_xs.size());
+			std::iota(std::begin(_indices), std::end(_indices), 0);
+
+			//Compute a vector of distances of the points to the camera position
+			std::vector <float> distances(_xs.size());
+
+#pragma omp parallel for
+			for (int n = 0; n < _xs.size(); n++)
+				distances[n] = glm::dot(glm::vec3(_xs[n], _ys[n], _zs[n]) - _cameraPosition, _cameraForwardVec);
+
+			sortArrayWRTKeys(distances, _indices);
+		}
+		catch (std::runtime_error const& e) {
+			std::string mess("Error: sorting localizations with respect to the camera position failed with error message: " + std::string(e.what()));
+			std::cout << mess << std::endl;
+		}
+	}
 }
