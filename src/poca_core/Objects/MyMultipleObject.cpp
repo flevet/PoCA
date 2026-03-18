@@ -250,7 +250,7 @@ void MyMultipleObject::recomputeGrid()
 		std::cout << "GridBBox " << m_gridBBoxes.back() << std::endl;
 	}
 
-	Bin bin{ maxD * 4, maxD * 4 };            // start size
+	Bin bin{ maxD * 6, maxD * 6 };            // start size
 	const int MAX_W = total;       // safety caps (tune as needed)
 	const int MAX_H = total;
 
