@@ -548,7 +548,14 @@ namespace poca::core {
 
 	poca::opengl::CameraInterface* Engine::getCamera(BasicComponentInterface* _bci)
 	{
+		auto topObj = getTopObject(_bci);
 		for (auto data : m_datasets) {
+			auto obj = std::get<0>(data);
+			auto cam = std::get<1>(data);
+			if (obj == topObj)
+				return cam;
+		}
+		/*for (auto data : m_datasets) {
 			auto obj = std::get<0>(data);
 			auto cam = std::get<1>(data);
 			if (!obj->hasBasicComponent(_bci->getName())) continue;
@@ -563,7 +570,7 @@ namespace poca::core {
 				if (comp->hasComponent(_bci))
 					return cam;
 			}
-		}
+		}*/
 		return NULL;
 	}
 
