@@ -308,11 +308,20 @@ void VoronoiDiagramBasicCommands::saveAsSVG(const QString& _filename) const
 	poca::opengl::CameraInterface* cam = engine->getCamera(m_voronoi);
 	poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
 
+	glm::vec3 orientation = cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+	glm::vec3 pos(orientation + cam->getCenter());
+	pos *= 2 * cam->getOriginalDistanceOrtho();
+
 	poca::core::BoundingBox bbox = m_voronoi->boundingBox();
+	glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(bbox[0], bbox[1], bbox[2]));
+	glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(bbox[3], bbox[4], bbox[5]));
+	poca::core::Vec2mf bottomLeft(p1[0] < p2[0] ? p1[0] : p2[0], p1[1] < p2[1] ? p1[1] : p2[1]);
+	poca::core::Vec2mf upRight(p1[0] > p2[0] ? p1[0] : p2[0], p1[1] > p2[1] ? p1[1] : p2[1]);
+
 	std::ofstream fs(_filename.toLatin1().data());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
 	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
-	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (bbox[3] - bbox[0]) << "\" height=\"" << (bbox[4] - bbox[1]) << "\" viewBox=\"" << bbox[0] << " " << bbox[1] << " " << bbox[3] << " " << bbox[4] << " " "\">\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (upRight[0] - bottomLeft[0]) << "\" height=\"" << (upRight[1] - bottomLeft[1]) << "\" viewBox=\"" << bottomLeft[0] << " " << bottomLeft[1] << " " << upRight[0] << " " << upRight[1] << " " "\">\n";
 	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
 	fs << "<desc>\n";
 	fs << "Creator: Florian Levet\n";

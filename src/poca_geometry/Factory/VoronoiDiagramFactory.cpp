@@ -97,6 +97,13 @@ namespace poca::geometry {
 			if (!delaunay)
 				return NULL;
 		}
+
+		auto topObj = engine->getTopObject(dset);
+		poca::core::BoundingBox bbox;
+		if (topObj != NULL)
+			bbox = topObj->boundingBox();
+		else
+			bbox = dset->boundingBox();
 		//std::ofstream fs("e:/timings.txt", std::fstream::out | std::fstream::app);
 		clock_t t1, t2;
 		t1 = clock();
@@ -104,7 +111,7 @@ namespace poca::geometry {
 		const std::vector <float>& xs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("x"))->getValues();
 		const std::vector <float>& ys = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("y"))->getValues();
 		if (!dset->hasData("z")) {
-			voro = createVoronoiDiagram(xs, ys, dset->boundingBox(), kdtree, delaunay);
+			voro = createVoronoiDiagram(xs, ys, bbox, kdtree, delaunay);
 		}
 		else {
 			const std::vector <float>& zs = static_cast<poca::core::Histogram<float>*>(dset->getOriginalHistogram("z"))->getValues();
