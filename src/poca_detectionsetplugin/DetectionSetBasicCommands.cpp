@@ -52,6 +52,7 @@
 #include <General/PluginList.hpp>
 #include <Objects/MyObject.hpp>
 #include <OpenGL/Camera.hpp>
+#include <Cuda/Misc.h>
 
 #include "DetectionSetBasicCommands.hpp"
 #include "DetectionSetPlugin.hpp"
@@ -523,11 +524,19 @@ void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
 	poca::opengl::CameraInterface* cam = engine->getCamera(m_dset);
 	poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
 
+	glm::vec3 orientation = cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+	glm::vec3 pos(orientation + cam->getCenter());
+	pos *= 2 * cam->getOriginalDistanceOrtho();
+
 	poca::core::BoundingBox bbox = m_dset->boundingBox();
+	glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(bbox[0], bbox[1], bbox[2]));
+	glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(bbox[3], bbox[4], bbox[5]));
+	poca::core::Vec2mf bottomLeft(p1[0] < p2[0] ? p1[0] : p2[0], p1[1] < p2[1] ? p1[1] : p2[1]);
+	poca::core::Vec2mf upRight(p1[0] > p2[0] ? p1[0] : p2[0], p1[1] > p2[1] ? p1[1] : p2[1]);
 	std::ofstream fs(_filename.toLatin1().data());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
 	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
-	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (bbox[3] - bbox[0]) << "\" height=\"" << (bbox[4] - bbox[1]) << "\" viewBox=\"" << bbox[0] << " " << bbox[1] << " " << bbox[3] << " " << bbox[4] << " " "\">\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (upRight[0] - bottomLeft[0]) << "\" height=\"" << (upRight[1] - bottomLeft[1]) << "\" viewBox=\"" << bottomLeft[0] << " " << bottomLeft[1] << " " << upRight[0] << " " << upRight[1] << " " "\">\n";
 	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
 	fs << "<desc>\n";
 	fs << "Creator: Florian Levet\n";
@@ -543,15 +552,25 @@ void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
 	const std::vector<bool>& selection = m_dset->getSelection();
 	float minH = histogram->getMin(), maxH = histogram->getMax(), interH = maxH - minH;
 
+	std::vector <uint32_t> indices;
+
+	if(m_dset->dimension() == 3)
+		poca::utils::sortWrtCameraPosition(pos, orientation, xs, ys, zs, indices);
+	else {
+		indices.resize(xs.size());
+		std::iota(std::begin(indices), std::end(indices), 0);
+	}
+
 	char col[32];
 	poca::core::PaletteInterface* pal = m_dset->getPalette();
-	for (size_t n = 0; n < xs.size(); n++) {
-		if (!selection[n]) continue;
-		float valPal = (values[n] - minH) / interH;
+	for (size_t n = 0; n < indices.size(); n++) {
+		size_t id = indices[n];
+		if (!selection[id]) continue;
+		float valPal = (values[id] - minH) / interH;
 		poca::core::Color4uc c = pal->getColor(valPal);
 		unsigned char r = c[0], g = c[1], b = c[2];
 		poca::core::getColorStringUC(r, g, b, col);
-		glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(xs[n], ys[n], zs[n]));
+		glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(xs[id], ys[id], zs[id]));
 		fs << "<circle fill=\"" << col << "\" cx =\"";
 		fs << p1[0] << "\" cy=\"";
 		fs << p1[1] << "\" cz=\"";
