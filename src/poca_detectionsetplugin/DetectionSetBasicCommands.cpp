@@ -533,10 +533,12 @@ void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
 	glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(bbox[3], bbox[4], bbox[5]));
 	poca::core::Vec2mf bottomLeft(p1[0] < p2[0] ? p1[0] : p2[0], p1[1] < p2[1] ? p1[1] : p2[1]);
 	poca::core::Vec2mf upRight(p1[0] > p2[0] ? p1[0] : p2[0], p1[1] > p2[1] ? p1[1] : p2[1]);
-	std::ofstream fs(_filename.toLatin1().data());
+	const float width = upRight[0] - bottomLeft[0];
+	const float height = upRight[1] - bottomLeft[1];
+	std::ofstream fs(_filename.toStdString());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
 	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
-	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (upRight[0] - bottomLeft[0]) << "\" height=\"" << (upRight[1] - bottomLeft[1]) << "\" viewBox=\"" << bottomLeft[0] << " " << bottomLeft[1] << " " << upRight[0] << " " << upRight[1] << " " "\">\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << width << "\" height=\"" << height << "\" viewBox=\"" << bottomLeft[0] << " " << bottomLeft[1] << " " << width << " " << height << " " "\">\n";
 	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
 	fs << "<desc>\n";
 	fs << "Creator: Florian Levet\n";
@@ -546,7 +548,16 @@ void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
 
 	const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
 	const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
-	const std::vector <float>& zs = m_dset->hasData("z") ? m_dset->getMyData("z")->getData<float>() : std::vector <float>(xs.size(), 0.f);
+	std::vector<float> zsFallback;
+	const std::vector<float>* zsPtr = nullptr;
+	if (m_dset->hasData("z")) {
+		zsPtr = &m_dset->getMyData("z")->getData<float>();
+	}
+	else {
+		zsFallback.assign(xs.size(), 0.f);
+		zsPtr = &zsFallback;
+	}
+	const std::vector<float>& zs = *zsPtr;
 	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(m_dset->getCurrentHistogram());
 	const std::vector<float>& values = histogram->getValues();
 	const std::vector<bool>& selection = m_dset->getSelection();
@@ -573,8 +584,7 @@ void DetectionSetBasicCommands::saveAsSVG(const QString& _filename) const
 		glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(xs[id], ys[id], zs[id]));
 		fs << "<circle fill=\"" << col << "\" cx =\"";
 		fs << p1[0] << "\" cy=\"";
-		fs << p1[1] << "\" cz=\"";
-		fs << p1[2] << "\" r=\"1\"/>\n";
+		fs << p1[1] << "\" r=\"1\"/>\n";
 	}
 	fs.close();
 }
