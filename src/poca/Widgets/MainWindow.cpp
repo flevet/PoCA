@@ -3030,6 +3030,37 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 		poca::opengl::CameraInterface* cam = createWindows(newobj);
 		engine->addCameraToObject(newobj, cam);
 	}
+	else if (tmp == "objsDomino") {
+		auto obj = m_currentMdi->getWidget()->getObject();
+		auto mobjects = dynamic_cast <MyMultipleObject*>(obj);
+		if (!mobjects) return;
+		std::vector <Surface_mesh_3_double> meshes;
+		std::vector <float> label;
+		for (auto n = 0; n < mobjects->nbColors(); n++) {
+			auto obj = mobjects->getObject(n);
+			if (!obj->hasBasicComponent("ObjectLists")) continue;
+			poca::geometry::ObjectLists* olist = static_cast <poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
+			poca::geometry::ObjectListMesh* omeshes = dynamic_cast<poca::geometry::ObjectListMesh*>(olist->currentObjectList());
+			if (omeshes == NULL) continue;
+			const auto& orig_meshes = omeshes->getMeshes();
+			std::vector <float> olabel(orig_meshes.size(), n);
+
+			std::copy(orig_meshes.begin(), orig_meshes.end(), std::back_inserter(meshes));
+			std::copy(olabel.begin(), olabel.end(), std::back_inserter(label));
+		}
+
+		poca::geometry::ObjectListMesh* finalMeshes = new poca::geometry::ObjectListMesh(meshes);
+		finalMeshes->addFeature("label", poca::core::generateDataWithLog(label));
+		poca::geometry::ObjectLists* newObjsList = new poca::geometry::ObjectLists(finalMeshes, poca::core::CommandInfo(), "MainWindow");
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::PluginList* plugins = engine->getPlugins();
+		poca::core::MyObjectInterface* newobj = engine->createObject(mobjects->getDir(), "merged.obj", newObjsList);
+		if (newobj == NULL)
+			return;
+		poca::opengl::CameraInterface* cam = createWindows(newobj);
+		engine->addCameraToObject(newobj, cam);
+		}
 	else if (tmp == "domino_exportColorsByCouple") {
 		auto obj = m_currentMdi->getWidget()->getObject();
 		if (!obj->hasBasicComponent("DetectionSet")) return;
