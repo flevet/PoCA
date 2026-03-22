@@ -444,7 +444,12 @@ namespace poca::geometry {
 	{
 		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DelaunayTriangulation");
 		DelaunayTriangulationInterface* delaunay = dynamic_cast <DelaunayTriangulationInterface*>(bci);
-		if (!delaunay) return NULL;
+		if (!delaunay) {
+			QMessageBox msgBox;
+			msgBox.setText("Delaunay triangulation is required to create the objects.");
+			msgBox.exec();
+			return NULL;
+		}
 		const std::vector <poca::core::ROIInterface*>& ROIs = _inROIs ? _obj->getROIs() : std::vector <poca::core::ROIInterface*>();
 		return createObjectListFromDelaunay(delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea, ROIs);
 	}
@@ -468,7 +473,12 @@ namespace poca::geometry {
 	{
 		poca::core::BasicComponentInterface* bci = _obj->getBasicComponent("DelaunayTriangulation");
 		DelaunayTriangulationInterface* delaunay = dynamic_cast <DelaunayTriangulationInterface*>(bci);
-		if (!delaunay) return NULL;
+		if (!delaunay) {
+			QMessageBox msgBox;
+			msgBox.setText("Delaunay triangulation is required to create the objects.");
+			msgBox.exec();
+			return NULL;
+		}
 		return createObjectListAlreadyIdentified(delaunay, _selection, _dMax, _minNbLocs, _maxNbLocs, _minArea, _maxArea);
 	}
 
