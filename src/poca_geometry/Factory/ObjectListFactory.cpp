@@ -40,6 +40,7 @@
 #include <CGAL/convex_hull_2.h>
 #include <CGAL/Arrangement_2.h>
 #include <CGAL/Arr_segment_traits_2.h>
+#include <CGAL/boost/graph/copy_face_graph.h>
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 #include <CGAL/Point_set_3.h>
 #include <CGAL/Poisson_reconstruction_function.h>
@@ -52,6 +53,8 @@
 #include <thrust/execution_policy.h>
 #include <thrust/unique.h>
 #include <thrust/binary_search.h>
+
+#include <QtWidgets/QMessageBox>
 
 #include <General/BasicComponent.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
@@ -1405,10 +1408,11 @@ namespace poca::geometry {
 
 		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
 
-		std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
-		std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects, triCHull;
+		//std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
+		//std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects, triCHull;
 		float area = 0.f;
 		std::vector <float> volumeObjects;
+		std::vector < Surface_mesh_3_double> meshes;
 
 		for (auto it = _selection.begin(); it != _selection.end(); it++) {
 			auto indexObj = it->first;
@@ -1416,35 +1420,37 @@ namespace poca::geometry {
 			area = 0.f;
 
 			if (_minNbLocs <= locs.size() && locs.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
-				firstsLocs.push_back(locsAllObjects.size());
-				firstTriangles.push_back(trianglesAllObjects.size());
-				firstOutlines.push_back(outlinesAllObjects.size());
+				//firstsLocs.push_back(locsAllObjects.size());
+				//firstTriangles.push_back(trianglesAllObjects.size());
+				//firstOutlines.push_back(outlinesAllObjects.size());
+
+				meshes.push_back(Surface_mesh_3_double());
 
 				switch (type) {
 				case ObjectListFactoryInterface::CONVEX_HULL:
-					computeConvexHullObject3D(xs, ys, zs, locs, outlinesAllObjects, triCHull, area);
+					computeConvexHullObject3DMesh(xs, ys, zs, locs, meshes.back(), area);
 					break;
 				default:
-					computeConvexHullObject3D(xs, ys, zs, locs, outlinesAllObjects, triCHull, area);
+					computeConvexHullObject3DMesh(xs, ys, zs, locs, meshes.back(), area);
 					break;
 				}
 
-				std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
-				std::copy(triCHull.begin(), triCHull.end(), std::back_inserter(trianglesAllObjects));
+				//std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
+				//std::copy(triCHull.begin(), triCHull.end(), std::back_inserter(trianglesAllObjects));
 				volumeObjects.push_back(area);
 			}
 		}
-		firstsLocs.push_back(locsAllObjects.size());
-		firstTriangles.push_back(trianglesAllObjects.size());
-		firstOutlines.push_back(outlinesAllObjects.size());
+		return new poca::geometry::ObjectListMesh(meshes);
+		//firstsLocs.push_back(locsAllObjects.size());
+		//firstTriangles.push_back(trianglesAllObjects.size());
+		//firstOutlines.push_back(outlinesAllObjects.size());
 
-		//return locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, outlinesAllObjects, firstOutlines, std::vector <uint32_t>());
-		return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, std::vector<uint32_t>(), locsAllObjects, firstsLocs, std::vector <poca::core::Vec3mf>());
-
+		//return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, std::vector<uint32_t>(), locsAllObjects, firstsLocs, std::vector <poca::core::Vec3mf>());
+		
 		/*const float* xs = _delaunay->getXs();
 		const float* ys = _delaunay->getYs();
 		const float* zs = _delaunay->getZs();
-		const std::vector <float>& volumes = _delaunay->getOriginalHistogram("volume")->getValues();
+		const std::vector <float>& volumes = static_cast<poca::core::Histogram<float>*>(_delaunay->getOriginalHistogram("volume"))->getValues();
 		const std::vector<uint32_t>& triangles = _delaunay->getTriangles();
 		const poca::core::MyArrayUInt32& neighbors = _delaunay->getNeighbors();
 		const std::vector <uint32_t> indiceTriangles = neighbors.getFirstElements();
@@ -1476,7 +1482,7 @@ namespace poca::geometry {
 		for (auto n = 0; n < originalSelectionTriangulationFaces.size(); n++)
 			selecTmp[n] = originalSelectionTriangulationFaces[n] != std::numeric_limits<uint32_t>::max();
 		_delaunay->setSelection(selecTmp);
-		_delaunay->executeCommand(false, "updateFeature");
+		//_delaunay->executeCommand(false, "updateFeature");
 
 		std::vector <uint32_t> linkTriangulationFacesToObjects(originalSelectionTriangulationFaces.size(), std::numeric_limits<std::uint32_t>::max());
 		std::vector <uint32_t> selectionTriangulationFaces(originalSelectionTriangulationFaces);
@@ -1492,6 +1498,11 @@ namespace poca::geometry {
 		double volumeD = 0.;
 
 		std::vector <uint32_t> allIndexesTriangles;
+
+		//For ObjectListMesh
+		std::vector <std::vector <poca::core::Vec3mf>> meshPoints;
+		std::vector <std::vector <std::vector <std::size_t>>> meshTris;
+		std::vector < Surface_mesh_3_double> meshes;
 
 		for (uint32_t n = 0; n < _delaunay->nbFaces(); n++) {
 			if (selectionTriangulationFaces[n] == std::numeric_limits<uint32_t>::max()) continue;
@@ -1639,10 +1650,46 @@ namespace poca::geometry {
 
 				std::copy(indexTrianglesOfObject.begin(), indexTrianglesOfObject.end(), std::back_inserter(allIndexesTriangles));
 				
+				//For ObjectListMesh
+				thrust::host_vector <uint32_t> h_triangles(indexTrianglesOfObject), h_data(indexTrianglesOfObject);
+				//std::copy(h_data.begin(), h_data.end(), std::ostream_iterator<uint32_t>(std::cout, " "));
+				//std::cout << std::endl;
+				thrust::sort(thrust::host, h_triangles.begin(), h_triangles.end());
+				thrust::host_vector<uint32_t> h_unique = h_triangles;
+				const auto end = thrust::unique(h_unique.begin(), h_unique.end());
+				auto nbVertices = thrust::distance(h_unique.begin(), end);
+
+				meshPoints.push_back(std::vector <poca::core::Vec3mf>());
+				meshPoints.back().resize(nbVertices);
+				for (auto i = 0; i < nbVertices; i++) {
+					meshPoints.back()[i].set(xs[h_unique[i]], ys[h_unique[i]], zs[h_unique[i]]);
+				}
+
+				//relabel the faces
+				thrust::lower_bound(h_unique.begin(), end, h_data.begin(), h_data.end(), h_triangles.begin());
+				meshTris.push_back(std::vector <std::vector <std::size_t>>());
+				for (auto i = 0; i < h_triangles.size(); i += 3) {
+					meshTris.back().push_back(std::vector<std::size_t>{h_triangles[i + 2], h_triangles[i + 1], h_triangles[i]});
+				}
 			}
 		}
 
-		ObjectList* objs = locsAllObjects.empty() ? NULL : new ObjectList(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		ObjectListInterface* objs;
+		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
+		if (type == ObjectListFactoryInterface::POISSON_SURFACE) {
+			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshes);
+		}
+		else if (type == ObjectListFactoryInterface::TRIANGULATION) {
+			objs = locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, linkTriangulationFacesToObjects, locsAllOutlines, firstOutlineLocs, normalsAllOutlineLocs);
+		}
+		else {
+			double targetLength = poca::core::Engine::instance()->getGlobalParameters()["meshTargetLength"].get<double>();
+			int iterations = poca::core::Engine::instance()->getGlobalParameters()["meshIterations"].get<int>();
+
+			std::vector <poca::core::ROIInterface*> ROIs;
+			objs = locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshPoints, meshTris, ROIs, true, true, targetLength, iterations);
+		}
+
 		return objs;*/
 	}
 
@@ -1692,6 +1739,21 @@ namespace poca::geometry {
 				_triangles.insert(_triangles.begin(), poca::core::Vec3mf(CGAL::to_double(v->point().x()), CGAL::to_double(v->point().y()), CGAL::to_double(v->point().z())));
 			} while (++hfc != fi->facet_begin());
 		}
+		_feature = CGAL::Polygon_mesh_processing::volume(poly);
+	}
+
+	void ObjectListFactory::computeConvexHullObject3DMesh(const float* _xs, const float* _ys, const float* _zs, const std::vector <uint32_t>& _locs, Surface_mesh_3_double& _mesh, float& _feature)
+	{
+		std::vector <Point_3_inexact> points;
+		for (const auto id : _locs)
+			points.push_back(Point_3_inexact(_xs[id], _ys[id], _zs[id]));
+
+		Polyhedron_3_inexact poly;
+		CGAL::convex_hull_3(points.begin(), points.end(), poly);
+
+		CGAL::copy_face_graph(poly, _mesh);
+		assert(CGAL::is_valid_polygon_mesh(_mesh));
+	
 		_feature = CGAL::Polygon_mesh_processing::volume(poly);
 	}
 

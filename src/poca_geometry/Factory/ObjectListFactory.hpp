@@ -69,6 +69,7 @@ namespace poca::geometry {
 	protected:
 		void computeConvexHullObject2D(const float*, const float*, const float*, const std::vector <uint32_t>&, std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
 		void computeConvexHullObject3D(const float*, const float*, const float*, const std::vector <uint32_t>&, std::vector <poca::core::Vec3mf>&, std::vector <poca::core::Vec3mf>&, float&);
+		void computeConvexHullObject3DMesh(const float*, const float*, const float*, const std::vector <uint32_t>&, Surface_mesh_3_double&, float&);
 		void computeConvexHullObject2DFromOutline(const float *, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
 		void computeConvexHullObject3DFromOutline(const float*, const float*, const float*, const std::set <uint32_t>&, std::vector <poca::core::Vec3mf>&, float&);
 		
