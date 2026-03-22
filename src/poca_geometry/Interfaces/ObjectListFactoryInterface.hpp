@@ -66,6 +66,8 @@ namespace poca::geometry {
 				return POISSON_SURFACE;
 			if (_typeS == "alpha_shape")
 				return ALPHA_SHAPE;
+			if (_typeS == "mesh")
+				return MESH;
 		}
 
 		static std::string getTypeStr(const int _id)
@@ -83,6 +85,9 @@ namespace poca::geometry {
 				break;
 			case ALPHA_SHAPE:
 				type = "alpha_shape";
+				break;
+			case MESH:
+				type = "mesh";
 				break;
 			}
 			return type;

@@ -974,13 +974,25 @@ void ObjectListBasicCommands::saveSelectedObjectsForVectorHeat(const std::set<in
 void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
-
+	poca::opengl::CameraInterface* cam = engine->getCamera(m_objects);
 	poca::core::PaletteInterface* pal = m_objects->getPalette();
+	poca::core::Vec3mf direction = poca::core::Vec3mf(cam->getEye().x, cam->getEye().y, cam->getEye().z);
+
+	glm::vec3 orientation = cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+	glm::vec3 pos(orientation + cam->getCenter());
+	pos *= 2 * cam->getOriginalDistanceOrtho();
+
 	poca::core::BoundingBox bbox = m_objects->boundingBox();
-	std::ofstream fs(_filename.toLatin1().data());
+	glm::vec2 p1 = cam->worldToScreenCoordinates(glm::vec3(bbox[0], bbox[1], bbox[2]));
+	glm::vec2 p2 = cam->worldToScreenCoordinates(glm::vec3(bbox[3], bbox[4], bbox[5]));
+	poca::core::Vec2mf bottomLeft(p1[0] < p2[0] ? p1[0] : p2[0], p1[1] < p2[1] ? p1[1] : p2[1]);
+	poca::core::Vec2mf upRight(p1[0] > p2[0] ? p1[0] : p2[0], p1[1] > p2[1] ? p1[1] : p2[1]);
+	const float width = upRight[0] - bottomLeft[0];
+	const float height = upRight[1] - bottomLeft[1];
+	std::ofstream fs(_filename.toStdString());
 	fs << std::setprecision(5) << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
 	fs << "<svg xmlns=\"http://www.w3.org/2000/svg\"\n";
-	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << (bbox[3] - bbox[0]) << "\" height=\"" << (bbox[4] - bbox[1]) << "\" viewBox=\"" << bbox[0] << " " << bbox[1] << " " << bbox[3] << " " << bbox[4] << " " "\">\n";
+	fs << "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n     width=\"" << width << "\" height=\"" << height << "\" viewBox=\"" << bottomLeft[0] << " " << bottomLeft[1] << " " << width << " " << height << " " "\">\n";
 	fs << "<title>d:/gl2ps/type_svg_outSimple.svg</title>\n";
 	fs << "<desc>\n";
 	fs << "Creator: Florian Levet\n";
@@ -1077,7 +1089,7 @@ void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 						fs << p1.x << "\" y1=\"";
 						fs << p1.y << "\" x2=\"";
 						fs << p2.x << "\" y2=\"";
-						fs << p2.y << "\" stroke=\"" << black << "\" stroke-width=\"1\"/>\n";
+						fs << p2.y << "\" stroke=\"" << /*black*/col << "\" stroke-width=\"1\"/>\n";
 					}
 				}
 			}
