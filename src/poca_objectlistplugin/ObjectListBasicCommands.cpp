@@ -1114,7 +1114,7 @@ void ObjectListBasicCommands::saveAsSVG(const QString& _filename) const
 			for (const auto& polygon : polygonWithHoles) {
 				fs << "M";
 				for (const auto& vertex : polygon)
-					fs << " " << vertex.x() << "," << vertex.y();
+					fs << " " << vertex.x() - bbox[0] << "," << vertex.y() - bbox[1];
 				fs << std::endl;
 			}
 			fs << "\"/>" << std::endl;
