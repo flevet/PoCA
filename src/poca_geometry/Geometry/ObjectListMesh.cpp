@@ -801,7 +801,7 @@ namespace poca::geometry {
 	void ObjectListMesh::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
 	{
 		_normals.clear();
-		bool useVertexNormals = false;
+		bool useVertexNormals = true;
 		if (useVertexNormals) {
 			for (const auto& mesh : m_meshes) {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
