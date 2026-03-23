@@ -374,7 +374,7 @@ namespace poca::geometry {
 		m_centroids.resize(m_polygons.size());
 		m_bboxMeshes.resize(m_polygons.size());
 
-		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 0.f, std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), 0.f);
+		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 0.f, std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), 0.f);
 		uint32_t curObj = 0;
 		for (const auto& polygons : m_polygons) {
 			const auto& polygon = polygons.front();
