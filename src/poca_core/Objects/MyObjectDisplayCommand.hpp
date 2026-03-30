@@ -41,6 +41,7 @@ public:
 	MyObjectDisplayCommand(const MyObjectDisplayCommand &);
 	~MyObjectDisplayCommand();
 
+	std::vector<poca::core::CommandSpec> commandSpecs() const;
 	void execute(poca::core::CommandInfo *);
 	Command * copy();
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);

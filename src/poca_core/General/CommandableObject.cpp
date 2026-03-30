@@ -83,10 +83,17 @@ namespace poca::core {
 	void CommandableObject::executeCommand(CommandInfo* _ci)
 	{
 		CommandRuntimeContext context;
-		executeCommand(_ci, context);
+		CommandExecutionResult result;
+		executeCommand(_ci, context, result);
 	}
 
 	void CommandableObject::executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context)
+	{
+		CommandExecutionResult result;
+		executeCommand(_ci, _context, result);
+	}
+
+	void CommandableObject::executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result)
 	{
 		if (_ci->isRecordable()) {
 			MacroRecorderSingleton::instance()->addCommand(m_nameCommandableObject, _ci);
@@ -94,7 +101,7 @@ namespace poca::core {
 		}
 		for (std::vector < Command* >::iterator it = m_commands.begin(); it != m_commands.end(); it++) {
 			Command* com = *it;
-			com->execute(_ci, _context);
+			com->execute(_ci, _context, _result);
 		}
 	}
 

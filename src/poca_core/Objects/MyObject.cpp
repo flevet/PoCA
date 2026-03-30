@@ -222,10 +222,17 @@ namespace poca::core {
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		executeCommand(_ci, context);
+		poca::core::CommandExecutionResult result;
+		executeCommand(_ci, context, result);
 	}
 
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
+	{
+		poca::core::CommandExecutionResult result;
+		executeCommand(_ci, _context, result);
+	}
+
+	void MyObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
 	{
 		if (_ci->nameCommand == "loadROIs") {
 			float cal = 1.f;
@@ -249,7 +256,7 @@ namespace poca::core {
 			if (!cam) return;
 			cam->setModelMatrix(m_modelMatrix);
 		}
-		poca::core::CommandableObject::executeCommand(_ci, _context);
+		poca::core::CommandableObject::executeCommand(_ci, _context, _result);
 	}
 
 	poca::core::CommandInfo MyObject::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
@@ -272,28 +279,42 @@ namespace poca::core {
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		executeCommandOnSpecificComponent(_nameComponent, _ci, context);
+		poca::core::CommandExecutionResult result;
+		executeCommandOnSpecificComponent(_nameComponent, _ci, context, result);
 	}
 
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
 	{
+		poca::core::CommandExecutionResult result;
+		executeCommandOnSpecificComponent(_nameComponent, _ci, _context, result);
+	}
+
+	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+	{
 		poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 		if (bci)
-			bci->executeCommand(_ci, _context);
+			bci->executeCommand(_ci, _context, _result);
 	}
 
 	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		executeGlobalCommand(_ci, context);
+		poca::core::CommandExecutionResult result;
+		executeGlobalCommand(_ci, context, result);
 	}
 
 	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
 	{
-		executeCommand(_ci, _context);
+		poca::core::CommandExecutionResult result;
+		executeGlobalCommand(_ci, _context, result);
+	}
+
+	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+	{
+		executeCommand(_ci, _context, _result);
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			poca::core::BasicComponentInterface* bc = *it;
-			bc->executeCommand(_ci, _context);
+			bc->executeCommand(_ci, _context, _result);
 		}
 	}
 

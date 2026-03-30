@@ -74,6 +74,7 @@ namespace poca::core {
 		virtual poca::core::stringList getNameBasicComponents() const;
 		void executeCommand(poca::core::CommandInfo*);
 		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 		poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 		void removeBasicComponent(const std::string&);
 
@@ -141,8 +142,10 @@ namespace poca::core {
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
 		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 		virtual void executeGlobalCommand(poca::core::CommandInfo*);
 		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 
 		virtual void saveCommands(const std::string&);
 		virtual void saveCommands(nlohmann::json&);

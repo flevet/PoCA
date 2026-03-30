@@ -31,7 +31,6 @@ set(OPENGL_HEADER_FILES
   OpenGL/SsaoShader.hpp
   OpenGL/Shader.hpp
   OpenGL/TextDisplayer.hpp
-  OpenGL/RenderCommandContext.hpp
   )
 
 set(OPENGL_SOURCE_FILES

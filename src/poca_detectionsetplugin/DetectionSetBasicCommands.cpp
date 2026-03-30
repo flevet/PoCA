@@ -127,6 +127,12 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	if (_infos->nameCommand == "selectLocsInROIs") {
@@ -489,7 +495,7 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const p
 		wobj->setName(newName.toLatin1().data());
 		wobj->addBasicComponent(dset);
 		wobj->setDimension(dset->dimension());
-		_context.set<poca::core::CreatedObjectContext>({ wobj });
+		_result.set<poca::core::CreatedObjectContext>({ wobj });
 	}
 }
 

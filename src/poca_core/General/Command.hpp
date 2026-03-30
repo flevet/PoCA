@@ -75,6 +75,33 @@ namespace poca::core {
 		mutable std::unordered_map<std::type_index, std::any> m_data;
 	};
 
+	class CommandExecutionResult
+	{
+	public:
+		CommandExecutionResult() = default;
+
+		template<typename T>
+		void set(const T& _value) {
+			m_data[std::type_index(typeid(T))] = _value;
+		}
+
+		template<typename T>
+		bool has() const {
+			return m_data.find(std::type_index(typeid(T))) != m_data.end();
+		}
+
+		template<typename T>
+		T get() const {
+			auto it = m_data.find(std::type_index(typeid(T)));
+			if (it == m_data.end())
+				throw std::runtime_error("Execution result entry not found");
+			return std::any_cast<T>(it->second);
+		}
+
+	private:
+		std::unordered_map<std::type_index, std::any> m_data;
+	};
+
 	class CommandInfo
 	{
 	public:
@@ -416,6 +443,9 @@ namespace poca::core {
 		virtual void execute(CommandInfo*) = 0;
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
 			execute(_ci);
+		}
+		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+			execute(_ci, _context);
 		}
 		virtual Command* copy() = 0;
 		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {

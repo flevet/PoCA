@@ -386,9 +386,10 @@ void ObjectListWidget::actionNeeded()
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
 		poca::core::CommandRuntimeContext context;
-		objList->executeCommand(&ci, context);
-		if (context.has<poca::core::CreatedObjectContext>()) {
-			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+		poca::core::CommandExecutionResult result;
+		objList->executeCommand(&ci, context, result);
+		if (result.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 			if (obj != nullptr)
 				emit(transferNewObjectCreated(obj));
 		}
@@ -402,9 +403,10 @@ void ObjectListWidget::actionNeeded()
 		if (selectedRows.empty()) return;
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
 		poca::core::CommandRuntimeContext context;
-		objList->executeCommand(&ci, context);
-		if (context.has<poca::core::CreatedObjectContext>()) {
-			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+		poca::core::CommandExecutionResult result;
+		objList->executeCommand(&ci, context, result);
+		if (result.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 			if (obj != nullptr)
 				emit(transferNewObjectCreated(obj));
 		}

@@ -48,6 +48,7 @@ namespace poca::core{
     class PluginList;
     class CommandInfo;
     class CommandRuntimeContext;
+    class CommandExecutionResult;
     class CommandableObject;
     class Engine;
 }
@@ -70,6 +71,9 @@ public:
     virtual void execute(poca::core::CommandInfo*) = 0;
     virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext&) {
         execute(_ci);
+    }
+    virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result) {
+        execute(_ci, _context);
     }
 };
 

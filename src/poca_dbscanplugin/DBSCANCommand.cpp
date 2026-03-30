@@ -112,6 +112,12 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos)
 
 void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -127,7 +133,7 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::C
 		printf("Time for computing DBSCAN: %ld ms\n", elapsed);
 	}
 	else if (_infos->nameCommand == "getDBSCANCommand") {
-		_context.set<DBSCANCommandContext>({ this });
+		_result.set<DBSCANCommandContext>({ this });
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;

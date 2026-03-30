@@ -145,6 +145,12 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	if (_infos->nameCommand == "saveStatsObjs") {
 		std::string filename, separator(",");
 		if (_infos->hasParameter("filename"))
@@ -171,7 +177,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 	}
 	else if (_infos->nameCommand == "duplicateCentroids") {
 		poca::core::MyObjectInterface* obj = duplicateCentroids();
-		_context.set<poca::core::CreatedObjectContext>({ obj });
+		_result.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "duplicateSelectedObjects") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection")? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
@@ -184,7 +190,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 			_infos->errorMessage("selected objects were not duplicated.");
 			return;
 		}
-		_context.set<poca::core::CreatedObjectContext>({ obj });
+		_result.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "saveSelectedObjectsForVectorHeat") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection") ? _infos->getParameter<std::set <int>>("selection") : std::set<int>();

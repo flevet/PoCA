@@ -113,6 +113,12 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos)
 
 void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	if (hasCommand(_infos->nameCommand))
 		loadParameters(*_infos);
 	if (_infos->getNameCommand() == "clean") {
@@ -123,7 +129,7 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 		uint32_t maxDT = getParameter<uint32_t>("clean", "maxDarkTime");
 		bool fixedDT = getParameter<bool>("clean", "fixedDarkTime");
 		poca::core::MyObjectInterface* obj = cleanDetectionSet(radius, maxDT, fixedDT);
-		_context.set<poca::core::CreatedObjectContext>({ obj });
+		_result.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
@@ -137,7 +143,7 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 	}
 	else if (_infos->nameCommand == "getCleanEquations") {
 		if (m_eqnBlinks == NULL) return;
-		_context.set<poca::core::CleanEquationsContext>({
+		_result.set<poca::core::CleanEquationsContext>({
 			m_eqnBlinks,
 			m_eqnTOns,
 			m_eqnTOffs,

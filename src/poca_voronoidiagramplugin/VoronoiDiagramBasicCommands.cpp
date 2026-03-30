@@ -142,6 +142,12 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	poca::core::Engine* engine = poca::core::Engine::instance();
 
 	if (hasCommand(_infos->nameCommand)) {
@@ -241,7 +247,7 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const
 		data["y"] = ys;
 		data["z"] = zs;
 		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(data);
-		_context.set<poca::voronoi::CreatedDetectionSetContext>({ dset });
+		_result.set<poca::voronoi::CreatedDetectionSetContext>({ dset });
 	}
 	else if (_infos->nameCommand == "clustersForChallenge") {
 		 poca::core::Engine* engine = poca::core::Engine::instance();

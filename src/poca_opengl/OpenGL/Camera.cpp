@@ -1848,11 +1848,12 @@ namespace poca::opengl {
 
 			ci = poca::core::CommandInfo(true, "doubleClickCamera");
 			poca::core::CommandRuntimeContext runtimeContext;
+			poca::core::CommandExecutionResult runtimeResult;
 			runtimeContext.set(poca::opengl::ActiveCamera{ this });
-			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, runtimeContext);
+			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, runtimeContext, runtimeResult);
 			if (ci.hasParameter("bbox")) {
 				poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
-				QOpenGLFramebufferObject* fbo = runtimeContext.has<poca::opengl::PickingFramebuffer>() ? runtimeContext.get<poca::opengl::PickingFramebuffer>().fbo : nullptr;
+				QOpenGLFramebufferObject* fbo = runtimeResult.has<poca::opengl::PickingFramebuffer>() ? runtimeResult.get<poca::opengl::PickingFramebuffer>().fbo : nullptr;
 				if (fbo == nullptr)
 					break;
 				size_t id = ci.getParameter<size_t>("id");

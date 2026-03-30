@@ -137,10 +137,17 @@ void MyMultipleObject::setThick(const float _t)
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	executeCommand(_ci, context);
+	poca::core::CommandExecutionResult result;
+	executeCommand(_ci, context, result);
 }
 
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
+{
+	poca::core::CommandExecutionResult result;
+	executeCommand(_ci, _context, result);
+}
+
+void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	for (poca::core::MyObjectInterface* obj : m_colors) {
 		/*if (_ci->nameCommand == "display") {
@@ -152,10 +159,10 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 				cam->setModelMatrix(mat);
 			}
 		}*/
-		obj->executeCommand(_ci, _context);
+		obj->executeCommand(_ci, _context, _result);
 	}
-	poca::core::MyObject::executeCommand(_ci, _context);
-	poca::core::CommandableObject::executeCommand(_ci, _context);
+	poca::core::MyObject::executeCommand(_ci, _context, _result);
+	poca::core::CommandableObject::executeCommand(_ci, _context, _result);
 }
 
 const poca::core::BoundingBox MyMultipleObject::boundingBox() const
@@ -189,33 +196,47 @@ const size_t MyMultipleObject::dimension() const
 void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	executeCommandOnSpecificComponent(_nameComponent, _ci, context);
+	poca::core::CommandExecutionResult result;
+	executeCommandOnSpecificComponent(_nameComponent, _ci, context, result);
 }
 
 void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	executeCommandOnSpecificComponent(_nameComponent, _ci, _context, result);
+}
+
+void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 	if (bci)
-		bci->executeCommand(_ci, _context);
+		bci->executeCommand(_ci, _context, _result);
 	for (poca::core::MyObjectInterface* obj : m_colors)
-		obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context);
+		obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
 }
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	executeGlobalCommand(_ci, context);
+	poca::core::CommandExecutionResult result;
+	executeGlobalCommand(_ci, context, result);
 }
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	executeGlobalCommand(_ci, _context, result);
+}
+
+void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	//executeCommand(_ci);
-	poca::core::MyObject::executeCommand(_ci, _context);
+	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	for (poca::core::MyObjectInterface* obj : m_colors)
-		obj->executeGlobalCommand(_ci, _context);
+		obj->executeGlobalCommand(_ci, _context, _result);
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;
-		bc->executeCommand(_ci, _context);
+		bc->executeCommand(_ci, _context, _result);
 	}
 }
 

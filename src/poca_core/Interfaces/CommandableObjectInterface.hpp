@@ -44,6 +44,7 @@ namespace poca::core {
 	class Command;
 	class CommandInfo;
 	class CommandRuntimeContext;
+	class CommandExecutionResult;
 
 	class CommandableObjectInterface {
 	public:
@@ -55,6 +56,9 @@ namespace poca::core {
 		virtual void executeCommand(CommandInfo*) = 0;
 		virtual void executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context) {
 			executeCommand(_ci);
+		}
+		virtual void executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+			executeCommand(_ci, _context);
 		}
 		virtual CommandInfo createCommand(const std::string&, const nlohmann::json&) = 0;
 

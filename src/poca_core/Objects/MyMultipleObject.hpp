@@ -59,6 +59,7 @@ public:
 
 	void executeCommand(poca::core::CommandInfo*);
 	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 
 	const poca::core::BoundingBox boundingBox() const;
 
@@ -66,8 +67,10 @@ public:
 
 	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
 	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 	virtual void executeGlobalCommand(poca::core::CommandInfo*);
 	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 
 	void resetModelMatrices(const bool = true);
 	void recomputeGrid();

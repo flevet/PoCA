@@ -839,9 +839,10 @@ void MainWindow::dropEvent(QDropEvent* _e)
 			poca::core::CommandInfo ci(true, "openFile", "name", name.toStdString());
 			poca::core::Engine* engine = poca::core::Engine::instance();
 			poca::core::CommandRuntimeContext context;
-			engine->getPlugins()->execute(&ci, context);
-			if (!context.has<poca::core::CreatedObjectContext>()) continue;
-			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			poca::core::CommandExecutionResult result;
+			engine->getPlugins()->execute(&ci, context, result);
+			if (!result.has<poca::core::CreatedObjectContext>()) continue;
+			poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 			if (obj != NULL) {
 				createWidget(obj);
 			}
@@ -1932,9 +1933,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
 							poca::core::CommandRuntimeContext context;
-							comObj->executeCommand(&command, context);
-							if (context.has<poca::voronoi::CreatedDetectionSetContext>()) {
-								poca::geometry::DetectionSet* dset = context.get<poca::voronoi::CreatedDetectionSetContext>().dset;
+							poca::core::CommandExecutionResult result;
+							comObj->executeCommand(&command, context, result);
+							if (result.has<poca::voronoi::CreatedDetectionSetContext>()) {
+								poca::geometry::DetectionSet* dset = result.get<poca::voronoi::CreatedDetectionSetContext>().dset;
 								if (dset == NULL) return;
 								poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
 								const std::string& dir = obj->getDir(), name = obj->getName();
@@ -1943,8 +1945,8 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 								newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
 								createWindows(newDset, QString(dir.c_str()), newName);
 							}
-							else if (context.has<poca::core::CreatedObjectContext>()) {
-								poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+							else if (result.has<poca::core::CreatedObjectContext>()) {
+								poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 								createWidget(obj);
 							}
 						}
@@ -2006,9 +2008,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
 							poca::core::CommandRuntimeContext context;
-							comObj->executeCommand(&command, context);
-							if (context.has<poca::core::CreatedObjectContext>()) {
-								poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+							poca::core::CommandExecutionResult result;
+							comObj->executeCommand(&command, context, result);
+							if (result.has<poca::core::CreatedObjectContext>()) {
+								poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 								createWidget(obj);
 							}
 						}

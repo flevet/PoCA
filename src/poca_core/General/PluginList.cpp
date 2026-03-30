@@ -33,8 +33,6 @@
 #include <QtCore/QThread>
 #include <QtCore/QDebug>
 
-#include <General/Command.hpp>
-
 #include "PluginList.hpp"
 
 namespace poca::core {
@@ -81,13 +79,20 @@ namespace poca::core {
 	void PluginList::execute(poca::core::CommandInfo* _ci)
 	{
 		CommandRuntimeContext context;
-		execute(_ci, context);
+		CommandExecutionResult result;
+		execute(_ci, context, result);
 	}
 
 	void PluginList::execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
 	{
+		CommandExecutionResult result;
+		execute(_ci, _context, result);
+	}
+
+	void PluginList::execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+	{
 		for (PluginInterface* plugin : m_plugins)
-			plugin->execute(_ci, _context);
+			plugin->execute(_ci, _context, _result);
 	}
 }
 

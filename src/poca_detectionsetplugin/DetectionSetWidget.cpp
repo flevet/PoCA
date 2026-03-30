@@ -554,9 +554,10 @@ void DetectionSetWidget::actionNeeded()
 		bool fixedDT = m_fixedDarkTcbox->isChecked();
 		poca::core::CommandInfo ci(true, "clean", "radius", radius, "maxDarkTime", maxDT, "fixedDarkTime", fixedDT);
 		poca::core::CommandRuntimeContext context;
-		engine->executeCommand(bc, &ci, context);
-		if (context.has<poca::core::CreatedObjectContext>()) {
-			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+		poca::core::CommandExecutionResult result;
+		engine->executeCommand(bc, &ci, context, result);
+		if (result.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = result.get<poca::core::CreatedObjectContext>().object;
 			if (obj != nullptr)
 				emit(transferNewObjectCreated(obj));
 		}
@@ -881,10 +882,11 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 
 		poca::core::CommandInfo ci(false, "DetectionSet", "getCleanEquations");
 		poca::core::CommandRuntimeContext context;
-		m_object->executeCommand(&ci, context);
-		if (context.has<poca::core::CleanEquationsContext>()) {
+		poca::core::CommandExecutionResult result;
+		m_object->executeCommand(&ci, context, result);
+		if (result.has<poca::core::CleanEquationsContext>()) {
 			m_groupBoxCleanerPlots->setVisible(true);
-			const poca::core::CleanEquationsContext cleanCtx = context.get<poca::core::CleanEquationsContext>();
+			const poca::core::CleanEquationsContext cleanCtx = result.get<poca::core::CleanEquationsContext>();
 			poca::core::EquationFit* eqnBlinks = cleanCtx.blinks;
 			poca::core::EquationFit* eqnTons = cleanCtx.tons;
 			poca::core::EquationFit* eqnToffs = cleanCtx.toffs;

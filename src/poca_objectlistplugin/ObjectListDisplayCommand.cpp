@@ -169,6 +169,12 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
+}
+
+void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+{
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
@@ -225,7 +231,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 					bbox[n] = bbox[n] > bbox2[n] ? bbox[n] : bbox2[n];
 			}
 			_infos->addParameter("bbox", bbox);
-			_context.set(poca::opengl::PickingFramebuffer{ m_pickOneObject });
+			_result.set(poca::opengl::PickingFramebuffer{ m_pickOneObject });
 			_infos->addParameter("id", idSelection);
 		}
 	}

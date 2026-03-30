@@ -266,133 +266,46 @@ void MyObjectDisplayCommand::display() const
 	//glClear(GL_DEPTH_BUFFER_BIT);
 }
 
+std::vector<poca::core::CommandSpec> MyObjectDisplayCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("zoomFactor", { { "zoomFactor", poca::core::CommandParameterType::Number, true } }),
+		poca::core::CommandSpec("currentZoom", { { "currentZoom", poca::core::CommandParameterType::Number, true } }),
+		poca::core::CommandSpec("continuousZoom", { { "continuousZoom", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("smoothPoint", { { "smoothPoint", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("smoothLine", { { "smoothLine", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("positionScaleBar", { { "positionScaleBar", poca::core::CommandParameterType::UnsignedInteger, true } }),
+		poca::core::CommandSpec("scaleBarHeight", { { "scaleBarHeight", poca::core::CommandParameterType::UnsignedInteger, true } }),
+		poca::core::CommandSpec("displayScaleBar", { { "displayScaleBar", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("colorScaleBar", { { "colorScaleBar", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("scaleBarWidth", { { "scaleBarWidth", poca::core::CommandParameterType::UnsignedInteger, true } }),
+		poca::core::CommandSpec("pointSizeGL", { { "pointSizeGL", poca::core::CommandParameterType::UnsignedInteger, true } }),
+		poca::core::CommandSpec("lineWidthGL", { { "lineWidthGL", poca::core::CommandParameterType::UnsignedInteger, true } }),
+		poca::core::CommandSpec("colorBakground", { { "colorBakground", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("nbGrid", { { "nbGrid", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("stepGrid", { { "stepGrid", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("useNbForGrid", { { "useNbForGrid", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("isotropicGrid", { { "isotropicGrid", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("antialias", { { "antialias", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("cullFace", { { "cullFace", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("fontDisplay", { { "fontDisplay", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("fontSize", { { "fontSize", poca::core::CommandParameterType::Number, true } }),
+		poca::core::CommandSpec("colorSelectedROIs", { { "colorSelectedROIs", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("colorUnselectedROIs", { { "colorUnselectedROIs", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("displayROIs", { { "displayROIs", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("displayROILabels", { { "displayROILabels", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("useSSAO", { { "useSSAO", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("radiusSSAO", { { "radiusSSAO", poca::core::CommandParameterType::Number, true } }),
+		poca::core::CommandSpec("strengthSSAO", { { "strengthSSAO", poca::core::CommandParameterType::Number, true } }),
+		poca::core::CommandSpec("useSilhouetteSSAO", { { "useSilhouetteSSAO", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("useDebugSSAO", { { "useDebugSSAO", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("currentDebugSSAO", { { "currentDebugSSAO", poca::core::CommandParameterType::Integer, true } })
+	};
+}
+
 poca::core::CommandInfo MyObjectDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "zoomFactor") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "currentZoom") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "continuousZoom") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "smoothPoint") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "smoothLine") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "positionScaleBar") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "scaleBarHeight") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "displayScaleBar") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "colorScaleBar") {
-		std::array<unsigned char, 4> val = _parameters.get<std::array<unsigned char, 4>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "scaleBarWidth") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "pointSizeGL") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "lineWidthGL") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "colorBakground") {
-		std::array<unsigned char, 4> val = _parameters.get<std::array<unsigned char, 4>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "nbGrid") {
-		std::array<uint8_t, 3> val = _parameters.get<std::array<uint8_t, 3>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "stepGrid") {
-		std::array<float, 3> val = _parameters.get<std::array<float, 3>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "useNbForGrid") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "isotropicGrid") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "antialias") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "cullFace") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "fontDisplay") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "fontSize") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "colorSelectedROIs") {
-		std::array<unsigned char, 4> val = _parameters.get<std::array<unsigned char, 4>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "colorUnselectedROIs") {
-		std::array<unsigned char, 4> val = _parameters.get<std::array<unsigned char, 4>>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "displayROIs") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "displayROILabels") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "useSSAO") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "radiusSSAO") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "strengthSSAO") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "useSilhouetteSSAO") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "useDebugSSAO") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "currentDebugSSAO") {
-		int val = _parameters.get<int>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 void MyObjectDisplayCommand::saveCommands(nlohmann::json& _json)

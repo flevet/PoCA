@@ -205,12 +205,13 @@ void DBSCANWidget::updateDBSCANResults()
 {
 	poca::core::CommandInfo ci(false, "getDBSCANCommand");
 	poca::core::CommandRuntimeContext context;
-	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context);
+	poca::core::CommandExecutionResult result;
+	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
 
-	if (!context.has<DBSCANCommandContext>())
+	if (!result.has<DBSCANCommandContext>())
 		return;
 
-	DBSCANCommand* command = context.get<DBSCANCommandContext>().command;
+	DBSCANCommand* command = result.get<DBSCANCommandContext>().command;
 	if (command == nullptr)
 		return;
 	//Creation of the histogram of the clusters size
