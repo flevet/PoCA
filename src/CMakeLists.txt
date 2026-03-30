@@ -55,7 +55,7 @@ add_dependencies(poca_nearestlocsmulticolorplugin poca_core poca_opengl poca_plo
 add_dependencies(poca_objectcolocalizationplugin poca_core poca_opengl poca_plot poca_geometry)
 add_dependencies(poca poca_core poca_opengl poca_plot poca_geometry)
 
-add_subdirectory(../../poca_extra/src ${CMAKE_BINARY_DIR}/extra)
+#add_subdirectory(../../poca_extra/src ${CMAKE_BINARY_DIR}/extra)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT poca)
 message("Last one ? C++ flags: ${CMAKE_CXX_FLAGS}")

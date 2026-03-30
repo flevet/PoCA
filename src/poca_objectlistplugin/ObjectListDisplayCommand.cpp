@@ -162,12 +162,21 @@ ObjectListDisplayCommand::~ObjectListDisplayCommand()
 
 void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::CommandRuntimeContext context;
+	execute(_infos, context);
+}
+
+void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+{
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
 	}
 	else if (_infos->nameCommand == "display") {
-		poca::opengl::Camera* cam = _infos->getParameterPtr<poca::opengl::Camera>("camera");
+		poca::opengl::Camera* cam = nullptr;
+		if (_context.has<poca::core::CameraCtx>())
+			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (!cam) return;
 		bool offscrean = false, ssao = false;;
 		if (_infos->hasParameter("offscreen"))
 			offscrean = _infos->getParameter<bool>("offscreen");
@@ -202,7 +211,10 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 			idSelection = _infos->getParameter<size_t>("objectID");
 		if (idSelection >= 0 && idSelection < m_objects->nbElements()) {
 			poca::core::BoundingBox bbox = m_objects->computeBoundingBoxElement(idSelection);
-			poca::opengl::Camera* cam = _infos->getParameterPtr<poca::opengl::Camera>("camera");
+			poca::opengl::Camera* cam = nullptr;
+			if (_context.has<poca::core::CameraCtx>())
+				cam = _context.get<poca::core::CameraCtx>().camera;
+			if (!cam) return;
 			displayZoomToBBox(cam, bbox);
 			if (_infos->hasParameter("bbox")) {
 				poca::core::BoundingBox bbox2 = _infos->getParameter<poca::core::BoundingBox>("bbox");
@@ -212,7 +224,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 					bbox[n] = bbox[n] > bbox2[n] ? bbox[n] : bbox2[n];
 			}
 			_infos->addParameter("bbox", bbox);
-			_infos->addParameter("fbo", m_pickOneObject);
+			_context.set(poca::core::FramebufferObjectCtx{ m_pickOneObject });
 			_infos->addParameter("id", idSelection);
 		}
 	}

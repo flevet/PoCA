@@ -348,11 +348,13 @@ MainWindow::~MainWindow()
 	if (m_currentMdi != NULL) {
 		m_currentMdi->getWidget()->getObject()->saveCommands(parameters);
 	}
-	poca::core::CommandInfo command(false, "saveParameters", "file", &parameters);
+	poca::core::CommandInfo command(false, "saveParameters");
+	poca::core::CommandRuntimeContext runtimeContext;
+	runtimeContext.set(poca::core::JsonFileCtx{ &parameters });
 	poca::core::Engine* engine = poca::core::Engine::instance();
-	engine->getPlugins()->execute(&command);
-	m_macroW->execute(&command);
-	m_pythonW->execute(&command);
+	engine->getPlugins()->execute(&command, runtimeContext);
+	m_macroW->execute(&command, runtimeContext);
+	m_pythonW->execute(&command, runtimeContext);
 
 	std::string text = parameters.dump(), textDisplay = parameters.dump(4);
 	std::cout << textDisplay << std::endl;

@@ -50,6 +50,7 @@ public:
 	~ObjectListDisplayCommand();
 
 	void execute(poca::core::CommandInfo*);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 	poca::core::Command* copy();
 

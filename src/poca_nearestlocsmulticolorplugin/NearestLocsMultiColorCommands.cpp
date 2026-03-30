@@ -94,8 +94,17 @@ NearestLocsMultiColorCommands::~NearestLocsMultiColorCommands()
 
 void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::CommandRuntimeContext context;
+	execute(_infos, context);
+}
+
+void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+{
 	if (_infos->nameCommand == "display") {
-		poca::opengl::Camera* cam = _infos->getParameterPtr<poca::opengl::Camera>("camera");
+		poca::opengl::Camera* cam = nullptr;
+		if (_context.has<poca::core::CameraCtx>())
+			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
 			offscrean = _infos->getParameter<bool>("offscreen");

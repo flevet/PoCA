@@ -57,6 +57,7 @@ public:
 	void update(poca::core::SubjectInterface*, const poca::core::CommandInfo & );
 	void executeMacro(poca::core::MyObjectInterface*, poca::core::CommandInfo*);
 	void execute(poca::core::CommandInfo*);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	void loadParameters(const nlohmann::json&);
 
 	void getJsonsFromQString(const QString&, std::vector <nlohmann::json>&);

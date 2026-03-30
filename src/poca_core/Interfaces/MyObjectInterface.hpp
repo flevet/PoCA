@@ -77,6 +77,9 @@ namespace poca::core {
 		virtual void clearCommands() = 0;
 		virtual const std::vector < Command* > getCommands() const = 0;
 		virtual void executeCommand(CommandInfo*) = 0;
+		virtual void executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context) {
+			executeCommand(_ci);
+		}
 		virtual void loadParameters(CommandInfo*) = 0;
 		virtual const bool hasParameter(const std::string&, const std::string&) = 0;
 
@@ -116,7 +119,13 @@ namespace poca::core {
 		virtual void saveROIs(const std::string&) = 0;
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, CommandInfo*) = 0;
+		virtual void executeCommandOnSpecificComponent(const std::string& _nameComponent, CommandInfo* _ci, const CommandRuntimeContext& _context) {
+			executeCommandOnSpecificComponent(_nameComponent, _ci);
+		}
 		virtual void executeGlobalCommand(poca::core::CommandInfo*) = 0;
+		virtual void executeGlobalCommand(poca::core::CommandInfo* _ci, const CommandRuntimeContext& _context) {
+			executeGlobalCommand(_ci);
+		}
 
 		virtual void saveCommands(const std::string&) = 0;
 		virtual void saveCommands(nlohmann::json&) = 0;

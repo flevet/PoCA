@@ -50,6 +50,7 @@ public:
 	~DelaunayTriangulationDisplayCommand();
 
 	void execute(poca::core::CommandInfo*);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	poca::core::Command* copy();
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 

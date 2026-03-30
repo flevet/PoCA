@@ -164,11 +164,19 @@ void ObjectListPlugin::setSingletons(poca::core::Engine* _engine)
 
 void ObjectListPlugin::execute(poca::core::CommandInfo* _com)
 {
+	poca::core::CommandRuntimeContext context;
+	execute(_com, context);
+}
+
+void ObjectListPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+{
 	if (_com->isRecordable())
 		poca::core::MacroRecorderSingleton::instance()->addCommand("VoronoiDiagramPlugin", _com);
 	if (_com->nameCommand == "saveParameters") {
-		if (!_com->hasParameter("file")) return;
-		nlohmann::json* json = _com->getParameterPtr<nlohmann::json>("file");
+		nlohmann::json* json = nullptr;
+		if (_context.has<poca::core::JsonFileCtx>())
+			json = _context.get<poca::core::JsonFileCtx>().file;
+		if (json == nullptr) return;
 
 		std::string nameStr = name().toLatin1().data();
 		(*json)[nameStr] = m_parameters[nameStr];

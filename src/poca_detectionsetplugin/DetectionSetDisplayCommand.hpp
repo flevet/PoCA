@@ -51,6 +51,7 @@ public:
 	~DetectionSetDisplayCommand();
 	
 	void execute(poca::core::CommandInfo *);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	poca::core::Command * copy();
 
 	void freeGPUMemory();

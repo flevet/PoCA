@@ -78,8 +78,14 @@ namespace poca::core {
 
 	void PluginList::execute(poca::core::CommandInfo* _ci)
 	{
+		CommandRuntimeContext context;
+		execute(_ci, context);
+	}
+
+	void PluginList::execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
+	{
 		for (PluginInterface* plugin : m_plugins)
-			plugin->execute(_ci);
+			plugin->execute(_ci, _context);
 	}
 }
 

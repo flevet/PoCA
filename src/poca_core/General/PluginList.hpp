@@ -51,6 +51,7 @@ namespace poca::core {
 		void addCommands(poca::core::CommandableObject*);
 		void setSingletons(poca::core::Engine*);
 		void execute(poca::core::CommandInfo*);
+		void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 
 	protected:
 		std::vector <PluginInterface*> m_plugins;

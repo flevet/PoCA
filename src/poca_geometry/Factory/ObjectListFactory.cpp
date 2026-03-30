@@ -1408,8 +1408,8 @@ namespace poca::geometry {
 
 		ObjectListFactoryInterface::TypeShape type = poca::core::Engine::instance()->getGlobalParameters()["typeObject"].get<ObjectListFactoryInterface::TypeShape>();
 
-		//std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
-		//std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects, triCHull;
+		std::vector <uint32_t> locsAllObjects, firstsLocs, firstTriangles, firstOutlines;
+		std::vector <poca::core::Vec3mf> trianglesAllObjects, outlinesAllObjects, triCHull;
 		float area = 0.f;
 		std::vector <float> volumeObjects;
 		std::vector < Surface_mesh_3_double> meshes;
@@ -1420,31 +1420,40 @@ namespace poca::geometry {
 			area = 0.f;
 
 			if (_minNbLocs <= locs.size() && locs.size() <= _maxNbLocs && _minArea <= area && area <= _maxArea) {
-				//firstsLocs.push_back(locsAllObjects.size());
-				//firstTriangles.push_back(trianglesAllObjects.size());
-				//firstOutlines.push_back(outlinesAllObjects.size());
+				firstsLocs.push_back(locsAllObjects.size());
+				firstTriangles.push_back(trianglesAllObjects.size());
+				firstOutlines.push_back(outlinesAllObjects.size());
 
 				meshes.push_back(Surface_mesh_3_double());
 
 				switch (type) {
-				case ObjectListFactoryInterface::CONVEX_HULL:
+				case ObjectListFactoryInterface::MESH:
 					computeConvexHullObject3DMesh(xs, ys, zs, locs, meshes.back(), area);
 					break;
 				default:
-					computeConvexHullObject3DMesh(xs, ys, zs, locs, meshes.back(), area);
+					computeConvexHullObject3D(xs, ys, zs, locs, outlinesAllObjects, triCHull, area);
 					break;
 				}
 
-				//std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
-				//std::copy(triCHull.begin(), triCHull.end(), std::back_inserter(trianglesAllObjects));
+				std::copy(locs.begin(), locs.end(), std::back_inserter(locsAllObjects));
+				std::copy(triCHull.begin(), triCHull.end(), std::back_inserter(trianglesAllObjects));
 				volumeObjects.push_back(area);
 			}
 		}
-		return new poca::geometry::ObjectListMesh(meshes);
-		//firstsLocs.push_back(locsAllObjects.size());
-		//firstTriangles.push_back(trianglesAllObjects.size());
-		//firstOutlines.push_back(outlinesAllObjects.size());
+		//return new poca::geometry::ObjectListMesh(meshes);
+		firstsLocs.push_back(locsAllObjects.size());
+		firstTriangles.push_back(trianglesAllObjects.size());
+		firstOutlines.push_back(outlinesAllObjects.size());
 
+		switch (type) {
+		case ObjectListFactoryInterface::MESH:
+			return locsAllObjects.empty() ? NULL : new poca::geometry::ObjectListMesh(meshes);
+			break;
+		default:
+			return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, std::vector<uint32_t>(), locsAllObjects, firstsLocs, std::vector <poca::core::Vec3mf>());
+			break;
+		}
+		return NULL;
 		//return locsAllObjects.empty() ? NULL : new ObjectListDelaunay(xs, ys, zs, locsAllObjects, firstsLocs, trianglesAllObjects, firstTriangles, volumeObjects, std::vector<uint32_t>(), locsAllObjects, firstsLocs, std::vector <poca::core::Vec3mf>());
 		
 		/*const float* xs = _delaunay->getXs();

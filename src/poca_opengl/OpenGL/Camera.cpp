@@ -656,7 +656,10 @@ namespace poca::opengl {
 		if (m_displayBoundingBox)
 			displayBoundingBox(thickness, antialias);
 		glEnable(GL_DEPTH_TEST);
-		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "display", "camera", this, "offscreen", true));
+		poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
+		poca::core::CommandRuntimeContext runtimeContext;
+		runtimeContext.set(poca::core::CameraCtx{ this });
+		m_object->executeGlobalCommand(&displayCommand, runtimeContext);
 
 		success = m_offscreenFBO->release();
 		if (!success) std::cout << "Problem with releasing" << std::endl;
@@ -768,10 +771,19 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 
 		if (!ssao) {
-			if(_buffOffscreen == NULL)
-				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "display", "camera", this));
+			if(_buffOffscreen == NULL) {
+				poca::core::CommandInfo displayCommand(false, "display");
+				poca::core::CommandRuntimeContext runtimeContext;
+				runtimeContext.set(poca::core::CameraCtx{ this });
+				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+			}
 			else
-				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "display", "camera", this, "offscreen", true));
+			{
+				poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
+				poca::core::CommandRuntimeContext runtimeContext;
+				runtimeContext.set(poca::core::CameraCtx{ this });
+				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+			}
 		}
 		else {
 			drawSSAO(_buffOffscreen);
@@ -1006,9 +1018,13 @@ namespace poca::opengl {
 		for(uint32_t i = 1; i < 5; i++)
 			glClearBufferfv(GL_COLOR, i, transparent);
 
-		m_object->executeCommandOnSpecificComponent("ObjectList", &poca::core::CommandInfo(false, "display", "camera", this, "offscreen", true, "ssao", true));
+		poca::core::CommandRuntimeContext runtimeContext;
+		runtimeContext.set(poca::core::CameraCtx{ this });
+		poca::core::CommandInfo objectListDisplay(false, "display", "offscreen", true, "ssao", true);
+		m_object->executeCommandOnSpecificComponent("ObjectList", &objectListDisplay, runtimeContext);
 
-		m_object->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(false, "display", "camera", this, "ssao", true));
+		poca::core::CommandInfo detectionSetDisplay(false, "display", "ssao", true);
+		m_object->executeCommandOnSpecificComponent("DetectionSet", &detectionSetDisplay, runtimeContext);
 		success = classShaderSSAO.m_fboGeometry->release();
 		if (!success) std::cout << "Problem with releasing" << std::endl;
 		QVector<GLuint> texIds = classShaderSSAO.m_fboGeometry->textures();
@@ -1829,11 +1845,15 @@ namespace poca::opengl {
 			for (std::string info : listInfos)
 				m_infoPicking.push_back(QString::fromStdString(info));
 
-			ci = poca::core::CommandInfo(true, "doubleClickCamera", "camera", this);
-			m_object->executeCommandOnSpecificComponent("ObjectList", &ci);
+			ci = poca::core::CommandInfo(true, "doubleClickCamera");
+			poca::core::CommandRuntimeContext runtimeContext;
+			runtimeContext.set(poca::core::CameraCtx{ this });
+			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, runtimeContext);
 			if (ci.hasParameter("bbox")) {
 				poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
-				QOpenGLFramebufferObject* fbo = ci.getParameterPtr<QOpenGLFramebufferObject>("fbo");
+				QOpenGLFramebufferObject* fbo = runtimeContext.has<poca::core::FramebufferObjectCtx>() ? runtimeContext.get<poca::core::FramebufferObjectCtx>().fbo : nullptr;
+				if (fbo == nullptr)
+					break;
 				size_t id = ci.getParameter<size_t>("id");
 				int y = 20;
 				InfosObjectImages* infos = new InfosObjectImages(fbo, poca::core::Vec4mf(0, y, m_sizePatch, m_sizePatch), bbox, m_stateCamera, id);
@@ -1916,8 +1936,10 @@ namespace poca::opengl {
 			if (m_insidePatchId == -1) {
 				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
-				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
-				m_object->executeGlobalCommand(&ci);
+				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
+				poca::core::CommandRuntimeContext runtimeContext;
+				runtimeContext.set(poca::core::CameraCtx{ this });
+				m_object->executeGlobalCommand(&ci, runtimeContext);
 				if (ci.hasParameter("bbox")) {
 					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
 					zoomToBoundingBox(bbox);

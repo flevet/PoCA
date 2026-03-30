@@ -37,11 +37,58 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <unordered_map>
+#include <typeindex>
 #include <iostream>
 
 #include "json.hpp"
 
+namespace poca::opengl {
+	class Camera;
+}
+
+class QOpenGLFramebufferObject;
+
 namespace poca::core {
+
+	class CommandRuntimeContext
+	{
+	public:
+		CommandRuntimeContext() = default;
+
+		template<typename T>
+		void set(const T& _value) const {
+			m_data[std::type_index(typeid(T))] = _value;
+		}
+
+		template<typename T>
+		bool has() const {
+			return m_data.find(std::type_index(typeid(T))) != m_data.end();
+		}
+
+		template<typename T>
+		T get() const {
+			auto it = m_data.find(std::type_index(typeid(T)));
+			if (it == m_data.end())
+				throw std::runtime_error("Runtime context entry not found");
+			return std::any_cast<T>(it->second);
+		}
+
+	private:
+		mutable std::unordered_map<std::type_index, std::any> m_data;
+	};
+
+	struct CameraCtx {
+		poca::opengl::Camera* camera = nullptr;
+	};
+
+	struct JsonFileCtx {
+		nlohmann::json* file = nullptr;
+	};
+
+	struct FramebufferObjectCtx {
+		QOpenGLFramebufferObject* fbo = nullptr;
+	};
 
 	class CommandInfo
 	{
@@ -231,6 +278,9 @@ namespace poca::core {
 
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
+		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
+			execute(_ci);
+		}
 		virtual Command* copy() = 0;
 		virtual CommandInfo createCommand(const std::string&, const nlohmann::json&) = 0;
 

@@ -58,13 +58,16 @@ public:
 	void setThick(const float);
 
 	void executeCommand(poca::core::CommandInfo*);
+	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 
 	const poca::core::BoundingBox boundingBox() const;
 
 	const size_t dimension() const;
 
 	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
+	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	virtual void executeGlobalCommand(poca::core::CommandInfo*);
+	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 
 	void resetModelMatrices(const bool = true);
 	void recomputeGrid();

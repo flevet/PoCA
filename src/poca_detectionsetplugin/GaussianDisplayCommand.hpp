@@ -48,6 +48,7 @@ public:
 	~GaussianDisplayCommand();
 
 	void execute(poca::core::CommandInfo*);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	void freeGPUMemory();
 
 	poca::core::Command* copy();
