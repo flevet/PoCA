@@ -130,15 +130,18 @@ poca::core::Command* DelaunayTriangulationConstructionCommand::copy()
 	return NULL;
 }
 
+std::vector<poca::core::CommandSpec> DelaunayTriangulationConstructionCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("computeDelaunay", {
+			{ "onSphere", poca::core::CommandParameterType::Boolean }
+		})
+	};
+}
+
 poca::core::CommandInfo DelaunayTriangulationConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "computeDelaunay") {
-		poca::core::CommandInfo ci(false, "computeDelaunay");
-		if (_parameters.contains("onSphere"))
-			ci.addParameter("onSphere", _parameters["onSphere"].get<bool>());
-		return ci;
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::PluginList* DelaunayTriangulationPlugin::m_plugins = NULL;

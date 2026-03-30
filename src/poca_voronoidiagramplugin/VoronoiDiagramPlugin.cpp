@@ -96,15 +96,18 @@ poca::core::Command* VoronoiDiagramConstructionCommand::copy()
 	return NULL;
 }
 
+std::vector<poca::core::CommandSpec> VoronoiDiagramConstructionCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("computeVoronoi", {
+			{ "onSphere", poca::core::CommandParameterType::Boolean }
+		})
+	};
+}
+
 poca::core::CommandInfo VoronoiDiagramConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "computeVoronoi") {
-		poca::core::CommandInfo ci(false, "computeVoronoi");
-		if (_parameters.contains("onSphere"))
-			ci.addParameter("onSphere", _parameters["onSphere"].get<bool>());
-		return ci;
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 nlohmann::json VoronoiDiagramPlugin::m_parameters;

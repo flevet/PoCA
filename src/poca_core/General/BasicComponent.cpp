@@ -262,62 +262,54 @@ namespace poca::core {
 
 	CommandInfo BasicComponent::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 	{
-		if (_nameCommand == "histogram") {
-			if (_parameters.contains("feature")) {
-				std::string feature = _parameters["feature"].get< std::string>();
-				if (_parameters.contains("action")) {
-					std::string action = _parameters["action"].get< std::string>();
+		auto createFromSpec = [&](const poca::core::CommandSpec& _spec) {
+			return _spec.create(false, _parameters);
+		};
 
-					if (action == "log") {
-						if (_parameters.contains("value")) {
-							bool val = _parameters["value"].get<bool>();
-							return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action, "value", val);
-						}
-					}
-					else if (action == "changeBoundsCustom") {
-						float minV, maxV;
-						bool complete = _parameters.contains("min");
-						if (complete)
-							minV = _parameters["min"].get<float>();
-						complete &= _parameters.contains("max");
-						if (complete) {
-							maxV = _parameters["max"].get<float>();
-							return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action, "min", minV, "max", maxV);
-						}
-					}
-					else if (action == "changeHistogramBounds") {
-						float minV, maxV;
-						bool complete = _parameters.contains("min");
-						if (complete)
-							minV = _parameters["min"].get<float>();
-						complete &= _parameters.contains("max");
-						if (complete) {
-							maxV = _parameters["max"].get<float>();
-							return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action, "min", minV, "max", maxV);
-						}
-					}
-					else if (action == "save") {
-						if (_parameters.contains("dir")) {
-							std::string val = _parameters["dir"].get<std::string>();
-							return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action, "dir", val);
-						}
-					}
-					else if (action == "displayWithLUT" || action == "selectHistogram")
-						return poca::core::CommandInfo(false, _nameCommand, "feature", feature, "action", action);
-				}
+		if (_nameCommand == "histogram") {
+			if (!_parameters.contains("feature") || !_parameters.contains("action"))
+				return poca::core::CommandInfo();
+
+			const std::string action = _parameters["action"].get<std::string>();
+			if (action == "log") {
+				return createFromSpec(poca::core::CommandSpec("histogram", {
+					{ "feature", poca::core::CommandParameterType::String, true },
+					{ "action", poca::core::CommandParameterType::String, true },
+					{ "value", poca::core::CommandParameterType::Boolean, true }
+				}));
 			}
+			else if (action == "changeBoundsCustom" || action == "changeHistogramBounds") {
+				return createFromSpec(poca::core::CommandSpec("histogram", {
+					{ "feature", poca::core::CommandParameterType::String, true },
+					{ "action", poca::core::CommandParameterType::String, true },
+					{ "min", poca::core::CommandParameterType::Number, true },
+					{ "max", poca::core::CommandParameterType::Number, true }
+				}));
+			}
+			else if (action == "save") {
+				return createFromSpec(poca::core::CommandSpec("histogram", {
+					{ "feature", poca::core::CommandParameterType::String, true },
+					{ "action", poca::core::CommandParameterType::String, true },
+					{ "dir", poca::core::CommandParameterType::String, true }
+				}));
+			}
+			else if (action == "displayWithLUT" || action == "selectHistogram") {
+				return createFromSpec(poca::core::CommandSpec("histogram", {
+					{ "feature", poca::core::CommandParameterType::String, true },
+					{ "action", poca::core::CommandParameterType::String, true }
+				}));
+			}
+			return poca::core::CommandInfo();
 		}
 		else if (_nameCommand == "selected") {
-			bool val = _parameters.get<bool>();
-			return poca::core::CommandInfo(false, _nameCommand, val);
+			return createFromSpec(poca::core::CommandSpec("selected", {
+				{ "selected", poca::core::CommandParameterType::Boolean, true }
+			}));
 		}
 		else if (_nameCommand == "changeLUT") {
-			if (_parameters.contains("LUT")) {
-				std::string val = _parameters["LUT"].get<std::string>();
-				return poca::core::CommandInfo(false, _nameCommand, "LUT", val);
-			}
-			else
-				return poca::core::CommandInfo();
+			return createFromSpec(poca::core::CommandSpec("changeLUT", {
+				{ "LUT", poca::core::CommandParameterType::String, true }
+			}));
 		}
 
 		return CommandableObject::createCommand(_nameCommand, _parameters);

@@ -289,33 +289,44 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 	}
 }
 
+std::vector<poca::core::CommandSpec> ObjectListDisplayCommand::commandSpecs() const
+{
+	std::vector<poca::core::CommandSpec> specs = poca::opengl::BasicDisplayCommand::commandSpecs();
+	specs.emplace_back("fill", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "fill", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("pointRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "pointRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("shapeRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "shapeRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("ellipsoidRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "ellipsoidRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("bboxSelection", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "bboxSelection", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("outlinePointRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "outlinePointRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("pointSizeGL", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "pointSizeGL", poca::core::CommandParameterType::UnsignedInteger, true }
+	});
+	specs.emplace_back("alpha", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "alpha", poca::core::CommandParameterType::Number, true }
+	});
+	specs.emplace_back("sortWRTCameraPosition", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "cameraPosition", poca::core::CommandParameterType::Any, true },
+		{ "cameraForward", poca::core::CommandParameterType::Any, true }
+	});
+	specs.emplace_back("updateFeature", std::initializer_list<poca::core::CommandParameterSpec>{});
+	return specs;
+}
+
 poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "ellipsoidRendering" || _nameCommand == "bboxSelection" || _nameCommand == "outlinePointRendering") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "pointSizeGL") {
-		uint32_t val = _parameters.get<uint32_t>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "alpha") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "sortWRTCameraPosition") {
-		glm::vec3 cameraPosition, cameraForward;
-		bool complete = _parameters.contains("cameraPosition") && _parameters.contains("cameraForward");
-		if (complete) {
-			cameraPosition = _parameters["cameraPosition"].get<glm::vec3>();
-			cameraForward = _parameters["cameraForward"].get<glm::vec3>();
-			return poca::core::CommandInfo(false, _nameCommand, "cameraPosition", cameraPosition, "cameraForward", "cameraForward");
-		}
-	}
-	else if (_nameCommand == "updateFeature") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::opengl::BasicDisplayCommand::createCommand(_nameCommand, _parameters);
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* ObjectListDisplayCommand::copy()

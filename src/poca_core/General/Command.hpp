@@ -404,6 +404,14 @@ namespace poca::core {
 			return {};
 		}
 
+		CommandInfo createCommandFromSpecs(const std::string& _nameCommand, const nlohmann::json& _parameters) const {
+			for (const CommandSpec& spec : commandSpecs()) {
+				if (spec.matches(_nameCommand))
+					return spec.create(false, _parameters);
+			}
+			return CommandInfo();
+		}
+
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
@@ -411,11 +419,7 @@ namespace poca::core {
 		}
 		virtual Command* copy() = 0;
 		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {
-			for (const CommandSpec& spec : commandSpecs()) {
-				if (spec.matches(_nameCommand))
-					return spec.create(false, _parameters);
-			}
-			return CommandInfo();
+			return createCommandFromSpecs(_nameCommand, _parameters);
 		}
 
 		virtual void saveCommands(nlohmann::json& _json) {

@@ -227,13 +227,16 @@ poca::core::Command* ColocTesselerConstructionCommand::copy()
 	return NULL;
 }
 
+std::vector<poca::core::CommandSpec> ColocTesselerConstructionCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("computeColocTesseler", {})
+	};
+}
+
 poca::core::CommandInfo ColocTesselerConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "computeColocTesseler") {
-		poca::core::CommandInfo ci(false, "computeColocTesseler");
-		return ci;
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 

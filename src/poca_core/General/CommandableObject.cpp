@@ -102,6 +102,12 @@ namespace poca::core {
 	{
 		for (std::vector < Command* >::iterator it = m_commands.begin(); it != m_commands.end(); it++) {
 			Command* com = *it;
+			CommandInfo ci = com->createCommandFromSpecs(_nameCommand, _parameters);
+			if (!ci.empty())
+				return ci;
+		}
+		for (std::vector < Command* >::iterator it = m_commands.begin(); it != m_commands.end(); it++) {
+			Command* com = *it;
 			CommandInfo ci = com->createCommand(_nameCommand, _parameters);
 			if (!ci.empty())
 				return ci;

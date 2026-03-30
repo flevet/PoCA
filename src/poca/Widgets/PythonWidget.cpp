@@ -557,8 +557,8 @@ void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comm
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-		if (_context.has<poca::core::JsonFileContext>())
-			json = _context.get<poca::core::JsonFileContext>().file;
+	if (_context.has<poca::core::JsonFileContext>())
+		json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::vector <nlohmann::json> commands;
@@ -606,21 +606,16 @@ void PythonWidget::loadParameters(const nlohmann::json& _json)
 
 poca::core::CommandInfo PythonWidget::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	poca::core::CommandInfo ci(false, _nameCommand);
-	if (!_parameters.contains("filename") || !_parameters.contains("features") || !_parameters.contains("resultType") || !_parameters.contains("nameFunction"))
-		return poca::core::CommandInfo();
-	ci.addParameter("filename", _parameters["filename"].get<std::string>());
-	ci.addParameter("features", _parameters["features"].get<std::vector<std::string>>());
-	ci.addParameter("resultType", _parameters["resultType"].get<std::string>());
-	if (_parameters.contains("addToComponent"))
-		ci.addParameter("addToComponent", _parameters["addToComponent"].get<std::string>());
-	if (_parameters.contains("nameNewFeature"))
-		ci.addParameter("nameNewFeature", _parameters["nameNewFeature"].get<std::string>());
-	if (_parameters.contains("nameFunction"))
-		ci.addParameter("nameFunction", _parameters["nameFunction"].get<std::string>());
-	if (_parameters.contains("buttonLabel"))
-		ci.addParameter("buttonLabel", _parameters["buttonLabel"].get<std::string>());
-	return ci;
+	const poca::core::CommandSpec spec(_nameCommand, {
+		{ "filename", poca::core::CommandParameterType::String, true },
+		{ "features", poca::core::CommandParameterType::Array, true },
+		{ "resultType", poca::core::CommandParameterType::String, true },
+		{ "nameFunction", poca::core::CommandParameterType::String, true },
+		{ "addToComponent", poca::core::CommandParameterType::String },
+		{ "nameNewFeature", poca::core::CommandParameterType::String },
+		{ "buttonLabel", poca::core::CommandParameterType::String }
+	});
+	return spec.create(false, _parameters);
 }
 
 void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInfo& _command)
