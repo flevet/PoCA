@@ -53,6 +53,7 @@ namespace poca::core {
 	class MyObjectInterface;
 	class BasicComponentList;
 	class BasicComponent;
+	class CommandRuntimeContext;
 }
 
 namespace poca::opengl {
@@ -117,6 +118,7 @@ namespace poca::core {
 
 		void executeCommand(BasicComponentInterface*, const bool, const std::string&);
 		void executeCommand(BasicComponentInterface*, CommandInfo*);
+		void executeCommand(BasicComponentInterface*, CommandInfo*, const CommandRuntimeContext&);
 
 		template<typename T>
 		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _name, const T& _param) {

@@ -43,6 +43,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <General/Engine.hpp>
 #include <OpenGL/Helper.h>
 
@@ -99,8 +100,8 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, cons
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -163,25 +164,32 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, cons
 	}
 }
 
+std::vector<poca::core::CommandSpec> VoronoiDiagramDisplayCommand::commandSpecs() const
+{
+	std::vector<poca::core::CommandSpec> specs = poca::opengl::BasicDisplayCommand::commandSpecs();
+	specs.emplace_back("fill", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "fill", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("pointRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "pointRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("polytopeRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "polytopeRendering", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("bboxSelection", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "bboxSelection", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("determineTrianglesLinkedToPoint", std::initializer_list<poca::core::CommandParameterSpec>{});
+	specs.emplace_back("explodeCells", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "factor", poca::core::CommandParameterType::Number, false, 1.f }
+	});
+	specs.emplace_back("selectedBorderCells", std::initializer_list<poca::core::CommandParameterSpec>{});
+	return specs;
+}
+
 poca::core::CommandInfo VoronoiDiagramDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "fill" || _nameCommand == "pointRendering" || _nameCommand == "polytopeRendering" || _nameCommand == "bboxSelection") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "determineTrianglesLinkedToPoint") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "explodeCells") {
-		float factor = 1.f;
-		poca::core::CommandInfo ci(false, _nameCommand);
-		ci.addParameter("factor", _parameters.contains("factor") ? _parameters["factor"].get<float>() : 1.f);
-		return ci;
-	}
-	else if (_nameCommand == "selectedBorderCells") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::opengl::BasicDisplayCommand::createCommand(_nameCommand, _parameters);
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* VoronoiDiagramDisplayCommand::copy()

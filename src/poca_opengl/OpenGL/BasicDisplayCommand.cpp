@@ -40,6 +40,27 @@
 
 namespace poca::opengl {
 
+	std::vector<poca::core::CommandSpec> BasicDisplayCommand::commandSpecs() const
+	{
+		using poca::core::CommandParameterType;
+		using poca::core::CommandSpec;
+
+		return {
+			CommandSpec("updatePickingBuffer", {
+				{"width", CommandParameterType::Integer, true, nullptr},
+				{"height", CommandParameterType::Integer, true, nullptr}
+			}),
+			CommandSpec("pick", {
+				{"x", CommandParameterType::Integer, true, nullptr},
+				{"y", CommandParameterType::Integer, true, nullptr},
+				{"saveImage", CommandParameterType::Boolean, false, false}
+			}),
+			CommandSpec("freeGPU", {}),
+			CommandSpec("togglePicking", {}),
+			CommandSpec("setIDObjectPicked", {})
+		};
+	}
+
 	BasicDisplayCommand::BasicDisplayCommand(poca::core::BasicComponentInterface* _component, const std::string& _name) : poca::core::Command(_name), m_pickFBO(NULL), m_wImage(0), m_hImage(0), m_idSelection(-1), m_pickingEnabled(true)
 	{
 		m_component = _component;
@@ -86,44 +107,7 @@ namespace poca::opengl {
 
 	poca::core::CommandInfo BasicDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 	{
-		if (_nameCommand == "updatePickingBuffer") {
-			int w, h;
-			bool complete = _parameters.contains("width");
-			if (complete)
-				w = _parameters["width"].get<int>();
-			complete &= _parameters.contains("height");
-			if (complete) {
-				h = _parameters["height"].get<int>();
-				return poca::core::CommandInfo(false, _nameCommand, "width", w , "height", h);
-			}
-		}
-		else if (_nameCommand == "pick") {
-			int x, y;
-			bool saveImage = false;
-			if(_parameters.contains("saveImage"))
-				saveImage = _parameters["saveImage"].get<bool>();
-			bool complete = _parameters.contains("x");
-			if (complete)
-				x = _parameters["x"].get<int>();
-			complete &= _parameters.contains("y");
-			if (complete) {
-				y = _parameters["y"].get<int>();
-				return poca::core::CommandInfo(false, _nameCommand, "x", x , "y", y, "saveImage", saveImage);
-			}
-		}
-		else if (_nameCommand == "freeGPU") {
-			return poca::core::CommandInfo(false, "freeGPU");
-		}
-		else if (_nameCommand == "togglePicking") {
-			bool val = _parameters.get<bool>();
-			return poca::core::CommandInfo(false, _nameCommand, val);
-		}
-		else if (_nameCommand == "setIDObjectPicked") {
-			int val = _parameters.get<int>();
-			return poca::core::CommandInfo(false, _nameCommand, val);
-		}
-
-		return poca::core::CommandInfo();
+		return poca::core::Command::createCommand(_nameCommand, _parameters);
 	}
 
 	void BasicDisplayCommand::pick(const int _x, const int _y, const bool _saveImage)

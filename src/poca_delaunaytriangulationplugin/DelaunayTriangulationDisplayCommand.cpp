@@ -43,6 +43,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <General/Engine.hpp>
 #include <OpenGL/Helper.h>
 
@@ -91,8 +92,8 @@ void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _info
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -140,12 +141,16 @@ void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _info
 	}
 }
 
+std::vector<poca::core::CommandSpec> DelaunayTriangulationDisplayCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("selectedBorderTriangles", {})
+	};
+}
+
 poca::core::CommandInfo DelaunayTriangulationDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "selectedBorderTriangles") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* DelaunayTriangulationDisplayCommand::copy()

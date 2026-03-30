@@ -54,6 +54,7 @@
 #include <General/MyData.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <General/Engine.hpp>
+#include <General/JsonCommandContext.hpp>
 
 #include "../Widgets/PythonWidget.hpp"
 
@@ -556,8 +557,8 @@ void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comm
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-		if (_context.has<poca::core::JsonFileCtx>())
-			json = _context.get<poca::core::JsonFileCtx>().file;
+		if (_context.has<poca::core::JsonFileContext>())
+			json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::vector <nlohmann::json> commands;

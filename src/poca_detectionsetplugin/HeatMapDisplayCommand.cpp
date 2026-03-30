@@ -42,6 +42,7 @@
 #include <General/Palette.hpp>
 #include <General/MyData.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <General/Engine.hpp>
 
 #include "HeatMapDisplayCommand.hpp"
@@ -104,8 +105,8 @@ void HeatMapDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca:
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -129,41 +130,35 @@ void HeatMapDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca:
 		generateLutTexture(m_palette);
 }
 
+std::vector<poca::core::CommandSpec> HeatMapDisplayCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("displayHeatmap", {
+			{ "displayHeatmap", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("interpolateHeatmapLUT", {
+			{ "interpolateHeatmapLUT", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("radiusHeatmap", {
+			{ "radiusHeatmap", poca::core::CommandParameterType::Number, true }
+		}),
+		poca::core::CommandSpec("intensityHeatmap", {
+			{ "intensityHeatmap", poca::core::CommandParameterType::Number, true }
+		}),
+		poca::core::CommandSpec("radiusHeatmapType", {
+			{ "radiusScreenHeatmap", poca::core::CommandParameterType::Boolean, true },
+			{ "radiusWorldHeatmap", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("updatePickingBuffer", {
+			{ "width", poca::core::CommandParameterType::Integer, true },
+			{ "height", poca::core::CommandParameterType::Integer, true }
+		})
+	};
+}
+
 poca::core::CommandInfo HeatMapDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	addCommandInfo(poca::core::CommandInfo(false, "radiusHeatmapType", "radiusScreenHeatmap", false, "radiusWorldHeatmap", true));
-	
-	if (_nameCommand == "displayHeatmap" || _nameCommand == "interpolateHeatmapLUT") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "radiusHeatmap" || _nameCommand == "intensityHeatmap") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "radiusHeatmapType") {
-		bool radiusScreenHeatmap, radiusWorldHeatmap;
-		bool complete = _parameters.contains("radiusScreenHeatmap");
-		if (complete)
-			radiusScreenHeatmap = _parameters["radiusScreenHeatmap"].get<bool>();
-		complete &= _parameters.contains("radiusWorldHeatmap");
-		if (complete) {
-			radiusWorldHeatmap = _parameters["radiusWorldHeatmap"].get<bool>();
-			return poca::core::CommandInfo(false, _nameCommand, "radiusScreenHeatmap", radiusScreenHeatmap, "radiusWorldHeatmap", radiusWorldHeatmap);
-		}
-	}
-	else if (_nameCommand == "updatePickingBuffer") {
-		int w, h;
-		bool complete = _parameters.contains("width");
-		if (complete)
-			w = _parameters["width"].get<int>();
-		complete &= _parameters.contains("height");
-		if (complete) {
-			h = _parameters["height"].get<int>();
-			return poca::core::CommandInfo(false, _nameCommand, "width", w, "height", h);
-		}
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 void HeatMapDisplayCommand::createDisplay()

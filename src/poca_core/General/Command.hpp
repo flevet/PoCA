@@ -34,20 +34,17 @@
 #define Command_h__
 
 #include <any>
-#include <vector>
-#include <string>
-#include <map>
-#include <unordered_map>
-#include <typeindex>
+#include <cstdint>
+#include <initializer_list>
 #include <iostream>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <typeindex>
+#include <unordered_map>
+#include <vector>
 
 #include "json.hpp"
-
-namespace poca::opengl {
-	class Camera;
-}
-
-class QOpenGLFramebufferObject;
 
 namespace poca::core {
 
@@ -78,33 +75,16 @@ namespace poca::core {
 		mutable std::unordered_map<std::type_index, std::any> m_data;
 	};
 
-	struct CameraCtx {
-		poca::opengl::Camera* camera = nullptr;
-	};
-
-	struct JsonFileCtx {
-		nlohmann::json* file = nullptr;
-	};
-
-	struct FramebufferObjectCtx {
-		QOpenGLFramebufferObject* fbo = nullptr;
-	};
-
 	class CommandInfo
 	{
 	public:
-		CommandInfo() : recordable(false) {
+		CommandInfo() : recordable(false) {}
 
-		}
+		CommandInfo(const char* _name) : recordable(false), nameCommand(_name) {}
 
-		CommandInfo(const char* _name) : recordable(false), nameCommand(_name) {
-		}
+		CommandInfo(const std::string& _name) : recordable(false), nameCommand(_name) {}
 
-		CommandInfo(const std::string& _name) : recordable(false), nameCommand(_name) {
-		}
-
-		CommandInfo(const bool _record, const std::string& _name) : recordable(_record), nameCommand(_name){
-		}
+		CommandInfo(const bool _record, const std::string& _name) : recordable(_record), nameCommand(_name) {}
 
 		template<typename T>
 		CommandInfo(const bool _record, const std::string& _name, const T& _param) : recordable(_record), nameCommand(_name) {
@@ -128,10 +108,41 @@ namespace poca::core {
 			addParameters(_nameP, _param, more...);
 		}
 
-		CommandInfo(const CommandInfo& _o) :recordable(_o.recordable), nameCommand(_o.nameCommand), json(_o.json) {
+		CommandInfo(const CommandInfo& _o) :recordable(_o.recordable), nameCommand(_o.nameCommand), json(_o.json) {}
+
+		~CommandInfo() {}
+
+		static CommandInfo fromJson(const nlohmann::json& _json, const bool _recordable = false) {
+			if (_json.empty() || !_json.is_object())
+				return CommandInfo();
+
+			if (_json.contains("name")) {
+				const std::string name = _json["name"].get<std::string>();
+				const bool record = _json.contains("recordable") ? _json["recordable"].get<bool>() : _recordable;
+				CommandInfo ci(record, name);
+				if (_json.contains("params"))
+					ci.json[name] = _json["params"];
+				else if (_json.contains("value"))
+					ci.json[name] = _json["value"];
+				else
+					ci.json[name] = nlohmann::json::object();
+				return ci;
+			}
+
+			if (_json.size() == 1) {
+				const auto it = _json.begin();
+				CommandInfo ci(_recordable, it.key());
+				ci.json[it.key()] = it.value();
+				return ci;
+			}
+
+			return CommandInfo();
 		}
 
-		~CommandInfo() {
+		static CommandInfo fromJson(const std::string& _name, const nlohmann::json& _params, const bool _recordable = false) {
+			CommandInfo ci(_recordable, _name);
+			ci.json[_name] = _params;
+			return ci;
 		}
 
 		template<typename T, typename... Args>
@@ -143,7 +154,7 @@ namespace poca::core {
 		template<typename T>
 		void addParameter(const std::string& _nameP, const T& _param) {
 			try{
-				json[nameCommand][_nameP] = _param;
+				parameters()[_nameP] = _param;
 			}
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;
@@ -159,7 +170,7 @@ namespace poca::core {
 		template<typename T>
 		void addParameter(const std::string& _nameP, T* _param) {
 			try {
-				json[nameCommand][_nameP] = reinterpret_cast<std::uintptr_t>(_param);
+				parameters()[_nameP] = reinterpret_cast<std::uintptr_t>(_param);
 			}
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;
@@ -173,21 +184,53 @@ namespace poca::core {
 			if (json.empty()) return false;
 			if (nameCommand == _nameParameter)
 				return true;
-			return json[nameCommand].contains(_nameParameter);
+			const nlohmann::json& params = parameters();
+			return params.is_object() && params.contains(_nameParameter);
 		}
 
 		template<typename T>
 		T getParameter(const std::string& _nameParameter) const {
 			if(nameCommand == _nameParameter)
-				return json[nameCommand].get<T>();
-			return json[nameCommand][_nameParameter].get<T>();
+				return parameters().get<T>();
+			return parameters()[_nameParameter].get<T>();
 		}
 
 		template<typename T>
 		T* getParameterPtr(const std::string& _nameParameter) const {
 			if (nameCommand == _nameParameter)
-				return (T*)json[nameCommand].get<std::uintptr_t>();
-			return (T*)json[nameCommand][_nameParameter].get<std::uintptr_t>();
+				return (T*)parameters().get<std::uintptr_t>();
+			return (T*)parameters()[_nameParameter].get<std::uintptr_t>();
+		}
+
+		inline const nlohmann::json& parameters() const {
+			static const nlohmann::json empty = nlohmann::json::object();
+			if (nameCommand.empty() || json.empty() || !json.contains(nameCommand))
+				return empty;
+			return json.at(nameCommand);
+		}
+
+		inline nlohmann::json& parameters() {
+			if (nameCommand.empty())
+				throw std::runtime_error("Cannot access parameters of an unnamed command");
+			if (!json.contains(nameCommand))
+				json[nameCommand] = nlohmann::json::object();
+			return json[nameCommand];
+		}
+
+		inline void setParameters(const nlohmann::json& _params) {
+			if (nameCommand.empty())
+				return;
+			json[nameCommand] = _params;
+		}
+
+		inline nlohmann::json toJson() const { return json; }
+
+		inline nlohmann::json toNormalizedJson() const {
+			return nlohmann::json{
+				{ "name", nameCommand },
+				{ "params", parameters() },
+				{ "recordable", recordable }
+			};
 		}
 
 		inline bool operator==(const CommandInfo& other) const { return nameCommand == other.nameCommand; }
@@ -196,9 +239,10 @@ namespace poca::core {
 
 		inline const std::string& getNameCommand() const { return nameCommand; }
 		inline const std::string toString() const { return json.dump(4); }
-		inline const size_t nbParameters() const { return json.empty() ? 0 : json[nameCommand].size(); }
+		inline const size_t nbParameters() const { return parameters().is_object() ? parameters().size() : (parameters().empty() ? 0 : 1); }
 		inline const bool isRecordable() const { return recordable; }
 		inline const bool empty() const { return nameCommand == ""; }
+		inline void setRecordable(const bool _value) { recordable = _value; }
 		inline void errorMessage(const std::string& _mess) const { std::cout << "ERROR! Command " << nameCommand << " was not runt with error message: " << _mess << std::endl; }
 		inline std::string errorMessageToStdString(const std::string& _mess) const { return std::string("ERROR! Command " + nameCommand + " was not runt with error message: " + _mess); }
 
@@ -209,6 +253,87 @@ namespace poca::core {
 	};
 
 	typedef std::map <std::string, CommandInfo> CommandInfos;
+
+	enum class CommandParameterType {
+		Any,
+		Boolean,
+		Integer,
+		UnsignedInteger,
+		Number,
+		String,
+		Object,
+		Array
+	};
+
+	struct CommandParameterSpec {
+		std::string name;
+		CommandParameterType type{ CommandParameterType::Any };
+		bool required{ false };
+		nlohmann::json defaultValue;
+	};
+
+	class CommandSpec {
+	public:
+		CommandSpec() = default;
+		CommandSpec(const std::string& _name, std::initializer_list<CommandParameterSpec> _params) : m_name(_name), m_params(_params) {}
+
+		inline const std::string& name() const { return m_name; }
+		inline const std::vector<CommandParameterSpec>& parameters() const { return m_params; }
+		inline bool matches(const std::string& _name) const { return m_name == _name; }
+
+		CommandInfo create(const bool _recordable, const nlohmann::json& _rawParams) const {
+			nlohmann::json normalized = nlohmann::json::object();
+			const nlohmann::json params = (_rawParams.is_null() ? nlohmann::json::object() : _rawParams);
+
+			if (m_params.empty()) {
+				normalized = params;
+				return CommandInfo::fromJson(m_name, normalized, _recordable);
+			}
+
+			if (!params.is_object() && m_params.size() == 1) {
+				if (!matchesType(params, m_params.front().type))
+					return CommandInfo();
+				normalized[m_params.front().name] = params;
+				return CommandInfo::fromJson(m_name, normalized, _recordable);
+			}
+
+			for (const CommandParameterSpec& spec : m_params) {
+				if (params.is_object() && params.contains(spec.name)) {
+					const nlohmann::json& value = params[spec.name];
+					if (!matchesType(value, spec.type))
+						return CommandInfo();
+					normalized[spec.name] = value;
+				}
+				else if (!spec.defaultValue.is_null()) {
+					normalized[spec.name] = spec.defaultValue;
+				}
+				else if (spec.required) {
+					return CommandInfo();
+				}
+			}
+
+			return CommandInfo::fromJson(m_name, normalized, _recordable);
+		}
+
+	private:
+		static bool matchesType(const nlohmann::json& _value, const CommandParameterType _type) {
+			switch (_type) {
+			case CommandParameterType::Any: return true;
+			case CommandParameterType::Boolean: return _value.is_boolean();
+			case CommandParameterType::Integer: return _value.is_number_integer();
+			case CommandParameterType::UnsignedInteger: return _value.is_number_unsigned() || (_value.is_number_integer() && _value.get<long long>() >= 0);
+			case CommandParameterType::Number: return _value.is_number();
+			case CommandParameterType::String: return _value.is_string();
+			case CommandParameterType::Object: return _value.is_object();
+			case CommandParameterType::Array: return _value.is_array();
+			default: return false;
+			}
+		}
+
+	private:
+		std::string m_name;
+		std::vector<CommandParameterSpec> m_params;
+	};
 
 	class Command {
 	public:
@@ -272,9 +397,12 @@ namespace poca::core {
 		}
 
 		void addCommandInfo(const CommandInfo& _com) {
-			m_commandInfos.insert(std::pair(_com.nameCommand, _com));
+			m_commandInfos[_com.nameCommand] = _com;
 		}
 
+		virtual std::vector<CommandSpec> commandSpecs() const {
+			return {};
+		}
 
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
@@ -282,7 +410,13 @@ namespace poca::core {
 			execute(_ci);
 		}
 		virtual Command* copy() = 0;
-		virtual CommandInfo createCommand(const std::string&, const nlohmann::json&) = 0;
+		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {
+			for (const CommandSpec& spec : commandSpecs()) {
+				if (spec.matches(_nameCommand))
+					return spec.create(false, _parameters);
+			}
+			return CommandInfo();
+		}
 
 		virtual void saveCommands(nlohmann::json& _json) {
 			for (std::map <std::string, CommandInfo>::const_iterator it = m_commandInfos.begin(); it != m_commandInfos.end(); it++)

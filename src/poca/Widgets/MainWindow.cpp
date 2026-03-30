@@ -89,6 +89,8 @@
 #include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <Objects/MyObjectDisplayCommand.hpp>
+#include <Objects/ObjectCommandContext.hpp>
+#include <General/JsonCommandContext.hpp>
 #include <OpenGL/Helper.h>
 #include <General/MyData.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
@@ -122,6 +124,7 @@
 #include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 #include "../Widgets/ColorButtonGridWidget.hpp"
+#include "../../poca_voronoidiagramplugin/VoronoiCommandContext.hpp"
 
 #undef max 
 
@@ -350,7 +353,7 @@ MainWindow::~MainWindow()
 	}
 	poca::core::CommandInfo command(false, "saveParameters");
 	poca::core::CommandRuntimeContext runtimeContext;
-	runtimeContext.set(poca::core::JsonFileCtx{ &parameters });
+	runtimeContext.set(poca::core::JsonFileContext{ &parameters });
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	engine->getPlugins()->execute(&command, runtimeContext);
 	m_macroW->execute(&command, runtimeContext);
@@ -835,9 +838,10 @@ void MainWindow::dropEvent(QDropEvent* _e)
 		if (name.endsWith(".txt")) {
 			poca::core::CommandInfo ci(true, "openFile", "name", name.toStdString());
 			poca::core::Engine* engine = poca::core::Engine::instance();
-			engine->getPlugins()->execute(&ci);
-			if (!ci.hasParameter("object")) continue;
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
+			poca::core::CommandRuntimeContext context;
+			engine->getPlugins()->execute(&ci, context);
+			if (!context.has<poca::core::CreatedObjectContext>()) continue;
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
 			if (obj != NULL) {
 				createWidget(obj);
 			}
@@ -1927,9 +1931,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 						nlohmann::json parameters;
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
-							comObj->executeCommand(&command);
-							if (command.hasParameter("newObject")) {
-								poca::geometry::DetectionSet* dset = command.getParameterPtr<poca::geometry::DetectionSet>("newObject");
+							poca::core::CommandRuntimeContext context;
+							comObj->executeCommand(&command, context);
+							if (context.has<poca::voronoi::CreatedDetectionSetContext>()) {
+								poca::geometry::DetectionSet* dset = context.get<poca::voronoi::CreatedDetectionSetContext>().dset;
 								if (dset == NULL) return;
 								poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
 								const std::string& dir = obj->getDir(), name = obj->getName();
@@ -1938,8 +1943,8 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 								newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
 								createWindows(newDset, QString(dir.c_str()), newName);
 							}
-							else if (command.hasParameter("object")) {
-								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+							else if (context.has<poca::core::CreatedObjectContext>()) {
+								poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
 								createWidget(obj);
 							}
 						}
@@ -2000,9 +2005,10 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 						nlohmann::json parameters;
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
-							comObj->executeCommand(&command);
-							if (command.hasParameter("object")) {
-								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
+							poca::core::CommandRuntimeContext context;
+							comObj->executeCommand(&command, context);
+							if (context.has<poca::core::CreatedObjectContext>()) {
+								poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
 								createWidget(obj);
 							}
 						}

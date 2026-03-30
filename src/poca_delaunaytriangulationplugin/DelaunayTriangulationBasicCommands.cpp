@@ -237,44 +237,46 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 	}
 }
 
+std::vector<poca::core::CommandSpec> DelaunayTriangulationBasicCommands::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("objectCreationParameters", {
+			{ "useDistance", poca::core::CommandParameterType::Boolean },
+			{ "useMinLocs", poca::core::CommandParameterType::Boolean },
+			{ "useMaxLocs", poca::core::CommandParameterType::Boolean },
+			{ "useMinArea", poca::core::CommandParameterType::Boolean },
+			{ "useMaxArea", poca::core::CommandParameterType::Boolean },
+			{ "minLocs", poca::core::CommandParameterType::UnsignedInteger },
+			{ "maxLocs", poca::core::CommandParameterType::UnsignedInteger },
+			{ "minArea", poca::core::CommandParameterType::Number },
+			{ "maxArea", poca::core::CommandParameterType::Number },
+			{ "cutDistance", poca::core::CommandParameterType::Number },
+			{ "inROIs", poca::core::CommandParameterType::Boolean }
+		}),
+		poca::core::CommandSpec("createFilteredObjects", {
+			{ "useDistance", poca::core::CommandParameterType::Boolean },
+			{ "useMinLocs", poca::core::CommandParameterType::Boolean },
+			{ "useMaxLocs", poca::core::CommandParameterType::Boolean },
+			{ "useMinArea", poca::core::CommandParameterType::Boolean },
+			{ "useMaxArea", poca::core::CommandParameterType::Boolean },
+			{ "minLocs", poca::core::CommandParameterType::UnsignedInteger },
+			{ "maxLocs", poca::core::CommandParameterType::UnsignedInteger },
+			{ "minArea", poca::core::CommandParameterType::Number },
+			{ "maxArea", poca::core::CommandParameterType::Number },
+			{ "cutDistance", poca::core::CommandParameterType::Number },
+			{ "inROIs", poca::core::CommandParameterType::Boolean }
+		}),
+		poca::core::CommandSpec("saveAsSVG", {
+			{ "filename", poca::core::CommandParameterType::String, true }
+		}),
+		poca::core::CommandSpec("applyCutDistance", {}),
+		poca::core::CommandSpec("invertSelection", {})
+	};
+}
+
 poca::core::CommandInfo DelaunayTriangulationBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "objectCreationParameters" || _nameCommand == "createFilteredObjects") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("useDistance"))
-			ci.addParameter("useDistance", _parameters["useDistance"].get<bool>());
-		if (_parameters.contains("useMinLocs"))
-			ci.addParameter("useMinLocs", _parameters["useMinLocs"].get<bool>());
-		if (_parameters.contains("useMaxLocs"))
-			ci.addParameter("useMaxLocs", _parameters["useMaxLocs"].get<bool>());
-		if (_parameters.contains("useMinArea"))
-			ci.addParameter("useMinArea", _parameters["useMinArea"].get<bool>());
-		if (_parameters.contains("useMaxArea"))
-			ci.addParameter("useMaxArea", _parameters["useMaxArea"].get<bool>());
-		if (_parameters.contains("minLocs"))
-			ci.addParameter("minLocs", _parameters["minLocs"].get<size_t>());
-		if (_parameters.contains("maxLocs"))
-			ci.addParameter("maxLocs", _parameters["maxLocs"].get<size_t>());
-		if (_parameters.contains("minArea"))
-			ci.addParameter("minArea", _parameters["minArea"].get<float>());
-		if (_parameters.contains("maxArea"))
-			ci.addParameter("maxArea", _parameters["maxArea"].get<float>());
-		if (_parameters.contains("cutDistance"))
-			ci.addParameter("cutDistance", _parameters["cutDistance"].get<float>());
-		if (_parameters.contains("inROIs"))
-			ci.addParameter("inROIs", _parameters["inROIs"].get<bool>());
-		return ci;
-	}
-	else if (_nameCommand == "saveAsSVG") {
-		if (_parameters.contains("filename")) {
-			std::string val = _parameters["filename"].get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
-		}
-	}
-	else if (_nameCommand  == "applyCutDistance" || _nameCommand == "invertSelection") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* DelaunayTriangulationBasicCommands::copy()

@@ -42,10 +42,13 @@
 #include <General/EquationFit.hpp>
 #include <OpenGL/Camera.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <Objects/MyObject.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 #include <General/MyData.hpp>
 
 #include "CleanerCommand.hpp"
+#include "DetectionSetCommandContext.hpp"
 
 CleanerCommand::CleanerCommand(poca::geometry::DetectionSet* _dset) :poca::core::Command("CleanerCommand"), m_initializeDisplay(false)
 {
@@ -84,6 +87,24 @@ CleanerCommand::~CleanerCommand()
 		delete m_eqnTOns;
 }
 
+std::vector<poca::core::CommandSpec> CleanerCommand::commandSpecs() const
+{
+	using poca::core::CommandParameterType;
+	using poca::core::CommandSpec;
+
+	return {
+		CommandSpec("clean", {
+			{"radius", CommandParameterType::Number, true, nullptr},
+			{"maxDarkTime", CommandParameterType::UnsignedInteger, true, nullptr},
+			{"fixedDarkTime", CommandParameterType::Boolean, false, false}
+		}),
+		CommandSpec("displayCleanedLocs", {}),
+		CommandSpec("getCleanEquations", {}),
+		CommandSpec("getCleanedData", {}),
+		CommandSpec("saveFramesMergedLocs", {})
+	};
+}
+
 void CleanerCommand::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandRuntimeContext context;
@@ -102,12 +123,12 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 		uint32_t maxDT = getParameter<uint32_t>("clean", "maxDarkTime");
 		bool fixedDT = getParameter<bool>("clean", "fixedDarkTime");
 		poca::core::MyObjectInterface* obj = cleanDetectionSet(radius, maxDT, fixedDT);
-		_infos->addParameter("object", static_cast <poca::core::MyObjectInterface*>(obj));
+		_context.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -116,15 +137,17 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 	}
 	else if (_infos->nameCommand == "getCleanEquations") {
 		if (m_eqnBlinks == NULL) return;
-		_infos->addParameters("blinks", m_eqnBlinks,
-			"tons", m_eqnTOns, 
-			"toffs", m_eqnTOffs,
-			"nbEmissionBursts", m_nbEmissionBursts,
-			"nbOriginalLocs", m_nbOriginalLocs,
-			"nbSupressedLocs", m_nbSuppressedLocs,
-			"nbAddedLocs", m_nbCorrectedLocs,
-			"nbUncorrectedLocs", m_nbUncorrectedLocs,
-			"darkTime", m_darkTime);
+		_context.set<poca::core::CleanEquationsContext>({
+			m_eqnBlinks,
+			m_eqnTOns,
+			m_eqnTOffs,
+			m_nbEmissionBursts,
+			m_nbOriginalLocs,
+			m_nbSuppressedLocs,
+			m_nbCorrectedLocs,
+			m_nbUncorrectedLocs,
+			m_darkTime
+			});
 	}
 	else if (_infos->nameCommand == "saveFramesMergedLocs") {
 		saveFramesMergedLocs();
@@ -133,29 +156,7 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 
 poca::core::CommandInfo CleanerCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "clean") {
-		float radius;
-		uint32_t maxDarkTime;
-		bool complete = _parameters.contains("radius"), fixedDarkTime;
-		if (complete)
-			radius = _parameters["radius"].get<float>();
-		complete &= _parameters.contains("fixedDarkTime");
-		if (complete)
-			fixedDarkTime = _parameters["fixedDarkTime"].get<bool>();
-		complete &= _parameters.contains("maxDarkTime");
-		if (complete) {
-			maxDarkTime = _parameters["maxDarkTime"].get<uint32_t>();
-			return poca::core::CommandInfo(false, _nameCommand, "radius", radius, "maxDarkTime", maxDarkTime, "fixedDarkTime", fixedDarkTime);
-		}
-	}
-	else if (_nameCommand == "displayCleanedLocs") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "getCleanEquations" || _nameCommand == "getCleanedData") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* CleanerCommand::copy() 

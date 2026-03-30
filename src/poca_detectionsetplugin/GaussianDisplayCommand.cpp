@@ -43,6 +43,7 @@
 #include <General/MyData.hpp>
 #include <General/Histogram.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <OpenGL/Helper.h>
 #include <General/Engine.hpp>
 
@@ -101,8 +102,8 @@ void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -123,15 +124,22 @@ void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca
 
 poca::core::CommandInfo GaussianDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "displayGaussian") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "pointSizeGL" || _nameCommand == "alphaGaussian") {
-		float val = _parameters.get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
+}
+
+std::vector<poca::core::CommandSpec> GaussianDisplayCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("displayGaussian", {
+			{ "displayGaussian", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("pointSizeGL", {
+			{ "pointSizeGL", poca::core::CommandParameterType::Number, true }
+		}),
+		poca::core::CommandSpec("alphaGaussian", {
+			{ "alphaGaussian", poca::core::CommandParameterType::Number, true }
+		})
+	};
 }
 
 void GaussianDisplayCommand::createDisplay()

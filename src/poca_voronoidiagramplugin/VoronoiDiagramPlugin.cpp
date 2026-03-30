@@ -39,6 +39,7 @@
 #include <General/Engine.hpp>
 #include <DesignPatterns/MacroRecorderSingleton.hpp>
 #include <General/PluginList.hpp>
+#include <General/JsonCommandContext.hpp>
 #include <Plot/Icons.hpp>
 #include <Interfaces/VoronoiDiagramFactoryInterface.hpp>
 #include <General/Engine.hpp>
@@ -226,8 +227,8 @@ void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com, const poca::co
 	bool done = false;
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-		if (_context.has<poca::core::JsonFileCtx>())
-			json = _context.get<poca::core::JsonFileCtx>().file;
+		if (_context.has<poca::core::JsonFileContext>())
+			json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::string nameStr = name().toLatin1().data();

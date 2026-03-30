@@ -163,33 +163,26 @@ void ColocTesselerBasicCommands::execute(poca::core::CommandInfo* _infos)
 	}
 }
 
+std::vector<poca::core::CommandSpec> ColocTesselerBasicCommands::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("threshold", {
+			{ "color1", poca::core::CommandParameterType::Number, true },
+			{ "color2", poca::core::CommandParameterType::Number, true }
+		}),
+		poca::core::CommandSpec("correction", {
+			{ "correction", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("computeCoefficients", {}),
+		poca::core::CommandSpec("savePairDensities", {
+			{ "filename", poca::core::CommandParameterType::String, true }
+		})
+	};
+}
+
 poca::core::CommandInfo ColocTesselerBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "threshold") {
-		float color1, color2;
-		bool complete = _parameters.contains("color1");
-		if (complete)
-			color1 = _parameters["color1"].get<float>();
-		complete &= _parameters.contains("color2");
-		if (complete) {
-			color2 = _parameters["color2"].get<float>();
-			return poca::core::CommandInfo(false, _nameCommand, "color1", color1, "color2", color2);
-		}
-	}
-	else if (_nameCommand == "correction") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "computeCoefficients") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "savePairDensities") {
-		if (_parameters.contains("filename")) {
-			std::string val = _parameters["filename"].get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
-		}
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* ColocTesselerBasicCommands::copy()

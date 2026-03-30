@@ -47,8 +47,10 @@
 #include <Geometry/DetectionSet.hpp>
 #include <General/CommandableObject.hpp>
 #include <General/Engine.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 
 #include "DetectionSetWidget.hpp"
+#include "DetectionSetCommandContext.hpp"
 
 DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, QWidget* _parent):m_object(NULL)// :QTabWidget(_parent)
 {
@@ -551,10 +553,12 @@ void DetectionSetWidget::actionNeeded()
 		if (!ok) return;
 		bool fixedDT = m_fixedDarkTcbox->isChecked();
 		poca::core::CommandInfo ci(true, "clean", "radius", radius, "maxDarkTime", maxDT, "fixedDarkTime", fixedDT);
-		engine->executeCommand(bc, &ci);
-		if (ci.hasParameter("object")) {
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
-			emit(transferNewObjectCreated(obj));
+		poca::core::CommandRuntimeContext context;
+		engine->executeCommand(bc, &ci, context);
+		if (context.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			if (obj != nullptr)
+				emit(transferNewObjectCreated(obj));
 		}
 	}
 	if (sender == m_saveFramesButton) {
@@ -876,18 +880,20 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 		}
 
 		poca::core::CommandInfo ci(false, "DetectionSet", "getCleanEquations");
-		m_object->executeCommand(&ci);
-		if (ci.hasParameter("blinks")) {
+		poca::core::CommandRuntimeContext context;
+		m_object->executeCommand(&ci, context);
+		if (context.has<poca::core::CleanEquationsContext>()) {
 			m_groupBoxCleanerPlots->setVisible(true);
-			poca::core::EquationFit* eqnBlinks = ci.getParameterPtr<poca::core::EquationFit>("blinks");
-			poca::core::EquationFit* eqnTons = ci.getParameterPtr<poca::core::EquationFit>("tons");
-			poca::core::EquationFit* eqnToffs = ci.getParameterPtr<poca::core::EquationFit>("toffs");
-			uint32_t nbEmissionBursts = ci.getParameter<uint32_t>("nbEmissionBursts");
-			uint32_t nbOriginalLocs = ci.getParameter<uint32_t>("nbOriginalLocs");
-			uint32_t nbSupressedLocs = ci.getParameter<uint32_t>("nbSupressedLocs");
-			uint32_t nbAddedLocs = ci.getParameter<uint32_t>("nbAddedLocs");
-			uint32_t nbUncorrectedLocs = ci.getParameter<uint32_t>("nbUncorrectedLocs");
-			uint32_t darkTime = ci.getParameter<uint32_t>("darkTime");
+			const poca::core::CleanEquationsContext cleanCtx = context.get<poca::core::CleanEquationsContext>();
+			poca::core::EquationFit* eqnBlinks = cleanCtx.blinks;
+			poca::core::EquationFit* eqnTons = cleanCtx.tons;
+			poca::core::EquationFit* eqnToffs = cleanCtx.toffs;
+			uint32_t nbEmissionBursts = cleanCtx.nbEmissionBursts;
+			uint32_t nbOriginalLocs = cleanCtx.nbOriginalLocs;
+			uint32_t nbSupressedLocs = cleanCtx.nbSupressedLocs;
+			uint32_t nbAddedLocs = cleanCtx.nbAddedLocs;
+			uint32_t nbUncorrectedLocs = cleanCtx.nbUncorrectedLocs;
+			uint32_t darkTime = cleanCtx.darkTime;
 			uint32_t nbTotalClean = nbUncorrectedLocs + nbAddedLocs;
 
 			fillPlot(m_plotBlinks, eqnBlinks);

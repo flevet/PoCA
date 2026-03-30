@@ -120,30 +120,26 @@ void KRipleyCommand::execute(poca::core::CommandInfo* _infos)
 	}
 }
 
+std::vector<poca::core::CommandSpec> KRipleyCommand::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("kripley", {
+			{ "minRadius", poca::core::CommandParameterType::Number, true },
+			{ "maxRadius", poca::core::CommandParameterType::Number, true },
+			{ "step", poca::core::CommandParameterType::Number, true }
+		}),
+		poca::core::CommandSpec("displayDBSCAN", {
+			{ "displayDBSCAN", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("getKRipleyResultsKs", {}),
+		poca::core::CommandSpec("getKRipleyResultsLs", {}),
+		poca::core::CommandSpec("getKRipleyResults", {})
+	};
+}
+
 poca::core::CommandInfo KRipleyCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "kripley") {
-		float minRadius, maxRadius, step;
-		bool complete = _parameters.contains("minRadius");
-		if (complete)
-			minRadius = _parameters["minRadius"].get<float>();
-		complete &= _parameters.contains("maxRadius");
-		if (complete)
-			maxRadius = _parameters["maxRadius"].get<float>();
-		complete &= _parameters.contains("step");
-		if (complete) {
-			step = _parameters["step"].get<float>();
-			return poca::core::CommandInfo(false, _nameCommand, "minRadius", minRadius, "maxRadius", maxRadius, "step", step);
-		}
-	}
-	else if (_nameCommand == "displayDBSCAN") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "getKRipleyResultsKs" || _nameCommand == "getKRipleyResultsLs" || _nameCommand == "getKRipleyResults") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 void KRipleyCommand::computeKRipley(const float _minR, const float  _maxR, const float _stepR)

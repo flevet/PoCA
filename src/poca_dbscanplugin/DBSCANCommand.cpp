@@ -44,6 +44,7 @@
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/Camera.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <Factory/ObjectListFactory.hpp>
 #include <Geometry/ObjectLists.hpp>
 #include <General/Engine.hpp>
@@ -53,6 +54,7 @@
 #include <General/MyData.hpp>
 
 #include "DBSCANCommand.hpp"
+#include "DBSCANCommandContext.hpp"
 #include "DBSCANPlugin.hpp"
 
 DBSCANCommand::DBSCANCommand(poca::geometry::DetectionSet* _ds) :poca::core::Command("DBSCANCommand"), m_histSizes(NULL), m_updateColorBuffer(false)
@@ -79,6 +81,22 @@ DBSCANCommand::DBSCANCommand(const DBSCANCommand& _o): poca::core::Command(_o)
 
 DBSCANCommand::~DBSCANCommand()
 {
+}
+
+std::vector<poca::core::CommandSpec> DBSCANCommand::commandSpecs() const
+{
+	using poca::core::CommandParameterType;
+	using poca::core::CommandSpec;
+
+	return {
+		CommandSpec("DBSCAN", {
+			{"radius", CommandParameterType::Number, true, nullptr},
+			{"min", CommandParameterType::UnsignedInteger, true, nullptr},
+			{"minNbForCluster", CommandParameterType::UnsignedInteger, false, static_cast<uint32_t>(15)}
+		}),
+		CommandSpec("displayDBSCAN", {}),
+		CommandSpec("createDBSCANObjects", {})
+	};
 }
 
 poca::core::Command* DBSCANCommand::copy()
@@ -109,12 +127,12 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::C
 		printf("Time for computing DBSCAN: %ld ms\n", elapsed);
 	}
 	else if (_infos->nameCommand == "getDBSCANCommand") {
-		_infos->addParameter("dbscanCommand", this);
+		_context.set<DBSCANCommandContext>({ this });
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -161,26 +179,7 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::C
 
 poca::core::CommandInfo DBSCANCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "DBSCAN") {
-		float radius;
-		uint32_t minNb;
-		bool complete = _parameters.contains("radius");
-		if (complete)
-			radius = _parameters["radius"].get<float>();
-		complete &= _parameters.contains("min");
-		if (complete) {
-			minNb = _parameters["min"].get<uint32_t>();
-			return poca::core::CommandInfo(false, _nameCommand, "radius", radius, "min", minNb);
-		}
-	}
-	else if (_nameCommand == "displayDBSCAN") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "createDBSCANObjects") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 void DBSCANCommand::computeDBSCAN(const float _radius, const uint32_t _minNb, const uint32_t _minNbForCluster, const float _dZ)

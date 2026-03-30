@@ -46,6 +46,7 @@
 #include <OpenGL/Camera.hpp>
 
 #include "VoronoiDiagramBasicCommands.hpp"
+#include "VoronoiCommandContext.hpp"
 #include "VoronoiDiagramPlugin.hpp"
 
 VoronoiDiagramBasicCommands::VoronoiDiagramBasicCommands(poca::geometry::VoronoiDiagram* _voro) :poca::core::Command("VoronoiDiagramBasicCommands")
@@ -90,7 +91,56 @@ VoronoiDiagramBasicCommands::~VoronoiDiagramBasicCommands()
 {
 }
 
+std::vector<poca::core::CommandSpec> VoronoiDiagramBasicCommands::commandSpecs() const
+{
+	using poca::core::CommandParameterType;
+	using poca::core::CommandSpec;
+
+	return {
+		CommandSpec("objectCreationParameters", {
+			{"minLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"maxLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"minArea", CommandParameterType::Number, false, nullptr},
+			{"maxArea", CommandParameterType::Number, false, nullptr},
+			{"cutDistance", CommandParameterType::Number, false, nullptr},
+			{"inROIs", CommandParameterType::Boolean, false, nullptr}
+		}),
+		CommandSpec("createFilteredObjects", {
+			{"minLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"maxLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"minArea", CommandParameterType::Number, false, nullptr},
+			{"maxArea", CommandParameterType::Number, false, nullptr},
+			{"cutDistance", CommandParameterType::Number, false, nullptr},
+			{"inROIs", CommandParameterType::Boolean, false, nullptr}
+		}),
+		CommandSpec("densityFactor", {
+			{"factor", CommandParameterType::Number, true, nullptr}
+		}),
+		CommandSpec("computeVoronoiDensityRankN", {
+			{"rank", CommandParameterType::UnsignedInteger, true, nullptr}
+		}),
+		CommandSpec("invertSelection", {}),
+		CommandSpec("randomPointOnTheSphere", {}),
+		CommandSpec("clustersForChallenge", {
+			{"minNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"maxNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"from", CommandParameterType::Number, false, nullptr},
+			{"to", CommandParameterType::Number, false, nullptr},
+			{"step", CommandParameterType::Number, false, nullptr}
+		}),
+		CommandSpec("saveAsSVG", {
+			{"filename", CommandParameterType::String, true, nullptr}
+		})
+	};
+}
+
 void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
+{
+	poca::core::CommandRuntimeContext context;
+	execute(_infos, context);
+}
+
+void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
 
@@ -191,7 +241,7 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 		data["y"] = ys;
 		data["z"] = zs;
 		poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(data);
-		_infos->addParameter("newObject", dset);
+		_context.set<poca::voronoi::CreatedDetectionSetContext>({ dset });
 	}
 	else if (_infos->nameCommand == "clustersForChallenge") {
 		 poca::core::Engine* engine = poca::core::Engine::instance();
@@ -243,58 +293,7 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "objectCreationParameters" || _nameCommand == "createFilteredObjects") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("minLocs"))
-			ci.addParameter("minLocs", _parameters["minLocs"].get<size_t>());
-		if (_parameters.contains("maxLocs"))
-			ci.addParameter("maxLocs", _parameters["maxLocs"].get<size_t>());
-		if (_parameters.contains("minArea"))
-			ci.addParameter("minArea", _parameters["minArea"].get<float>());
-		if (_parameters.contains("maxArea"))
-			ci.addParameter("maxArea", _parameters["maxArea"].get<float>());
-		if (_parameters.contains("cutDistance"))
-			ci.addParameter("cutDistance", _parameters["cutDistance"].get<float>());
-		if (_parameters.contains("inROIs"))
-			ci.addParameter("inROIs", _parameters["inROIs"].get<bool>());
-		return ci;
-	}
-	else if (_nameCommand == "densityFactor") {
-		if (_parameters.contains("factor")) {
-			float val = _parameters["factor"].get<float>();
-			return poca::core::CommandInfo(false, _nameCommand, "factor", val);
-		}
-	}
-	else if (_nameCommand == "computeVoronoiDensityRankN") {
-		if (_parameters.contains("rank")) {
-			uint32_t val = _parameters["rank"].get<uint32_t>();
-			return poca::core::CommandInfo(false, _nameCommand, "rank", val);
-		}
-	}
-	else if (_nameCommand == "invertSelection" || _nameCommand == "randomPointOnTheSphere") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "clustersForChallenge") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("minNbLocs"))
-			ci.addParameter("minNbLocs", _parameters["minNbLocs"].get<size_t>());
-		if (_parameters.contains("maxNbLocs"))
-			ci.addParameter("maxNbLocs", _parameters["maxNbLocs"].get<size_t>());
-		if (_parameters.contains("from"))
-			ci.addParameter("from", _parameters["from"].get<float>());
-		if (_parameters.contains("to"))
-			ci.addParameter("to", _parameters["to"].get<float>());
-		if (_parameters.contains("step"))
-			ci.addParameter("step", _parameters["step"].get<float>());
-		return ci;
-	}
-	else if (_nameCommand == "saveAsSVG") {
-		if (_parameters.contains("filename")) {
-			std::string val = _parameters["filename"].get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
-		}
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* VoronoiDiagramBasicCommands::copy()

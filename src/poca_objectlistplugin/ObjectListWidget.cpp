@@ -42,6 +42,7 @@
 #include <General/Histogram.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <Objects/ObjectCommandContext.hpp>
 
 #include "ObjectListWidget.hpp"
 
@@ -384,10 +385,12 @@ void ObjectListWidget::actionNeeded()
 	}
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
-		objList->executeCommand(&ci);
-		if (ci.hasParameter("object")) {
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
-			emit(transferNewObjectCreated(obj));
+		poca::core::CommandRuntimeContext context;
+		objList->executeCommand(&ci, context);
+		if (context.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			if (obj != nullptr)
+				emit(transferNewObjectCreated(obj));
 		}
 	}
 	else if (sender == m_duplicateSelectedObjectsButton) {
@@ -398,10 +401,12 @@ void ObjectListWidget::actionNeeded()
 				selectedRows.insert(range.topRow() + n);
 		if (selectedRows.empty()) return;
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
-		objList->executeCommand(&ci);
-		if (ci.hasParameter("object")) {
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
-			emit(transferNewObjectCreated(obj));
+		poca::core::CommandRuntimeContext context;
+		objList->executeCommand(&ci, context);
+		if (context.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			if (obj != nullptr)
+				emit(transferNewObjectCreated(obj));
 		}
 	}
 }

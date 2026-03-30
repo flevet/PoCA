@@ -45,6 +45,7 @@ public:
 	ObjectColocalizationCommands(const ObjectColocalizationCommands&);
 	~ObjectColocalizationCommands();
 
+	std::vector<poca::core::CommandSpec> commandSpecs() const;
 	void execute(poca::core::CommandInfo*);
 	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
 	poca::core::Command* copy();

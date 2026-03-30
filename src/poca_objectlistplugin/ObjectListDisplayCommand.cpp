@@ -45,6 +45,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <Interfaces/ObjectFeaturesFactoryInterface.hpp>
 #include <OpenGL/Helper.h>
 #include <General/Engine.hpp>
@@ -174,8 +175,8 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false, ssao = false;;
 		if (_infos->hasParameter("offscreen"))
@@ -212,8 +213,8 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 		if (idSelection >= 0 && idSelection < m_objects->nbElements()) {
 			poca::core::BoundingBox bbox = m_objects->computeBoundingBoxElement(idSelection);
 			poca::opengl::Camera* cam = nullptr;
-			if (_context.has<poca::core::CameraCtx>())
-				cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (!cam) return;
 			displayZoomToBBox(cam, bbox);
 			if (_infos->hasParameter("bbox")) {
@@ -224,7 +225,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 					bbox[n] = bbox[n] > bbox2[n] ? bbox[n] : bbox2[n];
 			}
 			_infos->addParameter("bbox", bbox);
-			_context.set(poca::core::FramebufferObjectCtx{ m_pickOneObject });
+			_context.set(poca::opengl::PickingFramebuffer{ m_pickOneObject });
 			_infos->addParameter("id", idSelection);
 		}
 	}

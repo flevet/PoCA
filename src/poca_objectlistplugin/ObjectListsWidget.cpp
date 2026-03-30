@@ -41,6 +41,7 @@
 #include <General/CommandableObject.hpp>
 #include <General/Command.hpp>
 #include <Geometry/ObjectLists.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 #include <Geometry/ObjectListMesh.hpp>
 #include <Geometry/ObjectListPolygon.hpp>
 #include <General/Histogram.hpp>
@@ -678,10 +679,12 @@ void ObjectListsWidget::actionNeeded()
 	}
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
-		engine->executeCommand(bc, &ci);
-		if (ci.hasParameter("object")) {
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
-			emit(transferNewObjectCreated(obj));
+		poca::core::CommandRuntimeContext context;
+		engine->executeCommand(bc, &ci, context);
+		if (context.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			if (obj != nullptr)
+				emit(transferNewObjectCreated(obj));
 		}
 	}
 	else if (sender == m_duplicateSelectedObjectsButton) {
@@ -691,10 +694,12 @@ void ObjectListsWidget::actionNeeded()
 		for (const QModelIndex& idx : rows)
 				selectedRows.insert(idx.row());
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
-		engine->executeCommand(bc, &ci);
-		if (ci.hasParameter("object")) {
-			poca::core::MyObjectInterface* obj = ci.getParameterPtr<poca::core::MyObjectInterface>("object");
-			emit(transferNewObjectCreated(obj));
+		poca::core::CommandRuntimeContext context;
+		engine->executeCommand(bc, &ci, context);
+		if (context.has<poca::core::CreatedObjectContext>()) {
+			poca::core::MyObjectInterface* obj = context.get<poca::core::CreatedObjectContext>().object;
+			if (obj != nullptr)
+				emit(transferNewObjectCreated(obj));
 		}
 	}
 	else if (sender == m_parametersButton) {

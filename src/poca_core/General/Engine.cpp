@@ -722,6 +722,12 @@ namespace poca::core {
 
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com)
 	{
+		CommandRuntimeContext context;
+		executeCommand(_bci, _com, context);
+	}
+
+	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandRuntimeContext& _context)
+	{
 		auto object = getTopObject(_bci);
 
 		if (object != NULL && object->nbColors() > 1 && m_globalCommands) {
@@ -731,7 +737,7 @@ namespace poca::core {
 					if (obj->hasBasicComponent(_bci->getName())) {
 						auto bc = obj->getBasicComponent(_bci->getName());
 						CommandableObject* co = static_cast <CommandableObject*>(bc);
-						co->executeCommand(_com);
+						co->executeCommand(_com, _context);
 					}
 				}
 			}
@@ -740,7 +746,7 @@ namespace poca::core {
 			//auto obj = getObject(_bci);
 			//if (obj == NULL) return;
 			CommandableObject* co = static_cast <CommandableObject*>(_bci);
-			co->executeCommand(_com);
+			co->executeCommand(_com, _context);
 		}
 	}
 }

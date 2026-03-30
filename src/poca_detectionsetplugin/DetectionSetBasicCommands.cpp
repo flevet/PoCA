@@ -51,6 +51,7 @@
 #include <Interfaces/PaletteInterface.hpp>
 #include <General/PluginList.hpp>
 #include <Objects/MyObject.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 #include <OpenGL/Camera.hpp>
 #include <Cuda/Misc.h>
 
@@ -71,7 +72,60 @@ DetectionSetBasicCommands::~DetectionSetBasicCommands()
 {
 }
 
+std::vector<poca::core::CommandSpec> DetectionSetBasicCommands::commandSpecs() const
+{
+	using poca::core::CommandParameterType;
+	using poca::core::CommandSpec;
+
+	return {
+		CommandSpec("selectLocsInROIs", {}),
+		CommandSpec("saveForGNN", {}),
+		CommandSpec("createObjectsOnLabels", {}),
+		CommandSpec("clustersForChallenge", {
+			{"minNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"maxNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"selection", CommandParameterType::String, false, nullptr},
+			{"currentScreen", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"factor", CommandParameterType::Number, false, nullptr}
+		}),
+		CommandSpec("createObjectsFromHistogram", {
+			{"minLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"maxLocs", CommandParameterType::UnsignedInteger, false, nullptr},
+			{"minArea", CommandParameterType::Number, false, nullptr},
+			{"maxArea", CommandParameterType::Number, false, nullptr},
+			{"cutDistance", CommandParameterType::Number, false, nullptr}
+		}),
+		CommandSpec("computeDensityWithRadius", {
+			{"radius", CommandParameterType::Number, true, nullptr}
+		}),
+		CommandSpec("rotatePointCloudXY", {
+			{"angle", CommandParameterType::Number, true, nullptr}
+		}),
+		CommandSpec("saveAsSVG", {
+			{"filename", CommandParameterType::String, true, nullptr}
+		}),
+		CommandSpec("rescaleFromGNN", {
+			{"filename", CommandParameterType::String, true, nullptr}
+		}),
+		CommandSpec("saveLocalizations", {
+			{"path", CommandParameterType::String, false, std::string("")},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"appendToDir", CommandParameterType::String, false, nullptr},
+			{"appendToName", CommandParameterType::String, false, nullptr}
+		}),
+		CommandSpec("keepPercentageOfLocalizations", {
+			{"percent", CommandParameterType::Number, true, nullptr}
+		})
+	};
+}
+
 void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
+{
+	poca::core::CommandRuntimeContext context;
+	execute(_infos, context);
+}
+
+void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
 
@@ -435,82 +489,13 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 		wobj->setName(newName.toLatin1().data());
 		wobj->addBasicComponent(dset);
 		wobj->setDimension(dset->dimension());
-		_infos->addParameter("object", static_cast <poca::core::MyObjectInterface*>(wobj));
+		_context.set<poca::core::CreatedObjectContext>({ wobj });
 	}
 }
 
 poca::core::CommandInfo DetectionSetBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	std::cout << __LINE__ << std::endl;
-	if (_nameCommand == "selectLocsInROIs" || _nameCommand == "saveForGNN" || _nameCommand == "createObjectsOnLabels") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "clustersForChallenge") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("minNbLocs"))
-			ci.addParameter("minNbLocs", _parameters["minNbLocs"].get<size_t>());
-		if (_parameters.contains("maxNbLocs"))
-			ci.addParameter("maxNbLocs", _parameters["maxNbLocs"].get<size_t>());
-		if (_parameters.contains("selection"))
-			ci.addParameter("selection", _parameters["selection"].get<std::string>());
-		if (_parameters.contains("currentScreen"))
-			ci.addParameter("currentScreen", _parameters["currentScreen"].get<uint32_t>());
-		return ci;
-	}
-	else if (_nameCommand == "createObjectsFromHistogram") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("minLocs"))
-			ci.addParameter("minLocs", _parameters["minLocs"].get<size_t>());
-		if (_parameters.contains("maxLocs"))
-			ci.addParameter("maxLocs", _parameters["maxLocs"].get<size_t>());
-		if (_parameters.contains("minArea"))
-			ci.addParameter("minArea", _parameters["minArea"].get<float>());
-		if (_parameters.contains("maxArea"))
-			ci.addParameter("maxArea", _parameters["maxArea"].get<float>());
-		if (_parameters.contains("cutDistance"))
-			ci.addParameter("cutDistance", _parameters["cutDistance"].get<float>());
-		return ci;
-	}
-	else if (_nameCommand == "computeDensityWithRadius") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("radius"))
-			ci.addParameter("radius", _parameters["radius"].get<float>());
-		return ci;
-	}
-	else if (_nameCommand == "rotatePointCloudXY") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("angle"))
-			ci.addParameter("angle", _parameters["angle"].get<float>());
-		return ci;
-	}
-	else if (_nameCommand == "saveAsSVG" || _nameCommand == "rescaleFromGNN") {
-		if (_parameters.contains("filename")) {
-			std::string val = _parameters["filename"].get<std::string>();
-			return poca::core::CommandInfo(false, _nameCommand, "filename", val);
-		}
-	}
-	else if (_nameCommand == "saveLocalizations") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		std::string path;
-		if (_parameters.contains("path"))
-			path = _parameters["path"].get<std::string>();
-		ci.addParameter("path",path);
-		if (_parameters.contains("appendToTitle"))
-			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
-		if (_parameters.contains("appendToDir"))
-			ci.addParameter("appendToDir", _parameters["appendToDir"].get<std::string>());
-		if (_parameters.contains("appendToName"))
-			ci.addParameter("appendToName", _parameters["appendToName"].get<std::string>());
-		return ci;
-
-	}
-	else if (_nameCommand == "keepPercentageOfLocalizations") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("percent"))
-			ci.addParameter("percent", _parameters["percent"].get<float>());
-		return ci;
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* DetectionSetBasicCommands::copy()

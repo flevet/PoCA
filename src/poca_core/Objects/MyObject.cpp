@@ -36,6 +36,7 @@
 #include <glm/gtx/transform.hpp>
 
 #include <OpenGL/Camera.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 
 #include "../General/Vec4.hpp"
 #include "../General/Histogram.hpp"
@@ -243,8 +244,8 @@ namespace poca::core {
 			setHeight(_ci->getParameter<double>("heightDataset"));
 		else if (_ci->nameCommand == "display") {
 			poca::opengl::Camera* cam = nullptr;
-			if (_context.has<poca::core::CameraCtx>())
-				cam = _context.get<poca::core::CameraCtx>().camera;
+			if (_context.has<poca::opengl::ActiveCamera>())
+				cam = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (!cam) return;
 			cam->setModelMatrix(m_modelMatrix);
 		}

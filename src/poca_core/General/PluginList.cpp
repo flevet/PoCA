@@ -33,6 +33,8 @@
 #include <QtCore/QThread>
 #include <QtCore/QDebug>
 
+#include <General/Command.hpp>
+
 #include "PluginList.hpp"
 
 namespace poca::core {

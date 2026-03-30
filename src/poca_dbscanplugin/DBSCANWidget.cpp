@@ -48,6 +48,7 @@
 
 #include "DBSCANWidget.hpp"
 #include "DBSCANCommand.hpp"
+#include "DBSCANCommandContext.hpp"
 
 DBSCANWidget::DBSCANWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, QWidget* _parent)
 {
@@ -203,12 +204,15 @@ void DBSCANWidget::executeMacro(poca::core::MyObjectInterface* _wobj, poca::core
 void DBSCANWidget::updateDBSCANResults()
 {
 	poca::core::CommandInfo ci(false, "getDBSCANCommand");
-	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci);
+	poca::core::CommandRuntimeContext context;
+	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context);
 
-	if (ci.json.empty())
+	if (!context.has<DBSCANCommandContext>())
 		return;
 
-	DBSCANCommand* command = ci.getParameterPtr< DBSCANCommand>("dbscanCommand");
+	DBSCANCommand* command = context.get<DBSCANCommandContext>().command;
+	if (command == nullptr)
+		return;
 	//Creation of the histogram of the clusters size
 	unsigned int nbBins = 50;
 	double* bins = new double[nbBins], * ts = new double[nbBins], minH = DBL_MAX, maxH = 0.;

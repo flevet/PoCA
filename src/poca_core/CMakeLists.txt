@@ -73,6 +73,7 @@ set(GENERAL_HEADER_FILES
   General/Image.hpp
   General/ImagesList.hpp
   General/json.hpp
+  General/JsonCommandContext.hpp
   General/Misc.h
   General/MyArray.hpp
   General/MyData.hpp
@@ -119,6 +120,7 @@ set(MY_OBJECT_HEADER_FILES
   Objects/MyObject.hpp
   Objects/MyMultipleObject.hpp
   Objects/MyObjectDisplayCommand.hpp
+  Objects/ObjectCommandContext.hpp
   )
 
 set(MY_OBJECT_SOURCE_FILES

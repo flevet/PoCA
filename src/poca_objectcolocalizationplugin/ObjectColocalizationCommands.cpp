@@ -38,6 +38,7 @@
 #include <Geometry/ObjectLists.hpp>
 #include <Geometry/DelaunayTriangulation.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <General/Engine.hpp>
 #include <General/Misc.h>
 #include <General/Histogram.hpp>
@@ -91,8 +92,8 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, cons
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -158,16 +159,30 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, cons
 	}
 }
 
+std::vector<poca::core::CommandSpec> ObjectColocalizationCommands::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("pointRendering", {
+			{ "pointRendering", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("shapeRendering", {
+			{ "shapeRendering", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("bboxSelection", {
+			{ "bboxSelection", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("fill", {
+			{ "fill", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("histogram", {}),
+		poca::core::CommandSpec("updateFeature", {}),
+		poca::core::CommandSpec("freeGPU", {})
+	};
+}
+
 poca::core::CommandInfo ObjectColocalizationCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "pointRendering" || _nameCommand == "shapeRendering" || _nameCommand == "bboxSelection" || _nameCommand == "fill") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "histogram" || _nameCommand == "updateFeature" || _nameCommand == "freeGPU") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* ObjectColocalizationCommands::copy()

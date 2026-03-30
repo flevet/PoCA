@@ -44,6 +44,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <OpenGL/Helper.h>
 #include <General/Engine.hpp>
 #include <Cuda/Misc.h>
@@ -98,8 +99,8 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const 
 		createDisplay();
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false, ssao = false;
 		if (_infos->hasParameter("offscreen"))

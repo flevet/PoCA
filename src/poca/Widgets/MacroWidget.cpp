@@ -53,6 +53,7 @@
 #include <General/PythonInterpreter.hpp>
 #include <Objects/MyObject.hpp>
 #include <General/Engine.hpp>
+#include <General/JsonCommandContext.hpp>
 
 #include "../Widgets/MacroWidget.hpp"
 
@@ -339,8 +340,8 @@ void MacroWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comma
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-		if (_context.has<poca::core::JsonFileCtx>())
-			json = _context.get<poca::core::JsonFileCtx>().file;
+		if (_context.has<poca::core::JsonFileContext>())
+			json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::string nameStr = objectName().toStdString();

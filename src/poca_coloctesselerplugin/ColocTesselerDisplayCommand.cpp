@@ -44,6 +44,7 @@
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 
 #include "ColocTesselerDisplayCommand.hpp"
 
@@ -77,8 +78,8 @@ void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos, const
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -95,11 +96,17 @@ void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos, const
 	}
 }
 
+std::vector<poca::core::CommandSpec> ColocTesselerDisplayCommand::commandSpecs() const
+{
+	std::vector<poca::core::CommandSpec> specs = poca::opengl::BasicDisplayCommand::commandSpecs();
+	specs.emplace_back("freeGPU", std::initializer_list<poca::core::CommandParameterSpec>{});
+	specs.emplace_back("updateFeature", std::initializer_list<poca::core::CommandParameterSpec>{});
+	return specs;
+}
+
 poca::core::CommandInfo ColocTesselerDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "freeGPU" || _nameCommand == "updateFeature")
-		return poca::core::CommandInfo(false, _nameCommand);
-	return poca::opengl::BasicDisplayCommand::createCommand(_nameCommand, _parameters);
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* ColocTesselerDisplayCommand::copy()

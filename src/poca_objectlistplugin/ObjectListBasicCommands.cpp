@@ -62,6 +62,7 @@
 #include <Geometry/ObjectLists.hpp>
 #include <Geometry/BasicComputation.hpp>
 #include <Geometry/CGAL_helpers.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 
 #include "ObjectListBasicCommands.hpp"
 #include "ObjectListPlugin.hpp"
@@ -80,7 +81,69 @@ ObjectListBasicCommands::~ObjectListBasicCommands()
 {
 }
 
+std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() const
+{
+	using poca::core::CommandParameterType;
+	using poca::core::CommandSpec;
+
+	return {
+		CommandSpec("saveStatsObjs", {
+			{"filename", CommandParameterType::String, false, nullptr},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"separator", CommandParameterType::String, false, std::string(",")}
+		}),
+		CommandSpec("saveLocsObjs", {
+			{"filename", CommandParameterType::String, false, nullptr},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"separator", CommandParameterType::String, false, std::string(",")}
+		}),
+		CommandSpec("saveOutlineLocsObjs", {
+			{"filename", CommandParameterType::String, false, nullptr},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"separator", CommandParameterType::String, false, std::string(",")}
+		}),
+		CommandSpec("saveAsSVG", {
+			{"filename", CommandParameterType::String, false, nullptr},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"separator", CommandParameterType::String, false, std::string(",")}
+		}),
+		CommandSpec("saveAsOBJ", {
+			{"filename", CommandParameterType::String, false, nullptr},
+			{"appendToTitle", CommandParameterType::String, false, nullptr},
+			{"appendToDir", CommandParameterType::String, false, nullptr},
+			{"appendToName", CommandParameterType::String, false, nullptr}
+		}),
+		CommandSpec("duplicateCentroids", {}),
+		CommandSpec("computeSkeletons", {}),
+		CommandSpec("exportObjectsInROIs", {}),
+		CommandSpec("exportLocsInObjects", {}),
+		CommandSpec("duplicateSelectedObjects", {
+			{"selection", CommandParameterType::Array, true, nullptr}
+		}),
+		CommandSpec("saveSelectedObjectsVectorHeat", {
+			{"selection", CommandParameterType::Array, true, nullptr}
+		}),
+		CommandSpec("fillHolesObjects", {
+			{"minArea", CommandParameterType::Number, true, nullptr}
+		}),
+		CommandSpec("smoothObjects", {
+			{"factorResampling", CommandParameterType::Number, true, nullptr},
+			{"nbSmoothSteps", CommandParameterType::UnsignedInteger, true, nullptr},
+			{"windowSize", CommandParameterType::UnsignedInteger, true, nullptr}
+		}),
+		CommandSpec("subdivide", {
+			{"iterations", CommandParameterType::UnsignedInteger, true, nullptr}
+		})
+	};
+}
+
 void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
+{
+	poca::core::CommandRuntimeContext context;
+	execute(_infos, context);
+}
+
+void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
 {
 	if (_infos->nameCommand == "saveStatsObjs") {
 		std::string filename, separator(",");
@@ -108,8 +171,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 	}
 	else if (_infos->nameCommand == "duplicateCentroids") {
 		poca::core::MyObjectInterface* obj = duplicateCentroids();
-		
-		_infos->addParameter("object", static_cast <poca::core::MyObjectInterface*>(obj));
+		_context.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "duplicateSelectedObjects") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection")? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
@@ -122,7 +184,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 			_infos->errorMessage("selected objects were not duplicated.");
 			return;
 		}
-		_infos->addParameter("object", static_cast <poca::core::MyObjectInterface*>(obj));
+		_context.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "saveSelectedObjectsForVectorHeat") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection") ? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
@@ -579,67 +641,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 
 poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "saveStatsObjs" || _nameCommand == "saveLocsObjs" || _nameCommand == "saveOutlineLocsObjs" || _nameCommand == "saveAsSVG") {
-		poca::core::CommandInfo ci(_nameCommand);
-		if (_parameters.contains("filename"))
-			ci.addParameter("filename", _parameters["filename"].get<std::string>());
-
-		if (_parameters.contains("appendToTitle"))
-			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
-		
-		std::string separator = _parameters.contains("separator") ? _parameters["separator"].get<std::string>() : ",";
-		ci.addParameter("separator", separator);
-			
-		return ci;
-	}
-	else if (_nameCommand == "saveAsOBJ") {
-		poca::core::CommandInfo ci(false, _nameCommand);
-		if (_parameters.contains("filename"))
-			ci.addParameter("filename", _parameters["filename"].get<std::string>());
-		if (_parameters.contains("appendToTitle"))
-			ci.addParameter("appendToTitle", _parameters["appendToTitle"].get<std::string>());
-		if (_parameters.contains("appendToDir"))
-			ci.addParameter("appendToDir", _parameters["appendToDir"].get<std::string>());
-		if (_parameters.contains("appendToName"))
-			ci.addParameter("appendToName", _parameters["appendToName"].get<std::string>());
-		return ci;
-	}
-	else if (_nameCommand == "duplicateCentroids" || _nameCommand == "computeSkeletons" || _nameCommand == "exportObjectsInROIs" || _nameCommand == "exportLocsInObjects") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "duplicateSelectedObjects") {
-		if (_parameters.contains("selection")) {
-			std::set<int> selectedObjects = _parameters["selection"].get<std::set<int>>();
-			return poca::core::CommandInfo(false, _nameCommand, "selection", selectedObjects);
-		}
-	}
-	else if (_nameCommand == "saveSelectedObjectsVectorHeat") {
-		if (_parameters.contains("selection")) {
-			std::set<int> selectedObjects = _parameters["selection"].get<std::set<int>>();
-			return poca::core::CommandInfo(false, _nameCommand, "selection", selectedObjects);
-		}
-	}
-	else if (_nameCommand == "fillHolesObjects") {
-		if (_parameters.contains("minArea")) {
-			float minA = _parameters["minArea"].get<float>();
-			return poca::core::CommandInfo(false, _nameCommand, "minArea", minA);
-		}
-	}
-	else if (_nameCommand == "smoothObjects") {
-		if (_parameters.contains("factorResampling") && _parameters.contains("nbSmoothSteps") && _parameters.contains("windowSize")) {
-			float factorResampling = _parameters["factorResampling"].get<float>();
-			uint32_t nbSmoothSteps = _parameters["nbSmoothSteps"].get<uint32_t>();
-			uint32_t windowSize = _parameters["windowSize"].get<uint32_t>();
-			return poca::core::CommandInfo(false, _nameCommand, "factorResampling", factorResampling, "nbSmoothSteps", nbSmoothSteps, "windowSize", windowSize);
-		}
-	}
-	else if (_nameCommand == "subdivide") {
-		if (_parameters.contains("iterations")) {
-			uint32_t iterations = _parameters["iterations"].get<uint32_t>();
-			return poca::core::CommandInfo(false, _nameCommand, "iterations", iterations);
-		}
-	}
-	return poca::core::CommandInfo(); 
+	return poca::core::Command::createCommand(_nameCommand, _parameters); 
 }
 
 poca::core::Command* ObjectListBasicCommands::copy()

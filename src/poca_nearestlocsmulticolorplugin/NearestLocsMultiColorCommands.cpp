@@ -38,6 +38,7 @@
 #include <Geometry/ObjectLists.hpp>
 #include <Geometry/DelaunayTriangulation.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 #include <General/Engine.hpp>
 #include <General/Misc.h>
 #include <OpenGL/Helper.h>
@@ -102,8 +103,8 @@ void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos, con
 {
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
-		if (_context.has<poca::core::CameraCtx>())
-			cam = _context.get<poca::core::CameraCtx>().camera;
+		if (_context.has<poca::opengl::ActiveCamera>())
+			cam = _context.get<poca::opengl::ActiveCamera>().camera;
 		if (!cam) return;
 		bool offscrean = false;
 		if (_infos->hasParameter("offscreen"))
@@ -140,36 +141,30 @@ void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos, con
 	}
 }
 
+std::vector<poca::core::CommandSpec> NearestLocsMultiColorCommands::commandSpecs() const
+{
+	return {
+		poca::core::CommandSpec("computeNearestNeighMulticolor", {
+			{ "inROIs", poca::core::CommandParameterType::Boolean, false, true },
+			{ "reference", poca::core::CommandParameterType::UnsignedInteger, false, 1u },
+			{ "maxDistance", poca::core::CommandParameterType::Number, false, DBL_MAX }
+		}),
+		poca::core::CommandSpec("displayCentroidsNearestNeighMulticolor", {
+			{ "displayCentroidsNearestNeighMulticolor", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("displayOutlinesNearestNeighMulticolor", {
+			{ "displayOutlinesNearestNeighMulticolor", poca::core::CommandParameterType::Boolean, true }
+		}),
+		poca::core::CommandSpec("transferSelectedObjectsNearestNeighMulticolor", {}),
+		poca::core::CommandSpec("saveDistancesNearestNeighMulticolor", {
+			{ "path", poca::core::CommandParameterType::String, false, "" }
+		})
+	};
+}
+
 poca::core::CommandInfo NearestLocsMultiColorCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
-	if (_nameCommand == "computeNearestNeighMulticolor") {
-		bool val = _parameters.get<bool>();
-		bool inROIs = true;
-		uint32_t reference = 1;
-		float maxD = DBL_MAX;
-		if (_parameters.contains("inROIs"))
-			inROIs = _parameters["inROIs"].get<bool>();
-		if (_parameters.contains("reference"))
-			reference = _parameters["reference"].get<uint32_t>();
-		if (_parameters.contains("maxDistance"))
-			maxD = _parameters["maxDistance"].get<float>();
-		return poca::core::CommandInfo(false, _nameCommand, "inROIs", inROIs, "reference", reference, "maxDistance", maxD);
-	}
-	else if (_nameCommand == "displayCentroidsNearestNeighMulticolor" || _nameCommand == "displayOutlinesNearestNeighMulticolor") {
-		bool val = _parameters.get<bool>();
-		return poca::core::CommandInfo(false, _nameCommand, val);
-	}
-	else if (_nameCommand == "transferSelectedObjectsNearestNeighMulticolor") {
-		return poca::core::CommandInfo(false, _nameCommand);
-	}
-	else if (_nameCommand == "saveDistancesNearestNeighMulticolor") {
-		std::string path;
-		if (_parameters.contains("path"))
-			path = _parameters["path"].get<std::string>();
-		return poca::core::CommandInfo(false, _nameCommand, "path", path);
-	}
-
-	return poca::core::CommandInfo();
+	return poca::core::Command::createCommand(_nameCommand, _parameters);
 }
 
 poca::core::Command* NearestLocsMultiColorCommands::copy()
