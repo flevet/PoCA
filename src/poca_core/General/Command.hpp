@@ -442,10 +442,11 @@ namespace poca::core {
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
-			execute(_ci);
+			CommandExecutionResult result;
+			execute(_ci, _context, result);
 		}
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
-			execute(_ci, _context);
+			execute(_ci);
 		}
 		virtual Command* copy() = 0;
 		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {

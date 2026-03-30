@@ -137,13 +137,8 @@ std::vector<poca::core::CommandSpec> VoronoiDiagramBasicCommands::commandSpecs()
 void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandRuntimeContext context;
-	execute(_infos, context);
-}
-
-void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
-{
 	poca::core::CommandExecutionResult result;
-	execute(_infos, _context, result);
+	execute(_infos, context, result);
 }
 
 void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
