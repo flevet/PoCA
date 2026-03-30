@@ -299,32 +299,66 @@ namespace poca::core {
 		nlohmann::json defaultValue;
 	};
 
+	struct CommandVariantSpec {
+		std::string discriminatorName;
+		nlohmann::json discriminatorValue;
+		std::vector<CommandParameterSpec> params;
+	};
+
 	class CommandSpec {
 	public:
 		CommandSpec() = default;
+		CommandSpec(const std::string& _name) : m_name(_name) {}
 		CommandSpec(const std::string& _name, std::initializer_list<CommandParameterSpec> _params) : m_name(_name), m_params(_params) {}
+
+		static CommandSpec withVariants(const std::string& _name, std::initializer_list<CommandVariantSpec> _variants) {
+			CommandSpec spec(_name);
+			spec.m_variants = _variants;
+			return spec;
+		}
 
 		inline const std::string& name() const { return m_name; }
 		inline const std::vector<CommandParameterSpec>& parameters() const { return m_params; }
+		inline const std::vector<CommandVariantSpec>& variants() const { return m_variants; }
 		inline bool matches(const std::string& _name) const { return m_name == _name; }
 
 		CommandInfo create(const bool _recordable, const nlohmann::json& _rawParams) const {
-			nlohmann::json normalized = nlohmann::json::object();
 			const nlohmann::json params = (_rawParams.is_null() ? nlohmann::json::object() : _rawParams);
 
-			if (m_params.empty()) {
+			if (!m_variants.empty()) {
+				if (!params.is_object())
+					return CommandInfo();
+
+				for (const CommandVariantSpec& variant : m_variants) {
+					if (!params.contains(variant.discriminatorName))
+						continue;
+					if (params[variant.discriminatorName] != variant.discriminatorValue)
+						continue;
+					return createFromParams(_recordable, params, variant.params);
+				}
+				return CommandInfo();
+			}
+
+			return createFromParams(_recordable, params, m_params);
+		}
+
+	private:
+		CommandInfo createFromParams(const bool _recordable, const nlohmann::json& params, const std::vector<CommandParameterSpec>& specs) const {
+			nlohmann::json normalized = nlohmann::json::object();
+
+			if (specs.empty()) {
 				normalized = params;
 				return CommandInfo::fromJson(m_name, normalized, _recordable);
 			}
 
-			if (!params.is_object() && m_params.size() == 1) {
-				if (!matchesType(params, m_params.front().type))
+			if (!params.is_object() && specs.size() == 1) {
+				if (!matchesType(params, specs.front().type))
 					return CommandInfo();
-				normalized[m_params.front().name] = params;
+				normalized[specs.front().name] = params;
 				return CommandInfo::fromJson(m_name, normalized, _recordable);
 			}
 
-			for (const CommandParameterSpec& spec : m_params) {
+			for (const CommandParameterSpec& spec : specs) {
 				if (params.is_object() && params.contains(spec.name)) {
 					const nlohmann::json& value = params[spec.name];
 					if (!matchesType(value, spec.type))
@@ -360,6 +394,7 @@ namespace poca::core {
 	private:
 		std::string m_name;
 		std::vector<CommandParameterSpec> m_params;
+		std::vector<CommandVariantSpec> m_variants;
 	};
 
 	class Command {

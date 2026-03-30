@@ -98,10 +98,10 @@ std::vector<poca::core::CommandSpec> CleanerCommand::commandSpecs() const
 			{"maxDarkTime", CommandParameterType::UnsignedInteger, true, nullptr},
 			{"fixedDarkTime", CommandParameterType::Boolean, false, false}
 		}),
-		CommandSpec("displayCleanedLocs", {}),
-		CommandSpec("getCleanEquations", {}),
-		CommandSpec("getCleanedData", {}),
-		CommandSpec("saveFramesMergedLocs", {})
+		CommandSpec("displayCleanedLocs"),
+		CommandSpec("getCleanEquations"),
+		CommandSpec("getCleanedData"),
+		CommandSpec("saveFramesMergedLocs")
 	};
 }
 

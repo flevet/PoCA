@@ -113,10 +113,10 @@ std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() con
 			{"appendToDir", CommandParameterType::String, false, nullptr},
 			{"appendToName", CommandParameterType::String, false, nullptr}
 		}),
-		CommandSpec("duplicateCentroids", {}),
-		CommandSpec("computeSkeletons", {}),
-		CommandSpec("exportObjectsInROIs", {}),
-		CommandSpec("exportLocsInObjects", {}),
+		CommandSpec("duplicateCentroids"),
+		CommandSpec("computeSkeletons"),
+		CommandSpec("exportObjectsInROIs"),
+		CommandSpec("exportLocsInObjects"),
 		CommandSpec("duplicateSelectedObjects", {
 			{"selection", CommandParameterType::Array, true, nullptr}
 		}),

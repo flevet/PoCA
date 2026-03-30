@@ -174,9 +174,9 @@ std::vector<poca::core::CommandSpec> ObjectColocalizationCommands::commandSpecs(
 		poca::core::CommandSpec("fill", {
 			{ "fill", poca::core::CommandParameterType::Boolean, true }
 		}),
-		poca::core::CommandSpec("histogram", {}),
-		poca::core::CommandSpec("updateFeature", {}),
-		poca::core::CommandSpec("freeGPU", {})
+		poca::core::CommandSpec("histogram"),
+		poca::core::CommandSpec("updateFeature"),
+		poca::core::CommandSpec("freeGPU")
 	};
 }
 

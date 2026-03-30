@@ -131,9 +131,9 @@ std::vector<poca::core::CommandSpec> KRipleyCommand::commandSpecs() const
 		poca::core::CommandSpec("displayDBSCAN", {
 			{ "displayDBSCAN", poca::core::CommandParameterType::Boolean, true }
 		}),
-		poca::core::CommandSpec("getKRipleyResultsKs", {}),
-		poca::core::CommandSpec("getKRipleyResultsLs", {}),
-		poca::core::CommandSpec("getKRipleyResults", {})
+		poca::core::CommandSpec("getKRipleyResultsKs"),
+		poca::core::CommandSpec("getKRipleyResultsLs"),
+		poca::core::CommandSpec("getKRipleyResults")
 	};
 }
 

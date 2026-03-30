@@ -269,8 +269,8 @@ std::vector<poca::core::CommandSpec> DelaunayTriangulationBasicCommands::command
 		poca::core::CommandSpec("saveAsSVG", {
 			{ "filename", poca::core::CommandParameterType::String, true }
 		}),
-		poca::core::CommandSpec("applyCutDistance", {}),
-		poca::core::CommandSpec("invertSelection", {})
+		poca::core::CommandSpec("applyCutDistance"),
+		poca::core::CommandSpec("invertSelection")
 	};
 }
 

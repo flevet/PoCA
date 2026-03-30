@@ -230,7 +230,7 @@ poca::core::Command* ColocTesselerConstructionCommand::copy()
 std::vector<poca::core::CommandSpec> ColocTesselerConstructionCommand::commandSpecs() const
 {
 	return {
-		poca::core::CommandSpec("computeColocTesseler", {})
+		poca::core::CommandSpec("computeColocTesseler")
 	};
 }
 

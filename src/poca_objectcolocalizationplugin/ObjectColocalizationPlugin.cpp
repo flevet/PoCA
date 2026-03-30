@@ -236,7 +236,7 @@ poca::core::Command* ObjectColocalizationConstructionCommand::copy()
 std::vector<poca::core::CommandSpec> ObjectColocalizationConstructionCommand::commandSpecs() const
 {
 	return {
-		poca::core::CommandSpec("computeObjectColocalization", {})
+		poca::core::CommandSpec("computeObjectColocalization")
 	};
 }
 

@@ -55,9 +55,9 @@ namespace poca::opengl {
 				{"y", CommandParameterType::Integer, true, nullptr},
 				{"saveImage", CommandParameterType::Boolean, false, false}
 			}),
-			CommandSpec("freeGPU", {}),
-			CommandSpec("togglePicking", {}),
-			CommandSpec("setIDObjectPicked", {})
+			CommandSpec("freeGPU"),
+			CommandSpec("togglePicking"),
+			CommandSpec("setIDObjectPicked")
 		};
 	}
 

@@ -267,39 +267,50 @@ namespace poca::core {
 		};
 
 		if (_nameCommand == "histogram") {
-			if (!_parameters.contains("feature") || !_parameters.contains("action"))
-				return poca::core::CommandInfo();
-
-			const std::string action = _parameters["action"].get<std::string>();
-			if (action == "log") {
-				return createFromSpec(poca::core::CommandSpec("histogram", {
-					{ "feature", poca::core::CommandParameterType::String, true },
-					{ "action", poca::core::CommandParameterType::String, true },
-					{ "value", poca::core::CommandParameterType::Boolean, true }
-				}));
-			}
-			else if (action == "changeBoundsCustom" || action == "changeHistogramBounds") {
-				return createFromSpec(poca::core::CommandSpec("histogram", {
-					{ "feature", poca::core::CommandParameterType::String, true },
-					{ "action", poca::core::CommandParameterType::String, true },
-					{ "min", poca::core::CommandParameterType::Number, true },
-					{ "max", poca::core::CommandParameterType::Number, true }
-				}));
-			}
-			else if (action == "save") {
-				return createFromSpec(poca::core::CommandSpec("histogram", {
-					{ "feature", poca::core::CommandParameterType::String, true },
-					{ "action", poca::core::CommandParameterType::String, true },
-					{ "dir", poca::core::CommandParameterType::String, true }
-				}));
-			}
-			else if (action == "displayWithLUT" || action == "selectHistogram") {
-				return createFromSpec(poca::core::CommandSpec("histogram", {
-					{ "feature", poca::core::CommandParameterType::String, true },
-					{ "action", poca::core::CommandParameterType::String, true }
-				}));
-			}
-			return poca::core::CommandInfo();
+			return createFromSpec(poca::core::CommandSpec::withVariants("histogram", {
+				{
+					"action", "log", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true },
+						{ "value", poca::core::CommandParameterType::Boolean, true }
+					}
+				},
+				{
+					"action", "changeBoundsCustom", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true },
+						{ "min", poca::core::CommandParameterType::Number, true },
+						{ "max", poca::core::CommandParameterType::Number, true }
+					}
+				},
+				{
+					"action", "changeHistogramBounds", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true },
+						{ "min", poca::core::CommandParameterType::Number, true },
+						{ "max", poca::core::CommandParameterType::Number, true }
+					}
+				},
+				{
+					"action", "save", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true },
+						{ "dir", poca::core::CommandParameterType::String, true }
+					}
+				},
+				{
+					"action", "displayWithLUT", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true }
+					}
+				},
+				{
+					"action", "selectHistogram", {
+						{ "feature", poca::core::CommandParameterType::String, true },
+						{ "action", poca::core::CommandParameterType::String, true }
+					}
+				}
+			}));
 		}
 		else if (_nameCommand == "selected") {
 			return createFromSpec(poca::core::CommandSpec("selected", {

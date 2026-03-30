@@ -155,7 +155,7 @@ std::vector<poca::core::CommandSpec> NearestLocsMultiColorCommands::commandSpecs
 		poca::core::CommandSpec("displayOutlinesNearestNeighMulticolor", {
 			{ "displayOutlinesNearestNeighMulticolor", poca::core::CommandParameterType::Boolean, true }
 		}),
-		poca::core::CommandSpec("transferSelectedObjectsNearestNeighMulticolor", {}),
+		poca::core::CommandSpec("transferSelectedObjectsNearestNeighMulticolor"),
 		poca::core::CommandSpec("saveDistancesNearestNeighMulticolor", {
 			{ "path", poca::core::CommandParameterType::String, false, "" }
 		})

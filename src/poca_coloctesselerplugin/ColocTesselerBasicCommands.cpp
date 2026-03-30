@@ -173,7 +173,7 @@ std::vector<poca::core::CommandSpec> ColocTesselerBasicCommands::commandSpecs() 
 		poca::core::CommandSpec("correction", {
 			{ "correction", poca::core::CommandParameterType::Boolean, true }
 		}),
-		poca::core::CommandSpec("computeCoefficients", {}),
+		poca::core::CommandSpec("computeCoefficients"),
 		poca::core::CommandSpec("savePairDensities", {
 			{ "filename", poca::core::CommandParameterType::String, true }
 		})

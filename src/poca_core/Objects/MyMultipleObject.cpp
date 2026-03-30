@@ -137,8 +137,7 @@ void MyMultipleObject::setThick(const float _t)
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	poca::core::CommandExecutionResult result;
-	executeCommand(_ci, context, result);
+	executeCommand(_ci, context);
 }
 
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
@@ -196,8 +195,7 @@ const size_t MyMultipleObject::dimension() const
 void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	poca::core::CommandExecutionResult result;
-	executeCommandOnSpecificComponent(_nameComponent, _ci, context, result);
+	executeCommandOnSpecificComponent(_nameComponent, _ci, context);
 }
 
 void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
@@ -218,8 +216,7 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 {
 	poca::core::CommandRuntimeContext context;
-	poca::core::CommandExecutionResult result;
-	executeGlobalCommand(_ci, context, result);
+	executeGlobalCommand(_ci, context);
 }
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)

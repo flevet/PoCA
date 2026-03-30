@@ -222,8 +222,7 @@ namespace poca::core {
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		poca::core::CommandExecutionResult result;
-		executeCommand(_ci, context, result);
+		executeCommand(_ci, context);
 	}
 
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
@@ -279,8 +278,7 @@ namespace poca::core {
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		poca::core::CommandExecutionResult result;
-		executeCommandOnSpecificComponent(_nameComponent, _ci, context, result);
+		executeCommandOnSpecificComponent(_nameComponent, _ci, context);
 	}
 
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)
@@ -299,8 +297,7 @@ namespace poca::core {
 	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
 	{
 		poca::core::CommandRuntimeContext context;
-		poca::core::CommandExecutionResult result;
-		executeGlobalCommand(_ci, context, result);
+		executeGlobalCommand(_ci, context);
 	}
 
 	void MyObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context)

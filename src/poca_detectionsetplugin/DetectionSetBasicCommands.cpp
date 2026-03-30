@@ -78,9 +78,9 @@ std::vector<poca::core::CommandSpec> DetectionSetBasicCommands::commandSpecs() c
 	using poca::core::CommandSpec;
 
 	return {
-		CommandSpec("selectLocsInROIs", {}),
-		CommandSpec("saveForGNN", {}),
-		CommandSpec("createObjectsOnLabels", {}),
+		CommandSpec("selectLocsInROIs"),
+		CommandSpec("saveForGNN"),
+		CommandSpec("createObjectsOnLabels"),
 		CommandSpec("clustersForChallenge", {
 			{"minNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
 			{"maxNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},

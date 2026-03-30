@@ -126,8 +126,8 @@ std::vector<poca::core::CommandSpec> VoronoiDiagramCharacteristicsCommands::comm
 			{ "nbBins", poca::core::CommandParameterType::UnsignedInteger },
 			{ "degreePolynome", poca::core::CommandParameterType::UnsignedInteger }
 		}),
-		poca::core::CommandSpec("createFilteredObjects", {}),
-		poca::core::CommandSpec("invertSelection", {})
+		poca::core::CommandSpec("createFilteredObjects"),
+		poca::core::CommandSpec("invertSelection")
 	};
 }
 

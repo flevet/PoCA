@@ -119,8 +119,8 @@ std::vector<poca::core::CommandSpec> VoronoiDiagramBasicCommands::commandSpecs()
 		CommandSpec("computeVoronoiDensityRankN", {
 			{"rank", CommandParameterType::UnsignedInteger, true, nullptr}
 		}),
-		CommandSpec("invertSelection", {}),
-		CommandSpec("randomPointOnTheSphere", {}),
+		CommandSpec("invertSelection"),
+		CommandSpec("randomPointOnTheSphere"),
 		CommandSpec("clustersForChallenge", {
 			{"minNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},
 			{"maxNbLocs", CommandParameterType::UnsignedInteger, false, nullptr},

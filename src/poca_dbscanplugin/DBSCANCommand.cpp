@@ -94,8 +94,8 @@ std::vector<poca::core::CommandSpec> DBSCANCommand::commandSpecs() const
 			{"min", CommandParameterType::UnsignedInteger, true, nullptr},
 			{"minNbForCluster", CommandParameterType::UnsignedInteger, false, static_cast<uint32_t>(15)}
 		}),
-		CommandSpec("displayDBSCAN", {}),
-		CommandSpec("createDBSCANObjects", {})
+		CommandSpec("displayDBSCAN"),
+		CommandSpec("createDBSCANObjects")
 	};
 }
 

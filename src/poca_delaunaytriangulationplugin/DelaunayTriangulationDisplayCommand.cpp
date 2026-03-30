@@ -144,7 +144,7 @@ void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _info
 std::vector<poca::core::CommandSpec> DelaunayTriangulationDisplayCommand::commandSpecs() const
 {
 	return {
-		poca::core::CommandSpec("selectedBorderTriangles", {})
+		poca::core::CommandSpec("selectedBorderTriangles")
 	};
 }
 
