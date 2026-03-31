@@ -53,6 +53,7 @@ namespace poca::opengl {
 		const poca::core::CommandInfos saveParameters() const { return poca::core::CommandInfos(); }
 		std::vector<poca::core::CommandSpec> commandSpecs() const;
 		void execute(poca::core::CommandInfo*);
+		void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 		poca::core::Command* copy();
 		poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
