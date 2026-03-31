@@ -21,6 +21,7 @@ set(DBSCAN_PLUGIN_HEADER_FILES
   DBSCANPlugin.hpp
   DBSCANWidget.hpp
   DBSCANCommand.hpp
+  DBSCANCommandContext.hpp
   )
 
 set(DBSCAN_SOURCE_HEADER_FILES

@@ -24,6 +24,7 @@ set(VORONOI_DIAGRAM_PLUGIN_HEADER_FILES
   VoronoiDiagramParamDialog.hpp
   VoronoiDiagramWidget.hpp
   VoronoiDiagramCharacteristicsCommands.hpp
+  VoronoiCommandContext.hpp
   )
 
 set(VORONOI_DIAGRAM_SOURCE_HEADER_FILES

@@ -108,7 +108,8 @@ std::vector<poca::core::CommandSpec> CleanerCommand::commandSpecs() const
 void CleanerCommand::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandRuntimeContext context;
-	execute(_infos, context);
+	poca::core::CommandExecutionResult result;
+	execute(_infos, context, result);
 }
 
 void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)

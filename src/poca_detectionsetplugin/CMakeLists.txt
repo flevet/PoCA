@@ -26,6 +26,7 @@ set(DETECTION_SET_PLUGIN_HEADER_FILES
   HeatMapDisplayCommand.hpp
   DetectionSetWidget.hpp
   CleanerCommand.hpp
+  DetectionSetCommandContext.hpp
   )
 
 set(DETECTION_SET_PLUGIN_SOURCE_FILES
