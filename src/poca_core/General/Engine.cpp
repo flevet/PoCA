@@ -613,20 +613,6 @@ namespace poca::core {
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
 							comObj->executeCommand(&command);
-							/*if (command.hasParameter("newObject")) {
-								poca::geometry::DetectionSet* dset = command.getParameterPtr<poca::geometry::DetectionSet>("newObject");
-								if (dset == NULL) return;
-								poca::geometry::DetectionSet* newDset = dset->duplicateSelection();
-								const std::string& dir = obj->getDir(), name = obj->getName();
-								QString newName(name.c_str());
-								int index = newName.lastIndexOf(".");
-								newName.insert(index, QString("_%1").arg(m_currentDuplicate++));
-								createWindows(newDset, QString(dir.c_str()), newName);
-							}
-							else if (command.hasParameter("object")) {
-								poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
-								createWidget(obj);
-							}*/
 						}
 						else
 							std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;
@@ -669,10 +655,6 @@ namespace poca::core {
 							poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 							if (!command.empty()) {
 								comObj->executeCommand(&command);
-								/*if (command.hasParameter("object")) {
-									poca::core::MyObjectInterface* obj = command.getParameterPtr<poca::core::MyObjectInterface>("object");
-									createWidget(obj);
-								}*/
 							}
 							else
 								std::cout << "Component [" << nameComp << "], command [" << nameCommand << "] does not exist, command " << jsonCommand.dump() << " was not executed." << std::endl;

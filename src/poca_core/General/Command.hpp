@@ -75,6 +75,9 @@ namespace poca::core {
 		mutable std::unordered_map<std::type_index, std::any> m_data;
 	};
 
+	// Preferred name for transient command inputs.
+	using CommandExecutionContext = CommandRuntimeContext;
+
 	class CommandExecutionResult
 	{
 	public:
