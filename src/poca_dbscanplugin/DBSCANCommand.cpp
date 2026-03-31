@@ -172,9 +172,6 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::C
 		}
 		obj->notify("LoadObjCharacteristicsAllWidgets");
 
-		/*objects->setBoundingBox(m_dset->boundingBox());
-		obj->addBasicComponent(objects);
-		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponentInterface*)objects));*/
 	}
 }
 

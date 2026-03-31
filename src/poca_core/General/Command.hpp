@@ -40,6 +40,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
@@ -47,6 +48,21 @@
 #include "json.hpp"
 
 namespace poca::core {
+
+	template<typename T>
+	struct is_c_string_pointer : std::false_type {};
+
+	template<>
+	struct is_c_string_pointer<char*> : std::true_type {};
+
+	template<>
+	struct is_c_string_pointer<const char*> : std::true_type {};
+
+	template<>
+	struct is_c_string_pointer<wchar_t*> : std::true_type {};
+
+	template<>
+	struct is_c_string_pointer<const wchar_t*> : std::true_type {};
 
 	class CommandExecutionContext
 	{
@@ -115,7 +131,12 @@ namespace poca::core {
 
 		template<typename T>
 		CommandInfo(const bool _record, const std::string& _name, const T& _param) : recordable(_record), nameCommand(_name) {
-			json[_name] = _param;
+			using value_type = std::decay_t<T>;
+			static_assert(!std::is_pointer_v<value_type> || is_c_string_pointer<value_type>::value, "Pointers must not be stored in CommandInfo");
+			if constexpr (is_c_string_pointer<value_type>::value)
+				json[_name] = std::string(_param);
+			else
+				json[_name] = _param;
 		}
 
 		template<typename T, typename... Args>
@@ -169,8 +190,13 @@ namespace poca::core {
 
 		template<typename T>
 		void addParameter(const std::string& _nameP, const T& _param) {
+			using value_type = std::decay_t<T>;
+			static_assert(!std::is_pointer_v<value_type> || is_c_string_pointer<value_type>::value, "Pointers must not be stored in CommandInfo");
 			try{
-				parameters()[_nameP] = _param;
+				if constexpr (is_c_string_pointer<value_type>::value)
+					parameters()[_nameP] = std::string(_param);
+				else
+					parameters()[_nameP] = _param;
 			}
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;

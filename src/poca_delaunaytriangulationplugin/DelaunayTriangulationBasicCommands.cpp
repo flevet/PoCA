@@ -188,8 +188,6 @@ void DelaunayTriangulationBasicCommands::execute(poca::core::CommandInfo* _infos
 			std::cout << text << std::endl;
 		}
 		obj->notify("LoadObjCharacteristicsAllWidgets");
-		//obj->addBasicComponent(objects);
-		//obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponentInterface*)objects));
 	}
 	else if (_infos->nameCommand == "saveAsSVG") {
 		QString filename = (_infos->getParameter<std::string>("filename")).c_str();

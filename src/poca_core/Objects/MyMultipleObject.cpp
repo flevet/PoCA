@@ -149,15 +149,6 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	for (poca::core::MyObjectInterface* obj : m_colors) {
-		/*if (_ci->nameCommand == "display") {
-			poca::opengl::Camera* cam = _ci->getParameterPtr<poca::opengl::Camera>("camera");
-			poca::core::CommandInfo com(false, "getModelMatrix");
-			obj->executeCommand(&com);
-			if (com.hasParameter("modelMatrix")) {
-				auto mat = com.getParameter<glm::mat4>("modelMatrix");
-				cam->setModelMatrix(mat);
-			}
-		}*/
 		obj->executeCommand(_ci, _context, _result);
 	}
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
