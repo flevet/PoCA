@@ -93,6 +93,9 @@ namespace poca::core {
 		template <typename T>
 		T* getParameterPtr(const std::string& _nameCommand)
 		{
+			// Legacy compatibility accessor kept for older plugins that still
+			// store pointers in CommandInfo. New code should prefer runtime
+			// context/result objects.
 			for (std::vector < Command* >::const_iterator it = m_commands.begin(); it != m_commands.end(); it++) {
 				Command* com = *it;
 				if (com->hasParameter(_nameCommand))
@@ -104,6 +107,9 @@ namespace poca::core {
 		template <typename T>
 		T* getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter)
 		{
+			// Legacy compatibility accessor kept for older plugins that still
+			// store pointers in CommandInfo. New code should prefer runtime
+			// context/result objects.
 			for (std::vector < Command* >::const_iterator it = m_commands.begin(); it != m_commands.end(); it++) {
 				Command* com = *it;
 				if (com->hasParameter(_nameCommand, _nameParameter))

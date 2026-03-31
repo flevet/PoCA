@@ -500,11 +500,6 @@ void VoronoiDiagramWidget::performAction(poca::core::MyObjectInterface* _obj, po
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "polytopeRendering") {
-		if (_ci->nameCommand == "histogram") {
-			std::string action = _ci->getParameter<std::string>("action");
-			if (action == "save")
-				_ci->addParameter("dir", obj->getDir());
-		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("VoronoiDiagram");
 		engine->executeCommand(bc, _ci);
 		actionDone = true;

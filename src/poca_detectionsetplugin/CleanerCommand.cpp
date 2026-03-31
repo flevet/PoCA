@@ -111,12 +111,6 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos)
 	execute(_infos, context);
 }
 
-void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
-{
-	poca::core::CommandExecutionResult result;
-	execute(_infos, _context, result);
-}
-
 void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	if (hasCommand(_infos->nameCommand))

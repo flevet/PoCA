@@ -40,6 +40,7 @@
 #include <General/CommandableObject.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <General/Engine.hpp>
 
 #include "DelaunayTriangulationWidget.hpp"
 
@@ -322,13 +323,8 @@ void DelaunayTriangulationWidget::performAction(poca::core::MyObjectInterface* _
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill") {
-		if (_ci->nameCommand == "histogram") {
-			std::string action = _ci->getParameter<std::string>("action");
-			if (action == "save")
-				_ci->addParameter("dir", obj->getDir());
-		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DelaunayTriangulation");
-		bc->executeCommand(_ci);
+		poca::core::Engine::instance()->executeCommand(bc, _ci);
 		actionDone = true;
 	}
 	if (actionDone) {

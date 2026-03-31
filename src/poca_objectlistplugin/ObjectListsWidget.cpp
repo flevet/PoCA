@@ -932,11 +932,6 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "hilow" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering") {
-		if (_ci->nameCommand == "histogram") {
-			std::string action = _ci->getParameter<std::string>("action");
-			if (action == "save")
-				_ci->addParameter("dir", _obj->getDir());
-		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
 		engine->executeCommand(bc, _ci);
 		actionDone = true;

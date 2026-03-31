@@ -122,13 +122,8 @@ std::vector<poca::core::CommandSpec> DetectionSetBasicCommands::commandSpecs() c
 void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandRuntimeContext context;
-	execute(_infos, context);
-}
-
-void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
-{
 	poca::core::CommandExecutionResult result;
-	execute(_infos, _context, result);
+	execute(_infos, context, result);
 }
 
 void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)

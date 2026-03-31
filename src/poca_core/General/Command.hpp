@@ -118,9 +118,12 @@ namespace poca::core {
 			json[_name] = _param;
 		}
 
+		// Legacy compatibility constructor kept for poca_extra and older plugins.
+		// New code should keep pointers out of CommandInfo and use runtime
+		// context/result objects for transient data.
 		template<typename T>
 		CommandInfo(const bool _record, const std::string& _name, T* _param) : recordable(_record), nameCommand(_name) {
-			json[_name] = reinterpret_cast<std::uintptr_t>(_param);
+			json[_name] = encodeLegacyPointer(_param);
 		}
 
 		template<typename T, typename... Args>
@@ -129,6 +132,9 @@ namespace poca::core {
 			addParameters(_nameP, _param, more...);
 		}
 
+		// Legacy compatibility constructor kept for poca_extra and older plugins.
+		// New code should keep pointers out of CommandInfo and use runtime
+		// context/result objects for transient data.
 		template<typename T, typename... Args>
 		CommandInfo(const bool _record, const std::string& _name, const std::string& _nameP, T* _param, Args... more) : recordable(_record), nameCommand(_name)
 		{
@@ -196,8 +202,17 @@ namespace poca::core {
 
 		template<typename T>
 		void addParameter(const std::string& _nameP, T* _param) {
+			addLegacyPointerParameter(_nameP, _param);
+		}
+
+		// Legacy compatibility path kept for poca_extra and older plugins.
+		// New code should pass transient inputs through CommandRuntimeContext
+		// and transient outputs through CommandExecutionResult instead of
+		// serializing pointers into CommandInfo.
+		template<typename T>
+		void addLegacyPointerParameter(const std::string& _nameP, T* _param) {
 			try {
-				parameters()[_nameP] = reinterpret_cast<std::uintptr_t>(_param);
+				parameters()[_nameP] = encodeLegacyPointer(_param);
 			}
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;
@@ -224,9 +239,17 @@ namespace poca::core {
 
 		template<typename T>
 		T* getParameterPtr(const std::string& _nameParameter) const {
+			return getLegacyParameterPtr<T>(_nameParameter);
+		}
+
+		// Legacy compatibility path kept for poca_extra and older plugins.
+		// New code should consume runtime-only objects from CommandRuntimeContext
+		// or CommandExecutionResult instead of CommandInfo.
+		template<typename T>
+		T* getLegacyParameterPtr(const std::string& _nameParameter) const {
 			if (nameCommand == _nameParameter)
-				return (T*)parameters().get<std::uintptr_t>();
-			return (T*)parameters()[_nameParameter].get<std::uintptr_t>();
+				return decodeLegacyPointer<T>(parameters().get<std::uintptr_t>());
+			return decodeLegacyPointer<T>(parameters()[_nameParameter].get<std::uintptr_t>());
 		}
 
 		inline const nlohmann::json& parameters() const {
@@ -277,6 +300,17 @@ namespace poca::core {
 		std::string nameCommand;
 		nlohmann::json json;
 		bool recordable;
+
+	private:
+		template<typename T>
+		static std::uintptr_t encodeLegacyPointer(T* _param) {
+			return reinterpret_cast<std::uintptr_t>(_param);
+		}
+
+		template<typename T>
+		static T* decodeLegacyPointer(const std::uintptr_t _value) {
+			return reinterpret_cast<T*>(_value);
+		}
 	};
 
 	typedef std::map <std::string, CommandInfo> CommandInfos;
@@ -442,20 +476,22 @@ namespace poca::core {
 
 		template <typename T>
 		T getParameterPtr(const std::string& _nameCommand) const {
+			// Legacy compatibility accessor kept for poca_extra and older plugins.
 			if (m_commandInfos.find(_nameCommand) == m_commandInfos.end())
 				throw std::runtime_error(std::string("Parameter " + _nameCommand + " not found"));
 			if (!m_commandInfos.at(_nameCommand).hasParameter(_nameCommand))
 				throw std::runtime_error(std::string("Parameter " + _nameCommand + " not found"));
-			return m_commandInfos.at(_nameCommand).getParameterPtr<T>(_nameCommand);
+			return m_commandInfos.at(_nameCommand).getLegacyParameterPtr<T>(_nameCommand);
 		}
 
 		template <typename T>
 		T getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter) const {
+			// Legacy compatibility accessor kept for poca_extra and older plugins.
 			if (m_commandInfos.find(_nameCommand) == m_commandInfos.end())
 				throw std::runtime_error(std::string("Parameter " + _nameCommand + " for command " + _nameCommand + " not found"));
 			if (!m_commandInfos.at(_nameCommand).hasParameter(_nameParameter))
 				throw std::runtime_error(std::string("Parameter " + _nameCommand + " for command " + _nameCommand + " not found"));
-			return m_commandInfos.at(_nameCommand).getParameterPtr<T>(_nameParameter);
+			return m_commandInfos.at(_nameCommand).getLegacyParameterPtr<T>(_nameParameter);
 		}
 
 		void addCommandInfo(const CommandInfo& _com) {
@@ -477,11 +513,10 @@ namespace poca::core {
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
-			CommandExecutionResult result;
-			execute(_ci, _context, result);
+			execute(_ci);
 		}
 		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
-			execute(_ci);
+			execute(_ci, _context);
 		}
 		virtual Command* copy() = 0;
 		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {

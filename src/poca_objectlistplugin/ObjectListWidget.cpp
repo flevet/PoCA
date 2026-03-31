@@ -43,6 +43,7 @@
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
 #include <Objects/ObjectCommandContext.hpp>
+#include <General/Engine.hpp>
 
 #include "ObjectListWidget.hpp"
 
@@ -486,13 +487,8 @@ void ObjectListWidget::performAction(poca::core::MyObjectInterface* _obj, poca::
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "hilow" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering") {
-		if (_ci->nameCommand == "histogram") {
-			std::string action = _ci->getParameter<std::string>("action");
-			if (action == "save")
-				_ci->addParameter("dir", _obj->getDir());
-		}	
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectList");
-		bc->executeCommand(_ci);
+		poca::core::Engine::instance()->executeCommand(bc, _ci);
 		actionDone = true;
 	}
 	else if (_ci->nameCommand == "selectObject") {

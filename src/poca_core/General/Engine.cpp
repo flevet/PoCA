@@ -736,6 +736,11 @@ namespace poca::core {
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandRuntimeContext& _context, CommandExecutionResult& _result)
 	{
 		auto object = getTopObject(_bci);
+		if (_com != nullptr && _com->nameCommand == "histogram" && _com->hasParameter("action")) {
+			const std::string action = _com->getParameter<std::string>("action");
+			if (action == "save" && !_com->hasParameter("dir") && object != NULL)
+				_com->addParameter("dir", object->getDir());
+		}
 
 		if (object != NULL && object->nbColors() > 1 && m_globalCommands) {
 			if (object->nbColors() > 1) {

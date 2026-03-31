@@ -710,11 +710,6 @@ void DetectionSetWidget::performAction(poca::core::MyObjectInterface* _obj, poca
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected") {
-		if (_ci->nameCommand == "histogram") {
-			std::string action = _ci->getParameter<std::string>("action");
-			if (action == "save")
-				_ci->addParameter("dir", _obj->getDir());
-		}
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("DetectionSet");
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		engine->executeCommand(bc, _ci);
