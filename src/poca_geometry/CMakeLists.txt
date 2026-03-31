@@ -52,6 +52,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/BasicComputation.hpp
   Geometry/DelaunayTriangulation.hpp
   Geometry/DetectionSet.hpp
+  Geometry/GeometryCommandContext.hpp
   Geometry/nanoflann.hpp
   Geometry/ObjectLists.hpp
   Geometry/ObjectListDelaunay.hpp

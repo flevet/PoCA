@@ -41,12 +41,21 @@ namespace poca::geometry {
 
 class KRipleyCommand: public poca::core::Command {
 public:
+	struct ResultContext {
+		size_t nbSteps = 0;
+		const float* values = nullptr;
+		const float* ts = nullptr;
+		const float* ls = nullptr;
+		const float* ks = nullptr;
+	};
+
 	KRipleyCommand(poca::geometry::DetectionSet*);
 	KRipleyCommand(const KRipleyCommand&);
 	~KRipleyCommand();
 
 	std::vector<poca::core::CommandSpec> commandSpecs() const;
 	void execute(poca::core::CommandInfo*);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
 
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const { return poca::core::CommandInfos(); }

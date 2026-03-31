@@ -40,6 +40,7 @@
 
 #include <General/Palette.hpp>
 #include <General/Histogram.hpp>
+#include <Geometry/GeometryCommandContext.hpp>
 #include <General/MyData.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <Interfaces/CameraInterface.hpp>
@@ -142,7 +143,10 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const 
 		sortWrtCameraPosition(cameraPosition, cameraForward);
 	}
 	else if (_infos->nameCommand == "addNormals") {
-		std::vector <poca::core::Vec3mf>* normals = _infos->getParameterPtr<std::vector <poca::core::Vec3mf>>("addNormals");
+		const std::vector <poca::core::Vec3mf>* normals = nullptr;
+		if (_context.has<poca::geometry::DetectionSetNormalsContext>())
+			normals = _context.get<poca::geometry::DetectionSetNormalsContext>().normals;
+		if (normals == nullptr) return;
 		m_normalBuffer.generateBuffer(normals->size(), 3, GL_FLOAT);
 		m_normalBuffer.updateBuffer(normals->data());
 

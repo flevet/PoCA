@@ -55,6 +55,7 @@
 #include "../Geometry/VoronoiDiagram.hpp"
 #include "../Geometry/voronator.hpp"
 #include "../Geometry/CGAL_includes.hpp"
+#include "../Geometry/GeometryCommandContext.hpp"
 #include "../3D_voronoi_GPU/voronoi.h"
 
 #define GL_GPU_MEM_INFO_TOTAL_AVAILABLE_MEM_NVX 0x9048
@@ -176,7 +177,10 @@ namespace poca::geometry {
 			_obj->addBasicComponent(voro);
 
 			const std::vector <poca::core::Vec3mf>& normals = ((poca::geometry::VoronoiDiagram2DOnSphere*)voro)->getNormals();
-			dset->executeCommand(&poca::core::CommandInfo(false, "addNormals", &normals));
+			poca::core::CommandInfo ci(false, "addNormals");
+			poca::core::CommandRuntimeContext context;
+			context.set<poca::geometry::DetectionSetNormalsContext>({ &normals });
+			static_cast<poca::core::CommandableObject*>(dset)->executeCommand(&ci, context);
 
 			if (voro != NULL) {
 				_obj->notify("LoadObjCharacteristicsAllWidgets");

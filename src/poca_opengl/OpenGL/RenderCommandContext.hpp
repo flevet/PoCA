@@ -11,7 +11,10 @@
 #ifndef RenderCommandContext_h__
 #define RenderCommandContext_h__
 
+#include <vector>
+
 #include <General/Command.hpp>
+#include <General/Vec3.hpp>
 
 class QOpenGLFramebufferObject;
 
@@ -26,6 +29,10 @@ namespace poca::opengl {
 
 	struct PickingFramebuffer {
 		QOpenGLFramebufferObject* fbo = nullptr;
+	};
+
+	struct DetectionSetNormals {
+		const std::vector<poca::core::Vec3mf>* normals = nullptr;
 	};
 }
 

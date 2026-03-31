@@ -46,6 +46,7 @@
 #include <General/CommandableObject.hpp>
 
 #include "KRipleyWidget.hpp"
+#include "KRipley.hpp"
 
 KRipleyWidget::KRipleyWidget(poca::core::MediatorWObjectFWidgetInterface* _mediator, QWidget* _parent) :m_lsSelected(false)
 {
@@ -183,14 +184,17 @@ void KRipleyWidget::toggleRipleyFunctionDisplay(bool _val)
 void KRipleyWidget::setKripleyCurveDisplay()
 {
 	poca::core::CommandInfo ci(false, m_lsSelected ? "getKRipleyResultsLs" : "getKRipleyResultsKs");
-	m_object->executeCommandOnSpecificComponent("DetectionSet" , &ci);
+	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionResult result;
+	m_object->executeCommandOnSpecificComponent("DetectionSet" , &ci, context, result);
 
-	if (ci.json.empty())
+	if (!result.has<KRipleyCommand::ResultContext>())
 		return;
-	size_t nbBins = ci.getParameter <size_t>("nbSteps");
-	float* ts = ci.getParameterPtr <float>("ts");
-	float* values = ci.getParameterPtr <float>("values");
-	float* lValues = ci.getParameterPtr <float>("ls");
+	const KRipleyCommand::ResultContext& data = result.get<KRipleyCommand::ResultContext>();
+	size_t nbBins = data.nbSteps;
+	const float* ts = data.ts;
+	const float* values = data.values;
+	const float* lValues = data.ls;
 
 	unsigned int indexMaxY = 0, indexMaxYForL = 0;
 	float maxValue = -FLT_MAX, minValue = FLT_MAX;
@@ -242,14 +246,17 @@ void KRipleyWidget::setKripleyCurveDisplay()
 void KRipleyWidget::exportKRipleyResults()
 {
 	poca::core::CommandInfo ci(false, "getKRipleyResults");
-	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci);
+	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionResult result;
+	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
 
-	if (ci.json.empty())
+	if (!result.has<KRipleyCommand::ResultContext>())
 		return;
-	size_t nbSteps = ci.getParameter <size_t>("nbSteps");
-	float* ks = ci.getParameterPtr <float>("ks");
-	float* ts = ci.getParameterPtr <float>("ts");
-	float* ls = ci.getParameterPtr <float>("ls");
+	const KRipleyCommand::ResultContext& data = result.get<KRipleyCommand::ResultContext>();
+	size_t nbSteps = data.nbSteps;
+	const float* ks = data.ks;
+	const float* ts = data.ts;
+	const float* ls = data.ls;
 	
 	QString nameXls(m_object->getDir().c_str());
 	nameXls.append("./KRipley_results.xls");

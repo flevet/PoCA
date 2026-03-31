@@ -82,6 +82,13 @@ poca::core::Command* KRipleyCommand::copy()
 
 void KRipleyCommand::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionResult result;
+	execute(_infos, context, result);
+}
+
+void KRipleyCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult& _result)
+{
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -99,24 +106,15 @@ void KRipleyCommand::execute(poca::core::CommandInfo* _infos)
 	}
 	else if (_infos->nameCommand == "getKRipleyResultsKs") {
 		if (m_ts.empty()) return;
-		_infos->addParameters("nbSteps", m_nbSteps,
-			"values", m_ks.data(),
-			"ts", m_ts.data(),
-			"ls", m_ls.data());
+		_result.set<ResultContext>({ m_nbSteps, m_ks.data(), m_ts.data(), m_ls.data(), m_ks.data() });
 	}
 	else if (_infos->nameCommand == "getKRipleyResultsLs") {
 		if (m_ts.empty()) return;
-		_infos->addParameters("nbSteps", m_nbSteps,
-			"values", m_ls.data(),
-			"ts", m_ts.data(),
-			"ls", m_ls.data());
+		_result.set<ResultContext>({ m_nbSteps, m_ls.data(), m_ts.data(), m_ls.data(), m_ks.data() });
 	}
 	else if (_infos->nameCommand == "getKRipleyResults") {
 		if (m_ts.empty()) return;
-		_infos->addParameters("nbSteps", m_nbSteps,
-			"ks", m_ks.data(),
-			"ts", m_ts.data(),
-			"ls", m_ls.data());
+		_result.set<ResultContext>({ m_nbSteps, nullptr, m_ts.data(), m_ls.data(), m_ks.data() });
 	}
 }
 
