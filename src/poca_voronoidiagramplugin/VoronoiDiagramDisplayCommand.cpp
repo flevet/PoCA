@@ -88,10 +88,11 @@ VoronoiDiagramDisplayCommand::~VoronoiDiagramDisplayCommand()
 void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandExecutionContext context;
-	execute(_infos, context);
+	poca::core::CommandExecutionResult result;
+	execute(_infos, context, result);
 }
 
-void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
+void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::opengl::BasicDisplayCommand::execute(_infos);
@@ -117,15 +118,19 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, cons
 		if (!m_voronoi->isSelected()) return;
 		QString infos = getInfosTriangle(m_idSelection);
 		if (infos.isEmpty()) return;
-		poca::core::stringList listInfos = _infos->getParameter<poca::core::stringList>("infos");
+		poca::core::stringList listInfos;
+		if (_result.has<poca::opengl::PickedInfoListResult>())
+			listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
 		listInfos.push_back(infos.toLatin1().data());
-		_infos->addParameter("infos", listInfos);
+		_result.set(poca::opengl::PickedInfoListResult{ listInfos });
 		if (m_idSelection >= 0) {
 			generateBoundingBoxSelection(m_idSelection);
-			if (_infos->hasParameter("pickedPoints") && m_voronoi->hasCells()) {
-				std::vector <poca::core::Vec3mf> pickedPoints = _infos->getParameter< std::vector <poca::core::Vec3mf>>("pickedPoints");
+			if (m_voronoi->hasCells()) {
+				std::vector <poca::core::Vec3mf> pickedPoints;
+				if (_result.has<poca::opengl::PickedPointsResult>())
+					pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
 				pickedPoints.push_back(m_voronoi->computeBarycenterElement(m_idSelection));
-				_infos->addParameter("pickedPoints", pickedPoints);
+				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
 		}
 	}

@@ -1335,10 +1335,11 @@ namespace poca::opengl {
 		poca::core::SubjectInterface* si = dynamic_cast <poca::core::SubjectInterface*>(m_object);
 		if (_subject == si && _aspect == "updateInfosObject") {
 			poca::core::CommandInfo ci(false, "getInfoObjectCurrentlyPicked");
-			m_object->executeCommandOnSpecificComponent("ObjectList", &ci);
+			poca::core::CommandExecutionResult result;
+			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, poca::core::CommandExecutionContext(), result);
 			std::string infos;
-			if (ci.hasParameter("infos"))
-				infos = ci.getParameter<std::string>("infos");
+			if (result.has<poca::opengl::PickedInfoTextResult>())
+				infos = result.get<poca::opengl::PickedInfoTextResult>().info;
 			if (m_infoPicking.empty())
 				m_infoPicking.push_back(QString::fromStdString(infos));
 			else
@@ -1350,10 +1351,11 @@ namespace poca::opengl {
 		}
 		else if (_subject == si && _aspect == "updateInfosObjectOverlap") {
 			poca::core::CommandInfo ci(false, "getInfoObjectCurrentlyPicked");
-			m_object->executeCommandOnSpecificComponent("ObjectColocalization", &ci);
+			poca::core::CommandExecutionResult result;
+			m_object->executeCommandOnSpecificComponent("ObjectColocalization", &ci, poca::core::CommandExecutionContext(), result);
 			std::string infos;
-			if (ci.hasParameter("infos"))
-				infos = ci.getParameter<std::string>("infos");
+			if (result.has<poca::opengl::PickedInfoTextResult>())
+				infos = result.get<poca::opengl::PickedInfoTextResult>().info;
 			if (m_infoPicking.empty())
 				m_infoPicking.push_back(QString::fromStdString(infos));
 			else
@@ -1566,16 +1568,19 @@ namespace poca::opengl {
 				poca::core::CommandInfo ci(false, "pick", 
 					"x", _event->pos().x(), 
 					"y", _event->pos().y(), 
-					"saveImage", false,
-					"infos", poca::core::stringList(),
-					"pickedPoints", std::vector <poca::core::Vec3mf>());
-				m_object->executeGlobalCommand(&ci);
+					"saveImage", false);
+				poca::core::CommandExecutionResult result;
+				m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), result);
 				m_infoPicking.clear();
-				poca::core::stringList listInfos = ci.getParameter<poca::core::stringList>("infos");
+				poca::core::stringList listInfos;
+				if (result.has<poca::opengl::PickedInfoListResult>())
+					listInfos = result.get<poca::opengl::PickedInfoListResult>().infos;
 				for (std::string info : listInfos)
 					m_infoPicking.push_back(QString::fromStdString(info));
 
-				m_pickedPoints = ci.getParameter<std::vector <poca::core::Vec3mf>>("pickedPoints");
+				m_pickedPoints.clear();
+				if (result.has<poca::opengl::PickedPointsResult>())
+					m_pickedPoints = result.get<poca::opengl::PickedPointsResult>().points;
 
 				mediator->actionAskedAllObservers(&poca::core::CommandInfo(false, "updatePickedObject"));
 
@@ -1822,11 +1827,13 @@ namespace poca::opengl {
 				"x", _event->pos().x(),
 				"y", _event->pos().y(),
 				"saveImage", false,
-				"infos", poca::core::stringList(),
 				"click", std::string("left"));
-			m_object->executeGlobalCommand(&ci);
+			poca::core::CommandExecutionResult result;
+			m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), result);
 			m_infoPicking.clear();
-			poca::core::stringList listInfos = ci.getParameter<poca::core::stringList>("infos");
+			poca::core::stringList listInfos;
+			if (result.has<poca::opengl::PickedInfoListResult>())
+				listInfos = result.get<poca::opengl::PickedInfoListResult>().infos;
 			for (std::string info : listInfos)
 				m_infoPicking.push_back(QString::fromStdString(info));
 			break;
@@ -1838,11 +1845,13 @@ namespace poca::opengl {
 			poca::core::CommandInfo ci(false, "pick",
 				"x", _event->pos().x(),
 				"y", _event->pos().y(),
-				"saveImage", false,
-				"infos", poca::core::stringList());
-			m_object->executeGlobalCommand(&ci);
+				"saveImage", false);
+			poca::core::CommandExecutionResult pickResult;
+			m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), pickResult);
 			m_infoPicking.clear();
-			poca::core::stringList listInfos = ci.getParameter<poca::core::stringList>("infos");
+			poca::core::stringList listInfos;
+			if (pickResult.has<poca::opengl::PickedInfoListResult>())
+				listInfos = pickResult.get<poca::opengl::PickedInfoListResult>().infos;
 			for (std::string info : listInfos)
 				m_infoPicking.push_back(QString::fromStdString(info));
 
@@ -1851,12 +1860,12 @@ namespace poca::opengl {
 			poca::core::CommandExecutionResult runtimeResult;
 			runtimeContext.set(poca::opengl::ActiveCamera{ this });
 			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, runtimeContext, runtimeResult);
-			if (ci.hasParameter("bbox")) {
-				poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
+			if (runtimeResult.has<poca::opengl::PickedBoundingBoxResult>() && runtimeResult.has<poca::opengl::PickedObjectIdResult>()) {
+				poca::core::BoundingBox bbox = runtimeResult.get<poca::opengl::PickedBoundingBoxResult>().bbox;
 				QOpenGLFramebufferObject* fbo = runtimeResult.has<poca::opengl::PickingFramebuffer>() ? runtimeResult.get<poca::opengl::PickingFramebuffer>().fbo : nullptr;
 				if (fbo == nullptr)
 					break;
-				size_t id = ci.getParameter<size_t>("id");
+				size_t id = static_cast<size_t>(runtimeResult.get<poca::opengl::PickedObjectIdResult>().id);
 				int y = 20;
 				InfosObjectImages* infos = new InfosObjectImages(fbo, poca::core::Vec4mf(0, y, m_sizePatch, m_sizePatch), bbox, m_stateCamera, id);
 				m_infoObjects.insert(m_infoObjects.begin(), infos);
@@ -1940,10 +1949,11 @@ namespace poca::opengl {
 				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
 				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
 				poca::core::CommandExecutionContext runtimeContext;
+				poca::core::CommandExecutionResult runtimeResult;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
-				m_object->executeGlobalCommand(&ci, runtimeContext);
-				if (ci.hasParameter("bbox")) {
-					poca::core::BoundingBox bbox = ci.getParameter<poca::core::BoundingBox>("bbox");
+				m_object->executeGlobalCommand(&ci, runtimeContext, runtimeResult);
+				if (runtimeResult.has<poca::opengl::PickedBoundingBoxResult>()) {
+					poca::core::BoundingBox bbox = runtimeResult.get<poca::opengl::PickedBoundingBoxResult>().bbox;
 					zoomToBoundingBox(bbox);
 					update();
 				}

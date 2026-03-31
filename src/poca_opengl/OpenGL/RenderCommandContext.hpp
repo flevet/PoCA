@@ -11,10 +11,13 @@
 #ifndef RenderCommandContext_h__
 #define RenderCommandContext_h__
 
+#include <string>
 #include <vector>
 
 #include <General/Command.hpp>
 #include <General/Vec3.hpp>
+#include <General/Vec6.hpp>
+#include <Interfaces/MyObjectInterface.hpp>
 
 class QOpenGLFramebufferObject;
 
@@ -33,6 +36,28 @@ namespace poca::opengl {
 
 	struct DetectionSetNormals {
 		const std::vector<poca::core::Vec3mf>* normals = nullptr;
+	};
+
+	struct PickedInfoTextResult {
+		std::string info;
+	};
+
+	struct PickedInfoListResult {
+		poca::core::stringList infos;
+	};
+
+	struct PickedPointsResult {
+		std::vector<poca::core::Vec3mf> points;
+	};
+
+	struct PickedBoundingBoxResult {
+		poca::core::BoundingBox bbox;
+		bool valid = false;
+	};
+
+	struct PickedObjectIdResult {
+		int id = -1;
+		bool valid = false;
 	};
 }
 

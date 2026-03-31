@@ -84,10 +84,11 @@ ObjectColocalizationCommands::~ObjectColocalizationCommands()
 void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandExecutionContext context;
-	execute(_infos, context);
+	poca::core::CommandExecutionResult result;
+	execute(_infos, context, result);
 }
 
-void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
+void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "display") {
@@ -114,9 +115,11 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, cons
 		if (!m_colocalization->isSelected()) return;
 		QString infos = getInfosTriangle(m_idSelection);
 		if (infos.isEmpty()) return;
-		poca::core::stringList listInfos = _infos->getParameter<poca::core::stringList>("infos");
+		poca::core::stringList listInfos;
+		if (_result.has<poca::opengl::PickedInfoListResult>())
+			listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
 		listInfos.push_back(infos.toLatin1().data());
-		_infos->addParameter("infos", listInfos);
+		_result.set(poca::opengl::PickedInfoListResult{ listInfos });
 		if (m_idSelection >= 0) {
 			generateBoundingBoxSelection(m_idSelection);
 		}
@@ -135,7 +138,7 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, cons
 				for (size_t n = 3; n < 6; n++)
 					bbox[n] = bbox[n] > bbox2[n] ? bbox[n] : bbox2[n];
 			}
-			_infos->addParameter("bbox", bbox);
+			_result.set(poca::opengl::PickedBoundingBoxResult{ bbox, true });
 		}
 	}
 	else if (_infos->nameCommand == "changeLUT") {
@@ -148,14 +151,14 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, cons
 		if (m_idSelection != -1) {
 			QString infos = getInfosTriangle(m_idSelection);
 			if (infos.isEmpty()) return;
-			_infos->addParameter("infos", std::string(infos.toLatin1().data()));
+			_result.set(poca::opengl::PickedInfoTextResult{ std::string(infos.toLatin1().data()) });
 			if (m_idSelection >= 0)
 				generateBoundingBoxSelection(m_idSelection);
 		}
 	}
 	else if (_infos->nameCommand == "getObjectPickedID") {
 		if (m_idSelection != -1 && m_pickingEnabled)
-			_infos->addParameter("id", m_idSelection);
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
 	}
 }
 

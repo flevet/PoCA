@@ -48,6 +48,7 @@
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
 #include <General/Engine.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 
 #include "ObjectListsWidget.hpp"
 
@@ -944,9 +945,10 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 		poca::core::CommandInfo ci3(false, "getObjectPickedID");
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectLists");
 		if (bc != NULL) {
-			engine->executeCommand(bc, _ci);
-			if (!ci3.json.empty() && ci3.hasParameter("id")) {
-				int id = ci3.getParameter<int>("id");
+			poca::core::CommandExecutionResult result;
+			engine->executeCommand(bc, &ci3, poca::core::CommandExecutionContext(), result);
+			if (result.has<poca::opengl::PickedObjectIdResult>() && result.get<poca::opengl::PickedObjectIdResult>().valid) {
+				int id = result.get<poca::opengl::PickedObjectIdResult>().id;
 				if (id != -1)
 					m_tableObjects->selectRow(id);
 			}

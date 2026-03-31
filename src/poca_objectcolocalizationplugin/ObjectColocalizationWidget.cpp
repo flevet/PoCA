@@ -45,6 +45,7 @@
 #include <Plot/Misc.h>
 #include <General/MyData.hpp>
 #include <General/Engine.hpp>
+#include <OpenGL/RenderCommandContext.hpp>
 
 #include "ObjectColocalizationWidget.hpp"
 #include "ObjectColocalization.hpp"
@@ -446,9 +447,10 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		poca::core::CommandInfo ci3(false, "getObjectPickedID");
 		poca::core::BasicComponentInterface* bc = _obj->getBasicComponent("ObjectColocalization");
 		if (bc != NULL) {
-			bc->executeCommand(&ci3);
-			if (!ci3.json.empty() && ci3.hasParameter("id")) {
-				int id = ci3.getParameter<int>("id");
+			poca::core::CommandExecutionResult result;
+			bc->executeCommand(&ci3, poca::core::CommandExecutionContext(), result);
+			if (result.has<poca::opengl::PickedObjectIdResult>() && result.get<poca::opengl::PickedObjectIdResult>().valid) {
+				int id = result.get<poca::opengl::PickedObjectIdResult>().id;
 				if (id != -1)
 					m_tableObjects->selectRow(id);
 			}

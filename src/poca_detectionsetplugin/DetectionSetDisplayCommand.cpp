@@ -87,10 +87,11 @@ DetectionSetDisplayCommand::~DetectionSetDisplayCommand()
 void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
 	poca::core::CommandExecutionContext context;
-	execute(_infos, context);
+	poca::core::CommandExecutionResult result;
+	execute(_infos, context, result);
 }
 
-void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
+void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
@@ -119,16 +120,20 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const 
 		if (!m_dset->isSelected()) return;
 		QString infos = getInfosLocalization(m_idSelection);
 		if (infos.isEmpty()) return;
-		poca::core::stringList listInfos = _infos->getParameter<poca::core::stringList>("infos");
+		poca::core::stringList listInfos;
+		if (_result.has<poca::opengl::PickedInfoListResult>())
+			listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
 		listInfos.push_back(infos.toLatin1().data());
-		_infos->addParameter("infos", listInfos);
-		if (m_idSelection >= 0 && _infos->hasParameter("pickedPoints")) {
-			std::vector <poca::core::Vec3mf> pickedPoints = _infos->getParameter< std::vector <poca::core::Vec3mf>>("pickedPoints");
+		_result.set(poca::opengl::PickedInfoListResult{ listInfos });
+		if (m_idSelection >= 0) {
 			float x = m_dset->getMyData("x")->getData<float>()[m_idSelection];
 			float y = m_dset->getMyData("y")->getData<float>()[m_idSelection];
 			float z = m_dset->dimension() == 3 ? m_dset->getMyData("z")->getData<float>()[m_idSelection] : 0.f;
+			std::vector <poca::core::Vec3mf> pickedPoints;
+			if (_result.has<poca::opengl::PickedPointsResult>())
+				pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
 			pickedPoints.push_back(poca::core::Vec3mf(x, y, z));
-			_infos->addParameter("pickedPoints", pickedPoints);
+			_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 		}
 	}
 	else if (hasParameter(_infos->nameCommand)) {
