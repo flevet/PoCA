@@ -38,8 +38,8 @@
 #include <QtWidgets/QMessageBox>
 
 #include <General/Engine.hpp>
-#include <General/Engine.hpp>
 #include <General/EquationFit.hpp>
+#include <Geometry/GeometryCommandContext.hpp>
 #include <OpenGL/Camera.hpp>
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/RenderCommandContext.hpp>
@@ -149,6 +149,10 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 			m_nbUncorrectedLocs,
 			m_darkTime
 			});
+	}
+	else if (_infos->nameCommand == "getCleanedData") {
+		if (m_featuresCorrectedLocs.empty()) return;
+		_result.set<poca::geometry::CleanedDetectionSetContext>({ new poca::geometry::DetectionSet(m_featuresCorrectedLocs) });
 	}
 	else if (_infos->nameCommand == "saveFramesMergedLocs") {
 		saveFramesMergedLocs();

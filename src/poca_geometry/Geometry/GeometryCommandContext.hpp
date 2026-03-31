@@ -20,6 +20,12 @@ namespace poca::geometry {
 	struct DetectionSetNormalsContext {
 		const std::vector<poca::core::Vec3mf>* normals = nullptr;
 	};
+
+	class DetectionSet;
+
+	struct CleanedDetectionSetContext {
+		poca::geometry::DetectionSet* dset = nullptr;
+	};
 }
 
 #endif

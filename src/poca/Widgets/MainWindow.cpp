@@ -107,6 +107,7 @@
 #include <Objects/MyMultipleObject.hpp>
 #include <Geometry/ObjectListPolygon.hpp>
 #include <General/Misc.h>
+#include <Geometry/GeometryCommandContext.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -1326,9 +1327,11 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 	}
 	if (_action == "duplicateCleanedData") {
 		poca::core::CommandInfo ci(false, "getCleanedData");
-		obj->executeCommandOnSpecificComponent("DetectionSet", &ci);
-		if (ci.hasParameter("detectionSet")) {
-			poca::geometry::DetectionSet* dset = ci.getParameterPtr <poca::geometry::DetectionSet>("detectionSet");
+		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionResult result;
+		obj->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
+		if (result.has<poca::geometry::CleanedDetectionSetContext>()) {
+			poca::geometry::DetectionSet* dset = result.get<poca::geometry::CleanedDetectionSetContext>().dset;
 			const std::string& dir = obj->getDir(), name = obj->getName();
 			QString newName(name.c_str());
 			int index = newName.lastIndexOf(".");
