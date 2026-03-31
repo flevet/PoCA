@@ -134,12 +134,6 @@ namespace poca::core {
 		template <typename T>
 		T getParameter(const std::string& _nameCommand, const std::string& _nameParameter) { return CommandableObject::getParameter<T>(_nameCommand, _nameParameter); }
 
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand) { return CommandableObject::getParameterPtr<T>(_nameCommand); }
-
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter) { return CommandableObject::getParameterPtr<T>(_nameCommand, _nameParameter); }
-
 		const size_t nbCommands() const { return CommandableObject::nbCommands(); }
 
 		/*void executeCommand(const bool _record, const std::string& _name) { CommandableObject::executeCommand(_record, _name); }

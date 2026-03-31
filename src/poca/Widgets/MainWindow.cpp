@@ -73,6 +73,7 @@
 
 #include <OpenGL/Camera.hpp>
 #include <Geometry/DetectionSet.hpp>
+#include <Geometry/GeometryCommandContext.hpp>
 #include <Interfaces/DelaunayTriangulationInterface.hpp>
 #include <Interfaces/DelaunayTriangulationFactoryInterface.hpp>
 #include <Interfaces/VoronoiDiagramFactoryInterface.hpp>
@@ -107,7 +108,6 @@
 #include <Objects/MyMultipleObject.hpp>
 #include <Geometry/ObjectListPolygon.hpp>
 #include <General/Misc.h>
-#include <Geometry/GeometryCommandContext.hpp>
 
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
@@ -881,7 +881,6 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	_obj->attach(cam, "updateDisplay");
 	_obj->attach(cam, "updateInfosObject");
 	_obj->attach(this, "addCommandLastAddedComponent");
-	_obj->attach(this, "addCommandToSpecificComponent");
 	_obj->attach(this, "LoadObjCharacteristicsAllWidgets");
 	_obj->attach(this, "UpdateMainTabWidgets");
 	_obj->attach(this, "duplicateCleanedData");
@@ -1062,7 +1061,6 @@ poca::opengl::CameraInterface* MainWindow::createWindows(poca::core::MyObjectInt
 		obj->attach(cam, "updateInfosObject");
 
 		obj->attach(this, "addCommandLastAddedComponent");
-		obj->attach(this, "addCommandToSpecificComponent");
 		obj->attach(this, "LoadObjCharacteristicsAllWidgets");
 		obj->attach(this, "UpdateMainTabWidgets");
 		obj->attach(this, "duplicateCleanedData");
@@ -1113,7 +1111,6 @@ poca::core::MyObjectInterface* MainWindow::createWindows(poca::core::BasicCompon
 		wobj->attach(cam, "updateInfosObject");
 
 		wobj->attach(this, "addCommandLastAddedComponent");
-		wobj->attach(this, "addCommandToSpecificComponent");
 		wobj->attach(this, "LoadObjCharacteristicsAllWidgets");	
 		wobj->attach(this, "UpdateMainTabWidgets");
 		wobj->attach(this, "duplicateCleanedData");
@@ -1308,13 +1305,6 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 
 	if (_action == "LoadObjCharacteristicsAllWidgets" || _action == "UpdateMainTabWidgets")
 		updateTabWidget();
-	if(_action == "addCommandToSpecificComponent"){
-		poca::core::BasicComponentInterface* comp = _action.getParameterPtr<poca::core::BasicComponentInterface>("component");
-		plugins->addCommands(comp);
-		poca::core::Engine::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
-		updateTabWidget();
-		obj->notify("LoadObjCharacteristicsAllWidgets");
-	}
 	if (_action == "addCommandLastAddedComponent") {
 		poca::core::BasicComponentInterface* bci = obj->getLastAddedBasicComponent();
 		if (bci == NULL) return;
@@ -1505,7 +1495,6 @@ void MainWindow::computeColocalization(const std::vector < MdiChild*>& _ws)
 		for (size_t n = 0; n < objs.size(); n++) {
 			objs[n]->attach(cam, "updateDisplay");
 			objs[n]->attach(this, "addCommandLastAddedComponent");
-			objs[n]->attach(this, "addCommandToSpecificComponent");
 			objs[n]->attach(this, "LoadObjCharacteristicsAllWidgets");
 		}
 
@@ -2450,41 +2439,46 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					imlist->setCurrentComponentIndex(0);
 					plugins->addCommands(imlist->getImage(0));
 					poca::core::CommandInfo ci(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
-					engine->executeCommand(imlist, &ci);
-					if (!ci.hasParameter("objects")) {
+					poca::core::CommandRuntimeContext context;
+					poca::core::CommandExecutionResult result;
+					engine->executeCommand(imlist, &ci, context, result);
+					if (!result.has<poca::geometry::CreatedObjectListMeshContext>()) {
 						std::cout << "Failed to marching cube actin " << std::endl;
 						continue;
 					}
 					std::cout << "Subdividing actin" << std::endl;
-					poca::geometry::ObjectListMesh* actin = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					poca::geometry::ObjectListMesh* actin = result.get<poca::geometry::CreatedObjectListMeshContext>().objects;
 					plugins->addCommands(actin);
 					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
-					engine->executeCommand(actin, &ci);
-					if (!ci.hasParameter("objects")) {
+					result = poca::core::CommandExecutionResult();
+					engine->executeCommand(actin, &ci, context, result);
+					if (!result.has<poca::geometry::CreatedObjectListMeshContext>()) {
 						std::cout << "Failed to subdivide actin " << std::endl;
 						continue;
 					}
-					poca::geometry::ObjectListMesh* actinSmooth = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					poca::geometry::ObjectListMesh* actinSmooth = result.get<poca::geometry::CreatedObjectListMeshContext>().objects;
 					
 					std::cout << "Marching cubes nuclei" << std::endl;
 					imlist->setCurrentComponentIndex(1);
 					plugins->addCommands(imlist->getImage(1));
 					ci = poca::core::CommandInfo(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
-					engine->executeCommand(imlist, &ci);
-					if (!ci.hasParameter("objects")) {
+					result = poca::core::CommandExecutionResult();
+					engine->executeCommand(imlist, &ci, context, result);
+					if (!result.has<poca::geometry::CreatedObjectListMeshContext>()) {
 						std::cout << "Failed to marching cube nuclei " << std::endl;
 						continue;
 					}
 					std::cout << "Subdividing nuclei" << std::endl;
-					poca::geometry::ObjectListMesh* noyaux = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					poca::geometry::ObjectListMesh* noyaux = result.get<poca::geometry::CreatedObjectListMeshContext>().objects;
 					plugins->addCommands(noyaux);
 					ci = poca::core::CommandInfo(false, "subdivide", "iterations", (uint32_t)1);
-					engine->executeCommand(noyaux, &ci);
-					if (!ci.hasParameter("objects")) {
+					result = poca::core::CommandExecutionResult();
+					engine->executeCommand(noyaux, &ci, context, result);
+					if (!result.has<poca::geometry::CreatedObjectListMeshContext>()) {
 						std::cout << "Failed to subdivide nuclei " << std::endl;
 						continue;
 					}
-					poca::geometry::ObjectListMesh* noyauxSmooth = ci.getParameterPtr<poca::geometry::ObjectListMesh>("objects");
+					poca::geometry::ObjectListMesh* noyauxSmooth = result.get<poca::geometry::CreatedObjectListMeshContext>().objects;
 					//delete actin8bits;
 
 					std::cout << "Creation of the nculei centroids" << std::endl;

@@ -90,35 +90,6 @@ namespace poca::core {
 			throw std::runtime_error(std::string("Parameter " + _nameParameter + " for command " + _nameCommand + " not found"));
 		}
 
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand)
-		{
-			// Legacy compatibility accessor kept for older plugins that still
-			// store pointers in CommandInfo. New code should prefer runtime
-			// context/result objects.
-			for (std::vector < Command* >::const_iterator it = m_commands.begin(); it != m_commands.end(); it++) {
-				Command* com = *it;
-				if (com->hasParameter(_nameCommand))
-					return com->getParameterPtr<T>(_nameCommand, _nameCommand);
-			}
-			throw std::runtime_error(std::string("Parameter " + _nameCommand + " not found"));
-		}
-
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter)
-		{
-			// Legacy compatibility accessor kept for older plugins that still
-			// store pointers in CommandInfo. New code should prefer runtime
-			// context/result objects.
-			for (std::vector < Command* >::const_iterator it = m_commands.begin(); it != m_commands.end(); it++) {
-				Command* com = *it;
-				if (com->hasParameter(_nameCommand, _nameParameter))
-					return com->getParameterPtr<T>(_nameCommand, _nameParameter);
-			}
-			throw std::runtime_error(std::string("Parameter " + _nameParameter + " for command " + _nameCommand + " not found"));
-		}
-
-
 		virtual void executeCommand(const bool _record, const std::string& _name);
 
 		template<typename T>
@@ -127,21 +98,8 @@ namespace poca::core {
 			executeCommand(&ci);
 		}
 
-		template<typename T>
-		void executeCommand(const bool _record, const std::string& _name, T* _param) {
-			CommandInfo ci(_record, _name, _param);
-			executeCommand(&ci);
-		}
-
 		template<typename T, typename... Args>
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) {
-			CommandInfo ci(_record, _nameCommand);
-			ci.addParameters(_nameParameter, _param, more...);
-			executeCommand(&ci);
-		}
-
-		template<typename T, typename... Args>
-		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) {
 			CommandInfo ci(_record, _nameCommand);
 			ci.addParameters(_nameParameter, _param, more...);
 			executeCommand(&ci);

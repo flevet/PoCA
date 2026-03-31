@@ -172,8 +172,8 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const p
 			currentScreen = _infos->getParameter<uint32_t>("currentScreen");
 		if (_infos->hasParameter("factor"))
 			factor = _infos->getParameter<float>("factor");
-		if (_infos->hasParameter("object"))
-			obj = _infos->getParameterPtr<poca::core::MyObjectInterface>("object");
+		if (_context.has<poca::core::TargetObjectContext>())
+			obj = _context.get<poca::core::TargetObjectContext>().object;
 
 
 		 poca::core::Engine* engine = poca::core::Engine::instance();
@@ -259,7 +259,7 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const p
 		poca::geometry::ObjectListInterface* objects = factory.createObjectListAlreadyIdentified(obj, selection, cutDistance, minLocs, maxLocs, minArea, maxArea);
 		objects->setBoundingBox(m_dset->boundingBox());
 		obj->addBasicComponent(objects);
-		obj->notify(poca::core::CommandInfo(false, "addCommandToSpecificComponent", "component", (poca::core::BasicComponentInterface*)objects));
+		obj->notify("addCommandLastAddedComponent");
 	}
 	else if (_infos->nameCommand == "computeDensityWithRadius") {
 		float radius = 0.f;

@@ -128,21 +128,8 @@ namespace poca::core {
 			executeCommand(_bci, &ci);
 		}
 
-		template<typename T>
-		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _name, T* _param) {
-			CommandInfo ci(_record, _name, _param);
-			executeCommand(_bci, &ci);
-		}
-
 		template<typename T, typename... Args>
 		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, const T& _param, Args... more) {
-			CommandInfo ci(_record, _nameCommand);
-			ci.addParameters(_nameParameter, _param, more...);
-			executeCommand(_bci, &ci);
-		}
-
-		template<typename T, typename... Args>
-		void executeCommand(BasicComponentInterface* _bci, const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) {
 			CommandInfo ci(_record, _nameCommand);
 			ci.addParameters(_nameParameter, _param, more...);
 			executeCommand(_bci, &ci);

@@ -62,6 +62,7 @@
 #include <Geometry/ObjectLists.hpp>
 #include <Geometry/BasicComputation.hpp>
 #include <Geometry/CGAL_helpers.hpp>
+#include <Geometry/GeometryCommandContext.hpp>
 #include <Objects/ObjectCommandContext.hpp>
 
 #include "ObjectListBasicCommands.hpp"
@@ -577,7 +578,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 			}
 		}
 		else
-			_infos->addParameter("objects", newomesh);
+			_result.set<poca::geometry::CreatedObjectListMeshContext>({ newomesh });
 	}
 	else if (_infos->nameCommand == "laplacianSmooth") {
 		poca::core::Engine* engine = poca::core::Engine::instance();
@@ -593,7 +594,10 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 			poca::geometry::laplacian_smooth(mesh, iterations, lambda);
 		poca::geometry::ObjectListMesh* newomesh = new poca::geometry::ObjectListMesh(meshes);
 		ObjectListPlugin::m_plugins->addCommands(newomesh);
-		if (!obj->hasBasicComponent("ObjectLists")) {
+		if (!obj) {
+			_result.set<poca::geometry::CreatedObjectListMeshContext>({ newomesh });
+		}
+		else if (!obj->hasBasicComponent("ObjectLists")) {
 			poca::geometry::ObjectLists* objsList = new poca::geometry::ObjectLists(newomesh, *_infos, "ObjectListPlugin");
 			ObjectListPlugin::m_plugins->addCommands(objsList);
 			obj->addBasicComponent(objsList);
@@ -605,7 +609,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 				objsList->addObjectList(newomesh, *_infos, "ObjectListPlugin");
 			std::cout << text << std::endl;
 		}
-		}
+	}
 	else if (_infos->nameCommand == "exportLocsInObjects") {
 		poca::geometry::ObjectListPolygon* opol = static_cast <poca::geometry::ObjectListPolygon*>(m_objects);
 		if (!opol) return;

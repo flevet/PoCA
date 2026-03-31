@@ -38,6 +38,7 @@
 #include <QtWidgets/QMessageBox>
 
 #include <General/Engine.hpp>
+#include <General/Engine.hpp>
 #include <General/EquationFit.hpp>
 #include <Geometry/GeometryCommandContext.hpp>
 #include <OpenGL/Camera.hpp>

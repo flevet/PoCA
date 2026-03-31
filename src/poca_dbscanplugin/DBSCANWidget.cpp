@@ -45,6 +45,7 @@
 #include <Plot/QCPHistogram.hpp>
 #include <Plot/Icons.hpp>
 #include <General/Palette.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 
 #include "DBSCANWidget.hpp"
 #include "DBSCANCommand.hpp"
@@ -156,8 +157,10 @@ void DBSCANWidget::actionNeeded()
 		m_object->notifyAll("updateDisplay"); 
 	}
 	else if (sender == m_creationFlteredObjectsButton) {
-		m_object->executeCommandOnSpecificComponent("DetectionSet", &poca::core::CommandInfo(true, "createDBSCANObjects",
-			"myObject", m_object));
+		poca::core::CommandInfo ci(true, "createDBSCANObjects");
+		poca::core::CommandRuntimeContext context;
+		context.set<poca::core::TargetObjectContext>({ m_object });
+		m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context);
 		m_object->notifyAll("updateDisplay");
 	}
 }

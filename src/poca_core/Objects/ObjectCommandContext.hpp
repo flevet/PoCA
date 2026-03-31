@@ -19,6 +19,10 @@ namespace poca::core {
 	struct CreatedObjectContext {
 		poca::core::MyObjectInterface* object = nullptr;
 	};
+
+	struct TargetObjectContext {
+		poca::core::MyObjectInterface* object = nullptr;
+	};
 }
 
 #endif

@@ -22,9 +22,19 @@ namespace poca::geometry {
 	};
 
 	class DetectionSet;
+	class ObjectListMesh;
+	class ObjectListInterface;
 
 	struct CleanedDetectionSetContext {
 		poca::geometry::DetectionSet* dset = nullptr;
+	};
+
+	struct CreatedObjectListMeshContext {
+		poca::geometry::ObjectListMesh* objects = nullptr;
+	};
+
+	struct CreatedObjectListContext {
+		poca::geometry::ObjectListInterface* objects = nullptr;
 	};
 }
 

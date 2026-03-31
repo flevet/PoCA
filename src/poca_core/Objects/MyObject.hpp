@@ -109,13 +109,7 @@ namespace poca::core {
 		T getParameter(const std::string& _nameCommand) { return poca::core::CommandableObject::getParameter<T>(_nameCommand); }
 
 		template <typename T>
-		T getParameter(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::getParameterPtr<T>(_nameCommand, _nameParameter); }
-
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand) { return poca::core::CommandableObject::getParameter<T>(_nameCommand); }
-
-		template <typename T>
-		T* getParameterPtr(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::getParameterPtr<T>(_nameCommand, _nameParameter); }
+		T getParameter(const std::string& _nameCommand, const std::string& _nameParameter) { return poca::core::CommandableObject::getParameter<T>(_nameCommand, _nameParameter); }
 
 		const size_t nbColors() const { return 1; }
 		MyObjectInterface* getObject(const size_t) { return this; }

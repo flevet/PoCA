@@ -44,6 +44,7 @@
 #include <Interfaces/PaletteInterface.hpp>
 #include <General/MyData.hpp>
 #include <OpenGL/Camera.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 
 #include "VoronoiDiagramBasicCommands.hpp"
 #include "VoronoiCommandContext.hpp"
@@ -269,7 +270,10 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const
 		t1 = clock();
 		for (auto factor = from; factor <= to; factor += step, n++) {
 			execute(&poca::core::CommandInfo(false, "densityFactor", "factor", factor));
-			engine->executeCommand(dset, false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n, "object", obj);
+			poca::core::CommandInfo ci(false, "clustersForChallenge", "minNbLocs", minNbLocs, "maxNbLocs", maxNbLocs, "selection", std::string("VoronoiDiagram"), "factor", factor, "currentScreen", n);
+			poca::core::CommandRuntimeContext context;
+			context.set<poca::core::TargetObjectContext>({ obj });
+			engine->executeCommand(dset, &ci, context);
 		}
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;

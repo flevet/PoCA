@@ -46,6 +46,7 @@
 #include <General/MyArray.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <General/Histogram.hpp>
+#include <Geometry/GeometryCommandContext.hpp>
 #include <General/PluginList.hpp>
 #include <General/Engine.hpp>
 
@@ -55,7 +56,6 @@
 #include "../Geometry/VoronoiDiagram.hpp"
 #include "../Geometry/voronator.hpp"
 #include "../Geometry/CGAL_includes.hpp"
-#include "../Geometry/GeometryCommandContext.hpp"
 #include "../3D_voronoi_GPU/voronoi.h"
 
 #define GL_GPU_MEM_INFO_TOTAL_AVAILABLE_MEM_NVX 0x9048
