@@ -60,7 +60,7 @@ public:
     void setPlugins(poca::core::PluginList* _plugins) { m_plugins = _plugins; }
     void setSingletons(poca::core::Engine*);
     void execute(poca::core::CommandInfo*);
-    void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+    void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 
     QString name() const { return "ObjectListPlugin"; }
 

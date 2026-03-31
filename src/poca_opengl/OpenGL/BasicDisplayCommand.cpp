@@ -105,12 +105,12 @@ namespace poca::opengl {
 		}
 	}
 
-	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext&)
+	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext&)
 	{
 		execute(_infos);
 	}
 
-	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult&)
+	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult&)
 	{
 		execute(_infos, _context);
 	}

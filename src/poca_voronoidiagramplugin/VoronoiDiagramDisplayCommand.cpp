@@ -87,11 +87,11 @@ VoronoiDiagramDisplayCommand::~VoronoiDiagramDisplayCommand()
 
 void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_infos, context);
 }
 
-void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::opengl::BasicDisplayCommand::execute(_infos);

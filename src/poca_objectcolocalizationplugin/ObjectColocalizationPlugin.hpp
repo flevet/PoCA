@@ -81,7 +81,7 @@ public:
 
     QString name() const { return "ObjectColocalizationPlugin"; }
     void execute(poca::core::CommandInfo*);
-    void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+    void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 
 protected:
     QTabWidget* m_parent;

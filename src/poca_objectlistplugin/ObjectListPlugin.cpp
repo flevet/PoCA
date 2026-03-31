@@ -165,11 +165,11 @@ void ObjectListPlugin::setSingletons(poca::core::Engine* _engine)
 
 void ObjectListPlugin::execute(poca::core::CommandInfo* _com)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_com, context);
 }
 
-void ObjectListPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+void ObjectListPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
 	if (_com->isRecordable())
 		poca::core::MacroRecorderSingleton::instance()->addCommand("VoronoiDiagramPlugin", _com);

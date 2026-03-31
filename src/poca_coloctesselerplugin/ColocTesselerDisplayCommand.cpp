@@ -66,11 +66,11 @@ ColocTesselerDisplayCommand::~ColocTesselerDisplayCommand()
 
 void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_infos, context);
 }
 
-void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
 {
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "updateFeature") {

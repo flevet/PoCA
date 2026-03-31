@@ -47,7 +47,7 @@ public:
 
 	std::vector<poca::core::CommandSpec> commandSpecs() const;
 	void execute(poca::core::CommandInfo*);
-	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const {
 		return poca::core::CommandInfos();

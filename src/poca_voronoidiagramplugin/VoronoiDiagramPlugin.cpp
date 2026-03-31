@@ -221,11 +221,11 @@ void VoronoiDiagramPlugin::setSingletons(poca::core::Engine* _engine)
 
 void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_com, context);
 }
 
-void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
 	bool done = false;
 	if (_com->nameCommand == "saveParameters") {

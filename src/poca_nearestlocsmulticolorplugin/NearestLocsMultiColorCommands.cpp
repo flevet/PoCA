@@ -95,11 +95,11 @@ NearestLocsMultiColorCommands::~NearestLocsMultiColorCommands()
 
 void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_infos, context);
 }
 
-void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+void NearestLocsMultiColorCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
 {
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;

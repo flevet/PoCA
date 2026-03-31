@@ -353,7 +353,7 @@ MainWindow::~MainWindow()
 		m_currentMdi->getWidget()->getObject()->saveCommands(parameters);
 	}
 	poca::core::CommandInfo command(false, "saveParameters");
-	poca::core::CommandRuntimeContext runtimeContext;
+	poca::core::CommandExecutionContext runtimeContext;
 	runtimeContext.set(poca::core::JsonFileContext{ &parameters });
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	engine->getPlugins()->execute(&command, runtimeContext);
@@ -839,7 +839,7 @@ void MainWindow::dropEvent(QDropEvent* _e)
 		if (name.endsWith(".txt")) {
 			poca::core::CommandInfo ci(true, "openFile", "name", name.toStdString());
 			poca::core::Engine* engine = poca::core::Engine::instance();
-			poca::core::CommandRuntimeContext context;
+			poca::core::CommandExecutionContext context;
 			poca::core::CommandExecutionResult result;
 			engine->getPlugins()->execute(&ci, context, result);
 			if (!result.has<poca::core::CreatedObjectContext>()) continue;
@@ -1317,7 +1317,7 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 	}
 	if (_action == "duplicateCleanedData") {
 		poca::core::CommandInfo ci(false, "getCleanedData");
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		poca::core::CommandExecutionResult result;
 		obj->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
 		if (result.has<poca::geometry::CleanedDetectionSetContext>()) {
@@ -1924,7 +1924,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 						nlohmann::json parameters;
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
-							poca::core::CommandRuntimeContext context;
+							poca::core::CommandExecutionContext context;
 							poca::core::CommandExecutionResult result;
 							comObj->executeCommand(&command, context, result);
 							if (result.has<poca::voronoi::CreatedDetectionSetContext>()) {
@@ -1999,7 +1999,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, QStringList _filen
 						nlohmann::json parameters;
 						poca::core::CommandInfo command = comObj->createCommand(nameCommand, jsonCommand[nameCommand]);
 						if (!command.empty()) {
-							poca::core::CommandRuntimeContext context;
+							poca::core::CommandExecutionContext context;
 							poca::core::CommandExecutionResult result;
 							comObj->executeCommand(&command, context, result);
 							if (result.has<poca::core::CreatedObjectContext>()) {
@@ -2439,7 +2439,7 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 					imlist->setCurrentComponentIndex(0);
 					plugins->addCommands(imlist->getImage(0));
 					poca::core::CommandInfo ci(false, "marchingCubes", "threshold", 0.5f, "repair", true, "remeshing", true, "targetLength", 6.f, "iterations", (uint32_t)3, "inROIs", false, "scaleZ", 3.8f);
-					poca::core::CommandRuntimeContext context;
+					poca::core::CommandExecutionContext context;
 					poca::core::CommandExecutionResult result;
 					engine->executeCommand(imlist, &ci, context, result);
 					if (!result.has<poca::geometry::CreatedObjectListMeshContext>()) {

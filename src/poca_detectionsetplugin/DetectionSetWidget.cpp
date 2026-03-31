@@ -553,7 +553,7 @@ void DetectionSetWidget::actionNeeded()
 		if (!ok) return;
 		bool fixedDT = m_fixedDarkTcbox->isChecked();
 		poca::core::CommandInfo ci(true, "clean", "radius", radius, "maxDarkTime", maxDT, "fixedDarkTime", fixedDT);
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		poca::core::CommandExecutionResult result;
 		engine->executeCommand(bc, &ci, context, result);
 		if (result.has<poca::core::CreatedObjectContext>()) {
@@ -876,7 +876,7 @@ void DetectionSetWidget::update(poca::core::SubjectInterface* _subject, const po
 		}
 
 		poca::core::CommandInfo ci(false, "DetectionSet", "getCleanEquations");
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		poca::core::CommandExecutionResult result;
 		m_object->executeCommand(&ci, context, result);
 		if (result.has<poca::core::CleanEquationsContext>()) {

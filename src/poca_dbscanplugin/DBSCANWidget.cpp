@@ -158,7 +158,7 @@ void DBSCANWidget::actionNeeded()
 	}
 	else if (sender == m_creationFlteredObjectsButton) {
 		poca::core::CommandInfo ci(true, "createDBSCANObjects");
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		context.set<poca::core::TargetObjectContext>({ m_object });
 		m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context);
 		m_object->notifyAll("updateDisplay");
@@ -207,7 +207,7 @@ void DBSCANWidget::executeMacro(poca::core::MyObjectInterface* _wobj, poca::core
 void DBSCANWidget::updateDBSCANResults()
 {
 	poca::core::CommandInfo ci(false, "getDBSCANCommand");
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
 

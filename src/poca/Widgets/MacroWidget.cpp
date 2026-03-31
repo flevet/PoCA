@@ -332,11 +332,11 @@ void MacroWidget::executeMacro(poca::core::MyObjectInterface* _wobj, poca::core:
 
 void MacroWidget::execute(poca::core::CommandInfo* _com)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_com, context);
 }
 
-void MacroWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+void MacroWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;

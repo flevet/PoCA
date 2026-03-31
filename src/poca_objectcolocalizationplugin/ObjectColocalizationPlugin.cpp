@@ -373,11 +373,11 @@ void ObjectColocalizationPlugin::setSingletons(poca::core::Engine* _engine)
 
 void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_com, context);
 }
 
-void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;

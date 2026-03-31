@@ -704,18 +704,18 @@ namespace poca::core {
 
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com)
 	{
-		CommandRuntimeContext context;
+		CommandExecutionContext context;
 		CommandExecutionResult result;
 		executeCommand(_bci, _com, context, result);
 	}
 
-	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandRuntimeContext& _context)
+	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandExecutionContext& _context)
 	{
 		CommandExecutionResult result;
 		executeCommand(_bci, _com, _context, result);
 	}
 
-	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandRuntimeContext& _context, CommandExecutionResult& _result)
+	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandExecutionContext& _context, CommandExecutionResult& _result)
 	{
 		auto object = getTopObject(_bci);
 		if (_com != nullptr && _com->nameCommand == "histogram" && _com->hasParameter("action")) {

@@ -184,7 +184,7 @@ void KRipleyWidget::toggleRipleyFunctionDisplay(bool _val)
 void KRipleyWidget::setKripleyCurveDisplay()
 {
 	poca::core::CommandInfo ci(false, m_lsSelected ? "getKRipleyResultsLs" : "getKRipleyResultsKs");
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	m_object->executeCommandOnSpecificComponent("DetectionSet" , &ci, context, result);
 
@@ -246,7 +246,7 @@ void KRipleyWidget::setKripleyCurveDisplay()
 void KRipleyWidget::exportKRipleyResults()
 {
 	poca::core::CommandInfo ci(false, "getKRipleyResults");
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	m_object->executeCommandOnSpecificComponent("DetectionSet", &ci, context, result);
 

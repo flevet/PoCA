@@ -386,7 +386,7 @@ void ObjectListWidget::actionNeeded()
 	}
 	else if (sender == m_duplicateCentroidsButton) {
 		poca::core::CommandInfo ci(true, "duplicateCentroids");
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		poca::core::CommandExecutionResult result;
 		objList->executeCommand(&ci, context, result);
 		if (result.has<poca::core::CreatedObjectContext>()) {
@@ -403,7 +403,7 @@ void ObjectListWidget::actionNeeded()
 				selectedRows.insert(range.topRow() + n);
 		if (selectedRows.empty()) return;
 		poca::core::CommandInfo ci(true, "duplicateSelectedObjects", "selection", selectedRows);
-		poca::core::CommandRuntimeContext context;
+		poca::core::CommandExecutionContext context;
 		poca::core::CommandExecutionResult result;
 		objList->executeCommand(&ci, context, result);
 		if (result.has<poca::core::CreatedObjectContext>()) {

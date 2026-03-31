@@ -140,12 +140,12 @@ std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() con
 
 void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	execute(_infos, context, result);
 }
 
-void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	if (_infos->nameCommand == "saveStatsObjs") {
 		std::string filename, separator(",");

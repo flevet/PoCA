@@ -69,7 +69,7 @@ public:
 	void executeMacro(poca::core::MyObjectInterface*, poca::core::CommandInfo*);
 
 	void execute(poca::core::CommandInfo*);
-	void execute(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 	void loadParameters(const nlohmann::json&);
 	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 

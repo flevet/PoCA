@@ -77,10 +77,10 @@ namespace poca::core {
 		virtual void clearCommands() = 0;
 		virtual const std::vector < Command* > getCommands() const = 0;
 		virtual void executeCommand(CommandInfo*) = 0;
-		virtual void executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context) {
+		virtual void executeCommand(CommandInfo* _ci, const CommandExecutionContext& _context) {
 			executeCommand(_ci);
 		}
-		virtual void executeCommand(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+		virtual void executeCommand(CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result) {
 			executeCommand(_ci, _context);
 		}
 		virtual void loadParameters(CommandInfo*) = 0;
@@ -122,17 +122,17 @@ namespace poca::core {
 		virtual void saveROIs(const std::string&) = 0;
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, CommandInfo*) = 0;
-		virtual void executeCommandOnSpecificComponent(const std::string& _nameComponent, CommandInfo* _ci, const CommandRuntimeContext& _context) {
+		virtual void executeCommandOnSpecificComponent(const std::string& _nameComponent, CommandInfo* _ci, const CommandExecutionContext& _context) {
 			executeCommandOnSpecificComponent(_nameComponent, _ci);
 		}
-		virtual void executeCommandOnSpecificComponent(const std::string& _nameComponent, CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+		virtual void executeCommandOnSpecificComponent(const std::string& _nameComponent, CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result) {
 			executeCommandOnSpecificComponent(_nameComponent, _ci, _context);
 		}
 		virtual void executeGlobalCommand(poca::core::CommandInfo*) = 0;
-		virtual void executeGlobalCommand(poca::core::CommandInfo* _ci, const CommandRuntimeContext& _context) {
+		virtual void executeGlobalCommand(poca::core::CommandInfo* _ci, const CommandExecutionContext& _context) {
 			executeGlobalCommand(_ci);
 		}
-		virtual void executeGlobalCommand(poca::core::CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+		virtual void executeGlobalCommand(poca::core::CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result) {
 			executeGlobalCommand(_ci, _context);
 		}
 

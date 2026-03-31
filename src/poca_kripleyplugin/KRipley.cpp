@@ -82,12 +82,12 @@ poca::core::Command* KRipleyCommand::copy()
 
 void KRipleyCommand::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	execute(_infos, context, result);
 }
 
-void KRipleyCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult& _result)
+void KRipleyCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult& _result)
 {
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);

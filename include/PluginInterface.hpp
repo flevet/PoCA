@@ -47,7 +47,7 @@ namespace poca::core{
 	class MediatorWObjectFWidgetInterface;
     class PluginList;
     class CommandInfo;
-    class CommandRuntimeContext;
+    class CommandExecutionContext;
     class CommandExecutionResult;
     class CommandableObject;
     class Engine;
@@ -69,10 +69,10 @@ public:
     virtual void setSingletons(poca::core::Engine*) = 0;
     virtual QString name() const = 0;
     virtual void execute(poca::core::CommandInfo*) = 0;
-    virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext&) {
+    virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext&) {
         execute(_ci);
     }
-    virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result) {
+    virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result) {
         execute(_ci, _context);
     }
 };

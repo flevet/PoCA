@@ -48,10 +48,10 @@
 
 namespace poca::core {
 
-	class CommandRuntimeContext
+	class CommandExecutionContext
 	{
 	public:
-		CommandRuntimeContext() = default;
+		CommandExecutionContext() = default;
 
 		template<typename T>
 		void set(const T& _value) const {
@@ -74,9 +74,6 @@ namespace poca::core {
 	private:
 		mutable std::unordered_map<std::type_index, std::any> m_data;
 	};
-
-	// Preferred name for transient command inputs.
-	using CommandExecutionContext = CommandRuntimeContext;
 
 	class CommandExecutionResult
 	{
@@ -427,10 +424,10 @@ namespace poca::core {
 
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
-		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context) {
+		virtual void execute(CommandInfo* _ci, const CommandExecutionContext& _context) {
 			execute(_ci);
 		}
-		virtual void execute(CommandInfo* _ci, const CommandRuntimeContext& _context, CommandExecutionResult& _result) {
+		virtual void execute(CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result) {
 			execute(_ci, _context);
 		}
 		virtual Command* copy() = 0;

@@ -58,19 +58,19 @@ public:
 	void setThick(const float);
 
 	void executeCommand(poca::core::CommandInfo*);
-	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 
 	const poca::core::BoundingBox boundingBox() const;
 
 	const size_t dimension() const;
 
 	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
-	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+	virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 	virtual void executeGlobalCommand(poca::core::CommandInfo*);
-	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+	virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 
 	void resetModelMatrices(const bool = true);
 	void recomputeGrid();

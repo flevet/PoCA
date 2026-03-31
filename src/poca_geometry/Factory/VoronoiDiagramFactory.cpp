@@ -178,7 +178,7 @@ namespace poca::geometry {
 
 			const std::vector <poca::core::Vec3mf>& normals = ((poca::geometry::VoronoiDiagram2DOnSphere*)voro)->getNormals();
 			poca::core::CommandInfo ci(false, "addNormals");
-			poca::core::CommandRuntimeContext context;
+			poca::core::CommandExecutionContext context;
 			context.set<poca::geometry::DetectionSetNormalsContext>({ &normals });
 			static_cast<poca::core::CommandableObject*>(dset)->executeCommand(&ci, context);
 

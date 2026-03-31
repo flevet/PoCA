@@ -549,11 +549,11 @@ void PythonWidget::populateListWidget(poca::core::BasicComponentInterface* _bc, 
 
 void PythonWidget::execute(poca::core::CommandInfo* _com)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_com, context);
 }
 
-void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandRuntimeContext& _context)
+void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;

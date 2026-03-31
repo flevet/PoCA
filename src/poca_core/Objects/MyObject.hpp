@@ -73,8 +73,8 @@ namespace poca::core {
 		poca::core::BasicComponentInterface* getLastAddedBasicComponent() const;
 		virtual poca::core::stringList getNameBasicComponents() const;
 		void executeCommand(poca::core::CommandInfo*);
-		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+		void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 		poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 		void removeBasicComponent(const std::string&);
 
@@ -135,11 +135,11 @@ namespace poca::core {
 		virtual void saveROIs(const std::string&);
 
 		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*);
-		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+		virtual void executeCommandOnSpecificComponent(const std::string&, poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 		virtual void executeGlobalCommand(poca::core::CommandInfo*);
-		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&);
-		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandRuntimeContext&, poca::core::CommandExecutionResult&);
+		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+		virtual void executeGlobalCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 
 		virtual void saveCommands(const std::string&);
 		virtual void saveCommands(nlohmann::json&);

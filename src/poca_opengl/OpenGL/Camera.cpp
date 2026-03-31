@@ -658,7 +658,7 @@ namespace poca::opengl {
 			displayBoundingBox(thickness, antialias);
 		glEnable(GL_DEPTH_TEST);
 		poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
-		poca::core::CommandRuntimeContext runtimeContext;
+		poca::core::CommandExecutionContext runtimeContext;
 		runtimeContext.set(poca::opengl::ActiveCamera{ this });
 		m_object->executeGlobalCommand(&displayCommand, runtimeContext);
 
@@ -774,14 +774,14 @@ namespace poca::opengl {
 		if (!ssao) {
 			if(_buffOffscreen == NULL) {
 				poca::core::CommandInfo displayCommand(false, "display");
-				poca::core::CommandRuntimeContext runtimeContext;
+				poca::core::CommandExecutionContext runtimeContext;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
 				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
 			}
 			else
 			{
 				poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
-				poca::core::CommandRuntimeContext runtimeContext;
+				poca::core::CommandExecutionContext runtimeContext;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
 				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
 			}
@@ -1019,7 +1019,7 @@ namespace poca::opengl {
 		for(uint32_t i = 1; i < 5; i++)
 			glClearBufferfv(GL_COLOR, i, transparent);
 
-		poca::core::CommandRuntimeContext runtimeContext;
+		poca::core::CommandExecutionContext runtimeContext;
 		runtimeContext.set(poca::opengl::ActiveCamera{ this });
 		poca::core::CommandInfo objectListDisplay(false, "display", "offscreen", true, "ssao", true);
 		m_object->executeCommandOnSpecificComponent("ObjectList", &objectListDisplay, runtimeContext);
@@ -1847,7 +1847,7 @@ namespace poca::opengl {
 				m_infoPicking.push_back(QString::fromStdString(info));
 
 			ci = poca::core::CommandInfo(true, "doubleClickCamera");
-			poca::core::CommandRuntimeContext runtimeContext;
+			poca::core::CommandExecutionContext runtimeContext;
 			poca::core::CommandExecutionResult runtimeResult;
 			runtimeContext.set(poca::opengl::ActiveCamera{ this });
 			m_object->executeCommandOnSpecificComponent("ObjectList", &ci, runtimeContext, runtimeResult);
@@ -1939,7 +1939,7 @@ namespace poca::opengl {
 				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
 				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
-				poca::core::CommandRuntimeContext runtimeContext;
+				poca::core::CommandExecutionContext runtimeContext;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
 				m_object->executeGlobalCommand(&ci, runtimeContext);
 				if (ci.hasParameter("bbox")) {

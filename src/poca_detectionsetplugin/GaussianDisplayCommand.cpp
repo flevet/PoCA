@@ -91,11 +91,11 @@ poca::core::Command* GaussianDisplayCommand::copy()
 
 void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	execute(_infos, context);
 }
 
-void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context)
+void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
 {
 	if ((_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") && !m_dc) {
 		generateFeatureBuffer();

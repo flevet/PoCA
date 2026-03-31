@@ -106,12 +106,12 @@ poca::core::Command* DBSCANCommand::copy()
 
 void DBSCANCommand::execute(poca::core::CommandInfo* _infos)
 {
-	poca::core::CommandRuntimeContext context;
+	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	execute(_infos, context, result);
 }
 
-void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandRuntimeContext& _context, poca::core::CommandExecutionResult& _result)
+void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);

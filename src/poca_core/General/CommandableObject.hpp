@@ -53,8 +53,8 @@ namespace poca::core {
 		virtual void clearCommands();
 		virtual const std::vector < Command* > getCommands() const;
 		virtual void executeCommand(CommandInfo*);
-		virtual void executeCommand(CommandInfo*, const CommandRuntimeContext&);
-		virtual void executeCommand(CommandInfo*, const CommandRuntimeContext&, CommandExecutionResult&);
+		virtual void executeCommand(CommandInfo*, const CommandExecutionContext&);
+		virtual void executeCommand(CommandInfo*, const CommandExecutionContext&, CommandExecutionResult&);
 		virtual CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 		virtual const size_t nbCommands() const;
