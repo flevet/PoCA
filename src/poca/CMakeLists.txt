@@ -41,6 +41,7 @@ set(WIDGET_HEADER_FILES
   Widgets/ROIGeneralWidget.hpp
   Widgets/ReorganizeRenderingWidget.hpp
   Widgets/ColorButtonGridWidget.hpp
+  Widgets/DatasetAssemblerWidget.hpp
   )
 
 set(WIDGET_SOURCE_FILES
@@ -55,6 +56,7 @@ set(WIDGET_SOURCE_FILES
   Widgets/ROIGeneralWidget.cpp
   Widgets/ReorganizeRenderingWidget.cpp
   Widgets/ColorButtonGridWidget.cpp
+  Widgets/DatasetAssemblerWidget.cpp
  )
 
 if(ADD_PYTHON)
@@ -70,6 +72,7 @@ if(ADD_PYTHON)
 	  Widgets/ROIGeneralWidget.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/ColorButtonGridWidget.hpp
+	  Widgets/DatasetAssemblerWidget.hpp
 	)
 else()
 	set(FOO_MOC_HEADERS
@@ -82,6 +85,7 @@ else()
 	  Widgets/ROIGeneralWidget.hpp
 	  Widgets/PythonParametersDialog.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
+	  Widgets/DatasetAssemblerWidget.hpp
 	  Widgets/ColorButtonGridWidget.cpp
 	)
 
@@ -100,6 +104,7 @@ if(ADD_PYTHON)
 	  Widgets/ROIGeneralWidget.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.hpp
+	  Widgets/DatasetAssemblerWidget.cpp
 	  )
 else()
 	set(FOO_SOURCE_FILES
@@ -113,6 +118,7 @@ else()
 	  Widgets/PythonParametersDialog.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.cpp
+	  Widgets/DatasetAssemblerWidget.cpp
 	  )
 
 endif()

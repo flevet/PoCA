@@ -125,6 +125,7 @@
 #include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 #include "../Widgets/ColorButtonGridWidget.hpp"
+#include "../Widgets/DatasetAssemblerWidget.hpp"
 #include "../../poca_voronoidiagramplugin/VoronoiCommandContext.hpp"
 
 #undef max 
@@ -224,6 +225,11 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	macroRecord->setTextEdit(m_macroW->getTextEdit());
 	macroRecord->setJson(m_macroW->getJson());
 	m_macroW->loadParameters(engine->getGlobalParameters());
+
+	m_datasetAssemblerW = new DatasetAssemblerWidget(m_tabWidget);
+	m_tabWidget->addTab(m_datasetAssemblerW, QObject::tr("Assembler"));
+	m_datasetAssemblerW->loadParameters(engine->getGlobalParameters());
+	QObject::connect(m_datasetAssemblerW, SIGNAL(transferNewObjectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 
 	engine->addGUI(m_tabWidget);
 
@@ -358,7 +364,9 @@ MainWindow::~MainWindow()
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	engine->getPlugins()->execute(&command, runtimeContext);
 	m_macroW->execute(&command, runtimeContext);
-	m_pythonW->execute(&command, runtimeContext);
+	m_datasetAssemblerW->saveParameters(parameters);
+	if (m_pythonW != NULL)
+		m_pythonW->execute(&command, runtimeContext);
 
 	std::string text = parameters.dump(), textDisplay = parameters.dump(4);
 	std::cout << textDisplay << std::endl;
@@ -385,6 +393,10 @@ void MainWindow::createActions()
 	m_plusAct = new QAction(QIcon(QPixmap(poca::plot::plusIcon)), tr("&Add component"), this);
 	m_plusAct->setStatusTip(tr("Add component to current dataset"));
 	QObject::connect(m_plusAct, SIGNAL(triggered()), this, SLOT(addComponentToCurrentMdi()));
+
+	m_datasetAssemblerAct = new QAction(QIcon(QPixmap(poca::plot::openDirIcon)), tr("Dataset assembler"), this);
+	m_datasetAssemblerAct->setStatusTip(tr("Open the dataset assembler"));
+	QObject::connect(m_datasetAssemblerAct, SIGNAL(triggered()), this, SLOT(openDatasetAssembler()));
 
 	m_duplicateAct = new QAction(QIcon("./images/duplicate.png"), tr("Duplicate localizations"), this);
 	m_duplicateAct->setStatusTip(tr("Open an existing file"));
@@ -624,6 +636,7 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_openFileAct);
 	m_fileToolBar->addAction(m_openDirAct);
 	m_fileToolBar->addAction(m_plusAct);
+	m_fileToolBar->addAction(m_datasetAssemblerAct);
 	m_fileToolBar->addAction(m_duplicateAct);
 	m_fileToolBar->addSeparator();
 	m_lastActionQuantifToolbar = m_fileToolBar->addSeparator();
@@ -1877,6 +1890,12 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 
 void MainWindow::actionNeeded()
 {
+}
+
+void MainWindow::openDatasetAssembler()
+{
+	if (m_tabWidget == NULL || m_datasetAssemblerW == NULL) return;
+	m_tabWidget->setCurrentWidget(m_datasetAssemblerW);
 }
 
 void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedFiles)

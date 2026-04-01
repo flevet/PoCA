@@ -33,6 +33,7 @@
 #define STB_RECT_PACK_IMPLEMENTATION
 
 #include <algorithm>
+#include <stdexcept>
 
 #include <General/Vec4.hpp>
 #include <General/Histogram.hpp>
@@ -51,6 +52,12 @@ namespace {
 			return false;
 		const std::vector<std::string>& names = _result.get<poca::opengl::RenderedComponentFamilies>().componentNames;
 		return std::find(names.begin(), names.end(), _componentName) != names.end();
+	}
+
+	void appendUnique(std::vector<size_t>& _values, const size_t _value)
+	{
+		if (std::find(_values.begin(), _values.end(), _value) == _values.end())
+			_values.push_back(_value);
 	}
 }
 
@@ -320,4 +327,56 @@ void MyMultipleObject::recomputeGrid()
 		bin = next;
 	}
 	resetModelMatrices(true);
+}
+
+void MyMultipleObject::clearHierarchy()
+{
+	m_hierarchy.clear();
+}
+
+size_t MyMultipleObject::addHierarchyNode(const std::string& _label, const std::string& _levelName, int _parentIndex)
+{
+	if (_parentIndex >= (int)m_hierarchy.size())
+		throw std::out_of_range("Invalid parent hierarchy node index");
+
+	m_hierarchy.push_back({ _label, _levelName, _parentIndex });
+	const size_t nodeIndex = m_hierarchy.size() - 1;
+	if (_parentIndex >= 0)
+		m_hierarchy[_parentIndex].children.push_back(nodeIndex);
+	return nodeIndex;
+}
+
+void MyMultipleObject::attachObjectToHierarchyNode(const size_t _nodeIndex, const size_t _objectIndex)
+{
+	if (_nodeIndex >= m_hierarchy.size())
+		throw std::out_of_range("Invalid hierarchy node index");
+	if (_objectIndex >= m_colors.size())
+		throw std::out_of_range("Invalid multiple object child index");
+
+	appendUnique(m_hierarchy[_nodeIndex].objectIndices, _objectIndex);
+}
+
+std::vector<size_t> MyMultipleObject::collectObjectIndicesForHierarchyNode(const size_t _nodeIndex, const bool _includeDescendants) const
+{
+	if (_nodeIndex >= m_hierarchy.size())
+		throw std::out_of_range("Invalid hierarchy node index");
+
+	std::vector<size_t> objectIndices = m_hierarchy[_nodeIndex].objectIndices;
+	if (!_includeDescendants)
+		return objectIndices;
+
+	std::vector<size_t> stack = m_hierarchy[_nodeIndex].children;
+	while (!stack.empty()) {
+		const size_t childIndex = stack.back();
+		stack.pop_back();
+		if (childIndex >= m_hierarchy.size())
+			continue;
+
+		for (const size_t objectIndex : m_hierarchy[childIndex].objectIndices)
+			appendUnique(objectIndices, objectIndex);
+		for (const size_t grandChildIndex : m_hierarchy[childIndex].children)
+			stack.push_back(grandChildIndex);
+	}
+
+	return objectIndices;
 }

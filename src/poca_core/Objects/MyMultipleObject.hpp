@@ -39,10 +39,23 @@
 #include "General/BasicComponent.hpp"
 #include "OpenGL/Camera.hpp"
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include <Objects/MyObject.hpp>
 
 class MyMultipleObject : public poca::core::MyObject {
 public:
+	struct HierarchyNode {
+		std::string label;
+		std::string levelName;
+		int parentIndex{ -1 };
+		std::vector<size_t> children;
+		std::vector<size_t> objectIndices;
+		std::map<std::string, std::string> metadata;
+	};
+
 	MyMultipleObject(std::vector<poca::core::MyObjectInterface*>);
 	~MyMultipleObject();
 
@@ -85,12 +98,20 @@ public:
 	inline const std::vector <poca::core::BoundingBox>& getGridBBoxes() const { return m_gridBBoxes; }
 	inline std::vector <poca::core::BoundingBox>& getGridBBoxes() { return m_gridBBoxes; }
 
+	bool hasHierarchy() const { return !m_hierarchy.empty(); }
+	void clearHierarchy();
+	size_t addHierarchyNode(const std::string&, const std::string& = "", int = -1);
+	void attachObjectToHierarchyNode(const size_t, const size_t);
+	const std::vector<HierarchyNode>& hierarchy() const { return m_hierarchy; }
+	std::vector<size_t> collectObjectIndicesForHierarchyNode(const size_t, const bool = true) const;
+
 protected:
 	std::vector <poca::core::MyObjectInterface*> m_colors;
 	size_t m_currentColor;
 
 	std::vector <poca::core::BoundingBox> m_gridBBoxes;
 	bool m_gridSelected{ true };
+	std::vector <HierarchyNode> m_hierarchy;
 };
 
 #endif // SMLMObject_h__

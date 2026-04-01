@@ -57,6 +57,7 @@ class MainFilterWidget;
 class PythonWidget;
 class ROIGeneralWidget;
 class MacroWidget;
+class DatasetAssemblerWidget;
 
 class LoaderLocalizationsInterface;
 class LoaderImageInterface;
@@ -155,6 +156,7 @@ private slots:
 	void onGridReleased();
 	void onToggleGridCentered(bool);
 	void onExportAllObjects();
+	void openDatasetAssembler();
 
 public slots:
 	void setPermanentStatusText(const QString &);
@@ -179,6 +181,7 @@ private:
 	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct, * m_freehandROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_pythonParamsAct;
+	QAction* m_datasetAssemblerAct;
 	QTabWidget * m_tabWidget;
 	QProgressBar * m_progressBar;
 	QLabel * m_lblPermanentStatus;
@@ -188,10 +191,11 @@ private:
 	QString m_pathToFileToOpen;
 
 	MainFilterWidget * m_mfw;
-	PythonWidget* m_pythonW; 
-	ROIGeneralWidget* m_ROIsW;
-	MacroWidget* m_macroW;
-	MdiChild * m_currentMdi;
+	PythonWidget* m_pythonW{ nullptr }; 
+	ROIGeneralWidget* m_ROIsW{ nullptr };
+	MacroWidget* m_macroW{ nullptr };
+	DatasetAssemblerWidget* m_datasetAssemblerW{ nullptr };
+	MdiChild * m_currentMdi{ nullptr };
 
 	double m_infosCreationDatasets[8];
 
