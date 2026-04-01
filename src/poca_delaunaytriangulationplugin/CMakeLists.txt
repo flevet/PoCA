@@ -20,6 +20,7 @@ link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 set(DELAUNAY_TRIANGULATION_PLUGIN_HEADER_FILES
   DelaunayTriangulationPlugin.hpp
   DelaunayTriangulationDisplayCommand.hpp
+  DelaunayTriangulationMultiObjectDisplayCommand.hpp
   DelaunayTriangulationBasicCommands.hpp
   DelaunayTriangulationWidget.hpp
   DelaunayTriangulationParamDialog.hpp
@@ -28,6 +29,7 @@ set(DELAUNAY_TRIANGULATION_PLUGIN_HEADER_FILES
 set(DELAUNAY_TRIANGULATION_SOURCE_HEADER_FILES
   DelaunayTriangulationPlugin.cpp
   DelaunayTriangulationDisplayCommand.cpp
+  DelaunayTriangulationMultiObjectDisplayCommand.cpp
   DelaunayTriangulationBasicCommands.cpp
   DelaunayTriangulationWidget.cpp
   DelaunayTriangulationParamDialog.cpp

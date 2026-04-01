@@ -36,10 +36,12 @@
 #include <OpenGL/Helper.h>
 #include <Geometry/DetectionSet.hpp>
 #include <General/Engine.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "DetectionSetPlugin.hpp"
 #include "DetectionSetWidget.hpp"
 #include "DetectionSetDisplayCommand.hpp"
+#include "DetectionSetMultiObjectDisplayCommand.hpp"
 #include "HeatMapDisplayCommand.hpp"
 #include "CleanerCommand.hpp"
 #include "DetectionSetBasicCommands.hpp"
@@ -83,6 +85,10 @@ poca::core::MyObjectInterface* DetectionSetPlugin::actionTriggered(QObject* _sen
 
 void DetectionSetPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
+	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
+	if (multipleObject)
+		multipleObject->addCommand(new DetectionSetMultiObjectDisplayCommand(multipleObject));
+
 	poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(_bc);
 	if (dset) {
 		dset->addCommand(new DetectionSetDisplayCommand(dset));

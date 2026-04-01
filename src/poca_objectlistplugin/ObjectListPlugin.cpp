@@ -43,10 +43,12 @@
 #include <Interfaces/ObjectListFactoryInterface.hpp>
 #include <General/BasicComponentList.hpp>
 #include <General/Engine.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "ObjectListPlugin.hpp"
 #include "ObjectListBasicCommands.hpp"
 #include "ObjectListDisplayCommand.hpp"
+#include "ObjectListMultiObjectDisplayCommand.hpp"
 #include "ObjectListsCommands.hpp"
 #include "ObjectListsWidget.hpp"
 #include "ObjectListParamDialog.hpp"
@@ -147,6 +149,10 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 
 void ObjectListPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
+	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
+	if (multipleObject)
+		multipleObject->addCommand(new ObjectListMultiObjectDisplayCommand(multipleObject));
+
 	poca::geometry::ObjectListInterface* objs = dynamic_cast <poca::geometry::ObjectListInterface*>(_bc);
 	if (objs) {
 		objs->addCommand(new ObjectListDisplayCommand(objs));

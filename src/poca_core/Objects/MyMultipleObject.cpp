@@ -44,6 +44,16 @@
 
 #include "MyMultipleObject.hpp"
 
+namespace {
+	bool isComponentFamilyHandled(const poca::core::CommandExecutionResult& _result, const std::string& _componentName)
+	{
+		if (!_result.has<poca::opengl::RenderedComponentFamilies>())
+			return false;
+		const std::vector<std::string>& names = _result.get<poca::opengl::RenderedComponentFamilies>().componentNames;
+		return std::find(names.begin(), names.end(), _componentName) != names.end();
+	}
+}
+
 MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors) :MyObject(), m_colors(_colors), m_currentColor(0)
 {
 	m_internalId = poca::core::NbObjects++;
@@ -225,10 +235,10 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	for (poca::core::MyObjectInterface* obj : m_colors)
 		obj->executeGlobalCommand(_ci, _context, _result);
-	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
-		return;
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;
+		if (isComponentFamilyHandled(_result, bc->getName()))
+			continue;
 		bc->executeCommand(_ci, _context, _result);
 	}
 }

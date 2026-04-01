@@ -50,6 +50,16 @@
 #include "MyObject.hpp"
 
 namespace poca::core {
+	namespace {
+		bool isComponentFamilyHandled(const poca::core::CommandExecutionResult& _result, const std::string& _componentName)
+		{
+			if (!_result.has<poca::opengl::RenderedComponentFamilies>())
+				return false;
+			const std::vector<std::string>& names = _result.get<poca::opengl::RenderedComponentFamilies>().componentNames;
+			return std::find(names.begin(), names.end(), _componentName) != names.end();
+		}
+	}
+
 	MyObject::MyObject() :poca::core::CommandableObject("Object")
 	{
 		m_internalId = poca::core::NbObjects++;
@@ -311,6 +321,8 @@ namespace poca::core {
 		executeCommand(_ci, _context, _result);
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			poca::core::BasicComponentInterface* bc = *it;
+			if (isComponentFamilyHandled(_result, bc->getName()))
+				continue;
 			bc->executeCommand(_ci, _context, _result);
 		}
 	}

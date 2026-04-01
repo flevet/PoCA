@@ -43,9 +43,11 @@
 #include <General/PythonInterpreter.hpp>
 #include <General/Engine.hpp>
 #include <General/MyData.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "DelaunayTriangulationPlugin.hpp"
 #include "DelaunayTriangulationDisplayCommand.hpp"
+#include "DelaunayTriangulationMultiObjectDisplayCommand.hpp"
 #include "DelaunayTriangulationBasicCommands.hpp"
 #include "DelaunayTriangulationWidget.hpp"
 #include "DelaunayTriangulationParamDialog.hpp"
@@ -216,6 +218,10 @@ poca::core::MyObjectInterface* DelaunayTriangulationPlugin::actionTriggered(QObj
 
 void DelaunayTriangulationPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
+	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
+	if (multipleObject)
+		multipleObject->addCommand(new DelaunayTriangulationMultiObjectDisplayCommand(multipleObject));
+
 	poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(_bc);
 	if (delau) {
 		delau->addCommand(new DelaunayTriangulationDisplayCommand(delau));

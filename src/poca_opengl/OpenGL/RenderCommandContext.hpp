@@ -30,6 +30,10 @@ namespace poca::opengl {
 		poca::opengl::Camera* camera = nullptr;
 	};
 
+	struct RenderedComponentFamilies {
+		std::vector<std::string> componentNames;
+	};
+
 	// Runtime marker set by a parent-side render command when it has already
 	// handled child-object rendering for a MyMultipleObject. This lets the
 	// container short-circuit per-child forwarding without moving batching

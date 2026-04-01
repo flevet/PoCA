@@ -22,6 +22,7 @@ set(DETECTION_SET_PLUGIN_HEADER_FILES
   DetectionSetPlugin.hpp
   DetectionSetBasicCommands.hpp
   DetectionSetDisplayCommand.hpp
+  DetectionSetMultiObjectDisplayCommand.hpp
   GaussianDisplayCommand.hpp
   HeatMapDisplayCommand.hpp
   DetectionSetWidget.hpp
@@ -33,6 +34,7 @@ set(DETECTION_SET_PLUGIN_SOURCE_FILES
   DetectionSetPlugin.cpp
   DetectionSetBasicCommands.cpp
   DetectionSetDisplayCommand.cpp
+  DetectionSetMultiObjectDisplayCommand.cpp
   GaussianDisplayCommand.cpp
   HeatMapDisplayCommand.cpp
   DetectionSetWidget.cpp

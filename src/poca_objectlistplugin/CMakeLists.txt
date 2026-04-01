@@ -22,6 +22,7 @@ set(OBJECT_LIST_PLUGIN_HEADER_FILES
   ObjectListBasicCommands.hpp
   ObjectListPlugin.hpp
   ObjectListDisplayCommand.hpp
+  ObjectListMultiObjectDisplayCommand.hpp
   ObjectListWidget.hpp
   ObjectListsWidget.hpp
   ObjectListParamDialog.hpp
@@ -32,6 +33,7 @@ set(OBJECT_LIST_PLUGIN_SOURCE_HEADER_FILES
   ObjectListBasicCommands.cpp
   ObjectListPlugin.cpp
   ObjectListDisplayCommand.cpp
+  ObjectListMultiObjectDisplayCommand.cpp
   ObjectListWidget.cpp
   ObjectListsWidget.cpp
   ObjectListParamDialog.cpp

@@ -36,6 +36,19 @@
 #include "VoronoiMultiObjectDisplayCommand.hpp"
 
 namespace {
+	const std::string kRenderedComponentName = "VoronoiDiagram";
+
+	void markComponentFamilyHandled(poca::core::CommandExecutionResult& _result)
+	{
+		poca::opengl::RenderedComponentFamilies families;
+		if (_result.has<poca::opengl::RenderedComponentFamilies>())
+			families = _result.get<poca::opengl::RenderedComponentFamilies>();
+		if (std::find(families.componentNames.begin(), families.componentNames.end(), kRenderedComponentName) == families.componentNames.end())
+			families.componentNames.push_back(kRenderedComponentName);
+		_result.set(families);
+		_result.set(poca::opengl::ChildObjectRenderingHandled{ true });
+	}
+
 	poca::core::Vec3mf transformPosition(const glm::mat4& _model, const poca::core::Vec3mf& _pos)
 	{
 		const glm::vec4 transformed = _model * glm::vec4(_pos.x(), _pos.y(), _pos.z(), 1.f);
@@ -115,10 +128,14 @@ void VoronoiMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, 
 				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
 		}
-		_result.set(poca::opengl::ChildObjectRenderingHandled{ true });
+		markComponentFamilyHandled(_result);
 	}
-	else if (_infos->nameCommand == "changeLUT" || _infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
+	else if (_infos->nameCommand == "changeLUT") {
 		freeGPUMemory();
+	}
+	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
+		if (!updateFeatureBuffers())
+			freeGPUMemory();
 	}
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
@@ -138,14 +155,14 @@ bool VoronoiMultiObjectDisplayCommand::canBatch() const
 	bool first = true;
 	bool hasCells = false;
 	uint32_t dimension = 0;
-	bool hasSelectedChild = false;
+	bool hasVoronoiChild = false;
 	for (size_t n = 0; n < m_object->nbColors(); n++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(n);
 		poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-		if (voro == nullptr || !voro->isSelected())
+		if (voro == nullptr)
 			continue;
 
-		hasSelectedChild = true;
+		hasVoronoiChild = true;
 		if (first) {
 			hasCells = voro->hasCells();
 			dimension = voro->dimension();
@@ -156,7 +173,7 @@ bool VoronoiMultiObjectDisplayCommand::canBatch() const
 		}
 	}
 
-	return hasSelectedChild;
+	return hasVoronoiChild;
 }
 
 VoronoiDiagramDisplayCommand* VoronoiMultiObjectDisplayCommand::referenceDisplayCommand() const
@@ -165,7 +182,7 @@ VoronoiDiagramDisplayCommand* VoronoiMultiObjectDisplayCommand::referenceDisplay
 	for (size_t n = 0; n < m_object->nbColors(); n++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(n);
 		poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-		if (voro == nullptr || !voro->isSelected())
+		if (voro == nullptr)
 			continue;
 		return voro->getCommand<VoronoiDiagramDisplayCommand>();
 	}
@@ -194,7 +211,7 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
 		poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-		if (voro == nullptr || !voro->isSelected())
+		if (voro == nullptr)
 			continue;
 
 		poca::core::HistogramInterface* histInterface = voro->getCurrentHistogram();
@@ -217,7 +234,7 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 			const float z = voro->getZs() != nullptr ? voro->getZs()[idx] : 0.f;
 			pointData.vertices.push_back(transformPosition(model, poca::core::Vec3mf(voro->getXs()[idx], voro->getYs()[idx], z)));
 			pointData.ids.push_back((float)(pointBase + idx + 1));
-			pointData.features.push_back(selection[idx] && !borderLocs[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			pointData.features.push_back(voro->isSelected() && selection[idx] && !borderLocs[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			pointData.pickMap.push_back({ (uint32_t)objectIndex, (uint32_t)idx });
 		}
 
@@ -242,6 +259,8 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 
 		std::vector<float> triangleFeatures;
 		voro->getFeatureInSelection(triangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER, false);
+		if (!voro->isSelected())
+			std::fill(triangleFeatures.begin(), triangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 		triangleData.features.insert(triangleData.features.end(), triangleFeatures.begin(), triangleFeatures.end());
 
 		if (voro->dimension() == 2) {
@@ -256,6 +275,8 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 
 			std::vector<float> lineFeatures;
 			voro->getFeatureInSelection(lineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER, true);
+			if (!voro->isSelected())
+				std::fill(lineFeatures.begin(), lineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			lineData.features.insert(lineData.features.end(), lineFeatures.begin(), lineFeatures.end());
 		}
 	}
@@ -326,7 +347,67 @@ void VoronoiMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const
 	drawElements(_cam, referenceCommand);
 	if (!_offscreen)
 		drawPicking(_cam);
-	_result.set(poca::opengl::ChildObjectRenderingHandled{ true });
+	markComponentFamilyHandled(_result);
+}
+
+bool VoronoiMultiObjectDisplayCommand::updateFeatureBuffers()
+{
+	if (!canBatch() || (m_pointBuffer.empty() && m_triangleBuffer.empty() && m_lineBuffer.empty()))
+		return false;
+
+	std::vector<float> pointFeatures, triangleFeatures, lineFeatures;
+	m_minOriginalFeature = std::numeric_limits<float>::max();
+	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
+
+	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
+		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+		poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
+		if (voro == nullptr)
+			continue;
+
+		poca::core::HistogramInterface* histInterface = voro->getCurrentHistogram();
+		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
+		if (histogram == nullptr)
+			return false;
+
+		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
+		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = voro->getSelection();
+		const std::vector<bool>& borderLocs = voro->borderLocalizations();
+
+		for (size_t idx = 0; idx < voro->nbFaces(); idx++)
+			pointFeatures.push_back(voro->isSelected() && selection[idx] && !borderLocs[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+
+		if (!voro->hasCells())
+			continue;
+
+		std::vector<float> localTriangleFeatures;
+		voro->getFeatureInSelection(localTriangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER, false);
+		if (!voro->isSelected())
+			std::fill(localTriangleFeatures.begin(), localTriangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+		triangleFeatures.insert(triangleFeatures.end(), localTriangleFeatures.begin(), localTriangleFeatures.end());
+
+		if (voro->dimension() == 2) {
+			std::vector<float> localLineFeatures;
+			voro->getFeatureInSelection(localLineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER, true);
+			if (!voro->isSelected())
+				std::fill(localLineFeatures.begin(), localLineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
+		}
+	}
+
+	if (m_minOriginalFeature == std::numeric_limits<float>::max()) {
+		m_minOriginalFeature = 0.f;
+		m_maxOriginalFeature = 1.f;
+	}
+	if (!m_locsFeatureBuffer.empty())
+		m_locsFeatureBuffer.updateBuffer(pointFeatures);
+	if (!m_triangleFeatureBuffer.empty())
+		m_triangleFeatureBuffer.updateBuffer(triangleFeatures);
+	if (!m_lineFeatureBuffer.empty())
+		m_lineFeatureBuffer.updateBuffer(lineFeatures);
+	return true;
 }
 
 void VoronoiMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, VoronoiDiagramDisplayCommand* _referenceCommand)

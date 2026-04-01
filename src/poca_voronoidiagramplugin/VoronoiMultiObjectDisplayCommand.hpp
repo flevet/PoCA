@@ -35,6 +35,7 @@ public:
 	void freeGPUMemory();
 
 protected:
+	bool updateFeatureBuffers();
 	void display(poca::opengl::Camera*, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, VoronoiDiagramDisplayCommand*);
 	void drawPicking(poca::opengl::Camera*);
