@@ -28,6 +28,7 @@ set(OPENGL_HEADER_FILES
   OpenGL/Camera.hpp
   OpenGL/GLBuffer.hpp
   OpenGL/Helper.h
+  OpenGL/MultiPrimitiveData.hpp
   OpenGL/SsaoShader.hpp
   OpenGL/Shader.hpp
   OpenGL/TextDisplayer.hpp

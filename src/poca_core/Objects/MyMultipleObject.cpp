@@ -40,6 +40,7 @@
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
 #include <General/stb_rect_pack.h>
+#include <OpenGL/RenderCommandContext.hpp>
 
 #include "MyMultipleObject.hpp"
 
@@ -200,6 +201,8 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 	poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 	if (bci)
 		bci->executeCommand(_ci, _context, _result);
+	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
+		return;
 	for (poca::core::MyObjectInterface* obj : m_colors)
 		obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
 }
@@ -222,6 +225,8 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	for (poca::core::MyObjectInterface* obj : m_colors)
 		obj->executeGlobalCommand(_ci, _context, _result);
+	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
+		return;
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;
 		bc->executeCommand(_ci, _context, _result);

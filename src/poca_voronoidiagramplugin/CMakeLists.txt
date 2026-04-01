@@ -20,6 +20,7 @@ link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 set(VORONOI_DIAGRAM_PLUGIN_HEADER_FILES
   VoronoiDiagramPlugin.hpp
   VoronoiDiagramDisplayCommand.hpp
+  VoronoiMultiObjectDisplayCommand.hpp
   VoronoiDiagramBasicCommands.hpp
   VoronoiDiagramParamDialog.hpp
   VoronoiDiagramWidget.hpp
@@ -30,6 +31,7 @@ set(VORONOI_DIAGRAM_PLUGIN_HEADER_FILES
 set(VORONOI_DIAGRAM_SOURCE_HEADER_FILES
   VoronoiDiagramPlugin.cpp
   VoronoiDiagramDisplayCommand.cpp
+  VoronoiMultiObjectDisplayCommand.cpp
   VoronoiDiagramBasicCommands.cpp
   VoronoiDiagramParamDialog.cpp
   VoronoiDiagramWidget.cpp

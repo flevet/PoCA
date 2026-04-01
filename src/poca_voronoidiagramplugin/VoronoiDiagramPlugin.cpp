@@ -43,9 +43,11 @@
 #include <Plot/Icons.hpp>
 #include <Interfaces/VoronoiDiagramFactoryInterface.hpp>
 #include <General/Engine.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "VoronoiDiagramPlugin.hpp"
 #include "VoronoiDiagramDisplayCommand.hpp"
+#include "VoronoiMultiObjectDisplayCommand.hpp"
 #include "VoronoiDiagramBasicCommands.hpp"
 #include "VoronoiDiagramParamDialog.hpp"
 #include "VoronoiDiagramCharacteristicsCommands.hpp"
@@ -197,6 +199,10 @@ poca::core::MyObjectInterface* VoronoiDiagramPlugin::actionTriggered(QObject* _s
 
 void VoronoiDiagramPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
+	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
+	if (multipleObject)
+		multipleObject->addCommand(new VoronoiMultiObjectDisplayCommand(multipleObject));
+
 	poca::geometry::VoronoiDiagram* voro = dynamic_cast <poca::geometry::VoronoiDiagram*>(_bc);
 	if (voro) {
 		voro->addCommand(new VoronoiDiagramDisplayCommand(voro));
