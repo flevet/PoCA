@@ -156,11 +156,6 @@ std::vector<poca::core::CommandSpec> HeatMapDisplayCommand::commandSpecs() const
 	};
 }
 
-poca::core::CommandInfo HeatMapDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 void HeatMapDisplayCommand::createDisplay()
 {
 	freeGPUMemory();

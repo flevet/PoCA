@@ -303,11 +303,6 @@ std::vector<poca::core::CommandSpec> MyObjectDisplayCommand::commandSpecs() cons
 	};
 }
 
-poca::core::CommandInfo MyObjectDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 void MyObjectDisplayCommand::saveCommands(nlohmann::json& _json)
 {
 	poca::core::Command::saveCommands(_json);

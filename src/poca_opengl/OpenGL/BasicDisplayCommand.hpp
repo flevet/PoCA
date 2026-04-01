@@ -56,8 +56,6 @@ namespace poca::opengl {
 		void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 		void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
 		poca::core::Command* copy();
-		poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
-
 		void updatePickingFBO(const int _w, const int _h);
 		void pick(const int, const int, const bool);
 

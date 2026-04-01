@@ -160,11 +160,6 @@ void CleanerCommand::execute(poca::core::CommandInfo* _infos, const poca::core::
 	}
 }
 
-poca::core::CommandInfo CleanerCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* CleanerCommand::copy() 
 {
 	return new CleanerCommand(*this);

@@ -118,6 +118,9 @@ namespace poca::core {
 		std::unordered_map<std::type_index, std::any> m_data;
 	};
 
+	// CommandInfo is the persistent, JSON-serializable command envelope.
+	// Runtime-only inputs must live in CommandExecutionContext.
+	// Runtime-only outputs must live in CommandExecutionResult.
 	class CommandInfo
 	{
 	public:
@@ -149,6 +152,10 @@ namespace poca::core {
 
 		~CommandInfo() {}
 
+		// Supports both normalized commands:
+		// { "name": "...", "params": { ... }, "recordable": false }
+		// and the historical one-entry form:
+		// { "commandName": { ... } }
 		static CommandInfo fromJson(const nlohmann::json& _json, const bool _recordable = false) {
 			if (_json.empty() || !_json.is_object())
 				return CommandInfo();
@@ -314,6 +321,8 @@ namespace poca::core {
 		inline const std::vector<CommandVariantSpec>& variants() const { return m_variants; }
 		inline bool matches(const std::string& _name) const { return m_name == _name; }
 
+		// Build a runtime CommandInfo from JSON. This is the preferred creation
+		// path for macros, init files, and other serialized command payloads.
 		CommandInfo create(const bool _recordable, const nlohmann::json& _rawParams) const {
 			const nlohmann::json params = (_rawParams.is_null() ? nlohmann::json::object() : _rawParams);
 
@@ -450,6 +459,9 @@ namespace poca::core {
 
 		virtual const CommandInfos saveParameters() const = 0;
 		virtual void execute(CommandInfo*) = 0;
+		// _ci should be treated as input-only during execution.
+		// Transient execution inputs belong to _context.
+		// Transient execution outputs belong to _result.
 		virtual void execute(CommandInfo* _ci, const CommandExecutionContext& _context) {
 			execute(_ci);
 		}

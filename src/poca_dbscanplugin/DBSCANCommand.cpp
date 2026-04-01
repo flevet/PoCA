@@ -175,11 +175,6 @@ void DBSCANCommand::execute(poca::core::CommandInfo* _infos, const poca::core::C
 	}
 }
 
-poca::core::CommandInfo DBSCANCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 void DBSCANCommand::computeDBSCAN(const float _radius, const uint32_t _minNb, const uint32_t _minNbForCluster, const float _dZ)
 {
 	bool hasZ = m_dset->hasData("z");

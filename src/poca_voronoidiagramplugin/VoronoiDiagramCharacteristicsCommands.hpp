@@ -50,7 +50,6 @@ public:
 	const poca::core::CommandInfos saveParameters() const {
 		return poca::core::CommandInfos();
 	}
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 	const std::vector <float>& getExperimentalCurvePDF(float&);
 	const std::vector <float>& getAnalyticCurvePDF(float&);

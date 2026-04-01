@@ -240,11 +240,6 @@ std::vector<poca::core::CommandSpec> ObjectColocalizationConstructionCommand::co
 	};
 }
 
-poca::core::CommandInfo ObjectColocalizationConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 nlohmann::json ObjectColocalizationPlugin::m_parameters;
 poca::core::PluginList* ObjectColocalizationPlugin::m_plugins = NULL;
 

@@ -494,11 +494,6 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const p
 	}
 }
 
-poca::core::CommandInfo DetectionSetBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* DetectionSetBasicCommands::copy()
 {
 	return new DetectionSetBasicCommands(*this);

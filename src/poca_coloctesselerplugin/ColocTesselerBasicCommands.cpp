@@ -180,11 +180,6 @@ std::vector<poca::core::CommandSpec> ColocTesselerBasicCommands::commandSpecs() 
 	};
 }
 
-poca::core::CommandInfo ColocTesselerBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* ColocTesselerBasicCommands::copy()
 {
 	return new ColocTesselerBasicCommands(*this);

@@ -52,7 +52,6 @@ public:
 	const poca::core::CommandInfos saveParameters() const {
 		return poca::core::CommandInfos();
 	}
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 	//void saveCommands(nlohmann::json&);
 	void freeGPUMemory();
 	void generateFeatureBuffer(poca::core::HistogramInterface* = NULL);

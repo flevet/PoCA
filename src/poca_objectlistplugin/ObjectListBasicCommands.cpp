@@ -644,11 +644,6 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 }
 
 
-poca::core::CommandInfo ObjectListBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters); 
-}
-
 poca::core::Command* ObjectListBasicCommands::copy()
 {
 	return new ObjectListBasicCommands(*this);

@@ -122,11 +122,6 @@ void GaussianDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca
 		m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(m_dset->getPalette());
 }
 
-poca::core::CommandInfo GaussianDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 std::vector<poca::core::CommandSpec> GaussianDisplayCommand::commandSpecs() const
 {
 	return {

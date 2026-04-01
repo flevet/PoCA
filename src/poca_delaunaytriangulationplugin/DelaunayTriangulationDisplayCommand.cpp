@@ -151,11 +151,6 @@ std::vector<poca::core::CommandSpec> DelaunayTriangulationDisplayCommand::comman
 	};
 }
 
-poca::core::CommandInfo DelaunayTriangulationDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* DelaunayTriangulationDisplayCommand::copy()
 {
 	return new DelaunayTriangulationDisplayCommand(*this);

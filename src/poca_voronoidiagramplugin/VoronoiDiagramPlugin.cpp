@@ -105,11 +105,6 @@ std::vector<poca::core::CommandSpec> VoronoiDiagramConstructionCommand::commandS
 	};
 }
 
-poca::core::CommandInfo VoronoiDiagramConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 nlohmann::json VoronoiDiagramPlugin::m_parameters;
 poca::core::PluginList* VoronoiDiagramPlugin::m_plugins = NULL;
 

@@ -162,11 +162,6 @@ std::vector<poca::core::CommandSpec> NearestLocsMultiColorCommands::commandSpecs
 	};
 }
 
-poca::core::CommandInfo NearestLocsMultiColorCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* NearestLocsMultiColorCommands::copy()
 {
 	return new NearestLocsMultiColorCommands(*this);

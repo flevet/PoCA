@@ -234,12 +234,6 @@ std::vector<poca::core::CommandSpec> ColocTesselerConstructionCommand::commandSp
 	};
 }
 
-poca::core::CommandInfo ColocTesselerConstructionCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
-
 poca::core::PluginList* ColocTesselerPlugin::m_plugins = NULL;
 nlohmann::json ColocTesselerPlugin::m_parameters;
 

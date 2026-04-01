@@ -52,7 +52,6 @@ public:
 	std::vector<poca::core::CommandSpec> commandSpecs() const;
 	void execute(poca::core::CommandInfo*);
 	void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 	poca::core::Command* copy();
 
 	void freeGPUMemory();

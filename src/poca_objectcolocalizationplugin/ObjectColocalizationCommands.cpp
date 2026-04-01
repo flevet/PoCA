@@ -183,11 +183,6 @@ std::vector<poca::core::CommandSpec> ObjectColocalizationCommands::commandSpecs(
 	};
 }
 
-poca::core::CommandInfo ObjectColocalizationCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* ObjectColocalizationCommands::copy()
 {
 	return new ObjectColocalizationCommands(*this);

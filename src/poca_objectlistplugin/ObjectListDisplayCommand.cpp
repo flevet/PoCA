@@ -327,11 +327,6 @@ std::vector<poca::core::CommandSpec> ObjectListDisplayCommand::commandSpecs() co
 	return specs;
 }
 
-poca::core::CommandInfo ObjectListDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* ObjectListDisplayCommand::copy()
 {
 	return new ObjectListDisplayCommand(*this);

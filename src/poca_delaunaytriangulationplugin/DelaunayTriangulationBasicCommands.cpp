@@ -272,11 +272,6 @@ std::vector<poca::core::CommandSpec> DelaunayTriangulationBasicCommands::command
 	};
 }
 
-poca::core::CommandInfo DelaunayTriangulationBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* DelaunayTriangulationBasicCommands::copy()
 {
 	return new DelaunayTriangulationBasicCommands(*this);

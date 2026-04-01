@@ -54,7 +54,6 @@ public:
 
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const { return poca::core::CommandInfos(); }
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 protected:
 	void display(poca::opengl::Camera*, const bool);

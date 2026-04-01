@@ -58,7 +58,6 @@ public:
 
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const { return poca::core::CommandInfos(); }
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 	inline const std::vector <float>& getSizeClusters() const { return m_sizeClusters; }
 	inline const std::vector <float>& getMajorAxisClusters() const { return m_majorAxisClusters; }

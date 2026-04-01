@@ -135,11 +135,6 @@ std::vector<poca::core::CommandSpec> KRipleyCommand::commandSpecs() const
 	};
 }
 
-poca::core::CommandInfo KRipleyCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 void KRipleyCommand::computeKRipley(const float _minR, const float  _maxR, const float _stepR)
 {
 	m_nbSteps = 0;

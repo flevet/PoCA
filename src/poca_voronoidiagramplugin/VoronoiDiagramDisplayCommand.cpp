@@ -192,11 +192,6 @@ std::vector<poca::core::CommandSpec> VoronoiDiagramDisplayCommand::commandSpecs(
 	return specs;
 }
 
-poca::core::CommandInfo VoronoiDiagramDisplayCommand::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* VoronoiDiagramDisplayCommand::copy()
 {
 	return new VoronoiDiagramDisplayCommand(*this);

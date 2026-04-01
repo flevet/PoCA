@@ -296,11 +296,6 @@ void VoronoiDiagramBasicCommands::execute(poca::core::CommandInfo* _infos, const
 }
 }
 
-poca::core::CommandInfo VoronoiDiagramBasicCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
-{
-	return poca::core::Command::createCommand(_nameCommand, _parameters);
-}
-
 poca::core::Command* VoronoiDiagramBasicCommands::copy()
 {
 	return new VoronoiDiagramBasicCommands(*this);

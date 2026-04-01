@@ -58,7 +58,6 @@ public:
 
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const { return poca::core::CommandInfos(); }
-	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&);
 
 	inline const uint32_t getNbEmissionBursts() const { return m_nbEmissionBursts; }
 	inline const uint32_t getNbUncorrectedLocs() const { return m_nbUncorrectedLocs; }
