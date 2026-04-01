@@ -145,6 +145,19 @@ namespace poca::core {
 
 	void BasicComponent::executeCommand(CommandInfo* _ci)
 	{
+		CommandExecutionContext context;
+		CommandExecutionResult result;
+		executeCommand(_ci, context, result);
+	}
+
+	void BasicComponent::executeCommand(CommandInfo* _ci, const CommandExecutionContext& _context)
+	{
+		CommandExecutionResult result;
+		executeCommand(_ci, _context, result);
+	}
+
+	void BasicComponent::executeCommand(CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result)
+	{
 			if (_ci->nameCommand == "histogram") {
 				if (!_ci->hasParameter("feature") || !_ci->hasParameter("action"))
 					return;
@@ -257,7 +270,7 @@ namespace poca::core {
 				bool val = _ci->getParameter<bool>("selected");
 				m_selected = val;
 			}
-			CommandableObject::executeCommand(_ci);
+			CommandableObject::executeCommand(_ci, _context, _result);
 	}
 
 	CommandInfo BasicComponent::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)

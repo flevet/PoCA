@@ -61,13 +61,19 @@ ObjectListsCommands::~ObjectListsCommands()
 
 void ObjectListsCommands::execute(poca::core::CommandInfo* _infos)
 {
+	poca::core::CommandExecutionContext context;
+	execute(_infos, context);
+}
+
+void ObjectListsCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
+{
 	if (_infos->nameCommand == "display") {
 		for(auto * obj : m_objects->components())
-			obj->executeCommand(_infos);
+			obj->executeCommand(_infos, _context);
 	}
 	else
 		if(m_objects->nbComponents() != 0)
-			m_objects->currentObjectList()->executeCommand(_infos);
+			m_objects->currentObjectList()->executeCommand(_infos, _context);
 }
 
 poca::core::CommandInfo ObjectListsCommands::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)

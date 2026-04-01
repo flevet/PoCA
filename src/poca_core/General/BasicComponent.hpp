@@ -106,6 +106,8 @@ namespace poca::core {
 		virtual const bool hasComponent(BasicComponentInterface* _bci) const { return this == _bci; }
 
 		void executeCommand(CommandInfo*);
+		void executeCommand(CommandInfo*, const CommandExecutionContext&);
+		void executeCommand(CommandInfo*, const CommandExecutionContext&, CommandExecutionResult&);
 		CommandInfo createCommand(const std::string&, const nlohmann::json&);
 		
 		//Others

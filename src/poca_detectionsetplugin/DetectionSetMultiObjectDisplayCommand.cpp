@@ -85,7 +85,7 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 
 void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	poca::opengl::BasicDisplayCommand::execute(_infos, _context, _result);
+	poca::opengl::BasicDisplayCommand::execute(_infos);
 
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
