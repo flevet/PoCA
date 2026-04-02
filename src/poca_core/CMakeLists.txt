@@ -80,8 +80,10 @@ set(GENERAL_HEADER_FILES
   General/Palette.hpp
   General/PluginList.hpp
   General/PythonInterpreter.hpp
+  General/Region3D.hpp
   General/ranker.h
   General/Scatterplot.hpp
+  General/TiffImageIO.hpp
   General/Vec2.hpp
   General/Vec3.hpp
   General/Vec4.hpp

@@ -34,6 +34,7 @@
 #define Histogram_h__
 
 #include <vector>
+#include <functional>
 #include <float.h>
 #include <iostream>
 #include <ctime>
@@ -69,8 +70,8 @@ namespace poca::core {
 
 		const size_t memorySize() const;
 
-		inline const T* getValuesPtr() const { return m_values.data(); }
-		inline T* getValuesPtr() { return m_values.data(); }
+		inline const T* getValuesPtr() const { ensureValuesLoaded(); return m_values.data(); }
+		inline T* getValuesPtr() { ensureValuesLoaded(); return m_values.data(); }
 		inline const float* getBinsPtr() const { return m_bins.data(); }
 		inline float* getBinsPtr() { return m_bins.data(); }
 		inline const float* getTsPtr() const { return m_ts.data(); }
@@ -81,8 +82,8 @@ namespace poca::core {
 		uint16_t* valuesui16();
 		uint32_t* valuesui32();
 
-		const std::vector <T>& getValues() const { return m_values; }
-		std::vector <T>& getValues() { return m_values; }
+		const std::vector <T>& getValues() const { ensureValuesLoaded(); return m_values; }
+		std::vector <T>& getValues() { ensureValuesLoaded(); return m_values; }
 		const std::vector <float>& getBins() const { return m_bins; }
 		std::vector <float>& getBins() { return m_bins; }
 		const std::vector <float>& getTs() const { return m_ts; }
@@ -94,6 +95,11 @@ namespace poca::core {
 		const size_t nbElements() const;
 
 		void computeStats();
+		void releaseValues();
+		bool hasValues() const { return !m_values.empty(); }
+		bool canMaterializeValues() const { return static_cast<bool>(m_materializeValuesCallback); }
+		void setMaterializeValuesCallback(std::function<void(std::vector<T>&)> _callback) { m_materializeValuesCallback = std::move(_callback); }
+		void ensureValuesLoaded() const;
 
 		const std::size_t getNbValues() const { return m_nbValues; }
 		const std::size_t getNbBins() const { return m_nbBins; }
@@ -130,6 +136,7 @@ namespace poca::core {
 		float m_stepX{ 0.f }, m_maxY{ FLT_MAX }, m_currentMin{ -FLT_MAX }, m_currentMax{ FLT_MAX };
 		bool m_isMinDefined{ false }, m_isMaxDefined{ false }, m_isLog{ false }, m_hasLogHistogram{ true }, m_hasInteraction{ true }, m_scaleLUT{ false };
 		float m_minDefined{ 0.f }, m_maxDefined{ 0.f };
+		std::function<void(std::vector<T>&)> m_materializeValuesCallback;
 		//EquationFit * m_eqn;
 	};
 
@@ -153,7 +160,7 @@ namespace poca::core {
 	Histogram<T>::Histogram(const Histogram& _o) :m_values(_o.m_values), m_bins(_o.m_bins), m_ts(_o.m_ts), m_nbValues(_o.m_nbValues), m_nbBins(_o.m_nbBins),
 		m_stats(_o.m_stats), m_stepX(_o.m_stepX), m_maxY(_o.m_maxY), m_currentMin(_o.m_currentMin),
 		m_currentMax(_o.m_currentMax), m_isMinDefined(_o.m_isMinDefined), m_isMaxDefined(_o.m_isMaxDefined), m_isLog(_o.m_isLog),
-		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined)
+		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined), m_materializeValuesCallback(_o.m_materializeValuesCallback)
 	{
 	}
 
@@ -175,6 +182,7 @@ namespace poca::core {
 		m_isLog = _o.m_isLog;
 		m_minDefined = _o.m_minDefined;
 		m_maxDefined = _o.m_maxDefined;
+		m_materializeValuesCallback = _o.m_materializeValuesCallback;
 
 		return *this;
 	}
@@ -333,6 +341,7 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::setSelection(std::vector <bool>& _selection)
 	{
+		ensureValuesLoaded();
 		if (_selection.size() != m_values.size()) return;
 		T minV = T(getCurrentMin()), maxV = T(getCurrentMax());
 #pragma omp parallel for
@@ -343,6 +352,7 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::saveValues(std::ofstream& _fs) const
 	{
+		ensureValuesLoaded();
 		for (size_t n = 0; n < m_values.size(); n++)
 			_fs << m_values[n] << std::endl;
 	}
@@ -350,6 +360,7 @@ namespace poca::core {
 	template <class T>
 	HistogramInterface* Histogram<T>::computeLogHistogram() const
 	{
+		ensureValuesLoaded();
 		poca::core::Histogram<T>* logHistogram = new Histogram<T>();
 		std::vector<T>& values = logHistogram->getValues();
 		values.resize(m_values.size());
@@ -361,19 +372,40 @@ namespace poca::core {
 	template <class T>
 	const size_t Histogram<T>::nbElements() const
 	{
+		ensureValuesLoaded();
 		return m_values.size();
 	}
 
 	template <class T>
 	void Histogram<T>::computeStats()
 	{
+		ensureValuesLoaded();
 		m_stats = ArrayStatistics::generateArrayStatistics(m_values, m_nbValues);
 		resetBounds();
 	}
 
 	template <class T>
+	void Histogram<T>::releaseValues()
+	{
+		m_values.clear();
+		m_values.shrink_to_fit();
+	}
+
+	template <class T>
+	void Histogram<T>::ensureValuesLoaded() const
+	{
+		if (!m_values.empty() || !m_materializeValuesCallback)
+			return;
+
+		auto* self = const_cast<Histogram<T>*>(this);
+		self->m_materializeValuesCallback(self->m_values);
+		self->m_nbValues = self->m_values.size();
+	}
+
+	template <class T>
 	float* Histogram<T>::valuesf()
 	{
+		ensureValuesLoaded();
 		std::string type = typeid(T).name();
 		if (type == "float")
 			return reinterpret_cast <float*>(m_values.data());
@@ -384,6 +416,7 @@ namespace poca::core {
 	template <class T>
 	uint8_t* Histogram<T>::valuesui8()
 	{
+		ensureValuesLoaded();
 		std::string type = typeid(T).name();
 		if (type == "uint8_t" || type == "unsigned char")
 			return reinterpret_cast <uint8_t*>(m_values.data());
@@ -394,6 +427,7 @@ namespace poca::core {
 	template <class T>
 	uint16_t* Histogram<T>::valuesui16()
 	{
+		ensureValuesLoaded();
 		std::string type = typeid(T).name();
 		if (type == "uint16_t" || type == "unsigned short")
 			return reinterpret_cast <uint16_t*>(m_values.data());
@@ -404,6 +438,7 @@ namespace poca::core {
 	template <class T>
 	uint32_t* Histogram<T>::valuesui32()
 	{
+		ensureValuesLoaded();
 		std::string type = typeid(T).name();
 		if (type == "uint32_t" || type == "unsigned int")
 			return reinterpret_cast <uint32_t*>(m_values.data());

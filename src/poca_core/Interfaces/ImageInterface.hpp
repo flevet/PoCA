@@ -35,9 +35,12 @@
 
 #include <vector>
 #include <array>
+#include <cstddef>
+#include <functional>
 
 #include <General/BasicComponent.hpp>
 #include <General/Misc.h>
+#include <General/Region3D.hpp>
 
 namespace poca::core {
 	class ImageInterface : public BasicComponent {
@@ -56,6 +59,13 @@ namespace poca::core {
 
 		virtual void save(const std::string&) const = 0;
 		virtual const void* getImagePtr(const uint32_t) const = 0;
+		virtual bool hasPixels() const = 0;
+		virtual bool canReloadPixels() const = 0;
+		virtual void releasePixels() = 0;
+		virtual bool canReadFullResolutionPlane() const = 0;
+		virtual bool canReadFullResolutionRegion() const = 0;
+		virtual bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const = 0;
+		virtual bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const = 0;
 
 		virtual const uint32_t dimension() const { return (m_depth > 1) ? 3 : 2; }
 		virtual inline uint32_t width() const { return m_width; }

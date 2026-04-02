@@ -44,6 +44,7 @@
 #include <thrust/count.h>
 #include <thrust/transform.h>
 #include <thrust/execution_policy.h>
+#include <map>
 
 #include "BasicOperationsImage.h"
 
@@ -357,6 +358,44 @@ void copy_u32_to_host_float(const thrust::device_vector<uint32_t>& d_u32, std::v
     cudaMemcpy(h_f.data(),  thrust::raw_pointer_cast(d_f.data()), n * sizeof(float), cudaMemcpyDeviceToHost);
 }
 
+template <class T>
+bool computeFeaturesLabelImageStreaming(poca::core::Image<T>* _typedImage, poca::core::ImageInterface* _image)
+{
+    if (_typedImage == nullptr || _typedImage->hasPixels() || !_typedImage->canReadFullResolutionPlane())
+        return false;
+
+    std::map<uint32_t, uint32_t> counts;
+    std::vector<T> plane(static_cast<std::size_t>(_image->width()) * static_cast<std::size_t>(_image->height()));
+    const std::size_t planeBytes = plane.size() * sizeof(T);
+
+    for (uint64_t z = 0; z < _image->depth(); ++z) {
+        if (!_typedImage->readFullResolutionPlane(z, plane.data(), planeBytes))
+            return false;
+
+        for (const T value : plane) {
+            const uint32_t label = static_cast<uint32_t>(value);
+            if (label == 0)
+                continue;
+            counts[label]++;
+        }
+    }
+
+    std::vector<float>& volume = _image->volumes();
+    volume.clear();
+    volume.reserve(counts.size());
+    std::vector<float> label;
+    label.reserve(counts.size());
+    for (const auto& entry : counts) {
+        label.push_back(static_cast<float>(entry.first));
+        volume.push_back(static_cast<float>(entry.second));
+    }
+
+    _image->addFeature("label", poca::core::generateDataWithLog(label));
+    _image->addFeature("volume", poca::core::generateDataWithLog(volume));
+    _image->setCurrentHistogramType("label");
+    return true;
+}
+
 
 void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
 {
@@ -366,6 +405,8 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
     case poca::core::UINT8:
     {
         poca::core::Image<uint8_t>* casted = static_cast <poca::core::Image<uint8_t>*>(_image);
+        if (computeFeaturesLabelImageStreaming(casted, _image))
+            return;
         auto d_u8 = upload_to_device<uint8_t>(casted->pixels());   // no thrust cross-system copy
         auto d_pixels = to_u32<uint8_t>(d_u8);
         //thrust::device_vector<uint32_t> d_pixels(casted->pixels());
@@ -375,6 +416,8 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
     case poca::core::UINT16:
     {
         poca::core::Image<uint16_t>* casted = static_cast <poca::core::Image<uint16_t>*>(_image);
+        if (computeFeaturesLabelImageStreaming(casted, _image))
+            return;
         auto d_u16 = upload_to_device<uint16_t>(casted->pixels());   // no thrust cross-system copy
         auto d_pixels = to_u32<uint16_t>(d_u16);
         //thrust::device_vector<uint32_t> d_pixels(casted->pixels());
@@ -384,6 +427,8 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
     case poca::core::UINT32:
     {
         poca::core::Image<uint32_t>* casted = static_cast <poca::core::Image<uint32_t>*>(_image);
+        if (computeFeaturesLabelImageStreaming(casted, _image))
+            return;
         auto d_pixels = upload_to_device<uint32_t>(casted->pixels());   // no thrust cross-system copy
         count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
     }

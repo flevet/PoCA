@@ -37,6 +37,8 @@
 #include <unordered_map>     // [PYRAMID]
 #include <cstdint>           // [PYRAMID]
 #include <algorithm>
+#include <cstring>
+#include <functional>
 #include <numeric>
 #include <vector>
 #include <type_traits> 
@@ -74,6 +76,16 @@ namespace poca::core {
 		inline T* data();
 		inline const std::vector<T>& pixels() const;
 		inline std::vector<T>& pixels();
+		bool hasPixels() const override;
+		bool canReloadPixels() const override;
+		void releasePixels() override;
+		bool canReadFullResolutionPlane() const override;
+		bool canReadFullResolutionRegion() const override;
+		bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const override;
+		bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const override;
+		void setPixelReloadCallback(std::function<void(std::vector<T>&)>);
+		void setPlaneReaderCallback(std::function<bool(uint64_t, void*, std::size_t)>);
+		void setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)>);
 
 		void save(const std::string&) const;
 
@@ -146,6 +158,10 @@ namespace poca::core {
 			uint32_t fx, uint32_t fy, uint32_t fz,
 			DownsampleMode mode
 		);
+
+	private:
+		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
+		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
 	};
 
 	//maxValue is used for shaders. uint8_t & uint16_t textures are normalized so need to know the maxValue to find back the pixel value
@@ -387,7 +403,7 @@ namespace poca::core {
 				parent = pit->second;
 			}
 			else {
-				// fallback (shouldn’t happen)
+				// fallback (should not happen)
 				parent.w = pv.w; parent.h = pv.h; parent.d = pv.d;
 				parent.data.assign(pv.ptr, pv.ptr + size_t(pv.w) * pv.h * pv.d);
 			}
@@ -550,6 +566,122 @@ namespace poca::core {
 	inline std::vector<T>& Image<T>::pixels()
 	{
 		return dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->getValues();
+	}
+
+	template <class T>
+	bool Image<T>::hasPixels() const
+	{
+		return dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->hasValues();
+	}
+
+	template <class T>
+	bool Image<T>::canReloadPixels() const
+	{
+		return dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->canMaterializeValues();
+	}
+
+	template <class T>
+	void Image<T>::releasePixels()
+	{
+		if (!canReloadPixels())
+			return;
+
+		dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->releaseValues();
+	}
+
+	template <class T>
+	void Image<T>::setPixelReloadCallback(std::function<void(std::vector<T>&)> _callback)
+	{
+		dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->setMaterializeValuesCallback(std::move(_callback));
+	}
+
+	template <class T>
+	bool Image<T>::canReadFullResolutionPlane() const
+	{
+		return static_cast<bool>(m_planeReaderCallback) || hasPixels();
+	}
+
+	template <class T>
+	bool Image<T>::canReadFullResolutionRegion() const
+	{
+		return static_cast<bool>(m_regionReaderCallback) || canReadFullResolutionPlane() || hasPixels();
+	}
+
+	template <class T>
+	bool Image<T>::readFullResolutionPlane(const uint64_t _planeIndex, void* _dst, const std::size_t _bytes) const
+	{
+		if (_planeIndex >= m_depth)
+			return false;
+
+		const std::size_t planeBytes = static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height) * sizeof(T);
+		if (_bytes < planeBytes)
+			return false;
+
+		if (m_planeReaderCallback)
+			return m_planeReaderCallback(_planeIndex, _dst, _bytes);
+
+		if (!hasPixels())
+			return false;
+
+		const std::size_t offset = static_cast<std::size_t>(_planeIndex) * static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height);
+		std::memcpy(_dst, pixels().data() + offset, planeBytes);
+		return true;
+	}
+
+	template <class T>
+	bool Image<T>::readFullResolutionRegion(const Region3D& _region, void* _dst, const std::size_t _bytes) const
+	{
+		if (_region.empty() || _region.endX() > m_width || _region.endY() > m_height || _region.endZ() > m_depth)
+			return false;
+
+		const std::size_t required = _region.nbVoxels() * sizeof(T);
+		if (_bytes < required)
+			return false;
+
+		if (m_regionReaderCallback)
+			return m_regionReaderCallback(_region, _dst, _bytes);
+
+		if (hasPixels()) {
+			const std::vector<T>& vals = pixels();
+			T* dst = static_cast<T*>(_dst);
+			const std::size_t slice = static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height);
+			for (uint64_t z = 0; z < _region.depth; ++z) {
+				for (uint64_t y = 0; y < _region.height; ++y) {
+					const std::size_t srcOffset = static_cast<std::size_t>(_region.z + z) * slice + static_cast<std::size_t>(_region.y + y) * static_cast<std::size_t>(m_width) + static_cast<std::size_t>(_region.x);
+					std::memcpy(dst, vals.data() + srcOffset, static_cast<std::size_t>(_region.width) * sizeof(T));
+					dst += _region.width;
+				}
+			}
+			return true;
+		}
+
+		if (!canReadFullResolutionPlane())
+			return false;
+
+		std::vector<T> plane(static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height));
+		T* dst = static_cast<T*>(_dst);
+		for (uint64_t z = 0; z < _region.depth; ++z) {
+			if (!readFullResolutionPlane(_region.z + z, plane.data(), plane.size() * sizeof(T)))
+				return false;
+			for (uint64_t y = 0; y < _region.height; ++y) {
+				const std::size_t srcOffset = static_cast<std::size_t>(_region.y + y) * static_cast<std::size_t>(m_width) + static_cast<std::size_t>(_region.x);
+				std::memcpy(dst, plane.data() + srcOffset, static_cast<std::size_t>(_region.width) * sizeof(T));
+				dst += _region.width;
+			}
+		}
+		return true;
+	}
+
+	template <class T>
+	void Image<T>::setPlaneReaderCallback(std::function<bool(uint64_t, void*, std::size_t)> _callback)
+	{
+		m_planeReaderCallback = std::move(_callback);
+	}
+
+	template <class T>
+	void Image<T>::setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)> _callback)
+	{
+		m_regionReaderCallback = std::move(_callback);
 	}
 
 	template <class T>

@@ -247,6 +247,8 @@ namespace poca::core{
 	}
 
 	std::vector < std::string >& split(const std::string&, char, std::vector < std::string >&);
+	uint32_t ceil_div_u32(uint32_t, uint32_t);
+	uint32_t next_pow2_u32(uint32_t);
 }
 
 namespace poca::geometry {

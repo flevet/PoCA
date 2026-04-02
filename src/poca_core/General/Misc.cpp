@@ -251,6 +251,21 @@ namespace poca::core {
 		else
 			printf("Invalid path\n");
 	}
+
+	uint32_t ceil_div_u32(uint32_t a, uint32_t b) {
+		return (a + b - 1) / b;
+	}
+
+	uint32_t next_pow2_u32(uint32_t v) {
+		if (v <= 1) return 1;
+		v--;
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		return v + 1;
+	}
 }
 
 namespace poca::geometry {
