@@ -461,6 +461,46 @@ __global__ void kernel_threshol_feature_label_gpu(const T* labels, const float* 
     thresholdedImage[tid] = value >= _thresholdMin && value <= _thresholdMax ? labels[tid] : 0;
 }
 
+template <class T>
+bool thresholdLabelsFeatureStreaming(poca::core::Image<T>* _typedImage,
+    poca::core::ImageInterface* _image,
+    const std::vector<float>& _featuresByLabel,
+    const float _thresholdMin,
+    const float _thresholdMax,
+    std::vector<uint32_t>& _result)
+{
+    if (_typedImage == nullptr || _typedImage->hasPixels() || !_typedImage->canReadFullResolutionPlane())
+        return false;
+
+    const std::size_t planeSize = static_cast<std::size_t>(_image->width()) * static_cast<std::size_t>(_image->height());
+    std::vector<T> plane(planeSize);
+    const std::size_t planeBytes = planeSize * sizeof(T);
+
+    _result.resize(static_cast<std::size_t>(_image->width()) * static_cast<std::size_t>(_image->height()) * static_cast<std::size_t>(_image->depth()));
+
+    for (uint64_t z = 0; z < _image->depth(); ++z) {
+        if (!_typedImage->readFullResolutionPlane(z, plane.data(), planeBytes))
+            return false;
+
+        const std::size_t offset = static_cast<std::size_t>(z) * planeSize;
+        for (std::size_t n = 0; n < planeSize; ++n) {
+            const uint32_t label = static_cast<uint32_t>(plane[n]);
+            uint32_t thresholded = 0;
+            if (label >= _image->min()) {
+                const std::size_t lutIndex = static_cast<std::size_t>(label - static_cast<uint32_t>(_image->min()));
+                if (lutIndex < _featuresByLabel.size()) {
+                    const float value = _featuresByLabel[lutIndex];
+                    if (value >= _thresholdMin && value <= _thresholdMax)
+                        thresholded = label;
+                }
+            }
+            _result[offset + n] = thresholded;
+        }
+    }
+
+    return true;
+}
+
 poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface* _image) {
     std::vector <float>& labels = static_cast<poca::core::Histogram<float>*>(_image->getHistogram("label"))->getValues();
     std::vector <float>& features = static_cast<poca::core::Histogram<float>*>(_image->getCurrentHistogram())->getValues();
@@ -474,35 +514,57 @@ poca::core::ImageInterface* thresholdLabelsFeature(poca::core::ImageInterface* _
     const auto minV = _image->getCurrentHistogram()->getCurrentMin(), maxV = _image->getCurrentHistogram()->getCurrentMax();
 
     thrust::device_vector<uint32_t> d_result(nbValues);
-    thrust::device_vector<float> d_features(values);
-    dim3 block(32);
-    dim3 grid((nbValues + block.x - 1) / block.x);
+    std::vector<uint32_t> streamedResult;
+    bool streamed = false;
 
-    switch (_image->type())
-    {
+    switch (_image->type()) {
     case poca::core::UINT8:
-    {
-        poca::core::Image<uint8_t>* casted = static_cast <poca::core::Image<uint8_t>*>(_image);
-        thrust::device_vector<uint8_t> d_pixels(casted->pixels());
-        kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
-    }
-    break;
+        streamed = thresholdLabelsFeatureStreaming(static_cast<poca::core::Image<uint8_t>*>(_image), _image, values, minV, maxV, streamedResult);
+        break;
     case poca::core::UINT16:
-    {
-        poca::core::Image<uint16_t>* casted = static_cast <poca::core::Image<uint16_t>*>(_image);
-        thrust::device_vector<uint16_t> d_pixels(casted->pixels());
-        kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
-    }
-    break;
+        streamed = thresholdLabelsFeatureStreaming(static_cast<poca::core::Image<uint16_t>*>(_image), _image, values, minV, maxV, streamedResult);
+        break;
     case poca::core::UINT32:
-    {
-        poca::core::Image<uint32_t>* casted = static_cast <poca::core::Image<uint32_t>*>(_image);
-        thrust::device_vector<uint32_t> d_pixels(casted->pixels());
-        kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
-    }
-    break;
+        streamed = thresholdLabelsFeatureStreaming(static_cast<poca::core::Image<uint32_t>*>(_image), _image, values, minV, maxV, streamedResult);
+        break;
     default:
         break;
+    }
+
+    if (streamed) {
+        d_result = upload_to_device<uint32_t>(streamedResult);
+    }
+    else {
+        thrust::device_vector<float> d_features(values);
+        dim3 block(32);
+        dim3 grid((nbValues + block.x - 1) / block.x);
+
+        switch (_image->type())
+        {
+        case poca::core::UINT8:
+        {
+            poca::core::Image<uint8_t>* casted = static_cast <poca::core::Image<uint8_t>*>(_image);
+            thrust::device_vector<uint8_t> d_pixels(casted->pixels());
+            kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
+        }
+        break;
+        case poca::core::UINT16:
+        {
+            poca::core::Image<uint16_t>* casted = static_cast <poca::core::Image<uint16_t>*>(_image);
+            thrust::device_vector<uint16_t> d_pixels(casted->pixels());
+            kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
+        }
+        break;
+        case poca::core::UINT32:
+        {
+            poca::core::Image<uint32_t>* casted = static_cast <poca::core::Image<uint32_t>*>(_image);
+            thrust::device_vector<uint32_t> d_pixels(casted->pixels());
+            kernel_threshol_feature_label_gpu << <grid, block >> > (thrust::raw_pointer_cast(d_pixels.data()), thrust::raw_pointer_cast(d_features.data()), minV, maxV, (uint32_t)_image->min(), thrust::raw_pointer_cast(d_result.data()), nbValues);
+        }
+        break;
+        default:
+            break;
+        }
     }
 
     relabel_kernel_gpu<uint32_t>(d_result);

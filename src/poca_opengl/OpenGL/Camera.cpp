@@ -38,6 +38,8 @@
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/string_cast.hpp>
+
+#include "LodUpdateManager.hpp"
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/projection.hpp>
 #include <iostream>
@@ -448,6 +450,7 @@ namespace poca::opengl {
 		this->setMouseTracking(true);
 		this->addActionToObserve("updateDisplay");
 		this->setWindowTitle(_obj->getName().c_str());
+		m_lodUpdateManager = std::make_unique<poca::opengl::LodUpdateManager>(this);
 
 		m_clip.resize(6);
 
@@ -1640,8 +1643,15 @@ namespace poca::opengl {
 			}
 			else {
 				if (m_scaling) {
-					float w = m_object == NULL ? 100 : m_object->getWidth();
-					m_distanceOrtho += ((float)(_event->pos().y() - m_prevClickPoint[1])) * (w / 1000.);
+					float scaleRef = 100.f;
+					if (m_object != NULL) {
+						const poca::core::BoundingBox bbox = m_object->boundingBox();
+						const float w = bbox[3] - bbox[0];
+						const float h = bbox[4] - bbox[1];
+						const float t = bbox[5] - bbox[2];
+						scaleRef = std::max(w, std::max(h, t));
+					}
+					m_distanceOrtho += ((float)(_event->pos().y() - m_prevClickPoint[1])) * (scaleRef / 1000.f);
 					if (m_distanceOrtho < 0.01f)
 						m_distanceOrtho = 0.01f;
 					recalcModelView();
@@ -1965,8 +1975,15 @@ namespace poca::opengl {
 	{
 		float mult = _event->angleDelta().y() < 0 ? 1.f : -1.f;
 
-		float w = m_object == NULL ? 100 : m_object->getWidth();
-		m_distanceOrtho += mult * 10.f * (w / 1000.);
+		float scaleRef = 100.f;
+		if (m_object != NULL) {
+			const poca::core::BoundingBox bbox = m_object->boundingBox();
+			const float w = bbox[3] - bbox[0];
+			const float h = bbox[4] - bbox[1];
+			const float t = bbox[5] - bbox[2];
+			scaleRef = std::max(w, std::max(h, t));
+		}
+		m_distanceOrtho += mult * 10.f * (scaleRef / 1000.f);
 		if (m_distanceOrtho < 0.01f)
 			m_distanceOrtho = 0.01f;
 		recalcModelView();

@@ -37,6 +37,7 @@
 #include <QtCore/QTimer>
 
 #include <ctime>
+#include <memory>
 
 #include <glm/glm.hpp>
 #define GLM_FORCE_RADIANS
@@ -48,6 +49,7 @@
 #include <General/Vec2.hpp>
 #include <General/Vec4.hpp>
 #include <OpenGL/GLBuffer.hpp>
+#include <OpenGL/LodUpdateManager.hpp>
 
 #include "../Interfaces/CameraInterface.hpp"
 #include "SsaoShader.hpp"
@@ -178,6 +180,8 @@ namespace poca::opengl {
 
 		int getWidth() const { return this->width(); }
 		int getHeight() const { return this->height(); }
+		LodUpdateManager& lodUpdateManager() { return *m_lodUpdateManager; }
+		const LodUpdateManager& lodUpdateManager() const { return *m_lodUpdateManager; }
 
 		void setCameraInteraction(const int);
 		const int getCameraInteraction() const { return m_currentInteractionMode; }
@@ -344,6 +348,7 @@ namespace poca::opengl {
 		StateCamera m_stateCamera;
 
 		poca::core::MyObjectInterface* m_object;
+		std::unique_ptr<LodUpdateManager> m_lodUpdateManager;
 		QStringList m_infoPicking;
 
 		poca::core::BoundingBox m_currentCrop;

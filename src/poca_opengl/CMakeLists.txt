@@ -28,6 +28,7 @@ set(OPENGL_HEADER_FILES
   OpenGL/Camera.hpp
   OpenGL/GLBuffer.hpp
   OpenGL/Helper.h
+  OpenGL/LodUpdateManager.hpp
   OpenGL/MultiPrimitiveData.hpp
   OpenGL/SsaoShader.hpp
   OpenGL/Shader.hpp
@@ -39,6 +40,7 @@ set(OPENGL_SOURCE_FILES
   OpenGL/BasicDisplayCommand.cpp
   OpenGL/Camera.cpp
   OpenGL/Helper.cpp
+  OpenGL/LodUpdateManager.cpp
   OpenGL/SsaoShader.cpp
   OpenGL/TextDisplayer.cpp
 )
