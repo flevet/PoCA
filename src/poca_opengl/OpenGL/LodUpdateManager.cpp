@@ -52,8 +52,10 @@ namespace poca::opengl {
 		state.latestVersion++;
 		state.status = LodRequestStatus::Queued;
 
-		m_requests.push(ImageLodRequest{ _imageId, _requestedLevel, state.latestVersion, _priority, _targetDims, _visible });
+		ImageLodRequest ilr{ _imageId, _requestedLevel, state.latestVersion, _priority, _targetDims, _visible };
+		m_requests.push(ilr);
 		m_condition.notify_one();
+		std::cout << "request = " << ilr << std::endl;
 		return state.latestVersion;
 	}
 
@@ -231,7 +233,27 @@ namespace poca::opengl {
 
 			if (m_camera != nullptr)
 				QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
+			std::cout << "LodUpdateManager::workerLoop - " << m_requests.size() << std::endl;
 		}
+	}
+
+
+	std::ostream& operator<<(std::ostream& _os, const ImageLodRequest& _ilr)
+	{
+		return _os << "ImageLodRequest, imageID=" <<_ilr.imageId << ", requestedLevel=" << _ilr.requestedLevel
+			<< ", requestVersion=" << _ilr.requestVersion << ", priority=" << _ilr.priority << ", targetDim=" << glm::to_string(_ilr.targetDims);
+	}
+
+	std::ostream& operator<<(std::ostream& _os, const ImageLodReady& _ilr)
+	{
+		return _os << "ImageLodReady, imageID=" << _ilr.imageId << ", requestedLevel=" << _ilr.requestedLevel
+			<< ", requestVersion=" << _ilr.requestVersion << ", obsolete=" << _ilr.obsolete << ", preparedDims=" << glm::to_string(_ilr.preparedDims);
+	}
+
+	std::ostream& operator<<(std::ostream& _os, const ImageLodState& _ils)
+	{
+		return _os << "ImageLodState, currentDisplayedLevel=" << _ils.currentDisplayedLevel << ", requestedLevel=" << _ils.requestedLevel
+			<< ", latestVersion=" << _ils.latestVersion << ", priority=" << _ils.priority << ", targetDims=" << glm::to_string(_ils.targetDims);
 	}
 
 	std::ostream& operator<<(std::ostream& _os, const LodUpdateManager& _lum)

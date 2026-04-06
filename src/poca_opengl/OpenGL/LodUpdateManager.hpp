@@ -52,6 +52,8 @@ namespace poca::opengl {
 		{
 			return priority < _other.priority;
 		}
+	
+		friend std::ostream& operator<<(std::ostream&, const ImageLodRequest&);
 	};
 
 	struct ImageLodReady {
@@ -62,6 +64,8 @@ namespace poca::opengl {
 		bool visible{ true };
 		bool obsolete{ false };
 		std::shared_ptr<void> payload;
+	
+		friend std::ostream& operator<<(std::ostream&, const ImageLodReady&);
 	};
 
 	struct ImageLodState {
@@ -72,6 +76,8 @@ namespace poca::opengl {
 		LodRequestStatus status{ LodRequestStatus::Idle };
 		uint64_t lastVisibleFrame{ 0 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
+	
+		friend std::ostream& operator<<(std::ostream&, const ImageLodState&);
 	};
 
 	class LodUpdateManager {
