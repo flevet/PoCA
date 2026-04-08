@@ -41,21 +41,35 @@ namespace poca::opengl {
 		m_camera = _camera;
 	}
 
-	uint32_t LodUpdateManager::request(uint64_t _imageId, uint32_t _requestedLevel, float _priority, const glm::uvec3& _targetDims, uint64_t _frameIndex, bool _visible)
+	uint32_t LodUpdateManager::request(const ImageLodRequest& _request, uint64_t _frameIndex)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
-		ImageLodState& state = m_states[_imageId];
-		state.requestedLevel = _requestedLevel;
-		state.priority = _priority;
-		state.targetDims = _targetDims;
+		ImageLodState& state = m_states[_request.imageId];
+
+		const bool sameTarget =
+			state.requestedLevel == _request.requestedLevel &&
+			state.targetDims == _request.targetDims &&
+			state.visible == _request.visible;
+
+		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
+			state.priority = std::max(state.priority, _request.priority);
+			state.lastVisibleFrame = _frameIndex;
+			return state.latestVersion;
+		}
+
+		state.requestedLevel = _request.requestedLevel;
+		state.priority = _request.priority;
+		state.targetDims = _request.targetDims;
+		state.visible = _request.visible;
 		state.lastVisibleFrame = _frameIndex;
 		state.latestVersion++;
 		state.status = LodRequestStatus::Queued;
 
-		ImageLodRequest ilr{ _imageId, _requestedLevel, state.latestVersion, _priority, _targetDims, _visible };
-		m_requests.push(ilr);
+		ImageLodRequest queued = _request;
+		queued.requestVersion = state.latestVersion;
+		m_requests.push(std::move(queued));
 		m_condition.notify_one();
-		std::cout << "request = " << ilr << std::endl;
+		//std::cout << "request = " << queued << std::endl;
 		return state.latestVersion;
 	}
 
@@ -233,7 +247,7 @@ namespace poca::opengl {
 
 			if (m_camera != nullptr)
 				QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
-			std::cout << "LodUpdateManager::workerLoop - " << m_requests.size() << std::endl;
+			//std::cout << "LodUpdateManager::workerLoop - " << m_requests.size() << std::endl;
 		}
 	}
 
@@ -253,7 +267,8 @@ namespace poca::opengl {
 	std::ostream& operator<<(std::ostream& _os, const ImageLodState& _ils)
 	{
 		return _os << "ImageLodState, currentDisplayedLevel=" << _ils.currentDisplayedLevel << ", requestedLevel=" << _ils.requestedLevel
-			<< ", latestVersion=" << _ils.latestVersion << ", priority=" << _ils.priority << ", targetDims=" << glm::to_string(_ils.targetDims);
+			<< ", latestVersion=" << _ils.latestVersion << ", priority=" << _ils.priority << ", targetDims=" << glm::to_string(_ils.targetDims)
+			<< ", visible=" << _ils.visible;
 	}
 
 	std::ostream& operator<<(std::ostream& _os, const LodUpdateManager& _lum)

@@ -40,6 +40,7 @@
 #include <ctime>
 #include <execution>
 #include <fstream>
+#include <mutex>
 
 #include "../Interfaces/HistogramInterface.hpp"
 #include "ArrayStatistics.hpp"
@@ -96,9 +97,10 @@ namespace poca::core {
 
 		void computeStats();
 		void releaseValues();
-		bool hasValues() const { return !m_values.empty(); }
-		bool canMaterializeValues() const { return static_cast<bool>(m_materializeValuesCallback); }
-		void setMaterializeValuesCallback(std::function<void(std::vector<T>&)> _callback) { m_materializeValuesCallback = std::move(_callback); }
+		bool hasValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty(); }
+		bool canMaterializeValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return static_cast<bool>(m_materializeValuesCallback); }
+		void setMaterializeValuesCallback(std::function<void(std::vector<T>&)> _callback) { std::lock_guard<std::mutex> lock(m_valuesMutex); m_materializeValuesCallback = std::move(_callback); }
+		void copyValues(std::vector<T>& _out) const;
 		void ensureValuesLoaded() const;
 
 		const std::size_t getNbValues() const { return m_nbValues; }
@@ -137,6 +139,7 @@ namespace poca::core {
 		bool m_isMinDefined{ false }, m_isMaxDefined{ false }, m_isLog{ false }, m_hasLogHistogram{ true }, m_hasInteraction{ true }, m_scaleLUT{ false };
 		float m_minDefined{ 0.f }, m_maxDefined{ 0.f };
 		std::function<void(std::vector<T>&)> m_materializeValuesCallback;
+		mutable std::mutex m_valuesMutex;
 		//EquationFit * m_eqn;
 	};
 
@@ -387,6 +390,7 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::releaseValues()
 	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
 		m_values.clear();
 		m_values.shrink_to_fit();
 	}
@@ -394,12 +398,25 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::ensureValuesLoaded() const
 	{
-		if (!m_values.empty() || !m_materializeValuesCallback)
+		auto* self = const_cast<Histogram<T>*>(this);
+		std::lock_guard<std::mutex> lock(self->m_valuesMutex);
+		if (!self->m_values.empty() || !self->m_materializeValuesCallback)
 			return;
 
-		auto* self = const_cast<Histogram<T>*>(this);
 		self->m_materializeValuesCallback(self->m_values);
 		self->m_nbValues = self->m_values.size();
+	}
+
+	template <class T>
+	void Histogram<T>::copyValues(std::vector<T>& _out) const
+	{
+		auto* self = const_cast<Histogram<T>*>(this);
+		std::lock_guard<std::mutex> lock(self->m_valuesMutex);
+		if (self->m_values.empty() && self->m_materializeValuesCallback) {
+			self->m_materializeValuesCallback(self->m_values);
+			self->m_nbValues = self->m_values.size();
+		}
+		_out = self->m_values;
 	}
 
 	template <class T>

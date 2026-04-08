@@ -76,6 +76,7 @@ namespace poca::opengl {
 		LodRequestStatus status{ LodRequestStatus::Idle };
 		uint64_t lastVisibleFrame{ 0 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
+		bool visible{ true };
 	
 		friend std::ostream& operator<<(std::ostream&, const ImageLodState&);
 	};
@@ -88,7 +89,7 @@ namespace poca::opengl {
 		void setCamera(Camera*);
 		Camera* camera() const { return m_camera; }
 
-		uint32_t request(uint64_t imageId, uint32_t requestedLevel, float priority, const glm::uvec3& targetDims, uint64_t frameIndex, bool visible = true);
+		uint32_t request(const ImageLodRequest& request, uint64_t frameIndex);
 		void cancel(uint64_t imageId);
 		void clear();
 

@@ -1685,6 +1685,7 @@ namespace poca::opengl {
 					}
 				}
 			}
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 		}
 		doneCurrent();
 		update();

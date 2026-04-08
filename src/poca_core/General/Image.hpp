@@ -40,6 +40,7 @@
 #include <cstring>
 #include <functional>
 #include <numeric>
+#include <mutex>
 #include <vector>
 #include <type_traits> 
 
@@ -58,6 +59,7 @@ namespace poca::core {
 	class Image : public ImageInterface {
 	public:
 		Image(const ImageType = RAW);
+		Image(const Image&);
 		~Image();
 
 		BasicComponentInterface* copy();
@@ -151,6 +153,7 @@ namespace poca::core {
 
 		// mutable: cache is logically const
 		mutable std::unordered_map<PyramidKey, PyramidLevel, PyramidKeyHash> m_pyramid; // [PYRAMID]
+		mutable std::recursive_mutex m_pyramidMutex;
 
 		// [PYRAMID] downsample core
 		static PyramidLevel downsampleLevel(
@@ -172,6 +175,14 @@ namespace poca::core {
 		m_data.insert(std::make_pair("intensity", new poca::core::MyData(new poca::core::Histogram<T>(), false)));
 		std::string type = typeid(T).name();
 		m_maxValue = (type == "float" || type == "unsigned int" || type == "int") ? 1 : std::numeric_limits<T>::max();
+	}
+
+	template <class T>
+	Image<T>::Image(const Image& _o) : ImageInterface(_o)
+	{
+		m_pyramid = _o.m_pyramid;
+		m_planeReaderCallback = _o.m_planeReaderCallback;
+		m_regionReaderCallback = _o.m_regionReaderCallback;
 	}
 
 	template <class T>
@@ -234,6 +245,7 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::invalidatePyramidCache() const
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_pyramid.clear();
 	}
 
@@ -366,6 +378,7 @@ namespace poca::core {
 		DownsampleMode mode
 	) const
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		// level 0 is the original full-res pixels
 		if (level <= 0) {
 			PyramidLevelView v;
@@ -393,7 +406,7 @@ namespace poca::core {
 			parent.w = this->width();
 			parent.h = this->height();
 			parent.d = this->depth();
-			parent.data = this->pixels(); // copies level0 once for pyramid chain; OK
+			dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->copyValues(parent.data);
 		}
 		else {
 			PyramidLevelView pv = getOrCreatePyramidLevel(level - 1, fx, fy, fz, mode);
@@ -426,6 +439,7 @@ namespace poca::core {
 		DownsampleMode mode
 	) const
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		// clamp factors
 		fx = std::max(1u, fx);
 		fy = std::max(1u, fy);
@@ -448,7 +462,7 @@ namespace poca::core {
 		src.w = this->width();
 		src.h = this->height();
 		src.d = this->depth();
-		src.data = this->pixels(); // copies level0; OK for a cached representation
+		dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->copyValues(src.data);
 
 		PyramidLevel dst = downsampleLevel(src, fx, fy, fz, mode);
 		auto [insIt, _] = m_pyramid.emplace(key, std::move(dst));
