@@ -71,6 +71,7 @@ public slots:
 	void resizeWindow();
 	void resizeWindow( const float, const float, const float );
 	void baseWidgetWasClicked();
+	void freeGPUResources();
 
 	void actionNeeded();
 	void actionNeeded(int);

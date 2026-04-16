@@ -1270,6 +1270,11 @@ void MainWindow::aboutDialog()
 
 void MainWindow::closeAllDatasets()
 {
+	foreach(QMdiSubWindow * window, m_mdiArea->subWindowList()) {
+		MdiChild * mdiChild = qobject_cast <MdiChild *>(window);
+		if (mdiChild != NULL)
+			mdiChild->freeGPUResources();
+	}
 	m_mdiArea->closeAllSubWindows();
 }
 

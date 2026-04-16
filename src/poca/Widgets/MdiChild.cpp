@@ -41,6 +41,7 @@
 
 #include <OpenGL/Camera.hpp>
 #include <General/Engine.hpp>
+#include <General/Command.hpp>
 #include <Plot/Icons.hpp>
 
 #include "../Widgets/MdiChild.hpp"
@@ -138,11 +139,33 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 
 MdiChild::~MdiChild()
 {
-	poca::core::Engine* engine = poca::core::Engine::instance();
-	poca::core::MyObjectInterface* obj = m_widget->getObject();
+	poca::core::MyObjectInterface* obj = m_widget != NULL ? m_widget->getObject() : nullptr;
+	freeGPUResources();
 	delete m_widget;
-	poca::core::Engine::instance()->removeObject(obj);
+	m_widget = nullptr;
+	m_camera = nullptr;
+	if (obj != nullptr)
+		poca::core::Engine::instance()->removeObject(obj);
 	emit(setCurrentMdi( NULL ) );
+}
+
+void MdiChild::freeGPUResources()
+{
+	if (m_widget == nullptr)
+		return;
+
+	poca::core::MyObjectInterface* obj = m_widget->getObject();
+	if (obj == nullptr)
+		return;
+
+	if (m_camera != nullptr) {
+		m_camera->makeCurrent();
+		obj->executeGlobalCommand(&poca::core::CommandInfo(false, "freeGPU"));
+		m_camera->doneCurrent();
+	}
+	else {
+		obj->executeGlobalCommand(&poca::core::CommandInfo(false, "freeGPU"));
+	}
 }
 
 void MdiChild::resizeEvent( QResizeEvent * _event )
