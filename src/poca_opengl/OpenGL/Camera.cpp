@@ -365,6 +365,29 @@ namespace glm {
 
 namespace poca::opengl {
 
+	namespace {
+		glm::vec3 bboxCenter(const poca::core::BoundingBox& _bbox)
+		{
+			return glm::vec3(
+				(_bbox[0] + _bbox[3]) * .5f,
+				(_bbox[1] + _bbox[4]) * .5f,
+				(_bbox[2] + _bbox[5]) * .5f);
+		}
+
+		glm::mat4 composeObjectModelMatrix(poca::core::MyObjectInterface* _object)
+		{
+			if (_object == nullptr)
+				return glm::mat4(1.f);
+
+			const glm::vec3 center = bboxCenter(_object->boundingBox());
+			const glm::vec3& translation = _object->getTranslationVector();
+			const glm::mat4 translationMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-translation.x, -translation.y, -translation.z));
+			const glm::mat4 toCenter = glm::translate(glm::mat4(1.f), center);
+			const glm::mat4 fromCenter = glm::translate(glm::mat4(1.f), -center);
+			return translationMatrix * toCenter * _object->getRotationMatrix() * fromCenter;
+		}
+	}
+
 	double clockToMilliseconds(clock_t ticks) {
 		// units/(units/time) => time (seconds) * 1000 = milliseconds
 		return (ticks / (double)CLOCKS_PER_SEC) * 1000.0;
@@ -1659,12 +1682,36 @@ namespace poca::opengl {
 					update();
 				}
 				else if (m_leftButtonOn) {
-					computeRotation();
-					glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
-					glm::vec3 pos(orientation + getCenter());
-					pos *= 2 * getOriginalDistanceOrtho();
-					if(m_object->nbColors() == 1)
-						m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+					if (_event->modifiers() == Qt::ControlModifier) {
+						poca::core::MyObjectInterface* currentObject = m_object->currentObject();
+						if (currentObject != NULL && m_prevClickPoint != m_clickPoint) {
+							glm::mat4& rotationMatrix = currentObject->getRotationMatrix();
+							if (m_dimension == 3) {
+								computePointOnSphere(m_clickPoint, m_stopVector);
+								glm::quat rotation;
+								computeRotationBetweenVectors(m_startVector, m_stopVector, rotation);
+								rotation = glm::inverse(rotation);
+								rotationMatrix = glm::mat4_cast(rotation) * rotationMatrix;
+								m_prevClickPoint = m_clickPoint;
+								m_startVector = m_stopVector;
+							}
+							else {
+								const float angle = (m_clickPoint.x - m_prevClickPoint.x) * 0.01f;
+								rotationMatrix = glm::rotate(glm::mat4(1.f), angle, glm::vec3(0.f, 0.f, 1.f)) * rotationMatrix;
+								m_prevClickPoint = m_clickPoint;
+							}
+							currentObject->getModelMatrix() = composeObjectModelMatrix(currentObject);
+							m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+						}
+					}
+					else {
+						computeRotation();
+						glm::vec3 orientation = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+						glm::vec3 pos(orientation + getCenter());
+						pos *= 2 * getOriginalDistanceOrtho();
+						if(m_object->nbColors() == 1)
+							m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", pos, "cameraForward", orientation));
+					}
 				}
 				else if (m_middleButtonOn) {
 					float w = m_currentCrop.realWidth(), h = m_currentCrop.realHeight();
@@ -1674,10 +1721,13 @@ namespace poca::opengl {
 					glm::vec3 rightVector = -glm::proj(diff, right);
 					glm::vec3 upVector = glm::proj(diff, m_stateCamera.m_up);
 					if (_event->modifiers() == Qt::ControlModifier) {
-						auto& translation = m_object->currentObject()->getTranslationVector();
-						auto& modelMatrix = m_object->currentObject()->getModelMatrix();
-						translation = translation + rightVector + upVector;
-						modelMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-translation.x, -translation.y, -translation.z));
+						poca::core::MyObjectInterface* currentObject = m_object->currentObject();
+						if (currentObject != NULL) {
+							auto& translation = currentObject->getTranslationVector();
+							translation = translation + rightVector + upVector;
+							currentObject->getModelMatrix() = composeObjectModelMatrix(currentObject);
+							m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+						}
 					}
 					else {
 						m_translation = m_translation + rightVector + upVector;
@@ -1685,8 +1735,8 @@ namespace poca::opengl {
 					}
 				}
 			}
-			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 		}
+		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 		doneCurrent();
 		update();
 	}
@@ -2008,8 +2058,7 @@ namespace poca::opengl {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glBindTexture(GL_TEXTURE_2D, 0);
 		
-		if(m_object->nbColors() == 1)
-			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
+		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
 		m_ssaoShader.update(w, h);
 
 		update();
@@ -2029,6 +2078,11 @@ namespace poca::opengl {
 		if (_nameShader == "pickShader") {
 			Shader* shader = new Shader();
 			shader->createAndLinkProgramFromStr(vsPick, fsPick);
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObjectPickShader") {
+			Shader* shader = new Shader("./shaders/multiObjectPick.vs", "./shaders/multiObjectPick.fs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
@@ -2103,13 +2157,38 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "multiObjectSphereRenderingShader") {
+			Shader* shader = new Shader("./shaders/multiObjectSphereRendering.vs", "./shaders/sphereRendering2.fs", "./shaders/sphereRendering2.gs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "objectRenderingShader") {
 			Shader* shader = new Shader("./shaders/objectRendering.vs", "./shaders/objectRendering.fs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "multiObjectObjectRenderingShader") {
+			Shader* shader = new Shader("./shaders/multiObjectObjectRendering.vs", "./shaders/objectRendering.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "objectRenderingSSAOShader") {
 			Shader* shader = new Shader("./shaders/objectRendering.vs", "./shaders/objectRenderingSSAO.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObjectObjectRenderingSSAOShader") {
+			Shader* shader = new Shader("./shaders/multiObjectObjectRendering.vs", "./shaders/objectRenderingSSAO.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObjectSimpleShader") {
+			Shader* shader = new Shader("./shaders/multiObjectSimpleShader.vs", "./shaders/simpleShader.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObjectLineRenderingShader") {
+			Shader* shader = new Shader("./shaders/multiObjectLineRendering.vs", "./shaders/lineRendering.fs", "./shaders/lineRendering.gs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
@@ -2125,6 +2204,11 @@ namespace poca::opengl {
 		}
 		if (_nameShader == "3DInstanceRenderingShader") {
 			Shader* shader = new Shader("./shaders/3DvertexShaderUniformColor_instancedRendering.vs", "./shaders/fragmentShaderUniformOrNotColor.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObject3DInstanceRenderingShader") {
+			Shader* shader = new Shader("./shaders/multiObject3DInstancedRendering.vs", "./shaders/fragmentShaderUniformOrNotColor.fs");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}

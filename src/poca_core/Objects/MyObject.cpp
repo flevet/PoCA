@@ -64,12 +64,16 @@ namespace poca::core {
 	{
 		m_internalId = poca::core::NbObjects++;
 		m_modelMatrix = glm::mat4(1.f);
+		m_rotationMatrix = glm::mat4(1.f);
 		m_translation = glm::vec3(0.f);
 	}
 
 	MyObject::MyObject(const MyObject& _o) :poca::core::CommandableObject(_o), m_dir(_o.m_dir), m_name(_o.m_name)
 	{
 		m_internalId = poca::core::NbObjects++;
+		m_modelMatrix = _o.m_modelMatrix;
+		m_rotationMatrix = _o.m_rotationMatrix;
+		m_translation = _o.m_translation;
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = _o.m_components.begin(); it != _o.m_components.end(); it++)
 			this->addBasicComponent((*it)->copy());
 	}

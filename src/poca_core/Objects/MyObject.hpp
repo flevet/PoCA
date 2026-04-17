@@ -121,9 +121,16 @@ namespace poca::core {
 		virtual const glm::vec3& getTranslationVector() const { return m_translation; }
 		virtual glm::vec3& getTranslationVector() { return m_translation; }
 
-		virtual void setModelMatrix(const glm::mat4& _mat) { m_modelMatrix = _mat; }
+		virtual void setModelMatrix(const glm::mat4& _mat) {
+			m_modelMatrix = _mat;
+			m_translation = glm::vec3(-_mat[3][0], -_mat[3][1], -_mat[3][2]);
+			m_rotationMatrix = glm::mat4(1.f);
+		}
 		virtual const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 		virtual glm::mat4& getModelMatrix() { return m_modelMatrix; }
+		virtual void setRotationMatrix(const glm::mat4& _mat) { m_rotationMatrix = _mat; }
+		virtual const glm::mat4& getRotationMatrix() const { return m_rotationMatrix; }
+		virtual glm::mat4& getRotationMatrix() { return m_rotationMatrix; }
 
 		virtual const std::vector < poca::core::ROIInterface* >& getROIs() const { return m_ROIs; }
 		virtual std::vector < poca::core::ROIInterface* >& getROIs() { return m_ROIs; }
@@ -154,7 +161,7 @@ namespace poca::core {
 		std::vector < poca::core::BasicComponentInterface* > m_components;
 		std::vector <poca::core::ROIInterface*> m_ROIs;
 	
-		glm::mat4 m_modelMatrixOG, m_modelMatrix;
+		glm::mat4 m_modelMatrixOG, m_modelMatrix, m_rotationMatrix;
 		glm::vec3 m_translation;
 };
 }

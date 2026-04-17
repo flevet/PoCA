@@ -1321,8 +1321,11 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::PluginList* plugins = engine->getPlugins();
 
-	if (_action == "LoadObjCharacteristicsAllWidgets" || _action == "UpdateMainTabWidgets")
+	if (_action == "LoadObjCharacteristicsAllWidgets" || _action == "UpdateMainTabWidgets") {
+		m_widgetColors->setCount(int(obj->nbColors()));
+		m_widgetColors->setCurrentIndex(int(obj->currentObjectID()));
 		updateTabWidget();
+	}
 	if (_action == "addCommandLastAddedComponent") {
 		poca::core::BasicComponentInterface* bci = obj->getLastAddedBasicComponent();
 		if (bci == NULL) return;

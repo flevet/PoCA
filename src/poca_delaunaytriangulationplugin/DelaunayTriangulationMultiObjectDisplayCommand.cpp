@@ -50,6 +50,52 @@ namespace {
 		const glm::vec4 transformed = _model * glm::vec4(_pos.x(), _pos.y(), _pos.z(), 1.f);
 		return poca::core::Vec3mf(transformed.x, transformed.y, transformed.z);
 	}
+
+	QString globalObjectInfo(MyMultipleObject* _object, const size_t _objectIndex)
+	{
+		if (_object == nullptr || _objectIndex >= _object->nbColors())
+			return QString();
+
+		poca::core::MyObjectInterface* child = _object->getObject(_objectIndex);
+		if (child == nullptr)
+			return QString();
+
+		QString text;
+		text.append(QString("Global object index: %1").arg(_objectIndex));
+		text.append(QString("\nGlobal object id: %1").arg(child->currentInternalId()));
+		if (!child->getName().empty())
+			text.append(QString("\nName: %1").arg(child->getName().c_str()));
+		if (!child->getDir().empty())
+			text.append(QString("\nDir: %1").arg(child->getDir().c_str()));
+		return text;
+	}
+
+	void appendGlobalObjectInfo(poca::core::CommandExecutionResult& _result, MyMultipleObject* _object, const size_t _objectIndex)
+	{
+		const QString infos = globalObjectInfo(_object, _objectIndex);
+		if (infos.isEmpty())
+			return;
+
+		poca::core::stringList listInfos;
+		if (_result.has<poca::opengl::PickedInfoListResult>())
+			listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
+		listInfos.push_back(infos.toLatin1().data());
+		_result.set(poca::opengl::PickedInfoListResult{ listInfos });
+	}
+
+	void handlePickedObjectSelection(poca::core::CommandInfo* _infos, MyMultipleObject* _object, const size_t _objectIndex)
+	{
+		if (_object == nullptr || !_infos->hasParameter("click"))
+			return;
+
+		const std::string click = _infos->getParameter<std::string>("click");
+		if (click != "left" || _objectIndex >= _object->nbColors())
+			return;
+
+		_object->setCurrentObject(_objectIndex);
+		_object->notify("LoadObjCharacteristicsAllWidgets");
+		_object->notifyAll("updateDisplay");
+	}
 }
 
 DelaunayTriangulationMultiObjectDisplayCommand::DelaunayTriangulationMultiObjectDisplayCommand(MyMultipleObject* _object)
@@ -105,6 +151,8 @@ void DelaunayTriangulationMultiObjectDisplayCommand::execute(poca::core::Command
 		if (m_idSelection >= 0 && (size_t)m_idSelection < m_pickMap.size()) {
 			generateBoundingBoxSelection(m_idSelection);
 			const auto& picked = m_pickMap[m_idSelection];
+			appendGlobalObjectInfo(_result, m_object, picked.objectIndex);
+			handlePickedObjectSelection(_infos, m_object, picked.objectIndex);
 			poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
 			poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast<poca::geometry::DelaunayTriangulationInterface*>(child->getBasicComponent("DelaunayTriangulation"));
 			if (delau) {

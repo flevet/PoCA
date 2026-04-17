@@ -39,6 +39,8 @@ protected:
 	bool canBatch() const;
 	bool rebuild();
 	bool updateFeatureBuffers();
+	bool refreshTransformBuffers();
+	bool updateObjectModelBuffer();
 	ObjectListDisplayCommand* referenceDisplayCommand() const;
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, const bool, ObjectListDisplayCommand*);
@@ -54,22 +56,28 @@ protected:
 
 	poca::opengl::PointSingleGLBuffer<poca::core::Vec3mf> m_pointBuffer, m_outlinePointBuffer;
 	poca::opengl::PointSingleGLBuffer<float> m_idLocsBuffer;
-	poca::opengl::FeatureSingleGLBuffer<float> m_locsFeatureBuffer, m_outlineLocsFeatureBuffer;
+	poca::opengl::FeatureSingleGLBuffer<float> m_locsFeatureBuffer, m_outlineLocsFeatureBuffer, m_pointObjectIndexBuffer, m_outlinePointObjectIndexBuffer;
 
 	poca::opengl::TriangleSingleGLBuffer<poca::core::Vec3mf> m_triangleBuffer, m_triangleNormalBuffer;
-	poca::opengl::TriangleSingleGLBuffer<float> m_idBuffer, m_triangleFeatureBuffer;
+	poca::opengl::TriangleSingleGLBuffer<float> m_idBuffer, m_triangleFeatureBuffer, m_triangleObjectIndexBuffer;
 
 	poca::opengl::LineSingleGLBuffer<poca::core::Vec3mf> m_lineBuffer;
-	poca::opengl::LineSingleGLBuffer<float> m_lineFeatureBuffer;
+	poca::opengl::LineSingleGLBuffer<float> m_lineFeatureBuffer, m_lineObjectIndexBuffer;
 	poca::opengl::LineSingleGLBuffer<poca::core::Vec3mf> m_skeletonBuffer, m_linksBuffer;
 	poca::opengl::LineSingleGLBuffer<poca::core::Color4D> m_colorSkeletonBuffer, m_colorLinksBuffer;
+	poca::opengl::LineSingleGLBuffer<float> m_skeletonObjectIndexBuffer, m_linkObjectIndexBuffer;
 	poca::opengl::LineSingleGLBuffer<poca::core::Vec3mf> m_boundingBoxSelection;
 	poca::opengl::QuadSingleGLBuffer<glm::mat4> m_ellipsoidTransformBuffer;
-	poca::opengl::FeatureSingleGLBuffer<float> m_ellipsoidFeatureBuffer;
+	poca::opengl::FeatureSingleGLBuffer<float> m_ellipsoidFeatureBuffer, m_ellipsoidObjectIndexBuffer;
+	poca::opengl::FeatureSingleGLBuffer<glm::vec4> m_objectModelBuffer;
+	GLuint m_objectModelTextureID;
 
 	bool m_hasEllipsoids;
 
 	std::vector<poca::opengl::PickMappingEntry> m_pointPickMap, m_trianglePickMap;
+	std::vector<poca::core::Vec3mf> m_localPoints, m_localOutlinePoints, m_localTriangles, m_localTriangleNormals, m_localLines, m_localSkeletons, m_localLinks;
+	std::vector<glm::mat4> m_localEllipsoidTransforms;
+	std::vector<uint32_t> m_pointObjectIndices, m_outlinePointObjectIndices, m_triangleObjectIndices, m_triangleNormalObjectIndices, m_lineObjectIndices, m_skeletonObjectIndices, m_linkObjectIndices, m_ellipsoidObjectIndices;
 };
 
 #endif
