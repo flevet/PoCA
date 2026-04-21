@@ -59,6 +59,7 @@ namespace {
 		if (std::find(_values.begin(), _values.end(), _value) == _values.end())
 			_values.push_back(_value);
 	}
+
 }
 
 MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors) :MyObject(), m_colors(_colors), m_currentColor(0)
@@ -176,22 +177,12 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 {
 	poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
-	if (!m_gridSelected) {
-		for (poca::core::MyObjectInterface* obj : m_colors) {
-			poca::core::BoundingBox bboxComp = obj->boundingBox();
-			for (size_t i = 0; i < 3; i++)
-				bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
-			for (size_t i = 3; i < 6; i++)
-				bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
-		}
-	}
-	else {
-		for (const auto& bboxComp : m_gridBBoxes) {
-			for (size_t i = 0; i < 3; i++)
-				bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
-			for (size_t i = 3; i < 6; i++)
-				bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
-		}
+	for (poca::core::MyObjectInterface* obj : m_colors) {
+		poca::core::BoundingBox bboxComp = obj->boundingBox();
+		for (size_t i = 0; i < 3; i++)
+			bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
+		for (size_t i = 3; i < 6; i++)
+			bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
 	}
 	return bbox;
 }

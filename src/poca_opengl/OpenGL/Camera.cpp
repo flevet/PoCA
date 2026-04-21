@@ -374,17 +374,49 @@ namespace poca::opengl {
 				(_bbox[2] + _bbox[5]) * .5f);
 		}
 
+		poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
+		{
+			if (_object == nullptr)
+				return poca::core::BoundingBox(0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+
+			const std::vector<poca::core::BasicComponentInterface*>& components = _object->getComponents();
+			if (components.empty())
+				return _object->boundingBox();
+
+			poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			bool hasBBox = false;
+			for (poca::core::BasicComponentInterface* component : components) {
+				if (component == nullptr)
+					continue;
+				const poca::core::BoundingBox& componentBBox = component->boundingBox();
+				for (int axis = 0; axis < 3; axis++)
+					bbox[axis] = std::min(bbox[axis], componentBBox[axis]);
+				for (int axis = 3; axis < 6; axis++)
+					bbox[axis] = std::max(bbox[axis], componentBBox[axis]);
+				hasBBox = true;
+			}
+
+			return hasBBox ? bbox : _object->boundingBox();
+		}
+
 		glm::mat4 composeObjectModelMatrix(poca::core::MyObjectInterface* _object)
 		{
 			if (_object == nullptr)
 				return glm::mat4(1.f);
 
-			const glm::vec3 center = bboxCenter(_object->boundingBox());
+			const glm::vec3 center = bboxCenter(localObjectBoundingBox(_object));
 			const glm::vec3& translation = _object->getTranslationVector();
 			const glm::mat4 translationMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-translation.x, -translation.y, -translation.z));
 			const glm::mat4 toCenter = glm::translate(glm::mat4(1.f), center);
 			const glm::mat4 fromCenter = glm::translate(glm::mat4(1.f), -center);
 			return translationMatrix * toCenter * _object->getRotationMatrix() * fromCenter;
+		}
+
+		poca::core::BoundingBox translatedBoundingBox(const poca::core::BoundingBox& _bbox, const glm::vec3& _translation)
+		{
+			return poca::core::BoundingBox(
+				_bbox[0] + _translation.x, _bbox[1] + _translation.y, _bbox[2] + _translation.z,
+				_bbox[3] + _translation.x, _bbox[4] + _translation.y, _bbox[5] + _translation.z);
 		}
 	}
 
@@ -773,8 +805,8 @@ namespace poca::opengl {
 		color *= 255.f;
 		GL_CHECK_ERRORS();
 
-		m_matrixModel = glm::mat4(1.f);
-		m_stateCamera.m_matrixView = m_stateCamera.m_matrix * glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
+		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 
 		GL_CHECK_ERRORS();
 
@@ -816,7 +848,7 @@ namespace poca::opengl {
 			drawSSAO(_buffOffscreen);
 		}
 
-		m_matrixModel = glm::mat4(1.f);
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 
 		GL_CHECK_ERRORS();
 
@@ -2294,12 +2326,13 @@ namespace poca::opengl {
 
 		recalcModelView();
 
-		m_clip[0] = glm::vec4(1, 0, 0, -_bbox[0]);
-		m_clip[1] = glm::vec4(0, 1, 0, -_bbox[1]);
-		m_clip[2] = glm::vec4(0, 0, 1, -_bbox[2]);
-		m_clip[3] = glm::vec4(-1, 0, 0, _bbox[3]);
-		m_clip[4] = glm::vec4(0, -1, 0, _bbox[4]);
-		m_clip[5] = glm::vec4(0, 0, -1, _bbox[5]);
+		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(_bbox, m_stateCamera.m_translationModel);
+		m_clip[0] = glm::vec4(1, 0, 0, -translatedBBox[0]);
+		m_clip[1] = glm::vec4(0, 1, 0, -translatedBBox[1]);
+		m_clip[2] = glm::vec4(0, 0, 1, -translatedBBox[2]);
+		m_clip[3] = glm::vec4(-1, 0, 0, translatedBBox[3]);
+		m_clip[4] = glm::vec4(0, -1, 0, translatedBBox[4]);
+		m_clip[5] = glm::vec4(0, 0, -1, translatedBBox[5]);
 		m_currentCrop = _bbox;
 
 		//paintGL();
@@ -2314,13 +2347,17 @@ namespace poca::opengl {
 		//if the crop is reset we expand a little more the clip plane to be sure to not cut part of the models
 		float smallest = m_currentCrop.smallestSide();
 		float expansion = smallest;
+		const poca::core::BoundingBox expandedBBox(
+			m_currentCrop[0] - expansion, m_currentCrop[1] - expansion, m_currentCrop[2] - expansion,
+			m_currentCrop[3] + expansion, m_currentCrop[4] + expansion, m_currentCrop[5] + expansion);
+		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(expandedBBox, m_stateCamera.m_translationModel);
 		m_clip.resize(6);
-		m_clip[0] = glm::vec4(1, 0, 0, -(m_currentCrop[0] - expansion));
-		m_clip[1] = glm::vec4(0, 1, 0, -(m_currentCrop[1] - expansion));
-		m_clip[2] = glm::vec4(0, 0, 1, -(m_currentCrop[2] - expansion));
-		m_clip[3] = glm::vec4(-1, 0, 0, m_currentCrop[3] + expansion);
-		m_clip[4] = glm::vec4(0, -1, 0, m_currentCrop[4] + expansion);
-		m_clip[5] = glm::vec4(0, 0, -1, m_currentCrop[5] + expansion);
+		m_clip[0] = glm::vec4(1, 0, 0, -translatedBBox[0]);
+		m_clip[1] = glm::vec4(0, 1, 0, -translatedBBox[1]);
+		m_clip[2] = glm::vec4(0, 0, 1, -translatedBBox[2]);
+		m_clip[3] = glm::vec4(-1, 0, 0, translatedBBox[3]);
+		m_clip[4] = glm::vec4(0, -1, 0, translatedBBox[4]);
+		m_clip[5] = glm::vec4(0, 0, -1, translatedBBox[5]);
 
 		m_resetedProj = true;
 	}

@@ -58,6 +58,30 @@ namespace poca::core {
 			const std::vector<std::string>& names = _result.get<poca::opengl::RenderedComponentFamilies>().componentNames;
 			return std::find(names.begin(), names.end(), _componentName) != names.end();
 		}
+
+		poca::core::BoundingBox transformBoundingBox(const poca::core::BoundingBox& _bbox, const glm::mat4& _model)
+		{
+			poca::core::BoundingBox transformed(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			const float xs[2] = { _bbox[0], _bbox[3] };
+			const float ys[2] = { _bbox[1], _bbox[4] };
+			const float zs[2] = { _bbox[2], _bbox[5] };
+
+			for (size_t ix = 0; ix < 2; ix++) {
+				for (size_t iy = 0; iy < 2; iy++) {
+					for (size_t iz = 0; iz < 2; iz++) {
+						const glm::vec4 corner = _model * glm::vec4(xs[ix], ys[iy], zs[iz], 1.f);
+						transformed[0] = std::min(transformed[0], corner.x);
+						transformed[1] = std::min(transformed[1], corner.y);
+						transformed[2] = std::min(transformed[2], corner.z);
+						transformed[3] = std::max(transformed[3], corner.x);
+						transformed[4] = std::max(transformed[4], corner.y);
+						transformed[5] = std::max(transformed[5], corner.z);
+					}
+				}
+			}
+
+			return transformed;
+		}
 	}
 
 	MyObject::MyObject() :poca::core::CommandableObject("Object")
@@ -267,7 +291,7 @@ namespace poca::core {
 			if (_context.has<poca::opengl::ActiveCamera>())
 				cam = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (!cam) return;
-			cam->setModelMatrix(m_modelMatrix);
+			cam->setModelMatrix(cam->getModelMatrix() * m_modelMatrix);
 		}
 		poca::core::CommandableObject::executeCommand(_ci, _context, _result);
 	}
@@ -394,7 +418,7 @@ namespace poca::core {
 	{
 		poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 		for (unsigned int n = 0; n < m_components.size(); n++) {
-			poca::core::BoundingBox bboxComp = m_components.at(n)->boundingBox();
+			poca::core::BoundingBox bboxComp = transformBoundingBox(m_components.at(n)->boundingBox(), m_modelMatrix);
 			for (size_t i = 0; i < 3; i++)
 				bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
 			for (size_t i = 3; i < 6; i++)

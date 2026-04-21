@@ -1008,9 +1008,6 @@ void ObjectListMultiObjectDisplayCommand::generateBoundingBoxSelection(const int
 		return;
 	std::vector<poca::core::Vec3mf> cube(24);
 	poca::geometry::createCubeFromVector(cube, child->boundingBox());
-	const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
-	for (auto& point : cube)
-		point = transformPosition(model, point);
 	m_boundingBoxSelection.updateBuffer(cube.data());
 }
 
