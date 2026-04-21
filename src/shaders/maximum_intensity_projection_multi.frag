@@ -201,9 +201,14 @@ void main()
     }
 
     a_colour = vec4(0.0);
+    bool hasContribution = false;
     for (int curImage = 0; curImage < nbImages; ++curImage) {
+        if (maximumIntensity[curImage] > -3.0e+38)
+            hasContribution = true;
         vec4 currentColor = computeImageColor(images[curImage], maximumIntensity[curImage]);
         a_colour += currentColor;
     }
+    if (!hasContribution)
+        discard;
     a_colour = clamp(a_colour, 0.0, 1.0);
 }

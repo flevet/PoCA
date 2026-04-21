@@ -36,8 +36,6 @@ uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
 uniform vec3 background_colour;
-uniform vec3 material_colour;
-uniform vec3 light_position;
 
 uniform int nb_steps;
 uniform bool applyThreshold;
@@ -61,36 +59,31 @@ uniform float feature_min;
 uniform float feature_max;
 uniform float current_min;
 uniform float current_max;
-uniform float labelBackground;
-uniform float featureTextureSize;
 
-uniform float values_feature;
-
-// Ray
 struct Ray {
     vec3 origin;
     vec3 direction;
 };
 
-// Axis-aligned bounding box
 struct AABB {
     vec3 top;
     vec3 bottom;
 };
 
-void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
-	float id = label_id - 1;
-	y = floor(id / w) / (h - 1);
-	x = (id - (y * w)) / (w - 1);
+void offset_feature_texture(float label_id, float w, float h, out float x, out float y)
+{
+    float id = label_id - 1.0;
+    y = floor(id / w) / (h - 1.0);
+    x = (id - (y * w)) / (w - 1.0);
 }
 
-float scaleOffsetVar(float texturesize, float pos){
-	float scale = (texturesize - 1.0) / texturesize;
-	float offset = 1.0 / (2.0 * texturesize);
-	return scale * pos + offset;
+float scaleOffsetVar(float texturesize, float pos)
+{
+    float scale = (texturesize - 1.0) / texturesize;
+    float offset = 1.0 / (2.0 * texturesize);
+    return scale * pos + offset;
 }
 
-// Slab method for ray-box intersection
 void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
 {
     vec3 direction_inv = 1.0 / ray.direction;
@@ -104,143 +97,109 @@ void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
     t_1 = min(t.x, t.y);
 }
 
-void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
+bool sampleFeatureValue(vec3 position, out float featureValue)
 {
-    vec3 direction_inv = 1.0 / ray.direction;
-    vec3 t_top = direction_inv * (box.top - ray.origin);
-    vec3 t_bottom = direction_inv * (box.bottom - ray.origin);
-    vec3 t_min = min(t_top, t_bottom);
-    vec2 t = max(t_min.xx, t_min.yz);
-    float t_0 = max(0.0, max(t.x, t.y));
-    vec3 t_max = max(t_top, t_bottom);
-    t = min(t_max.xx, t_max.yz);
-    float t_1 = min(t.x, t.y);
-	intersected = t_1 >= t_0;
+    float intensity;
+    if (isFloat)
+        intensity = texture(volume, position).r;
+    else
+        intensity = float(texture(uvolume, position).r);
+
+    if (intensity < pixel_min)
+        return false;
+
+    float x = intensity, y = 0.0;
+    if (height_feature_texture == 1.0) {
+        x = (intensity - pixel_min) / max(pixel_max - pixel_min, 1e-6);
+    }
+    else {
+        offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
+        y = scaleOffsetVar(height_feature_texture, y);
+    }
+    x = scaleOffsetVar(width_feature_texture, x);
+    featureValue = texture2D(featureTexture, vec2(x, y)).r;
+    return true;
 }
 
-// A very simple colour transfer function
-vec4 colour_transfer(float intensity)
+vec4 computeSampleColor(float featureValue)
 {
-    vec3 high = vec3(1.0, 1.0, 1.0);
-    vec3 low = vec3(0., 0., 0.);
-	
-	//float modified_intensity = intensity * maxValue;
-	//modified_intensity = (modified_intensity - histogram_min) / (histogram_max - histogram_min);
-	
-    float alpha = (exp(intensity) - 1.0) / (exp(1.0) - 1.0);
-    return vec4(intensity * high + (1.0 - intensity) * low, alpha);
-}
+    if (scaleLUT)
+        featureValue = clamp(featureValue, current_min, current_max);
 
-// A very simple colour transfer function
-vec4 my_colour_transfer(float intensity)
-{
-    if(intensity < feature_min)
-		return vec4(0, 0, 0, 1);
-	if(intensity > feature_max)
-		return vec4(1, 1, 1, 1);
-	
-	float modified_intensity = (intensity - feature_min) / ( feature_max - feature_min);
-	return vec4(modified_intensity, modified_intensity, modified_intensity, (exp(modified_intensity) - 1.0) / (exp(1.0) - 1.0));
+    if (!applyThreshold && !scaleLUT && (featureValue < current_min || featureValue > current_max))
+        return vec4(0.0);
+
+    if (applyThreshold) {
+        if (featureValue > current_min && featureValue < current_max)
+            return vec4(1.0, 0.0, 0.0, 1.0);
+        return vec4(0.0);
+    }
+
+    float normalizedValue = (featureValue - feature_min) / max(feature_max - feature_min, 1e-6);
+    normalizedValue = clamp(normalizedValue, 0.0, 1.0);
+
+    float lutPos = scaleOffsetVar(512.0, normalizedValue);
+    if (isLabel)
+        return vec4(texture1D(lutTexture, lutPos).xyz, 1.0);
+
+    float alpha = (exp(normalizedValue) - 1.0) / (exp(1.0) - 1.0);
+    vec3 rgb = texture1D(lutTexture, lutPos).xyz;
+    rgb = pow(rgb, vec3(1.0 / gamma));
+    return vec4(rgb, alpha);
 }
 
 void main()
 {
     vec4 ndcPos;
-	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-	ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
-	ndcPos.w = 1.0;
- 
-	vec4 clipPos = ndcPos;
-	clipPos.z = -1.0;
-	vec4 eyePos  = invMVP * clipPos;
-	vec3 ray_origin = eyePos.xyz;
-	
+    ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / viewport.zw - 1.0;
+    ndcPos.z = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near);
+    ndcPos.w = 1.0;
+
+    vec4 clipPos = ndcPos;
+    clipPos.z = -1.0;
+    vec4 eyePos = invMVP * clipPos;
+    vec3 ray_origin = eyePos.xyz;
+
     float t_0, t_1, t_0_crop, t_1_crop;
     Ray casting_ray = Ray(ray_origin, ray_direction);
     AABB bounding_box = AABB(top, bottom);
     ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
-	
-	if(cropped){
-		AABB crop_bbox = AABB(top_crop, bottom_crop);
-		ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
-		if(t_0_crop > t_1_crop)
-			discard;
-		t_0 = t_0_crop;
-		t_1 = t_1_crop;
-	}
-	
-    //vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    //vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
-	vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+
+    if (cropped) {
+        AABB crop_bbox = AABB(top_crop, bottom_crop);
+        ray_box_intersection(casting_ray, crop_bbox, t_0_crop, t_1_crop);
+        if (t_0_crop > t_1_crop)
+            discard;
+        t_0 = t_0_crop;
+        t_1 = t_1_crop;
+    }
+
     vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-	
+    vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
     vec3 ray = ray_stop - ray_start;
-    float ray_length = length(ray);
-	vec3 ray_step = ray / float(nb_steps);
+    vec3 ray_step = ray / float(nb_steps);
 
     vec3 position = ray_start;
-	vec4 colour = vec4(0.0);
-	
-	float maximum_intensity = -3.402823466e+38;
-	
-    // Ray march until reaching the end of the volume, or colour saturation
-	int n = 0;
-    while(n < nb_steps && colour.a < 1.0){
-		position = position + ray_step;
-		float intensity;
-		if(isFloat)
-			intensity = texture(volume, position).r;
-		else
-			intensity = float(texture(uvolume, position).r);
-			
-		if(intensity >= pixel_min){
-			//we retrieve the true pixel value from the pixel
-			//We need to normalize it in order to fetch the lookup table from featureTexture
-			float x = intensity, y = 0;
-			if(height_feature_texture == 1){
-				x = (intensity - pixel_min) / (pixel_max - pixel_min);
-			}
-			else{
-				offset_feature_texture(intensity, width_feature_texture, height_feature_texture, x, y);
-				y = scaleOffsetVar(height_feature_texture, y);
-			}
-			x = scaleOffsetVar(width_feature_texture, x);
-			intensity = texture(featureTexture, vec2(x, y)).r;
-				
-			if(scaleLUT){
-				if (intensity >= maximum_intensity)
-					maximum_intensity = intensity;
-			}
-			else
-				if (intensity >= maximum_intensity && intensity <= current_max)
-					maximum_intensity = intensity;
-		}
-		//And we need to normalize a second time to fetch the correct color in lutTexture
-		intensity = (intensity - feature_min) / (feature_max - feature_min);
-		
-        vec4 c = colour_transfer(intensity);
+    vec4 accum = vec4(0.0);
 
-        // Alpha-blending
-        colour.rgb = c.a * c.rgb + (1 - c.a) * colour.a * colour.rgb;
-        colour.a = c.a + (1 - c.a) * colour.a;
-		n = n + 1;
-	}
-	
-	if(!applyThreshold && !scaleLUT && (maximum_intensity < current_min || maximum_intensity > current_max))
-		discard;
+    for (int step = 0; step < nb_steps && accum.a < 0.999; ++step) {
+        position += ray_step;
+        float featureValue;
+        if (!sampleFeatureValue(position, featureValue))
+            continue;
 
-	if(applyThreshold && maximum_intensity > current_min && maximum_intensity < current_max){
-		a_colour = vec4(1, 0, 0, 1);
-	}
-	else{
-		// Blend background
-		colour.rgb = colour.a * colour.rgb + (1 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
-		colour.rgb = texture(lutTexture, colour.r).xyz;
-		colour.a = 1.0;
+        vec4 sampleColor = computeSampleColor(featureValue);
+        if (sampleColor.a <= 0.0)
+            continue;
 
-		// Gamma correction
-		a_colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
-		a_colour.a = colour.a;
-	}
+        accum.rgb += (1.0 - accum.a) * sampleColor.a * sampleColor.rgb;
+        accum.a += (1.0 - accum.a) * sampleColor.a;
+    }
+
+    if (accum.a <= 0.0)
+        discard;
+
+    vec3 background = pow(background_colour, vec3(1.0 / gamma));
+    a_colour.rgb = accum.rgb + (1.0 - accum.a) * background;
+    a_colour.a = accum.a;
 }

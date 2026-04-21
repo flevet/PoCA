@@ -14,8 +14,6 @@ uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
 uniform vec3 background_colour;
-uniform vec3 material_colour;
-uniform vec3 light_position;
 uniform int nbImages;
 uniform int nb_steps;
 uniform float gamma;
@@ -75,6 +73,9 @@ bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureVa
         return false;
 
     vec3 sizeImage = desc.top.xyz - desc.bottom.xyz;
+    if (sizeImage.x <= 0.0 || sizeImage.y <= 0.0 || sizeImage.z < 0.0)
+        return false;
+
     vec3 position = (imagePosition - desc.bottom.xyz) / max(sizeImage, vec3(1e-6));
     position = clamp(position, vec3(0.0), vec3(1.0));
 
@@ -97,8 +98,9 @@ bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureVa
 
     float x = intensity, y = 0.0;
     sampler2D featureTexture = sampler2D(desc.featureHandle.xy);
-    if (desc.featureDims.y == 1.0)
+    if (desc.featureDims.y == 1.0) {
         x = (intensity - desc.pixelParams.x) / max(desc.pixelParams.y - desc.pixelParams.x, 1e-6);
+    }
     else {
         offset_feature_texture(intensity, desc.featureDims.x, desc.featureDims.y, x, y);
         y = scaleOffsetVar(desc.featureDims.y, y);
@@ -106,6 +108,36 @@ bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureVa
     x = scaleOffsetVar(desc.featureDims.x, x);
     featureValue = texture(featureTexture, vec2(x, y)).r;
     return true;
+}
+
+vec4 computeImageSampleColor(ImageDescriptor desc, float featureValue)
+{
+    if (desc.flags.w != 0u)
+        featureValue = clamp(featureValue, desc.featureParams.x, desc.featureParams.y);
+
+    if (desc.flags.x == 0u && desc.flags.w == 0u &&
+        (featureValue < desc.featureParams.x || featureValue > desc.featureParams.y))
+        return vec4(0.0);
+
+    if (desc.flags.x != 0u) {
+        if (featureValue > desc.featureParams.x && featureValue < desc.featureParams.y)
+            return vec4(1.0, 0.0, 0.0, 1.0);
+        return vec4(0.0);
+    }
+
+    float normalizedValue = (featureValue - desc.pixelParams.z) / max(desc.pixelParams.w - desc.pixelParams.z, 1e-6);
+    normalizedValue = clamp(normalizedValue, 0.0, 1.0);
+
+    sampler1D lutTexture = sampler1D(desc.lutHandle.xy);
+    float posLut = scaleOffsetVar(512.0, normalizedValue);
+
+    if (desc.flags.z != 0u)
+        return vec4(texture(lutTexture, posLut).xyz, 1.0);
+
+    float alpha = (exp(normalizedValue) - 1.0) / (exp(1.0) - 1.0);
+    vec3 rgb = texture(lutTexture, posLut).xyz;
+    rgb = pow(rgb, vec3(1.0 / gamma));
+    return vec4(rgb, alpha);
 }
 
 void main()
@@ -138,38 +170,27 @@ void main()
     vec3 ray_step = (ray_stop - ray_start) / float(nb_steps);
     vec3 parentPosition = ray_start;
 
-    vec4 accum[1024];
-    for (int n = 0; n < nbImages; ++n)
-        accum[n] = vec4(0.0);
-
-    for (int step = 0; step < nb_steps; ++step) {
+    vec4 accum = vec4(0.0);
+    for (int step = 0; step < nb_steps && accum.a < 0.999; ++step) {
         parentPosition += ray_step;
-        for (int curImage = 0; curImage < nbImages; ++curImage) {
+        for (int curImage = 0; curImage < nbImages && accum.a < 0.999; ++curImage) {
             float featureValue;
             if (!sampleFeatureValue(curImage, parentPosition, featureValue))
                 continue;
 
-            ImageDescriptor desc = images[curImage];
-            if (desc.flags.w != 0u) {
-                featureValue = clamp(featureValue, desc.featureParams.x, desc.featureParams.y);
-            }
+            vec4 sampleColor = computeImageSampleColor(images[curImage], featureValue);
+            if (sampleColor.a <= 0.0)
+                continue;
 
-            featureValue = (featureValue - desc.pixelParams.z) / max(desc.pixelParams.w - desc.pixelParams.z, 1e-6);
-            vec4 c = vec4(featureValue, featureValue, featureValue, (exp(featureValue) - 1.0) / (exp(1.0) - 1.0));
-            accum[curImage].rgb = c.a * c.rgb + (1.0 - c.a) * accum[curImage].a * accum[curImage].rgb;
-            accum[curImage].a = c.a + (1.0 - c.a) * accum[curImage].a;
+            accum.rgb += (1.0 - accum.a) * sampleColor.a * sampleColor.rgb;
+            accum.a += (1.0 - accum.a) * sampleColor.a;
         }
     }
 
-    a_colour = vec4(0.0);
-    for (int curImage = 0; curImage < nbImages; ++curImage) {
-        vec4 colour = accum[curImage];
-        sampler1D lutTexture = sampler1D(images[curImage].lutHandle.xy);
-        colour.rgb = colour.a * colour.rgb + (1.0 - colour.a) * pow(background_colour, vec3(gamma)).rgb;
-        float posLut = scaleOffsetVar(512.0, colour.r);
-        colour.rgb = texture(lutTexture, posLut).xyz;
-        colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
-        a_colour += vec4(colour.rgb, colour.a);
-    }
-    a_colour = clamp(a_colour, 0.0, 1.0);
+    if (accum.a <= 0.0)
+        discard;
+
+    vec3 background = pow(background_colour, vec3(1.0 / gamma));
+    a_colour.rgb = accum.rgb + (1.0 - accum.a) * background;
+    a_colour.a = accum.a;
 }
