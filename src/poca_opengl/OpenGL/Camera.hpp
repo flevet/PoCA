@@ -140,6 +140,7 @@ namespace poca::opengl {
 		~Camera();
 
 		virtual const glm::mat4& getProjectionMatrix() const { return m_matrixProjection; }
+		virtual void setProjectionMatrix(const glm::mat4& _mat) { m_matrixProjection = _mat; }
 		virtual const glm::mat4& getViewMatrix() const { return m_stateCamera.m_matrixView; }
 		virtual const glm::mat4& getModelMatrix() const { return m_matrixModel; }
 		virtual const glm::vec3& getTranslationModel() const { return m_stateCamera.m_translationModel; }

@@ -830,11 +830,13 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 
 		if (!ssao) {
-			if(_buffOffscreen == NULL) {
+			if (_buffOffscreen == NULL) {
 				poca::core::CommandInfo displayCommand(false, "display");
 				poca::core::CommandExecutionContext runtimeContext;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
 				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+				poca::core::CommandInfo overlayCommand(false, "displayOverlay");
+				m_object->executeCommand(&overlayCommand, runtimeContext);
 			}
 			else
 			{
@@ -842,6 +844,8 @@ namespace poca::opengl {
 				poca::core::CommandExecutionContext runtimeContext;
 				runtimeContext.set(poca::opengl::ActiveCamera{ this });
 				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+				poca::core::CommandInfo overlayCommand(false, "displayOverlay", "offscreen", true);
+				m_object->executeCommand(&overlayCommand, runtimeContext);
 			}
 		}
 		else {
@@ -2204,6 +2208,16 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "objectRenderingTranslucentShader") {
+			Shader* shader = new Shader("./shaders/objectRendering.vs", "./shaders/objectRenderingTranslucent.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "multiObjectObjectRenderingTranslucentShader") {
+			Shader* shader = new Shader("./shaders/multiObjectObjectRendering.vs", "./shaders/objectRenderingTranslucent.fs");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "objectRenderingSSAOShader") {
 			Shader* shader = new Shader("./shaders/objectRendering.vs", "./shaders/objectRenderingSSAO.fs");
 			m_shaders[_nameShader] = shader;
@@ -2261,6 +2275,16 @@ namespace poca::opengl {
 		}
 		if (_nameShader == "isosurface") {
 			Shader* shader = new Shader("./shaders/isosurface.vert", "./shaders/isosurface.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "isosurfaceAll") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/isosurface_all.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "isosurfaceMulti") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/isosurface_multi.frag");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
