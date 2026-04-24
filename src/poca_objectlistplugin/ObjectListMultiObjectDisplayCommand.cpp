@@ -219,6 +219,9 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 		if (!refreshTransformBuffers())
 			freeGPUMemory();
 	}
+	else if (_infos->nameCommand == "useVertexNormals") {
+		freeGPUMemory();
+	}
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
 	}
@@ -567,11 +570,21 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	const bool cullFaceActivated = _cam->cullFaceActivated();
 	const std::string cullFaceType = _referenceCommand->getParameter<std::string>("cullFaceType");
 	const float alpha = _referenceCommand->getParameter<float>("alpha");
+	const bool translucentRendering = _referenceCommand->hasParameter("translucentRendering") ? _referenceCommand->getParameter<bool>("translucentRendering") : false;
+	const bool useTranslucentMeshRendering = translucentRendering && m_is3D;
 
-	if (alpha < 1.f) glDisable(GL_DEPTH_TEST);
-	else glEnable(GL_DEPTH_TEST);
-	if (cullFaceActivated) glEnable(GL_CULL_FACE);
-	else glDisable(GL_CULL_FACE);
+	if (useTranslucentMeshRendering) {
+		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_FALSE);
+		glDisable(GL_CULL_FACE);
+	}
+	else {
+		if (alpha < 1.f) glDisable(GL_DEPTH_TEST);
+		else glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		if (cullFaceActivated) glEnable(GL_CULL_FACE);
+		else glDisable(GL_CULL_FACE);
+	}
 	glDisable(GL_BLEND);
 	glCullFace(GL_BACK);
 
@@ -748,7 +761,9 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	glEnable(GL_BLEND);
 	if (shapeRendering && !m_triangleBuffer.empty()) {
 		if (m_is3D) {
-			poca::opengl::Shader* shader = _ssao ? _cam->getShader("multiObjectObjectRenderingSSAOShader") : _cam->getShader("multiObjectObjectRenderingShader");
+			if (useTranslucentMeshRendering)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			poca::opengl::Shader* shader = useTranslucentMeshRendering ? _cam->getShader("multiObjectObjectRenderingTranslucentShader") : (_ssao ? _cam->getShader("multiObjectObjectRenderingSSAOShader") : _cam->getShader("multiObjectObjectRenderingShader"));
 			glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
 			glm::vec3 pos(orientation + _cam->getCenter());
 			pos *= 2 * _cam->getOriginalDistanceOrtho();
@@ -864,6 +879,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	}
 
 	glDisable(GL_BLEND);
+	glDepthMask(GL_TRUE);
 	glDisable(GL_DEPTH_TEST);
 	if (m_idSelection >= 0 && displayBboxSelection && !m_boundingBoxSelection.empty()) {
 		GLfloat bkColor[4];

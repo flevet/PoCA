@@ -51,6 +51,7 @@
 #include <OpenGL/RenderCommandContext.hpp>
 
 #include "ObjectListsWidget.hpp"
+#include "ObjectListDisplayCommand.hpp"
 
 static char* duplicateCentroidsIcon[] = {
 	/* columns rows colors chars-per-pixel */
@@ -460,6 +461,20 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_linkToSkeletonRenderButton->setChecked(true);
 	layoutObjectMesh->addWidget(m_linkToSkeletonRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_linkToSkeletonRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_vertexNormalsButton = new QPushButton("Vertex normals");
+	m_vertexNormalsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_vertexNormalsButton->setCheckable(true);
+	m_vertexNormalsButton->setChecked(true);
+	m_vertexNormalsButton->setToolTip("Toggle vertex normals / face normals for mesh shading");
+	layoutObjectMesh->addWidget(m_vertexNormalsButton, 0, Qt::AlignRight);
+	QObject::connect(m_vertexNormalsButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_translucentMeshButton = new QPushButton("Translucent");
+	m_translucentMeshButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_translucentMeshButton->setCheckable(true);
+	m_translucentMeshButton->setChecked(false);
+	m_translucentMeshButton->setToolTip("Use translucent mesh shading");
+	layoutObjectMesh->addWidget(m_translucentMeshButton, 0, Qt::AlignRight);
+	QObject::connect(m_translucentMeshButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QWidget* omemptyW = new QWidget;
 	omemptyW->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -901,6 +916,16 @@ void ObjectListsWidget::actionNeeded(bool _val)
 		m_object->notifyAll("updateDisplay");
 		return;
 	}
+	else if (sender == m_vertexNormalsButton) {
+		engine->executeCommand(bc, true, "useVertexNormals", _val);
+		m_object->notifyAll("updateDisplay");
+		return;
+	}
+	else if (sender == m_translucentMeshButton) {
+		engine->executeCommand(bc, true, "translucentRendering", _val);
+		m_object->notifyAll("updateDisplay");
+		return;
+	}
 }
 
 void ObjectListsWidget::actionNeeded(float _val)
@@ -1146,6 +1171,22 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 			m_cullfaceButton->blockSignals(true);
 			m_cullfaceButton->setChecked(val);
 			m_cullfaceButton->blockSignals(false);
+		}
+
+		poca::geometry::ObjectListMesh* currentMesh = dynamic_cast<poca::geometry::ObjectListMesh*>(curObjects);
+		if (currentMesh != nullptr) {
+			bool val = currentMesh->useVertexNormals();
+			m_vertexNormalsButton->blockSignals(true);
+			m_vertexNormalsButton->setChecked(val);
+			m_vertexNormalsButton->blockSignals(false);
+		}
+
+		ObjectListDisplayCommand* displayCommand = curObjects->getCommand<ObjectListDisplayCommand>();
+		if (displayCommand != nullptr && displayCommand->hasParameter("translucentRendering")) {
+			bool val = displayCommand->getParameter<bool>("translucentRendering");
+			m_translucentMeshButton->blockSignals(true);
+			m_translucentMeshButton->setChecked(val);
+			m_translucentMeshButton->blockSignals(false);
 		}
 
 		bool selected = curObjects->isSelected();

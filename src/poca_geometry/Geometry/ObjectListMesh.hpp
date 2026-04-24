@@ -98,6 +98,8 @@ namespace poca::geometry {
 		inline  std::vector <Surface_mesh_3_double>& getMeshes() { return m_meshes; }
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 		inline const std::vector <poca::core::BoundingBox>& getBBoxMeshes() const { return m_bboxMeshes; }
+		inline bool useVertexNormals() const { return m_useVertexNormals; }
+		inline void setUseVertexNormals(const bool _val) { m_useVertexNormals = _val; }
 
 	protected:
 		const bool addObjectMesh(std::vector <Point_3_double>&, std::vector<std::vector<std::size_t> >&, 
@@ -125,6 +127,7 @@ namespace poca::geometry {
 		bool m_applyRemeshing{ false };
 		double m_targetLength{ 1. };
 		int32_t m_iterations{ 1 };
+		bool m_useVertexNormals{ true };
 	};
 }
 

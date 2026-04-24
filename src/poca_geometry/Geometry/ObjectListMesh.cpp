@@ -503,7 +503,9 @@ namespace poca::geometry {
 				}
 			}
 		}
-		return new ObjectListMesh(allVertices, allTriangles, false, false);
+		ObjectListMesh* copied = new ObjectListMesh(allVertices, allTriangles, false, false);
+		copied->setUseVertexNormals(m_useVertexNormals);
+		return copied;
 	}
 
 	poca::geometry::ObjectListInterface* ObjectListMesh::exportFilteredObjects() const
@@ -531,7 +533,11 @@ namespace poca::geometry {
 				}
 			}
 		}
-		return allVertices.empty() ? NULL: static_cast <poca::geometry::ObjectListInterface*> (new ObjectListMesh(allVertices, allTriangles, false, false));
+		if (allVertices.empty())
+			return NULL;
+		ObjectListMesh* exported = new ObjectListMesh(allVertices, allTriangles, false, false);
+		exported->setUseVertexNormals(m_useVertexNormals);
+		return static_cast<poca::geometry::ObjectListInterface*>(exported);
 	}
 	
 	const bool ObjectListMesh::addObjectMesh(std::vector <Point_3_double>& _vertices, std::vector<std::vector<std::size_t> >& _triangles,
@@ -801,8 +807,7 @@ namespace poca::geometry {
 	void ObjectListMesh::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
 	{
 		_normals.clear();
-		bool useVertexNormals = true;
-		if (useVertexNormals) {
+		if (m_useVertexNormals) {
 			for (const auto& mesh : m_meshes) {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 				Vertex_vector_3_map normal_map = mesh.property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").value();
@@ -1077,6 +1082,10 @@ namespace poca::geometry {
 		for (auto idx : _selection)
 			meshesSelected.push_back(m_meshes[idx]);
 
-		return meshesSelected.empty() ? NULL : static_cast <poca::geometry::ObjectListInterface*> (new ObjectListMesh(meshesSelected));
+		if (meshesSelected.empty())
+			return NULL;
+		ObjectListMesh* exported = new ObjectListMesh(meshesSelected);
+		exported->setUseVertexNormals(m_useVertexNormals);
+		return static_cast<poca::geometry::ObjectListInterface*>(exported);
 	}
 }

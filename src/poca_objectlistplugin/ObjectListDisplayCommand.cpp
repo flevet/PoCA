@@ -124,6 +124,8 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 	addCommandInfo(poca::core::CommandInfo(false, "skeletonRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "linkRendering", true));
 	addCommandInfo(poca::core::CommandInfo(false, "alpha", 1.f));
+	addCommandInfo(poca::core::CommandInfo(false, "useVertexNormals", true));
+	addCommandInfo(poca::core::CommandInfo(false, "translucentRendering", false));
 	if (parameters.contains(name())) {
 		nlohmann::json param = parameters[name()];
 		if(param.contains("fill"))
@@ -148,6 +150,10 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 			loadParameters(poca::core::CommandInfo(false, "shapeRendering", param["shapeRendering"].get<bool>()));
 		if (param.contains("alpha"))
 			loadParameters(poca::core::CommandInfo(false, "alpha", param["alpha"].get<float>()));
+		if (param.contains("useVertexNormals"))
+			loadParameters(poca::core::CommandInfo(false, "useVertexNormals", param["useVertexNormals"].get<bool>()));
+		if (param.contains("translucentRendering"))
+			loadParameters(poca::core::CommandInfo(false, "translucentRendering", param["translucentRendering"].get<bool>()));
 	}
 }
 
@@ -166,6 +172,12 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos)
 	poca::core::CommandExecutionContext context;
 	poca::core::CommandExecutionResult result;
 	execute(_infos, context, result);
+}
+
+void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
+{
+	poca::core::CommandExecutionResult result;
+	execute(_infos, _context, result);
 }
 
 void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
@@ -245,6 +257,13 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 				generateBoundingBoxSelection(m_idSelection);
 		}
 	}
+	else if (_infos->nameCommand == "useVertexNormals") {
+		loadParameters(*_infos);
+		poca::geometry::ObjectListMesh* mesh = dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects);
+		if (mesh != nullptr)
+			mesh->setUseVertexNormals(getParameter<bool>("useVertexNormals"));
+		createDisplay();
+	}
 	else if (hasParameter(_infos->nameCommand)) {
 		loadParameters(*_infos);
 	}
@@ -319,6 +338,12 @@ std::vector<poca::core::CommandSpec> ObjectListDisplayCommand::commandSpecs() co
 	specs.emplace_back("alpha", std::initializer_list<poca::core::CommandParameterSpec>{
 		{ "alpha", poca::core::CommandParameterType::Number, true }
 	});
+	specs.emplace_back("useVertexNormals", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "useVertexNormals", poca::core::CommandParameterType::Boolean, true }
+	});
+	specs.emplace_back("translucentRendering", std::initializer_list<poca::core::CommandParameterSpec>{
+		{ "translucentRendering", poca::core::CommandParameterType::Boolean, true }
+	});
 	specs.emplace_back("sortWRTCameraPosition", std::initializer_list<poca::core::CommandParameterSpec>{
 		{ "cameraPosition", poca::core::CommandParameterType::Any, true },
 		{ "cameraForward", poca::core::CommandParameterType::Any, true }
@@ -360,6 +385,8 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	bool skeletonRendering = getParameter<bool>("skeletonRendering");
 	bool linkRendering = getParameter<bool>("linkRendering");
 	float alpha = getParameter<float>("alpha");
+	bool translucentRendering = getParameter<bool>("translucentRendering");
+	const bool useTranslucentMeshRendering = translucentRendering && m_objects->dimension() == 3;
 
 	const poca::core::BoundingBox bbox = m_objects->boundingBox();
 	glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
@@ -368,14 +395,22 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	//glClear(GL_DEPTH_BUFFER_BIT);
 	
-	if (alpha < 1.f)
-		glDisable(GL_DEPTH_TEST);
-	else
+	if (useTranslucentMeshRendering) {
 		glEnable(GL_DEPTH_TEST);
-	if (cullFaceActivated)
-		glEnable(GL_CULL_FACE);
-	else
+		glDepthMask(GL_FALSE);
 		glDisable(GL_CULL_FACE);
+	}
+	else {
+		if (alpha < 1.f)
+			glDisable(GL_DEPTH_TEST);
+		else
+			glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		if (cullFaceActivated)
+			glEnable(GL_CULL_FACE);
+		else
+			glDisable(GL_CULL_FACE);
+	}
 
 	glDisable(GL_BLEND);
 	glCullFace(GL_BACK);
@@ -422,17 +457,23 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	if (shapeRendering) {
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-		double a = 1 - (0.299 * bkColor[0] + 0.587 * bkColor[1] + 0.114 * bkColor[2]) / 255;
-		if (a < 0.5)
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE); // bright colors
-		else
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // dark colors
+		if (useTranslucentMeshRendering)
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		else {
+			double a = 1 - (0.299 * bkColor[0] + 0.587 * bkColor[1] + 0.114 * bkColor[2]) / 255;
+			if (a < 0.5)
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE); // bright colors
+			else
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // dark colors
+		}
 		if (m_objects->dimension() == 3) {
 			//if (alpha < 1.f)
 				//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha);
 			//else 
 			{
 				const glm::mat4& proj = _cam->getProjectionMatrix(), & view = _cam->getViewMatrix(), & model = _cam->getModelMatrix();
+				if (useTranslucentMeshRendering)
+					shader = _cam->getShader("objectRenderingTranslucentShader");
 				shader->use();
 				shader->setMat4("model", model);
 				shader->setMat4("view", view);
@@ -496,6 +537,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	GL_CHECK_ERRORS();
 
 	glDisable(GL_BLEND);
+	glDepthMask(GL_TRUE);
 	if (m_idSelection >= 0 && shapeRendering && displayBboxSelection) {
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
