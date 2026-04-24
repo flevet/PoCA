@@ -161,7 +161,7 @@ void main()
     vec3 ray_origin = eyePos.xyz;
 
     float t_0, t_1, t_0_crop, t_1_crop;
-    Ray casting_ray = Ray(ray_origin, ray_direction);
+    Ray casting_ray = Ray(ray_origin + ray_direction, ray_direction);
     AABB bounding_box = AABB(top, bottom);
     ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
 
@@ -174,8 +174,8 @@ void main()
         t_1 = t_1_crop;
     }
 
-    vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
-    vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
+    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
     vec3 ray = ray_stop - ray_start;
     vec3 ray_step = ray / float(nb_steps);
 
