@@ -3,83 +3,131 @@
 *
 * File:      PythonInterpreter.cpp
 *
-* Copyright: Florian Levet (2020-2025)
-*
-* License:   LGPL v3
-*
-* Homepage:  https://github.com/flevet/PoCA
-*
-* PoCA is a free software; you can redistribute it and/or
-* modify it under the terms of the GNU Lesser General Public
-* License as published by the Free Software Foundation; either
-* version 3 of the License, or (at your option) any later version.
-*
-* The algorithms that underlie PoCA have required considerable
-* development. They are described in the original SR-Tesseler paper,
-* doi:10.1038/nmeth.3579. If you use PoCA as part of work (visualization, 
-* manipulation, quantification) towards a scientific publication, please include 
-* a citation to the original paper.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-* Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with this program; if not, write to the Free Software Foundation,
-* Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+* External Python execution backend using QProcess + Windows named shared memory.
 */
 
 #ifndef NO_PYTHON
 
-#if defined(_MSC_VER) && (_MSC_VER >= 1930)
-#include <corecrt.h>
-#endif
-
-#ifdef _DEBUG
-#undef _DEBUG
-#include <python.h>
-#define _DEBUG
-#else
-#include <python.h>
-#endif
-#include "numpy/arrayobject.h"
-
+#include <QtCore/QByteArray>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
+#include <QtCore/QProcessEnvironment>
+#include <QtCore/QString>
 #include <QtWidgets/QMessageBox>
+
+#include <algorithm>
+#include <chrono>
+#include <cstring>
 #include <iostream>
+#include <memory>
+#include <sstream>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#error "External Python shared-memory mode is currently implemented for Windows named shared memory."
+#endif
 
 #include <General/Engine.hpp>
 
 #include "../General/PythonInterpreter.hpp"
 #include "../General/Misc.h"
 
+namespace {
+	struct WinSharedMemory {
+		std::string name;
+		HANDLE handle = NULL;
+		void* data = nullptr;
+		size_t size = 0;
+
+		~WinSharedMemory() { close(); }
+
+		bool create(const std::string& _name, size_t _size)
+		{
+			name = _name;
+			size = _size;
+			const DWORD sizeLow = static_cast<DWORD>(_size & 0xffffffffULL);
+			const DWORD sizeHigh = static_cast<DWORD>((_size >> 32) & 0xffffffffULL);
+			handle = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, sizeHigh, sizeLow, name.c_str());
+			if (handle == NULL) return false;
+			data = MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, _size);
+			if (data == nullptr) {
+				CloseHandle(handle);
+				handle = NULL;
+				return false;
+			}
+			return true;
+		}
+
+		bool open(const std::string& _name, size_t _size)
+		{
+			name = _name;
+			size = _size;
+			handle = OpenFileMappingA(FILE_MAP_READ, FALSE, name.c_str());
+			if (handle == NULL) return false;
+			data = MapViewOfFile(handle, FILE_MAP_READ, 0, 0, _size);
+			if (data == nullptr) {
+				CloseHandle(handle);
+				handle = NULL;
+				return false;
+			}
+			return true;
+		}
+
+		void close()
+		{
+			if (data != nullptr) {
+				UnmapViewOfFile(data);
+				data = nullptr;
+			}
+			if (handle != NULL) {
+				CloseHandle(handle);
+				handle = NULL;
+			}
+		}
+	};
+
+	std::string normalisePath(std::string _path)
+	{
+		std::replace(_path.begin(), _path.end(), '\\', '/');
+		while (!_path.empty() && (_path.back() == '/' || _path.back() == '\\'))
+			_path.pop_back();
+		return _path;
+	}
+
+	std::string quoteForJson(const std::string& s)
+	{
+		std::ostringstream os;
+		os << '"';
+		for (char c : s) {
+			switch (c) {
+			case '\\': os << "\\\\"; break;
+			case '"': os << "\\\""; break;
+			case '\n': os << "\\n"; break;
+			case '\r': os << "\\r"; break;
+			case '\t': os << "\\t"; break;
+			default: os << c; break;
+			}
+		}
+		os << '"';
+		return os.str();
+	}
+
+	std::string makeSharedMemoryName(size_t index)
+	{
+		const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+		std::ostringstream os;
+		os << "poca_" << GetCurrentProcessId() << "_" << now << "_in_" << index;
+		return os.str();
+	}
+}
+
 namespace poca::core {
-#if PY_MAJOR_VERSION >= 3 
-	int
-		init_numpy2()
-	{
-		import_array();
-	}
-#else 
-	void
-		init_numpy2()
-	{
-		import_array();
-	}
-#endif 
-
-	/*const std::size_t ENV_BUF_SIZE = 2048; // Enough for your PATH?
-
-	void PrintFullPath(const char* partialPath)
-	{
-		printf("Connecting to Python.\n");
-		char full[_MAX_PATH];
-		if (_fullpath(full, partialPath, _MAX_PATH) != NULL)
-			printf("Full path is: %s\n", full);
-		else
-			printf("Invalid path\n");
-	}*/
-
 	PythonInterpreter* PythonInterpreter::m_instance = 0;
 
 	PythonInterpreter* PythonInterpreter::instance()
@@ -101,14 +149,13 @@ namespace poca::core {
 		m_instance = _pint;
 	}
 
-	PythonInterpreter::PythonInterpreter(): m_initialized(false)
+	PythonInterpreter::PythonInterpreter() : m_initialized(false)
 	{
 	}
 
 	PythonInterpreter::~PythonInterpreter()
 	{
-		if(m_initialized)
-			Py_Finalize();
+		// Nothing to finalize: Python runs in a child process.
 	}
 
 	int PythonInterpreter::initialize()
@@ -116,7 +163,6 @@ namespace poca::core {
 		if (m_initialized)
 			return EXIT_SUCCESS;
 
-		
 		nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
 		std::vector <std::string> names = { "python_path", "python_dll_path", "python_lib_path", "python_packages_path", "python_scripts_path" };
 		std::vector <std::string> paths(names.size());
@@ -126,419 +172,472 @@ namespace poca::core {
 			msgBox.exec();
 			return EXIT_FAILURE;
 		}
-		for(auto n = 0; n < names.size(); n++)
-			if(parameters["PythonParameters"].contains(names[n]))
+		for (auto n = 0; n < names.size(); n++)
+			if (parameters["PythonParameters"].contains(names[n]))
 				paths[n] = parameters["PythonParameters"][names[n]].get<std::string>();
 
-		for (const auto& path : paths)
-			if (path.empty()) {
-				return EXIT_FAILURE;
-			}
+		if (paths[0].empty() || paths[4].empty())
+			return EXIT_FAILURE;
 
-		// Get current directory
-		poca::core::PrintFullPath(".\\");
+		m_pythonRootPath = normalisePath(paths[0]);
+		m_pythonScriptsPath = normalisePath(paths[4]);
+		m_initialized = true;
+		return EXIT_SUCCESS;
+	}
 
-		//Add needed path to environment variable PATH
-		char buf[ENV_BUF_SIZE];
-		std::size_t bufsize = ENV_BUF_SIZE;
-		std::string pathToPython = paths[0];
-		int e = getenv_s(&bufsize, buf, bufsize, "PATH");
-		printf("value of PATH: %.*s\n", (int)sizeof(buf), buf);
-		if (e) {
-			//std::cerr << "`getenv_s` failed, returned " << e << '\n';
-			//exit(EXIT_FAILURE);
+	std::string PythonInterpreter::resolveScriptPath(const char* _moduleName) const
+	{
+		std::string script = _moduleName ? _moduleName : "";
+		script = normalisePath(script);
+		if (script.size() >= 3 && script.substr(script.size() - 3) == ".py") {
+			QFileInfo fi(QString::fromStdString(script));
+			if (fi.isAbsolute()) return script;
+			return m_pythonScriptsPath + "/" + script;
 		}
-		std::string env_path, orig_path = buf;
-		env_path = pathToPython + ";";
-		env_path += orig_path;
-		e = _putenv_s("PATH", env_path.c_str());
-		if (e) {
-			std::cerr << "`_putenv_s` failed, returned " << e << std::endl;
+
+		// Existing callers pass a module name such as "nena".
+		return m_pythonScriptsPath + "/" + script + ".py";
+	}
+
+	int PythonInterpreter::executeExternalPython(QVector <QVector <double>>& _res, const QVector <QVector <double>>& _data, const char* _moduleName, const char* _funcName)
+	{
+		if (initialize() == EXIT_FAILURE)
+			return EXIT_FAILURE;
+
+		const std::string pythonExe = m_pythonRootPath + "/python.exe";
+		const std::string workerScript = m_pythonScriptsPath + "/poca_external_worker.py";
+		const std::string userScript = resolveScriptPath(_moduleName);
+
+		if (!QFileInfo::exists(QString::fromStdString(pythonExe))) {
+			std::cerr << "Python executable does not exist: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+		if (!QFileInfo::exists(QString::fromStdString(workerScript))) {
+			std::cerr << "PoCA Python worker does not exist: " << workerScript << std::endl;
+			return EXIT_FAILURE;
+		}
+		if (!QFileInfo::exists(QString::fromStdString(userScript))) {
+			std::cerr << "Python script does not exist: " << userScript << std::endl;
 			return EXIT_FAILURE;
 		}
 
-		//Add PYTHONPATH and PYTHONHOME env variables
-		std::string pythonpath = paths[1] + ";" + paths[2] + ";" + paths[3] + ";" + paths[4] + ";";
-		_putenv_s("PYTHONPATH", pythonpath.c_str());
-		std::string pythonhome = pathToPython;
-		_putenv_s("PYTHONHOME", pythonhome.c_str());
+		std::vector <std::unique_ptr<WinSharedMemory>> inputShms;
+		inputShms.reserve(_data.size());
 
-		Py_InitializeEx(0);
-		init_numpy2();
+		std::ostringstream request;
+		request << "{\"inputs\":[";
+		for (int i = 0; i < _data.size(); ++i) {
+			const QVector <double>& values = _data[i];
+			const size_t nbytes = static_cast<size_t>(values.size()) * sizeof(double);
+			std::unique_ptr<WinSharedMemory> shm(new WinSharedMemory());
+			const std::string shmName = makeSharedMemoryName(static_cast<size_t>(i));
+			if (!shm->create(shmName, std::max<size_t>(nbytes, 1))) {
+				std::cerr << "Could not create input shared memory segment: " << shmName << std::endl;
+				return EXIT_FAILURE;
+			}
+			if (nbytes > 0)
+				std::memcpy(shm->data, values.constData(), nbytes);
 
-		m_initialized = true;
+			if (i > 0) request << ",";
+			request << "{\"name\":" << quoteForJson(shmName)
+				<< ",\"dtype\":\"float64\""
+				<< ",\"shape\":[" << values.size() << "]"
+				<< ",\"nbytes\":" << nbytes << "}";
+			inputShms.push_back(std::move(shm));
+		}
+		request << "]}\n";
+
+		QProcess process;
+		QStringList args;
+		args << QString::fromStdString(workerScript)
+			 << "--script" << QString::fromStdString(userScript)
+			 << "--function" << QString::fromStdString(_funcName ? _funcName : "");
+
+		QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		env.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PATH"), QString::fromStdString(m_pythonRootPath + ";" + m_pythonRootPath + "/Library/bin;" + m_pythonRootPath + "/DLLs;") + env.value(QStringLiteral("PATH")));
+		process.setProcessEnvironment(env);
+		process.setProcessChannelMode(QProcess::SeparateChannels);
+		process.start(QString::fromStdString(pythonExe), args);
+		if (!process.waitForStarted(10000)) {
+			std::cerr << "Could not start external Python process: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		process.write(QByteArray::fromStdString(request.str()));
+		process.waitForBytesWritten(10000);
+
+		QByteArray line;
+		while (!line.contains('\n')) {
+			if (!process.waitForReadyRead(30000)) {
+				std::cerr << "External Python process did not answer. STDERR:\n"
+					<< process.readAllStandardError().toStdString() << std::endl;
+				process.kill();
+				return EXIT_FAILURE;
+			}
+			line += process.readAllStandardOutput();
+		}
+
+		nlohmann::json response;
+		try {
+			response = nlohmann::json::parse(line.toStdString());
+		}
+		catch (const nlohmann::json::exception& e) {
+			std::cerr << "Could not parse external Python response: " << e.what() << "\nResponse was:\n" << line.toStdString() << std::endl;
+			process.kill();
+			return EXIT_FAILURE;
+		}
+
+		if (!response.value("ok", false)) {
+			std::cerr << "External Python error: " << response.value("error", std::string("unknown error")) << std::endl;
+			if (response.contains("traceback"))
+				std::cerr << response["traceback"].get<std::string>() << std::endl;
+			process.write("done\n");
+			process.waitForFinished(5000);
+			return EXIT_FAILURE;
+		}
+
+		_res.clear();
+		for (const auto& output : response["outputs"]) {
+			const std::string name = output["name"].get<std::string>();
+			const size_t nbytes = output["nbytes"].get<size_t>();
+			std::vector<size_t> shape = output["shape"].get<std::vector<size_t>>();
+			size_t nbValues = 1;
+			for (const auto dim : shape) nbValues *= dim;
+			if (nbytes != nbValues * sizeof(double)) {
+				std::cerr << "Unexpected output size from Python shared memory segment." << std::endl;
+				process.write("done\n");
+				process.waitForFinished(5000);
+				return EXIT_FAILURE;
+			}
+
+			WinSharedMemory outputShm;
+			if (!outputShm.open(name, std::max<size_t>(nbytes, 1))) {
+				std::cerr << "Could not open output shared memory segment: " << name << std::endl;
+				process.write("done\n");
+				process.waitForFinished(5000);
+				return EXIT_FAILURE;
+			}
+
+			QVector <double> values(static_cast<int>(nbValues));
+			if (nbytes > 0)
+				std::memcpy(values.data(), outputShm.data, nbytes);
+			_res.push_back(values);
+		}
+
+		process.write("done\n");
+		process.waitForBytesWritten(5000);
+		process.waitForFinished(10000);
+
+		const QByteArray stderrData = process.readAllStandardError();
+		if (!stderrData.isEmpty())
+			std::cerr << stderrData.toStdString() << std::endl;
+
 		return EXIT_SUCCESS;
 	}
 
 	int PythonInterpreter::applyFunctionWith1ArrayParameterAnd1DArrayReturned(QVector <double>& _res, const QVector <double>& _data, const char* _moduleName, const char* _funcName)
 	{
-		int result = EXIT_FAILURE;
-		result = initialize();
-		if (result == EXIT_FAILURE)
-			return result;
-		result = EXIT_FAILURE;
-
-		const int SIZE = _data.size();
-		npy_intp dims[1] = { SIZE };
-		const int ND = 1;
-		long double* c_arr = new long double[SIZE];
-
-		for (int i = 0; i < SIZE; i++) {
-			c_arr[i] = _data[i];
-		}
-
-		// Convert it to a NumPy array.
-		PyObject* pArray = PyArray_SimpleNewFromData(ND, dims, NPY_LONGDOUBLE, reinterpret_cast<void*>(c_arr));
-		if (pArray) {
-			// import mymodule
-			PyObject* pName = PyUnicode_FromString(_moduleName);
-			if (pName) {
-				PyObject* pModule = PyImport_Import(pName);
-				if (pModule) {
-					// import function
-					PyObject* pFunc = PyObject_GetAttrString(pModule, _funcName);
-					if (pFunc) {
-						if (!PyCallable_Check(pFunc)) {
-							std::cerr << _moduleName << "." << _funcName
-								<< " is not callable." << std::endl;
-						}
-						else {
-							PyObject* pReturn = PyObject_CallFunctionObjArgs(pFunc, pArray, NULL);
-							if (pReturn) {
-								PyArrayObject* np_ret = reinterpret_cast<PyArrayObject*>(pReturn);
-								if (PyArray_NDIM(np_ret) != 1) {
-									std::cerr << _moduleName << "." << _funcName
-										<< " returned array with wrong dimension." << std::endl;
-								}
-								else {
-									// Convert back to C++ array and print.
-									int len = PyArray_SHAPE(np_ret)[0];
-									long double* c_out;
-									c_out = reinterpret_cast<long double*>(PyArray_DATA(np_ret));
-									_res.resize(len);
-									for (int i = 0; i < len; i++) {
-										_res[i] = c_out[i];
-									}
-								}
-
-								Py_DECREF(pReturn);
-							}
-						}
-						Py_DECREF(pFunc);
-					}
-					Py_DECREF(pModule);
-				}
-				else
-					PyErr_Print();
-				Py_DECREF(pName);
-			}
-			Py_DECREF(pArray);
-		}
-
-		delete[] c_arr;
-		result = EXIT_SUCCESS;
-
-		if (PyErr_CheckSignals())
-			PyErr_PrintEx(1);
-
+		QVector <QVector <double>> in, out;
+		in.push_back(_data);
+		int result = executeExternalPython(out, in, _moduleName, _funcName);
+		if (result == EXIT_SUCCESS && !out.empty()) _res = out[0];
 		return result;
 	}
 
 	int PythonInterpreter::applyFunctionWith2ArraysParameterAnd1DArrayReturned(QVector <double>& _res, const QVector <double>& _data1, const QVector <double>& _data2, const char* _moduleName, const char* _funcName)
 	{
-		int result = EXIT_FAILURE;
-		result = initialize();
-		if (result == EXIT_FAILURE)
-			return result;
-		result = EXIT_FAILURE;
-
-		const int SIZE1 = _data1.size(), SIZE2 = _data2.size();
-		npy_intp dims1[1] = { SIZE1 }, dims2[1] = { SIZE2 };
-		const int ND = 1;
-
-		long double* c_arr1 = new long double[_data1.size()];
-		for (int i = 0; i < SIZE1; i++) {
-			c_arr1[i] = _data1[i];
-		}
-		long double* c_arr2 = new long double[_data2.size()];
-		for (int i = 0; i < SIZE2; i++) {
-			c_arr2[i] = _data2[i];
-		}
-
-		// Convert it to a NumPy array.
-		PyObject* pArray1 = PyArray_SimpleNewFromData(ND, dims1, NPY_LONGDOUBLE, reinterpret_cast<void*>(c_arr1));
-		PyObject* pArray2 = PyArray_SimpleNewFromData(ND, dims2, NPY_LONGDOUBLE, reinterpret_cast<void*>(c_arr2));
-		if (pArray1 && pArray2) {
-			// import mymodule
-			PyObject* pName = PyUnicode_FromString(_moduleName);
-			if (pName) {
-				PyObject* pModule = PyImport_Import(pName);
-				if (pModule) {
-					// import function
-					PyObject* pFunc = PyObject_GetAttrString(pModule, _funcName);
-					if (pFunc) {
-						if (!PyCallable_Check(pFunc)) {
-							std::cerr << _moduleName << "." << _funcName
-								<< " is not callable." << std::endl;
-						}
-						else {
-							PyObject* pReturn = PyObject_CallFunctionObjArgs(pFunc, pArray1, pArray2, NULL);
-							if (pReturn) {
-								PyArrayObject* np_ret = reinterpret_cast<PyArrayObject*>(pReturn);
-								if (PyArray_NDIM(np_ret) != 1) {
-									std::cerr << _moduleName << "." << _funcName
-										<< " returned array with wrong dimension." << std::endl;
-								}
-								else {
-									// Convert back to C++ array and print.
-									int len = PyArray_SHAPE(np_ret)[0];
-									long double* c_out;
-									c_out = reinterpret_cast<long double*>(PyArray_DATA(np_ret));
-									_res.resize(len);
-									for (int i = 0; i < len; i++) {
-										_res[i] = c_out[i];
-									}
-								}
-
-								Py_DECREF(pReturn);
-							}
-						}
-						Py_DECREF(pFunc);
-					}
-					Py_DECREF(pModule);
-				}
-				else
-					PyErr_Print();
-				Py_DECREF(pName);
-			}
-			Py_DECREF(pArray1);
-			Py_DECREF(pArray2);
-		}
-
-		delete[] c_arr1;
-		delete[] c_arr2;
-		result = EXIT_SUCCESS;
-
-		if (PyErr_CheckSignals())
-			PyErr_PrintEx(1);
-
+		QVector <QVector <double>> in, out;
+		in.push_back(_data1);
+		in.push_back(_data2);
+		int result = executeExternalPython(out, in, _moduleName, _funcName);
+		if (result == EXIT_SUCCESS && !out.empty()) _res = out[0];
 		return result;
 	}
 
 	int PythonInterpreter::applyFunctionWithNArraysParameterAndNArrayReturned(QVector <QVector <double>>& _res, const QVector <QVector <double>>& _data, const char* _moduleName, const char* _funcName)
 	{
-		int result = EXIT_FAILURE;
-		result = initialize();
-		if (result == EXIT_FAILURE)
-			return result;
-		result = EXIT_FAILURE;
-
-		if (_data.size() > 6)
-			return result;
-
-		const int ND = 1;
-		std::vector <int> sizes(_data.size());
-		std::vector <long double*> c_arrs(_data.size());
-		std::vector <PyObject*> pArrays(_data.size());
-		for (unsigned int n = 0; n < sizes.size(); n++) {
-			sizes[n] = _data[n].size();
-			c_arrs[n] = new long double[sizes[n]];
-			for (int i = 0; i < sizes[n]; i++) {
-				c_arrs[n][i] = _data[n][i];
-			}
-			npy_intp dims[1] = { sizes[n] };
-			pArrays[n] = PyArray_SimpleNewFromData(ND, dims, NPY_LONGDOUBLE, reinterpret_cast<void*>(c_arrs[n]));
-		}
-		if (pArrays[0]) {
-			// import mymodule
-			PyObject* pName = PyUnicode_FromString(_moduleName);
-			if (pName) {
-				PyObject* pModule = PyImport_Import(pName);
-				if (pModule) {
-					// import function
-					PyObject* pFunc = PyObject_GetAttrString(pModule, _funcName);
-					if (pFunc) {
-						if (!PyCallable_Check(pFunc)) {
-							std::cerr << _moduleName << "." << _funcName
-								<< " is not callable." << std::endl;
-						}
-						else {
-							PyObject* pReturn;
-							switch (_data.size()) {
-							case 1:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], NULL);
-								break;
-							case 2:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], NULL);
-								break;
-							case 3:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], NULL);
-								break;
-							case 4:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], NULL);
-								break;
-							case 5:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], pArrays[4], NULL);
-								break;
-							case 6:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], pArrays[4], pArrays[5], NULL);
-								break;
-							}
-							if (pReturn) {
-								PyArrayObject* np_ret = reinterpret_cast<PyArrayObject*>(pReturn);
-								if (PyArray_NDIM(np_ret) == 0) {
-									std::cerr << _moduleName << "." << _funcName
-										<< " returned array with wrong dimension." << std::endl;
-								}
-								else {
-									// Convert back to C++ array and print.
-									long double* c_out;
-									c_out = reinterpret_cast<long double*>(PyArray_DATA(np_ret));
-									unsigned int cpt = 0;
-
-									_res.resize(PyArray_NDIM(np_ret));
-									for (unsigned int n = 0; n < _res.size(); n++) {
-										int len = PyArray_SHAPE(np_ret)[n];
-										_res[n].resize(len);
-										for (int i = 0; i < len; i++) {
-											_res[n][i] = c_out[cpt++];
-										}
-									}
-								}
-
-								Py_DECREF(pReturn);
-							}
-						}
-						Py_DECREF(pFunc);
-					}
-					Py_DECREF(pModule);
-				}
-				else
-					PyErr_Print();
-				Py_DECREF(pName);
-			}
-			for (unsigned int n = 0; n < sizes.size(); n++)
-				Py_DECREF(pArrays[n]);
-		}
-
-		for (unsigned int n = 0; n < sizes.size(); n++)
-			delete[] c_arrs[n];
-		result = EXIT_SUCCESS;
-
-		if (PyErr_CheckSignals())
-			PyErr_PrintEx(1);
-
-		return result;
+		return executeExternalPython(_res, _data, _moduleName, _funcName);
 	}
 
 	int PythonInterpreter::applyFunctionWithNArraysParameterAnd1ArrayReturned(QVector <double>& _res, const QVector <QVector <double>>& _data, const char* _moduleName, const char* _funcName)
 	{
-		int result = EXIT_FAILURE;
-		result = initialize();
-		if (result == EXIT_FAILURE)
-			return result;
-		result = EXIT_FAILURE;
-
-		if (_data.size() > 6)
-			return result;
-
-		const int ND = 1;
-		std::vector <int> sizes(_data.size());
-		std::vector <long double*> c_arrs(_data.size());
-		std::vector <PyObject*> pArrays(_data.size());
-		for (unsigned int n = 0; n < sizes.size(); n++) {
-			sizes[n] = _data[n].size();
-			c_arrs[n] = new long double[sizes[n]];
-			for (int i = 0; i < sizes[n]; i++) {
-				c_arrs[n][i] = _data[n][i];
-			}
-			npy_intp dims[1] = { sizes[n] };
-			pArrays[n] = PyArray_SimpleNewFromData(ND, dims, NPY_DOUBLE, reinterpret_cast<void*>(c_arrs[n]));
-		}
-
-		if (pArrays[0]) {
-			// import mymodule
-			PyObject* pName = PyUnicode_FromString(_moduleName);
-			if (pName) {
-				PyObject* pModule = PyImport_Import(pName);
-				if (pModule) {
-					// import function
-					PyObject* pFunc = PyObject_GetAttrString(pModule, _funcName);
-					if (pFunc) {
-						if (!PyCallable_Check(pFunc)) {
-							std::cerr << _moduleName << "." << _funcName
-								<< " is not callable." << std::endl;
-						}
-						else {
-							PyObject* pReturn;
-							switch (_data.size()) {
-							case 1:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], NULL);
-								break;
-							case 2:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], NULL);
-								break;
-							case 3:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], NULL);
-								break;
-							case 4:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], NULL);
-								break;
-							case 5:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], pArrays[4], NULL);
-								break;
-							case 6:
-								pReturn = PyObject_CallFunctionObjArgs(pFunc, pArrays[0], pArrays[1], pArrays[2], pArrays[3], pArrays[4], pArrays[5], NULL);
-								break;
-							}
-							if (pReturn) {
-								PyArrayObject* np_ret = reinterpret_cast<PyArrayObject*>(pReturn);
-								if (PyArray_NDIM(np_ret) != 1) {
-									std::cerr << _moduleName << "." << _funcName
-										<< " returned array with wrong dimension." << std::endl;
-								}
-								else {
-									// Convert back to C++ array and print.
-									int len = PyArray_SHAPE(np_ret)[0];
-									long double* c_out;
-									c_out = reinterpret_cast<long double*>(PyArray_DATA(np_ret));
-									_res.resize(len);
-									for (int i = 0; i < len; i++) {
-										_res[i] = c_out[i];
-									}
-								}
-								PyErr_Print();
-								Py_DECREF(pReturn);
-							}
-							else
-								PyErr_Print();
-						}
-						PyErr_Print();
-						Py_DECREF(pFunc);
-					}
-					else
-						PyErr_Print();
-					Py_DECREF(pModule);
-				}
-				else
-					PyErr_Print();
-				Py_DECREF(pName);
-			}
-			else
-				PyErr_Print();
-			for (unsigned int n = 0; n < sizes.size(); n++)
-				Py_DECREF(pArrays[n]);
-		}
-
-		for (unsigned int n = 0; n < sizes.size(); n++)
-			delete[] c_arrs[n];
-		result = EXIT_SUCCESS;
-
-		if (PyErr_CheckSignals())
-			PyErr_PrintEx(1);
-
+		QVector <QVector <double>> out;
+		int result = executeExternalPython(out, _data, _moduleName, _funcName);
+		if (result == EXIT_SUCCESS && !out.empty()) _res = out[0];
 		return result;
+	}
+
+	int PythonInterpreter::applyFunctionWithNFloatArraysParameterAnd1ArrayReturned(QVector <double>& _res, const std::vector<const std::vector<float>*>& _data, const char* _moduleName, const char* _funcName)
+	{
+		// Keep PythonWidget source-compatible while avoiding the old QVector<double>
+		// conversion path. Inputs are exported as float32 shared-memory arrays.
+		if (initialize() == EXIT_FAILURE)
+			return EXIT_FAILURE;
+
+		const std::string pythonExe = m_pythonRootPath + "/python.exe";
+		const std::string workerScript = m_pythonScriptsPath + "/poca_external_worker.py";
+		const std::string userScript = resolveScriptPath(_moduleName);
+
+		if (!QFileInfo::exists(QString::fromStdString(pythonExe))) {
+			std::cerr << "Python executable does not exist: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+		if (!QFileInfo::exists(QString::fromStdString(workerScript))) {
+			std::cerr << "PoCA Python worker does not exist: " << workerScript << std::endl;
+			return EXIT_FAILURE;
+		}
+		if (!QFileInfo::exists(QString::fromStdString(userScript))) {
+			std::cerr << "Python script does not exist: " << userScript << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		std::vector <std::unique_ptr<WinSharedMemory>> inputShms;
+		inputShms.reserve(_data.size());
+
+		std::ostringstream request;
+		request << "{\"inputs\":[";
+		for (size_t i = 0; i < _data.size(); ++i) {
+			const std::vector<float>* values = _data[i];
+			const size_t nbValues = values != nullptr ? values->size() : 0;
+			const size_t nbytes = nbValues * sizeof(float);
+			std::unique_ptr<WinSharedMemory> shm(new WinSharedMemory());
+			const std::string shmName = makeSharedMemoryName(i);
+			if (!shm->create(shmName, std::max<size_t>(nbytes, 1))) {
+				std::cerr << "Could not create input shared memory segment: " << shmName << std::endl;
+				return EXIT_FAILURE;
+			}
+			if (nbytes > 0 && values != nullptr)
+				std::memcpy(shm->data, values->data(), nbytes);
+
+			if (i > 0) request << ",";
+			request << "{\"name\":" << quoteForJson(shmName)
+				<< ",\"dtype\":\"float32\""
+				<< ",\"shape\":[" << nbValues << "]"
+				<< ",\"nbytes\":" << nbytes << "}";
+			inputShms.push_back(std::move(shm));
+		}
+		request << "]}\n";
+
+		QProcess process;
+		QStringList args;
+		args << QString::fromStdString(workerScript)
+			 << "--script" << QString::fromStdString(userScript)
+			 << "--function" << QString::fromStdString(_funcName ? _funcName : "");
+
+		QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		env.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PATH"), QString::fromStdString(m_pythonRootPath + ";" + m_pythonRootPath + "/Library/bin;" + m_pythonRootPath + "/DLLs;") + env.value(QStringLiteral("PATH")));
+		process.setProcessEnvironment(env);
+		process.setProcessChannelMode(QProcess::SeparateChannels);
+		process.start(QString::fromStdString(pythonExe), args);
+		if (!process.waitForStarted(10000)) {
+			std::cerr << "Could not start external Python process: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		process.write(QByteArray::fromStdString(request.str()));
+		process.waitForBytesWritten(10000);
+
+		QByteArray line;
+		while (!line.contains('\n')) {
+			if (!process.waitForReadyRead(30000)) {
+				std::cerr << "External Python process did not answer. STDERR:\n"
+					<< process.readAllStandardError().toStdString() << std::endl;
+				process.kill();
+				return EXIT_FAILURE;
+			}
+			line += process.readAllStandardOutput();
+		}
+
+		nlohmann::json response;
+		try {
+			response = nlohmann::json::parse(line.toStdString());
+		}
+		catch (const nlohmann::json::exception& e) {
+			std::cerr << "Could not parse external Python response: " << e.what() << "\nResponse was:\n" << line.toStdString() << std::endl;
+			process.kill();
+			return EXIT_FAILURE;
+		}
+
+		if (!response.value("ok", false)) {
+			std::cerr << "External Python error: " << response.value("error", std::string("unknown error")) << std::endl;
+			if (response.contains("traceback"))
+				std::cerr << response["traceback"].get<std::string>() << std::endl;
+			process.write("done\n");
+			process.waitForFinished(5000);
+			return EXIT_FAILURE;
+		}
+
+		_res.clear();
+		if (response.contains("outputs") && !response["outputs"].empty()) {
+			const auto& output = response["outputs"][0];
+			const std::string name = output["name"].get<std::string>();
+			const size_t nbytes = output["nbytes"].get<size_t>();
+			std::vector<size_t> shape = output["shape"].get<std::vector<size_t>>();
+			size_t nbValues = 1;
+			for (const auto dim : shape) nbValues *= dim;
+			if (nbytes != nbValues * sizeof(double)) {
+				std::cerr << "Unexpected output size from Python shared memory segment." << std::endl;
+				process.write("done\n");
+				process.waitForFinished(5000);
+				return EXIT_FAILURE;
+			}
+
+			WinSharedMemory outputShm;
+			if (!outputShm.open(name, std::max<size_t>(nbytes, 1))) {
+				std::cerr << "Could not open output shared memory segment: " << name << std::endl;
+				process.write("done\n");
+				process.waitForFinished(5000);
+				return EXIT_FAILURE;
+			}
+
+			_res.resize(static_cast<int>(nbValues));
+			if (nbytes > 0)
+				std::memcpy(_res.data(), outputShm.data, nbytes);
+		}
+
+		process.write("done\n");
+		process.waitForBytesWritten(5000);
+		process.waitForFinished(10000);
+
+		const QByteArray stderrData = process.readAllStandardError();
+		if (!stderrData.isEmpty())
+			std::cerr << stderrData.toStdString() << std::endl;
+
+		return EXIT_SUCCESS;
+	}
+	int PythonInterpreter::executePocaScript(nlohmann::json& _response, const std::vector<PythonInterpreter::PythonFeatureInput>& _inputs, const char* _moduleName, const char* _funcName)
+	{
+		_response = nlohmann::json::object();
+		m_lastResponse = nlohmann::json::object();
+		if (initialize() == EXIT_FAILURE)
+			return EXIT_FAILURE;
+
+		const std::string pythonExe = m_pythonRootPath + "/python.exe";
+		const std::string workerScript = m_pythonScriptsPath + "/poca_external_worker.py";
+		const std::string userScript = resolveScriptPath(_moduleName);
+
+		if (!QFileInfo::exists(QString::fromStdString(pythonExe)) || !QFileInfo::exists(QString::fromStdString(workerScript)) || !QFileInfo::exists(QString::fromStdString(userScript))) {
+			std::cerr << "Python external mode path error. python=" << pythonExe << ", worker=" << workerScript << ", script=" << userScript << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		std::vector <std::unique_ptr<WinSharedMemory>> inputShms;
+		inputShms.reserve(_inputs.size());
+
+		std::ostringstream request;
+		request << "{\"api\":\"poca\",\"inputs\":[";
+		for (size_t i = 0; i < _inputs.size(); ++i) {
+			const PythonInterpreter::PythonFeatureInput& input = _inputs[i];
+			const std::vector<float>* values = input.values;
+			const size_t nbValues = values != nullptr ? values->size() : 0;
+			const size_t nbytes = nbValues * sizeof(float);
+			std::unique_ptr<WinSharedMemory> shm(new WinSharedMemory());
+			const std::string shmName = makeSharedMemoryName(i);
+			if (!shm->create(shmName, std::max<size_t>(nbytes, 1))) {
+				std::cerr << "Could not create input shared memory segment: " << shmName << std::endl;
+				return EXIT_FAILURE;
+			}
+			if (nbytes > 0 && values != nullptr)
+				std::memcpy(shm->data, values->data(), nbytes);
+
+			if (i > 0) request << ",";
+			request << "{\"name\":" << quoteForJson(shmName)
+				<< ",\"component\":" << quoteForJson(input.component)
+				<< ",\"feature\":" << quoteForJson(input.feature)
+				<< ",\"dtype\":\"float32\""
+				<< ",\"shape\":[" << nbValues << "]"
+				<< ",\"nbytes\":" << nbytes << "}";
+			inputShms.push_back(std::move(shm));
+		}
+		request << "]}\n";
+
+		QProcess process;
+		QStringList args;
+		args << QString::fromStdString(workerScript)
+			 << "--script" << QString::fromStdString(userScript)
+			 << "--function" << QString::fromStdString(_funcName ? _funcName : "");
+
+		QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		env.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PATH"), QString::fromStdString(m_pythonRootPath + ";" + m_pythonRootPath + "/Library/bin;" + m_pythonRootPath + "/DLLs;") + env.value(QStringLiteral("PATH")));
+		process.setProcessEnvironment(env);
+		process.setProcessChannelMode(QProcess::SeparateChannels);
+		process.start(QString::fromStdString(pythonExe), args);
+		if (!process.waitForStarted(10000)) {
+			std::cerr << "Could not start external Python process: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		process.write(QByteArray::fromStdString(request.str()));
+		process.waitForBytesWritten(10000);
+
+		QByteArray line;
+		while (!line.contains('\n')) {
+			if (!process.waitForReadyRead(30000)) {
+				std::cerr << "External Python process did not answer. STDERR:\n" << process.readAllStandardError().toStdString() << std::endl;
+				process.kill();
+				return EXIT_FAILURE;
+			}
+			line += process.readAllStandardOutput();
+		}
+
+		nlohmann::json response;
+		try { response = nlohmann::json::parse(line.toStdString()); }
+		catch (const nlohmann::json::exception& e) {
+			std::cerr << "Could not parse external Python response: " << e.what() << "\nResponse was:\n" << line.toStdString() << std::endl;
+			process.kill();
+			return EXIT_FAILURE;
+		}
+
+		if (!response.value("ok", false)) {
+			std::cerr << "External Python error: " << response.value("error", std::string("unknown error")) << std::endl;
+			if (response.contains("traceback")) std::cerr << response["traceback"].get<std::string>() << std::endl;
+			process.write("done\n");
+			process.waitForFinished(5000);
+			return EXIT_FAILURE;
+		}
+
+		// Copy returned shared-memory arrays into the JSON object as in-memory vectors.
+		if (response.contains("actions")) {
+			for (auto& action : response["actions"]) {
+				if (action.contains("values_shm")) {
+					auto payload = action["values_shm"];
+					const std::string name = payload["name"].get<std::string>();
+					const size_t nbytes = payload["nbytes"].get<size_t>();
+					std::vector<size_t> shape = payload["shape"].get<std::vector<size_t>>();
+					size_t nbValues = 1; for (const auto dim : shape) nbValues *= dim;
+					if (nbytes != nbValues * sizeof(double)) {
+						std::cerr << "Unexpected output size from Python shared memory segment." << std::endl;
+						process.write("done\n"); process.waitForFinished(5000); return EXIT_FAILURE;
+					}
+					WinSharedMemory outputShm;
+					if (!outputShm.open(name, std::max<size_t>(nbytes, 1))) {
+						std::cerr << "Could not open output shared memory segment: " << name << std::endl;
+						process.write("done\n"); process.waitForFinished(5000); return EXIT_FAILURE;
+					}
+					std::vector<double> values(nbValues);
+					if (nbytes > 0) std::memcpy(values.data(), outputShm.data, nbytes);
+					action.erase("values_shm");
+					action["values"] = values;
+				}
+			}
+		}
+
+		process.write("done\n");
+		process.waitForBytesWritten(5000);
+		process.waitForFinished(10000);
+
+		const QByteArray stderrData = process.readAllStandardError();
+		if (!stderrData.isEmpty()) std::cerr << stderrData.toStdString() << std::endl;
+
+		_response = response;
+		m_lastResponse = response;
+		return EXIT_SUCCESS;
 	}
 }
 #endif
-

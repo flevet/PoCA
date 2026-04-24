@@ -519,7 +519,7 @@ void PythonWidget::update(poca::core::SubjectInterface* _subject, const poca::co
 
 	m_object = obj;
 
-	if (m_object->nbBasicComponents() <= 1) return;
+	if (m_object->nbBasicComponents() < 1) return;
 
 	if (_aspect == "LoadObjCharacteristicsAllWidgets") {
 
@@ -618,109 +618,149 @@ poca::core::CommandInfo PythonWidget::createCommand(const std::string& _nameComm
 	return spec.create(false, _parameters);
 }
 
+namespace {
+	bool collectPocaPythonInputs(poca::core::MyObjectInterface* _obj, const std::vector<std::string>& _features, const std::string& _filename, const std::string& _nameFunction, std::vector<poca::core::PythonInterpreter::PythonFeatureInput>& _inputs)
+	{
+		if (_obj == nullptr) return false;
+		for (const auto& feature : _features) {
+			auto pos = feature.find(" -> ");
+			if (pos == std::string::npos) {
+				std::cout << "Error: bad Python feature specification '" << feature << "'. Expected 'Component -> feature'." << std::endl;
+				return false;
+			}
+			std::string comp = feature.substr(0, pos), feat = feature.substr(pos + 4);
+			poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent*>(_obj->getBasicComponent(comp));
+			if (!bc) {
+				std::cout << "Error: execution of the Python function " << _nameFunction << " from the file " << _filename << " failed. Component " << comp << " does not exist." << std::endl;
+				return false;
+			}
+			if (!bc->hasData(feat)) {
+				std::cout << "Error: execution of the Python function " << _nameFunction << " from the file " << _filename << " failed. Feature " << feat << " from component " << comp << " does not exist." << std::endl;
+				return false;
+			}
+			poca::core::PythonInterpreter::PythonFeatureInput input;
+			input.component = comp;
+			input.feature = feat;
+			input.values = &bc->getData<float>(feat);
+			_inputs.push_back(input);
+		}
+		return true;
+	}
+
+	bool applyPocaPythonActions(poca::core::MyObjectInterface* _obj, const nlohmann::json& _response)
+	{
+		if (!_response.contains("actions")) return true;
+		bool changedObject = false;
+		for (const auto& action : _response["actions"]) {
+			const std::string type = action.value("type", std::string());
+			if (type == "display") {
+				std::cout << action.value("text", std::string()) << std::endl;
+			}
+			else if (type == "add_feature") {
+				const std::string component = action.value("component", std::string());
+				const std::string feature = action.value("feature", std::string());
+				if (component.empty() || feature.empty() || !action.contains("values")) {
+					std::cout << "Error: Python add_feature action requires component, feature and values." << std::endl;
+					return false;
+				}
+				poca::core::BasicComponentInterface* bc = _obj->getBasicComponent(component);
+				if (!bc) {
+					std::cout << "Error: Python requested adding feature " << feature << " to unknown component " << component << "." << std::endl;
+					return false;
+				}
+				std::vector<float> newFeature;
+				newFeature.reserve(action["values"].size());
+				for (const auto& v : action["values"])
+					newFeature.push_back(static_cast<float>(v.get<double>()));
+				bc->addFeature(feature, poca::core::generateDataWithLog(newFeature));
+				std::cout << "Python added feature '" << feature << "' to component '" << component << "' (" << newFeature.size() << " values)." << std::endl;
+				changedObject = true;
+			}
+			else if (type == "create_dataset") {
+				std::cout << "Python requested creation of dataset '" << action.value("name", std::string("unnamed")) << "'. This action is described in JSON but is not connected to PoCA object creation yet." << std::endl;
+			}
+			else {
+				std::cout << "Warning: unknown Python action type '" << type << "'." << std::endl;
+			}
+		}
+		if (changedObject)
+			_obj->notify("LoadObjCharacteristicsAllWidgets");
+		return true;
+	}
+}
+
 void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInfo& _command)
 {
 	std::string nameFunction = _command.getParameter<std::string>("nameFunction");
 
 	if (nameFunction == "nena") {
-		//This is a hack. This version of nena requires computation of the distances between the locs in the consecutive frames
-		//Therefore it needs currently to be done in poca, requiring highjacking the normal run of the python script
-		//In a perfect world, this distance computation should be done in the python script
 		executeNena();
 		return;
 	}
 
-	QVector <QVector <double>> dataPython;
 	std::vector <std::string> features = _command.getParameter< std::vector <std::string>>("features");
 	std::string filename = _command.getParameter<std::string>("filename");
-
-	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	for (const auto& feature : features) {
-		auto pos = feature.find(" -> ");
-		std::string comp = feature.substr(0, pos), feat = feature.substr(pos + 4);
-		//std::cout << comp << " ------ " << feat << std::endl;
-		poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent *>(obj->getBasicComponent(comp));
-		if (!bc) {
-			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Component " << comp << " does not exist." << std::endl;
-			return;
-		}
-		if (!bc->hasData(feat)) {
-			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Feature " << feat << "from component " << comp << " does not exist." << std::endl;
-			return;
-		}
-		const std::vector <float>& data = bc->getData<float>(feat);
-		auto cur = dataPython.size();
-		dataPython.push_back(QVector<double>());
-		for (const auto val : data)
-			dataPython[cur].push_back(val);
-	}
-
 	auto pos = filename.find_last_of(".");
-	auto moduleName = filename.substr(0, pos);
+	auto moduleName = pos == std::string::npos ? filename : filename.substr(0, pos);
+
+	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
+	if (!collectPocaPythonInputs(m_object->currentObject(), features, filename, nameFunction, inputs))
+		return;
 
 	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
-	QVector <double> res;
-	bool res2 = py->applyFunctionWithNArraysParameterAnd1ArrayReturned(res, dataPython, moduleName.c_str(), nameFunction.c_str());
-	if (res2 == EXIT_FAILURE)
-		std::cout << "ERROR! Function << " << nameFunction << " from Python file " << filename << " was not run with error message : python script was not run." << std::endl;
-	else {
-		std::cout << "Result of running " << nameFunction << " from Python file " << filename << ":" << std::endl;
-		std::copy(res.begin(), res.end(), std::ostream_iterator<double>(std::cout, " "));
-		std::cout << std::endl;
+	nlohmann::json response;
+	bool res = py->executePocaScript(response, inputs, moduleName.c_str(), nameFunction.c_str());
+	if (res == EXIT_FAILURE) {
+		std::cout << "ERROR! Function " << nameFunction << " from Python file " << filename << " was not run." << std::endl;
+		return;
 	}
+	applyPocaPythonActions(m_object->currentObject(), response);
 }
 
 void PythonWidget::executePythonScriptAddFeatureToComponent(const poca::core::CommandInfo& _command)
 {
-	QVector <QVector <double>> dataPython;
 	std::vector <std::string> features = _command.getParameter< std::vector <std::string>>("features");
 	std::string filename = _command.getParameter<std::string>("filename");
 	std::string nameFunction = _command.getParameter<std::string>("nameFunction");
-	std::string component = _command.getParameter<std::string>("addToComponent");
-	std::string nameFeature = _command.getParameter<std::string>("nameNewFeature");
-
-	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	for (const auto& feature : features) {
-		auto pos = feature.find(" -> ");
-		std::string comp = feature.substr(0, pos), feat = feature.substr(pos + 4);
-		//std::cout << comp << " ------ " << feat << std::endl;
-		poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent*>(obj->getBasicComponent(comp));
-		if (!bc) {
-			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Component " << comp << " does not exist." << std::endl;
-			return;
-		}
-		if(!bc->hasData(feat)) {
-			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Feature " << feat << "from component " << comp << " does not exist." << std::endl;
-			return;
-		}
-		const std::vector <float>& data = bc->getData<float>(feat);
-		auto cur = dataPython.size();
-		dataPython.push_back(QVector<double>());
-		for (const auto val : data)
-			dataPython[cur].push_back(val);
-	}
-
 	auto pos = filename.find_last_of(".");
-	auto moduleName = filename.substr(0, pos);
+	auto moduleName = pos == std::string::npos ? filename : filename.substr(0, pos);
+
+	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
+	if (!collectPocaPythonInputs(m_object->currentObject(), features, filename, nameFunction, inputs))
+		return;
 
 	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
-	QVector <double> res;
-	bool res2 = py->applyFunctionWithNArraysParameterAnd1ArrayReturned(res, dataPython, moduleName.c_str(), nameFunction.c_str());
-	if (res2 == EXIT_FAILURE)
-		std::cout << "ERROR! Function << " << nameFunction << " from Python file " << filename <<" was not run with error message : python script was not run." << std::endl;
-	else {
-		std::vector <float> newFeature(res.size(), 0.f);
-		std::transform(res.begin(), res.end(), newFeature.begin(), [](double x) { return (float)x; });
-		poca::core::BasicComponentInterface* bc = obj->getBasicComponent(component);
-		if (!bc) {
-			std::cout << "Error: execution of the Python function " << nameFunction << " from the file " << filename << " failed. Result should have been added to component " << component << " that does not exist." << std::endl;
-			return;
-		}
-		bc->addFeature(nameFeature, poca::core::generateDataWithLog(newFeature));
-		m_object->notify("LoadObjCharacteristicsAllWidgets");
+	nlohmann::json response;
+	bool res = py->executePocaScript(response, inputs, moduleName.c_str(), nameFunction.c_str());
+	if (res == EXIT_FAILURE) {
+		std::cout << "ERROR! Function " << nameFunction << " from Python file " << filename << " was not run." << std::endl;
+		return;
 	}
-}
 
+	// New API: Python decides what to do by returning structured actions.
+	if (response.contains("actions") && !response["actions"].empty()) {
+		applyPocaPythonActions(m_object->currentObject(), response);
+		return;
+	}
+
+	// Compatibility fallback for older scripts that still return a bare array.
+	QVector <double> legacyRes;
+	bool legacy = py->applyFunctionWithNFloatArraysParameterAnd1ArrayReturned(legacyRes, [&]() {
+		std::vector<const std::vector<float>*> raw;
+		for (const auto& input : inputs) raw.push_back(input.values);
+		return raw;
+	}(), moduleName.c_str(), nameFunction.c_str());
+	if (legacy == EXIT_FAILURE) return;
+
+	std::string component = _command.getParameter<std::string>("addToComponent");
+	std::string nameFeature = _command.getParameter<std::string>("nameNewFeature");
+	std::vector <float> newFeature(legacyRes.size(), 0.f);
+	std::transform(legacyRes.begin(), legacyRes.end(), newFeature.begin(), [](double x) { return (float)x; });
+	poca::core::BasicComponentInterface* bc = m_object->currentObject()->getBasicComponent(component);
+	if (!bc) return;
+	bc->addFeature(nameFeature, poca::core::generateDataWithLog(newFeature));
+	m_object->currentObject()->notify("LoadObjCharacteristicsAllWidgets");
+}
 QStringList PythonWidget::identifyPythonFunctionNames(const QString& _file) const
 {
 	QStringList functions, splitFile;
