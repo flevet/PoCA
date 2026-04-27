@@ -141,6 +141,7 @@ PythonWidget::PythonWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidge
 	QVBoxLayout* layout = new QVBoxLayout;
 	//layout->addWidget(m_groupPreloadedPythonFiles);
 	layout->addWidget(groupFileFunction);
+	groupListFeatures->setVisible(false);
 	layout->addWidget(groupListFeatures);
 	layout->addWidget(groupPredefined);
 	layout->addWidget(m_buttonExecuteScript, Qt::AlignRight);
@@ -273,9 +274,9 @@ void PythonWidget::actionNeeded()
 		m_labelPythonFile->setText(filename);
 	}
 	else if (sender == m_buttonExecuteScript) {
-		if (m_labelPythonExecutable->text().isEmpty() || m_labelPythonFile->text().isEmpty()) {
+		if (m_labelPythonFile->text().isEmpty()) {
 			QMessageBox msgBox;
-			msgBox.setText("Please choose both python.exe and a Python script before execution.");
+			msgBox.setText("Please choose a Python script before execution.");
 			msgBox.exec();
 			return;
 		}
@@ -291,13 +292,9 @@ void PythonWidget::actionNeeded()
 				return;
 			}
 		}
-		std::vector <std::string> features;
-		for (auto n = 0; n < m_lists[1]->count(); n++)
-			features.push_back(m_lists[1]->item(n)->text().toStdString());
 		poca::core::CommandInfo com(true, commandName,
 			"pythonExecutable", m_labelPythonExecutable->text().toStdString(),
-			"filename", m_labelPythonFile->text().toStdString(),
-			"features", features);
+			"filename", m_labelPythonFile->text().toStdString());
 
 		execute(&com);
 		if (m_addToPredefinedModules->isChecked()) {
@@ -407,8 +404,10 @@ void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comm
 
 		std::string nameStr = objectName().toStdString();
 		(*json)[nameStr] = commands;
+			if (!m_labelPythonExecutable->text().isEmpty())
+				(*json)["PythonParameters"]["python_executable_path"] = m_labelPythonExecutable->text().toStdString();
 	}
-	if(_com->hasParameter("pythonExecutable") && _com->hasParameter("filename") && _com->hasParameter("features"))
+	if(_com->hasParameter("filename"))
 		executePythonScript(*_com);
 
 	if (_com->isRecordable())
@@ -417,6 +416,9 @@ void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comm
 
 void PythonWidget::loadParameters(const nlohmann::json& _json)
 {
+	if (_json.contains("PythonParameters") && _json["PythonParameters"].contains("python_executable_path"))
+		m_labelPythonExecutable->setText(_json["PythonParameters"]["python_executable_path"].get<std::string>().c_str());
+
 	std::string nameStr = objectName().toStdString();
 	if (_json.contains(nameStr)) {
 		try {
@@ -441,16 +443,16 @@ void PythonWidget::loadParameters(const nlohmann::json& _json)
 poca::core::CommandInfo PythonWidget::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
 	const poca::core::CommandSpec spec(_nameCommand, {
-		{ "pythonExecutable", poca::core::CommandParameterType::String, true },
+		{ "pythonExecutable", poca::core::CommandParameterType::String },
 		{ "filename", poca::core::CommandParameterType::String, true },
-		{ "features", poca::core::CommandParameterType::Array, true },
+		{ "features", poca::core::CommandParameterType::Array },
 		{ "buttonLabel", poca::core::CommandParameterType::String }
 	});
 	return spec.create(false, _parameters);
 }
 
 namespace {
-	bool collectPocaPythonInputs(poca::core::MyObjectInterface* _obj, const std::vector<std::string>& _features, const std::string& _filename, const std::string& _nameFunction, std::vector<poca::core::PythonInterpreter::PythonFeatureInput>& _inputs)
+	bool collectPocaPythonInputsFromFeatures(poca::core::MyObjectInterface* _obj, const std::vector<std::string>& _features, const std::string& _filename, const std::string& _nameFunction, std::vector<poca::core::PythonInterpreter::PythonFeatureInput>& _inputs)
 	{
 		if (_obj == nullptr) return false;
 		for (const auto& feature : _features) {
@@ -475,6 +477,54 @@ namespace {
 			input.values = &bc->getData<float>(feat);
 			_inputs.push_back(input);
 		}
+		return true;
+	}
+
+	bool collectPocaPythonInputsFromRequirements(poca::core::MyObjectInterface* _obj, const nlohmann::json& _description, const std::string& _filename, std::vector<poca::core::PythonInterpreter::PythonFeatureInput>& _inputs)
+	{
+		if (_obj == nullptr) return false;
+		if (!_description.value("ok", false)) {
+			std::cout << "Error: could not read PoCA Python script requirements for " << _filename << "." << std::endl;
+			if (_description.contains("error")) std::cout << _description["error"].get<std::string>() << std::endl;
+			if (_description.contains("traceback")) std::cout << _description["traceback"].get<std::string>() << std::endl;
+			return false;
+		}
+		if (!_description.contains("requirements") || !_description["requirements"].is_array()) {
+			std::cout << "Error: Python script " << _filename << " did not return a valid requirements array." << std::endl;
+			return false;
+		}
+		for (const auto& requirement : _description["requirements"]) {
+			const std::string comp = requirement.value("component", std::string("DetectionSet"));
+			poca::core::BasicComponent* bc = static_cast<poca::core::BasicComponent*>(_obj->getBasicComponent(comp));
+			if (!bc) {
+				std::cout << "Error: Python script " << _filename << " requires component '" << comp << "', but this component does not exist." << std::endl;
+				return false;
+			}
+			if (!requirement.contains("features") || !requirement["features"].is_array()) {
+				std::cout << "Error: Python script " << _filename << " has an invalid requirement for component '" << comp << "'." << std::endl;
+				return false;
+			}
+			for (const auto& featureRequirement : requirement["features"]) {
+				const std::string feat = featureRequirement.value("name", std::string());
+				const bool optional = featureRequirement.value("optional", false);
+				if (feat.empty()) {
+					std::cout << "Error: Python script " << _filename << " has a feature requirement without a name." << std::endl;
+					return false;
+				}
+				if (!bc->hasData(feat)) {
+					if (optional) continue;
+					std::cout << "Error: Python script " << _filename << " requires feature '" << feat << "' from component '" << comp << "', but it does not exist." << std::endl;
+					return false;
+				}
+				poca::core::PythonInterpreter::PythonFeatureInput input;
+				input.component = comp;
+				input.feature = feat;
+				input.values = &bc->getData<float>(feat);
+				_inputs.push_back(input);
+			}
+		}
+		if (_inputs.empty())
+			std::cout << "Warning: Python script " << _filename << " declared no PoCA input features." << std::endl;
 		return true;
 	}
 
@@ -503,6 +553,10 @@ namespace {
 				newFeature.reserve(action["values"].size());
 				for (const auto& v : action["values"])
 					newFeature.push_back(static_cast<float>(v.get<double>()));
+				if (newFeature.size() != bc->nbElements()) {
+					std::cout << "Error: Python feature \"" << feature << "\" has " << newFeature.size() << " values, but component \"" << component << "\" has " << bc->nbElements() << " elements." << std::endl;
+					return false;
+				}
 				bc->addFeature(feature, poca::core::generateDataWithLog(newFeature));
 				std::cout << "Python added feature '" << feature << "' to component '" << component << "' (" << newFeature.size() << " values)." << std::endl;
 				changedObject = true;
@@ -522,16 +576,42 @@ namespace {
 
 void PythonWidget::executePythonScript(const poca::core::CommandInfo& _command)
 {
-	std::vector <std::string> features = _command.getParameter< std::vector <std::string>>("features");
+	std::vector <std::string> features;
+	if (_command.hasParameter("features"))
+		features = _command.getParameter< std::vector <std::string>>("features");
 	std::string filename = _command.getParameter<std::string>("filename");
-	std::string pythonExecutable = _command.getParameter<std::string>("pythonExecutable");
+	std::string pythonExecutable;
+	if (_command.hasParameter("pythonExecutable"))
+		pythonExecutable = _command.getParameter<std::string>("pythonExecutable");
+	if (pythonExecutable.empty()) {
+		nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
+		if (parameters.contains("PythonParameters") && parameters["PythonParameters"].contains("python_executable_path"))
+			pythonExecutable = parameters["PythonParameters"]["python_executable_path"].get<std::string>();
+	}
+	if (pythonExecutable.empty()) {
+		std::cout << "Error: no Python executable is configured. Set PythonParameters/python_executable_path in poca.ini or select python.exe in the Python widget." << std::endl;
+		return;
+	}
 	const std::string nameFunction = "run";
 
-	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
-	if (!collectPocaPythonInputs(m_object->currentObject(), features, filename, nameFunction, inputs))
-		return;
-
 	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
+	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
+	nlohmann::json description;
+	if (py->describePocaScript(description, pythonExecutable.c_str(), filename.c_str()) == EXIT_SUCCESS && description.contains("requirements") && !description["requirements"].empty()) {
+		if (!collectPocaPythonInputsFromRequirements(m_object->currentObject(), description, filename, inputs))
+			return;
+	}
+	else {
+		if (!features.empty()) {
+			if (!collectPocaPythonInputsFromFeatures(m_object->currentObject(), features, filename, nameFunction, inputs))
+				return;
+		}
+		else {
+			std::cout << "Error: Python script " << filename << " does not declare POCA_INPUTS/poca_inputs(), and no legacy GUI feature list is available." << std::endl;
+			return;
+		}
+	}
+
 	nlohmann::json response;
 	bool res = py->executePocaScript(response, inputs, pythonExecutable.c_str(), filename.c_str());
 	if (res == EXIT_FAILURE) {

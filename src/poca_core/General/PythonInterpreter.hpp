@@ -28,6 +28,7 @@ namespace poca::core {
 			std::string feature;
 			const std::vector<float>* values = nullptr;
 		};
+		int describePocaScript(nlohmann::json&, const char*, const char*);
 		int executePocaScript(nlohmann::json&, const std::vector<PythonFeatureInput>&, const char*, const char*);
 		const nlohmann::json& lastResponse() const { return m_lastResponse; }
 

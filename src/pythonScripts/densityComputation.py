@@ -3,6 +3,10 @@ import scipy.spatial as spatial
 
 radius = 50.0
 
+POCA_INPUTS = {
+    "DetectionSet": ["x", "y", {"name": "z", "optional": True}]
+}
+
 
 def computeDensity2D(xs, ys):
     points = np.vstack((xs, ys)).T

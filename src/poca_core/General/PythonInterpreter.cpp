@@ -152,6 +152,68 @@ namespace poca::core {
 		// Nothing to finalize: Python runs in a child process.
 	}
 
+	int PythonInterpreter::describePocaScript(nlohmann::json& _response, const char* _pythonExecutable, const char* _scriptPath)
+	{
+		_response = nlohmann::json::object();
+		const std::string pythonExe = normalisePath(_pythonExecutable ? _pythonExecutable : "");
+		const std::string userScript = normalisePath(_scriptPath ? _scriptPath : "");
+		if (pythonExe.empty() || userScript.empty()) {
+			std::cerr << "Python external mode requires both python.exe and a script path." << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		QFileInfo userScriptInfo(QString::fromStdString(userScript));
+		const std::string workerScript = normalisePath(userScriptInfo.absolutePath().toStdString()) + "/poca_external_worker.py";
+		if (!QFileInfo::exists(QString::fromStdString(pythonExe)) || !QFileInfo::exists(QString::fromStdString(workerScript)) || !QFileInfo::exists(QString::fromStdString(userScript))) {
+			std::cerr << "Python external mode path error. python=" << pythonExe << ", worker=" << workerScript << ", script=" << userScript << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		QProcess process;
+		QStringList args;
+		args << QString::fromStdString(workerScript)
+			 << "--script" << QString::fromStdString(userScript)
+			 << "--function" << QStringLiteral("run")
+			 << "--describe";
+
+		QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		env.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+		env.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+		QFileInfo pythonInfo(QString::fromStdString(pythonExe));
+		const std::string pythonRootPath = normalisePath(pythonInfo.absolutePath().toStdString());
+		env.insert(QStringLiteral("PATH"), QString::fromStdString(pythonRootPath + ";" + pythonRootPath + "/Library/bin;" + pythonRootPath + "/DLLs;") + env.value(QStringLiteral("PATH")));
+		process.setProcessEnvironment(env);
+		process.setProcessChannelMode(QProcess::SeparateChannels);
+		process.start(QString::fromStdString(pythonExe), args);
+		if (!process.waitForStarted(10000)) {
+			std::cerr << "Could not start external Python process: " << pythonExe << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		process.write("{\"api\":\"poca_describe\"}\n");
+		process.waitForBytesWritten(10000);
+
+		QByteArray line;
+		while (!line.contains('\n')) {
+			if (!process.waitForReadyRead(30000)) {
+				std::cerr << "External Python describe did not answer. STDERR:\n" << process.readAllStandardError().toStdString() << std::endl;
+				process.kill();
+				return EXIT_FAILURE;
+			}
+			line += process.readAllStandardOutput();
+		}
+		try { _response = nlohmann::json::parse(line.toStdString()); }
+		catch (const nlohmann::json::exception& e) {
+			std::cerr << "Could not parse external Python describe response: " << e.what() << "\nResponse was:\n" << line.toStdString() << std::endl;
+			process.kill();
+			return EXIT_FAILURE;
+		}
+		process.waitForFinished(5000);
+		const QByteArray stderrData = process.readAllStandardError();
+		if (!stderrData.isEmpty()) std::cerr << stderrData.toStdString() << std::endl;
+		return _response.value("ok", false) ? EXIT_SUCCESS : EXIT_FAILURE;
+	}
+
 	int PythonInterpreter::executePocaScript(nlohmann::json& _response, const std::vector<PythonInterpreter::PythonFeatureInput>& _inputs, const char* _pythonExecutable, const char* _scriptPath)
 	{
 		_response = nlohmann::json::object();

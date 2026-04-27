@@ -81,7 +81,6 @@ class PocaData:
         })
 
     def create_dataset(self, name, components):
-        # components format: {"DetectionSet": {"x": array, "y": array, ...}, ...}
         self._actions.append({
             "type": "create_dataset",
             "name": name,
@@ -90,6 +89,57 @@ class PocaData:
 
     def actions(self):
         return list(self._actions)
+
+
+def _normalise_requirements(raw):
+    """Return canonical script input requirements.
+
+    User scripts may define either:
+      POCA_INPUTS = {"DetectionSet": ["x", "y", {"name": "z", "optional": True}]}
+      POCA_INPUTS = [{"component": "DetectionSet", "features": ["x", "y"]}]
+      def poca_inputs(): return ...
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        if "component" in raw and "features" in raw:
+            raw = [raw]
+        else:
+            raw = [{"component": comp, "features": feats} for comp, feats in raw.items()]
+    if not isinstance(raw, (list, tuple)):
+        raise TypeError("PoCA requirements must be a dict or list")
+    result = []
+    for req in raw:
+        if not isinstance(req, dict):
+            raise TypeError("Each PoCA requirement must be a dict")
+        component = str(req.get("component", "DetectionSet"))
+        features = []
+        for f in req.get("features", []):
+            if isinstance(f, str):
+                features.append({"name": f, "optional": False})
+            elif isinstance(f, dict):
+                name = f.get("name", f.get("feature"))
+                if not name:
+                    raise ValueError("Feature requirement dict needs 'name' or 'feature'")
+                features.append({"name": str(name), "optional": bool(f.get("optional", False))})
+            else:
+                raise TypeError("Feature requirements must be strings or dicts")
+        result.append({"component": component, "features": features})
+    return result
+
+
+def _describe_user_script(script_path):
+    module_name = "poca_user_script_describe_" + str(os.getpid()) + "_" + str(time.time_ns())
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load Python script: {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if hasattr(module, "poca_inputs") and callable(module.poca_inputs):
+        raw = module.poca_inputs()
+    else:
+        raw = getattr(module, "POCA_INPUTS", [])
+    return _normalise_requirements(raw)
 
 
 def _load_array(meta):
@@ -127,7 +177,6 @@ def _append_array_payload(action, key, arr, output_shms):
     arr = np.asarray(arr)
     if arr.ndim == 0:
         arr = arr.reshape(1)
-    # PoCA features are float vectors, so default to float64 for compatibility with existing C++ copy path.
     if arr.dtype.kind not in ("f", "i", "u", "b"):
         raise TypeError(f"Unsupported array dtype for action {action.get('type')}: {arr.dtype}")
     arr = np.ascontiguousarray(arr, dtype=np.float64)
@@ -187,12 +236,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--script", required=True)
     parser.add_argument("--function", required=True)
+    parser.add_argument("--describe", action="store_true")
     args = parser.parse_args()
 
     input_shms = []
     output_shms = []
     try:
         request = json.loads(sys.stdin.readline())
+        if args.describe or request.get("api") == "poca_describe":
+            response = {"ok": True, "requirements": _describe_user_script(args.script)}
+            sys.__stdout__.write(json.dumps(response) + "\n")
+            sys.__stdout__.flush()
+            return 0
+
         loaded = []
         arrays = []
         for meta in request.get("inputs", []):
@@ -237,7 +293,7 @@ def main():
         sys.__stdout__.write(json.dumps(response) + "\n")
         sys.__stdout__.flush()
 
-        ack = sys.stdin.readline().strip()
+        sys.stdin.readline().strip()
         return 0
     except Exception as exc:
         sys.__stdout__.write(json.dumps({
