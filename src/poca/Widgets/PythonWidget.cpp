@@ -38,7 +38,6 @@
 #include <QtWidgets/QPlainTextEdit>
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QOpenGLWidget>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
 #include <QtCore/QVector>
@@ -64,49 +63,39 @@ PythonWidget::PythonWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidge
 	m_mediator = _mediator;
 	m_object = NULL;
 
-	/*std::vector <std::string> features = {"DetectionSet -> x", "DetectionSet -> y"};
-	m_pythonCommands.push_back(poca::core::CommandInfo(false, "nena", "filename", std::string("nena.py"), "nameFunction", std::string("nena"), "features", features, "resultType", std::string("singleValue")));
-	m_pythonCommands.push_back(poca::core::CommandInfo(false, "CAML", "buttonLabel", std::string("CAML2D"), "filename", std::string("CAML.py"), "nameFunction", std::string("testCAML2D"), "features", features, "resultType", std::string("addFeature"), "addToComponent", std::string("DetectionSet"), "nameNewFeature", std::string("camID")));
-	features.push_back("DetectionSet -> z");
-	m_pythonCommands.push_back(poca::core::CommandInfo(false, "CAML", "buttonLabel", std::string("CAML3D"), "filename", std::string("CAML.py"), "nameFunction", std::string("testCAML3D"), "features", features, "resultType", std::string("addFeature"), "addToComponent", std::string("DetectionSet"), "nameNewFeature", std::string("camID")));
-	m_pythonCommands.push_back(poca::core::CommandInfo(false, "ellipsoidFit", "buttonLabel", std::string("Locs: fit ellipsoid"), "filename", std::string("ellipsoidFit.py"), "nameFunction", std::string("ls_ellipsoid"), "features", features, "resultType", std::string("singleValue")));
-	*/
 	this->setObjectName("PythonWidget");
 	this->addActionToObserve("LoadObjCharacteristicsAllWidgets");
 
-	QGroupBox * groupFileFunction = new QGroupBox(tr("Python file & function"));
+	QGroupBox * groupFileFunction = new QGroupBox(tr("Python execution"));
 	groupFileFunction->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	int maxSize = 30;
+	m_buttonOpenPython = new QPushButton();
+	m_buttonOpenPython->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_buttonOpenPython->setMaximumSize(QSize(maxSize, maxSize));
+	m_buttonOpenPython->setIcon(QIcon(QPixmap(poca::plot::openFileIcon)));
+	m_buttonOpenPython->setToolTip("Select Python executable");
+	QObject::connect(m_buttonOpenPython, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+	m_labelPythonExecutable = new QLabel;
+	m_labelPythonExecutable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	QHBoxLayout* layoutPython = new QHBoxLayout;
+	layoutPython->addWidget(new QLabel("Python executable:"));
+	layoutPython->addWidget(m_buttonOpenPython);
+	layoutPython->addWidget(m_labelPythonExecutable);
 	m_buttonOpenFile = new QPushButton();
 	m_buttonOpenFile->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_buttonOpenFile->setMaximumSize(QSize(maxSize, maxSize));
 	m_buttonOpenFile->setIcon(QIcon(QPixmap(poca::plot::openFileIcon)));
-	m_buttonOpenFile->setToolTip("Save detections");
+	m_buttonOpenFile->setToolTip("Select Python script");
 	QObject::connect(m_buttonOpenFile, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	m_labelPythonFile = new QLabel;
 	m_labelPythonFile->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	QHBoxLayout* layout1 = new QHBoxLayout;
+	layout1->addWidget(new QLabel("Python script:"));
 	layout1->addWidget(m_buttonOpenFile);
 	layout1->addWidget(m_labelPythonFile);
-	QLabel* lblCombo = new QLabel("Identified functions:");
-	lblCombo->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_functionNameCombo = new QComboBox;
-	m_functionNameCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	QObject::connect(m_functionNameCombo, SIGNAL(activated(int)), this, SLOT(updateChosenFunctionName(int)));
-	QHBoxLayout* layoutCombo = new QHBoxLayout;
-	layoutCombo->addWidget(lblCombo);
-	layoutCombo->addWidget(m_functionNameCombo);
-	QLabel* lbl1 = new QLabel("Function name (no parameters):");
-	lbl1->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_editNameFunction = new QLineEdit;
-	m_editNameFunction->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-	QHBoxLayout* layout2 = new QHBoxLayout;
-	layout2->addWidget(lbl1);
-	layout2->addWidget(m_editNameFunction);
 	QVBoxLayout* layout3 = new QVBoxLayout;
+	layout3->addLayout(layoutPython);
 	layout3->addLayout(layout1);
-	layout3->addLayout(layoutCombo);
-	layout3->addLayout(layout2);
 	groupFileFunction->setLayout(layout3);
 
 
@@ -124,49 +113,11 @@ PythonWidget::PythonWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidge
 	layoutList->addWidget(m_lists[1]);
 	groupListFeatures->setLayout(layoutList);
 
-	QGroupBox* groupReturnValues = new QGroupBox(tr("Python function return type"));
-	groupReturnValues->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_singleValCBox = new QCheckBox("Display results");
-	m_singleValCBox->setChecked(true);
-	m_singleValCBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_addFeatureCBox = new QCheckBox("Add feature to component"); 
-	m_addFeatureCBox->setChecked(false);
-	m_addFeatureCBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_createNewDatasetCBox = new QCheckBox("Create new dataset");
-	m_createNewDatasetCBox->setChecked(false);
-	m_createNewDatasetCBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_createNewDatasetCBox->setEnabled(false);
-	m_bgroupGrid = new QButtonGroup;
-	m_bgroupGrid->addButton(m_singleValCBox, 0);
-	m_bgroupGrid->addButton(m_addFeatureCBox, 1);
-	m_bgroupGrid->addButton(m_createNewDatasetCBox, 2);
 	m_BCCombo = new QComboBox;
 	m_BCCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	QLabel* lblNameFeature = new QLabel("Name new feature");
-	lblNameFeature->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_nameFeatureEdit = new QLineEdit;
-	m_nameFeatureEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	QLabel* lblNamDataset = new QLabel("Name new dataset");
-	lblNamDataset->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	lblNamDataset->setEnabled(false);
-	m_nameNewDatasetEdit = new QLineEdit;
-	m_nameNewDatasetEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	m_nameNewDatasetEdit->setEnabled(false);
-	QLabel* lbl = new QLabel("Feature name:");
-	lbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
-	QGridLayout* layoutType = new QGridLayout;
-	layoutType->addWidget(m_singleValCBox, 0, 0, 1, 1);
-	layoutType->addWidget(m_addFeatureCBox, 1, 0, 1, 1);
-	layoutType->addWidget(m_BCCombo, 1, 1, 1, 1);
-	layoutType->addWidget(lblNameFeature, 1, 2, 1, 1);
-	layoutType->addWidget(m_nameFeatureEdit, 1, 3, 1, 1);
-	layoutType->addWidget(m_createNewDatasetCBox, 2, 0, 1, 1);
-	layoutType->addWidget(lblNamDataset, 2, 2, 1, 1);
-	layoutType->addWidget(m_nameNewDatasetEdit, 2, 3, 1, 1);
-	groupReturnValues->setLayout(layoutType);
 
 	QGroupBox* groupPredefined = new QGroupBox(tr("Add to predefined modules"));
-	groupReturnValues->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	groupPredefined->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_addToPredefinedModules = new QCheckBox("Yes");
 	m_addToPredefinedModules->setChecked(false);
 	m_addToPredefinedModules->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
@@ -191,7 +142,6 @@ PythonWidget::PythonWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidge
 	//layout->addWidget(m_groupPreloadedPythonFiles);
 	layout->addWidget(groupFileFunction);
 	layout->addWidget(groupListFeatures);
-	layout->addWidget(groupReturnValues);
 	layout->addWidget(groupPredefined);
 	layout->addWidget(m_buttonExecuteScript, Qt::AlignRight);
 	layout->addWidget(emptyW);
@@ -221,30 +171,10 @@ PythonWidget::~PythonWidget()
 
 void PythonWidget::populatePredefinedButtons()
 {
-	
-	nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
-	std::vector <std::string> names = { "python_path", "python_dll_path", "python_lib_path", "python_packages_path", "python_scripts_path" };
-	std::vector <std::string> paths(names.size());
-	if (!parameters.contains("PythonParameters")) {
-		/*QMessageBox msgBox;
-		msgBox.setText("Cannot load predefined modules. Please make sure that the Python paths have been initialized (in Menu >> Plugins >> Python).");
-		msgBox.exec();*/
-		return;
-	}
-	if (!parameters["PythonParameters"].contains("python_scripts_path")) {
-		/*QMessageBox msgBox;
-		msgBox.setText("Cannot load predefined modules. Please make sure that the Python paths to the custom Python scripts has been initialized (in Menu >> Plugins >> Python).");
-		msgBox.exec();*/
-		return;
-	}
-	std::string pathToScripts = parameters["PythonParameters"]["python_scripts_path"].get<std::string>();
-	if (pathToScripts[pathToScripts.size() - 1] != '/')
-		pathToScripts.append("/");
-
 	int maxSize = 100;
 	std::vector <std::vector<poca::core::CommandInfo>::iterator> toErase;
 	for (std::vector<poca::core::CommandInfo>::iterator com = m_pythonCommands.begin(); com != m_pythonCommands.end(); com++) {
-		const std::string& filename = pathToScripts + com->getParameter<std::string>("filename");
+		const std::string& filename = com->getParameter<std::string>("filename");
 
 		if (!poca::core::file_exists(filename)) {
 			//if the file does not exist, we remove the command from the vector
@@ -325,40 +255,30 @@ void PythonWidget::actionNeeded()
 			execute(&command);
 		}
 	}
-	if (sender == m_buttonOpenFile) {
-		QString path;
-		
-		nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
-		if (parameters.contains("PythonParameters") && parameters["PythonParameters"].contains("python_scripts_path")) {
-			std::string pathToScripts = parameters["PythonParameters"]["python_scripts_path"].get<std::string>();
-			path = pathToScripts.c_str();
-		}
-		else
-			path = QDir::currentPath();
-
+	if (sender == m_buttonOpenPython) {
+		QString filename = QFileDialog::getOpenFileName(0,
+			QObject::tr("Select Python executable"),
+			QDir::currentPath(),
+			QObject::tr("Python executable (python.exe);;Executable (*.exe)"), 0, QFileDialog::DontUseNativeDialog);
+		if (filename.isEmpty()) return;
+		m_labelPythonExecutable->setText(filename);
+	}
+	else if (sender == m_buttonOpenFile) {
 		QString filename = QFileDialog::getOpenFileName(0,
 			QObject::tr("Select one Python file"),
-			path,
+			QDir::currentPath(),
 			QObject::tr("Python file (*.py)"), 0, QFileDialog::DontUseNativeDialog);
 
 		if (filename.isEmpty()) return;
-		QString pathFile = filename.left(filename.lastIndexOf("/"));
-		std::cout << pathFile.toStdString() << std::endl;
-		if (pathFile != path) {
+		m_labelPythonFile->setText(filename);
+	}
+	else if (sender == m_buttonExecuteScript) {
+		if (m_labelPythonExecutable->text().isEmpty() || m_labelPythonFile->text().isEmpty()) {
 			QMessageBox msgBox;
-			msgBox.setText("Mandatory: the chosen Python file is required to be inside the Python script folder (" + path + ") defined in PoCA(in Menu >> Plugins >> Python).");
+			msgBox.setText("Please choose both python.exe and a Python script before execution.");
 			msgBox.exec();
 			return;
 		}
-		m_labelPythonFile->setText(filename);
-
-		QFile file(filename);
-		if (!file.open(QFile::ReadOnly | QFile::Text)) return;
-		QStringList functions = identifyPythonFunctionNames(file.readAll());
-		m_functionNameCombo->clear();
-		m_functionNameCombo->addItems(functions);
-	}
-	else if (sender == m_buttonExecuteScript) {
 		QString name = m_labelPythonFile->text();
 		name = name.right(name.size() - name.lastIndexOf("/") - 1);
 		std::string nameModule = name.left(name.lastIndexOf(".")).toStdString(), filename = name.toStdString(), commandName = nameModule;
@@ -371,34 +291,13 @@ void PythonWidget::actionNeeded()
 				return;
 			}
 		}
-		std::string nameFunction = m_editNameFunction->text().toStdString();
 		std::vector <std::string> features;
 		for (auto n = 0; n < m_lists[1]->count(); n++)
 			features.push_back(m_lists[1]->item(n)->text().toStdString());
-		std::string resultType, addToComponent, nameNewFeature;
-		auto idx = m_bgroupGrid->checkedId();
-		poca::core::CommandInfo com;
-		switch (idx) {
-		case 0:
-		{
-			resultType = "singleValue";
-			com = poca::core::CommandInfo(true, commandName, "filename", filename, "nameFunction", nameFunction, "features", features, "resultType", resultType);
-			break;
-		}
-		case 1:
-		{
-			resultType = "addFeature";
-			addToComponent = m_BCCombo->currentText().toStdString();
-			nameNewFeature = m_nameFeatureEdit->text().toStdString();
-			com = poca::core::CommandInfo(true, commandName, "filename", filename, "nameFunction", nameFunction, "features", features, "resultType", resultType, "addToComponent", addToComponent, "nameNewFeature", nameNewFeature);
-			break;
-		}
-		case 2:
-			//resultType = "singleValue";
-			break;
-		}
-		if (resultType.empty())
-			return;
+		poca::core::CommandInfo com(true, commandName,
+			"pythonExecutable", m_labelPythonExecutable->text().toStdString(),
+			"filename", m_labelPythonFile->text().toStdString(),
+			"features", features);
 
 		execute(&com);
 		if (m_addToPredefinedModules->isChecked()) {
@@ -432,66 +331,6 @@ void PythonWidget::actionNeeded(int _idx)
 void PythonWidget::actionNeeded(bool _val)
 {
 
-}
-
-void PythonWidget::executeNena()
-{
-	poca::core::MyObjectInterface* obj = m_object->currentObject();
-	poca::core::BasicComponentInterface* bci = obj->getBasicComponent("DetectionSet");
-	poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(bci);
-	if (dset == NULL) return;
-
-	if (!dset->hasData("frame")) return;
-
-	const std::vector <float>& xs = dset->getData<float>("x");
-	const std::vector <float>& ys = dset->getData<float>("y");
-	const std::vector <float>& zs = dset->hasData("z") ? dset->getData<float>("z") : std::vector <float>(xs.size(), 0.f);
-	const std::vector <float>& times = dset->getData<float>("frame");
-
-	//Prepare data per frame
-	std::vector <uint32_t> pointsPerFrame;
-	float currentTime = times[0];
-	uint32_t n = 0;
-	pointsPerFrame.push_back(n++);
-	for (; n < dset->nbPoints(); n++) {
-		if (times[n] != currentTime) {
-			currentTime = times[n];
-			pointsPerFrame.push_back(n);
-		}
-	}
-	pointsPerFrame.push_back(n - 1);
-
-	QVector <double> distancesNena;
-
-	double dmin = std::numeric_limits < double >::max(), d = 0.;
-	for (size_t currentSlice = 0; currentSlice < pointsPerFrame.size() - 2; currentSlice++) {
-		size_t nextSlice = currentSlice + 1;
-		for (uint32_t i = pointsPerFrame[currentSlice]; i < pointsPerFrame[nextSlice]; i++) {
-			dmin = std::numeric_limits < double >::max();
-			bool found = false;
-			for (uint32_t j = pointsPerFrame[nextSlice]; j < pointsPerFrame[nextSlice + 1]; j++) {
-				d = poca::geometry::distance3DSqr(xs[i], ys[i], zs[i], xs[j], ys[j], zs[j]);
-				if (d < dmin) {
-					dmin = d;
-					found = true;
-				}
-			}
-			if (found) {
-				distancesNena.push_back(sqrt(dmin));
-			}
-		}
-	}
-	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
-	QVector <QVector <double>> distances;
-	distances.push_back(distancesNena);
-	QVector <double> coeffs;
-	bool res = py->applyFunctionWithNArraysParameterAnd1ArrayReturned(coeffs, distances, "nena", "nena");
-	if (res == EXIT_FAILURE)
-		std::cout << "ERROR! NeNA was not run with error message: python script was not run." << std::endl;
-	else if(coeffs.empty())
-		std::cout << "ERROR! running NeNA failed." << std::endl;
-	else
-		std::cout << "The average lecalization accuracy by NeNA is at " << coeffs[0] << " nm." << std::endl;
 }
 
 void PythonWidget::performAction(poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _ci)
@@ -569,13 +408,8 @@ void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::Comm
 		std::string nameStr = objectName().toStdString();
 		(*json)[nameStr] = commands;
 	}
-	if(_com->hasParameter("filename") && _com->hasParameter("features") && _com->hasParameter("resultType") && _com->hasParameter("nameFunction") ){
-		std::string resultType = _com->getParameter<std::string>("resultType");
-		if (resultType == "singleValue")
-			executePythonScriptDisplayReturn(*_com);
-		else if (resultType == "addFeature")
-			executePythonScriptAddFeatureToComponent(*_com);
-	}
+	if(_com->hasParameter("pythonExecutable") && _com->hasParameter("filename") && _com->hasParameter("features"))
+		executePythonScript(*_com);
 
 	if (_com->isRecordable())
 		poca::core::MacroRecorderSingleton::instance()->addCommand("PythonWidget", _com);
@@ -607,12 +441,9 @@ void PythonWidget::loadParameters(const nlohmann::json& _json)
 poca::core::CommandInfo PythonWidget::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
 {
 	const poca::core::CommandSpec spec(_nameCommand, {
+		{ "pythonExecutable", poca::core::CommandParameterType::String, true },
 		{ "filename", poca::core::CommandParameterType::String, true },
 		{ "features", poca::core::CommandParameterType::Array, true },
-		{ "resultType", poca::core::CommandParameterType::String, true },
-		{ "nameFunction", poca::core::CommandParameterType::String, true },
-		{ "addToComponent", poca::core::CommandParameterType::String },
-		{ "nameNewFeature", poca::core::CommandParameterType::String },
 		{ "buttonLabel", poca::core::CommandParameterType::String }
 	});
 	return spec.create(false, _parameters);
@@ -689,19 +520,12 @@ namespace {
 	}
 }
 
-void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInfo& _command)
+void PythonWidget::executePythonScript(const poca::core::CommandInfo& _command)
 {
-	std::string nameFunction = _command.getParameter<std::string>("nameFunction");
-
-	if (nameFunction == "nena") {
-		executeNena();
-		return;
-	}
-
 	std::vector <std::string> features = _command.getParameter< std::vector <std::string>>("features");
 	std::string filename = _command.getParameter<std::string>("filename");
-	auto pos = filename.find_last_of(".");
-	auto moduleName = pos == std::string::npos ? filename : filename.substr(0, pos);
+	std::string pythonExecutable = _command.getParameter<std::string>("pythonExecutable");
+	const std::string nameFunction = "run";
 
 	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
 	if (!collectPocaPythonInputs(m_object->currentObject(), features, filename, nameFunction, inputs))
@@ -709,80 +533,13 @@ void PythonWidget::executePythonScriptDisplayReturn(const poca::core::CommandInf
 
 	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
 	nlohmann::json response;
-	bool res = py->executePocaScript(response, inputs, moduleName.c_str(), nameFunction.c_str());
+	bool res = py->executePocaScript(response, inputs, pythonExecutable.c_str(), filename.c_str());
 	if (res == EXIT_FAILURE) {
-		std::cout << "ERROR! Function " << nameFunction << " from Python file " << filename << " was not run." << std::endl;
+		std::cout << "ERROR! Function run(poca) from Python file " << filename << " was not run." << std::endl;
 		return;
 	}
+
 	applyPocaPythonActions(m_object->currentObject(), response);
-}
-
-void PythonWidget::executePythonScriptAddFeatureToComponent(const poca::core::CommandInfo& _command)
-{
-	std::vector <std::string> features = _command.getParameter< std::vector <std::string>>("features");
-	std::string filename = _command.getParameter<std::string>("filename");
-	std::string nameFunction = _command.getParameter<std::string>("nameFunction");
-	auto pos = filename.find_last_of(".");
-	auto moduleName = pos == std::string::npos ? filename : filename.substr(0, pos);
-
-	std::vector<poca::core::PythonInterpreter::PythonFeatureInput> inputs;
-	if (!collectPocaPythonInputs(m_object->currentObject(), features, filename, nameFunction, inputs))
-		return;
-
-	poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
-	nlohmann::json response;
-	bool res = py->executePocaScript(response, inputs, moduleName.c_str(), nameFunction.c_str());
-	if (res == EXIT_FAILURE) {
-		std::cout << "ERROR! Function " << nameFunction << " from Python file " << filename << " was not run." << std::endl;
-		return;
-	}
-
-	// New API: Python decides what to do by returning structured actions.
-	if (response.contains("actions") && !response["actions"].empty()) {
-		applyPocaPythonActions(m_object->currentObject(), response);
-		return;
-	}
-
-	// Compatibility fallback for older scripts that still return a bare array.
-	QVector <double> legacyRes;
-	bool legacy = py->applyFunctionWithNFloatArraysParameterAnd1ArrayReturned(legacyRes, [&]() {
-		std::vector<const std::vector<float>*> raw;
-		for (const auto& input : inputs) raw.push_back(input.values);
-		return raw;
-	}(), moduleName.c_str(), nameFunction.c_str());
-	if (legacy == EXIT_FAILURE) return;
-
-	std::string component = _command.getParameter<std::string>("addToComponent");
-	std::string nameFeature = _command.getParameter<std::string>("nameNewFeature");
-	std::vector <float> newFeature(legacyRes.size(), 0.f);
-	std::transform(legacyRes.begin(), legacyRes.end(), newFeature.begin(), [](double x) { return (float)x; });
-	poca::core::BasicComponentInterface* bc = m_object->currentObject()->getBasicComponent(component);
-	if (!bc) return;
-	bc->addFeature(nameFeature, poca::core::generateDataWithLog(newFeature));
-	m_object->currentObject()->notify("LoadObjCharacteristicsAllWidgets");
-}
-QStringList PythonWidget::identifyPythonFunctionNames(const QString& _file) const
-{
-	QStringList functions, splitFile;
-	splitFile = _file.split("def ");
-	for (auto n = 1; n < splitFile.size(); n++) {
-		QString current = splitFile[n];
-		auto pos = current.indexOf(":");
-		if (pos == -1) continue;
-		auto function = current.left(pos);
-		functions.push_back(function);
-	}
-	return functions;
-}
-
-void PythonWidget::updateChosenFunctionName(int _idx)
-{
-	QString function = m_functionNameCombo->currentText();
-	//Remove parameters
-	auto pos = function.indexOf("(");
-	if (pos != -1)
-		function = function.left(pos);
-	m_editNameFunction->setText(function);
 }
 
 #endif

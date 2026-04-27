@@ -44,7 +44,6 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QLineEdit>
-#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QGridLayout>
 
@@ -80,7 +79,6 @@ protected slots:
 	void actionNeeded();
 	void actionNeeded( int );
 	void actionNeeded( bool );
-	void updateChosenFunctionName(int);
 
 protected:
 	void populateListWidget(poca::core::BasicComponentInterface*, QListWidget*);
@@ -88,27 +86,19 @@ protected:
 	void addPredefinedButton(uint32_t);
 
 protected:
-	void executeNena();
-
-	void executePythonScriptDisplayReturn(const poca::core::CommandInfo&);
-	void executePythonScriptAddFeatureToComponent(const poca::core::CommandInfo&);
-
-	QStringList identifyPythonFunctionNames(const QString&) const;
+	void executePythonScript(const poca::core::CommandInfo&);
 
 protected:
 	QTabWidget* m_parentTab;
 
-	QPushButton* m_buttonOpenFile, * m_buttonExecuteScript;
-	QLabel* m_labelPythonFile;
-	QLineEdit* m_editNameFunction;
+	QPushButton* m_buttonOpenPython, * m_buttonOpenFile, * m_buttonExecuteScript;
+	QLabel* m_labelPythonExecutable, * m_labelPythonFile;
 	
 	std::vector <QPushButton*> m_buttonsPreloaded, m_buttonsRemovePreloaded;
-	QButtonGroup* m_bgroupGrid;
-
-	QComboBox* m_BCCombo, * m_functionNameCombo;
+	QComboBox* m_BCCombo;
 	QListWidget* m_lists[2];
-	QCheckBox* m_singleValCBox, * m_addFeatureCBox, * m_createNewDatasetCBox, * m_addToPredefinedModules;
-	QLineEdit* m_nameFeatureEdit, * m_nameNewDatasetEdit, * m_namePredefinedCommand;
+	QCheckBox* m_addToPredefinedModules;
+	QLineEdit* m_namePredefinedCommand;
 	
 	poca::core::MyObjectInterface* m_object;
 	poca::core::MediatorWObjectFWidget * m_mediator;

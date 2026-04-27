@@ -36,7 +36,6 @@ set(WIDGET_HEADER_FILES
   Widgets/MacroWidget.hpp
   Widgets/MainWindow.hpp
   Widgets/MergeDatasetsChoiceDialog.hpp
-  Widgets/PythonParametersDialog.hpp
   Widgets/PythonWidget.hpp
   Widgets/ROIGeneralWidget.hpp
   Widgets/ReorganizeRenderingWidget.hpp
@@ -51,7 +50,6 @@ set(WIDGET_SOURCE_FILES
   Widgets/MacroWidget.cpp
   Widgets/MainWindow.cpp
   Widgets/MergeDatasetsChoiceDialog.cpp
-  Widgets/PythonParametersDialog.cpp
   Widgets/PythonWidget.cpp
   Widgets/ROIGeneralWidget.cpp
   Widgets/ReorganizeRenderingWidget.cpp
@@ -67,7 +65,6 @@ if(ADD_PYTHON)
 	  Widgets/MacroWidget.hpp
 	  Widgets/MainWindow.hpp
 	  Widgets/MergeDatasetsChoiceDialog.hpp
-	  Widgets/PythonParametersDialog.hpp
 	  Widgets/PythonWidget.hpp
 	  Widgets/ROIGeneralWidget.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
@@ -83,7 +80,6 @@ else()
 	  Widgets/MainWindow.hpp
 	  Widgets/MergeDatasetsChoiceDialog.hpp
 	  Widgets/ROIGeneralWidget.hpp
-	  Widgets/PythonParametersDialog.hpp
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/DatasetAssemblerWidget.hpp
 	  Widgets/ColorButtonGridWidget.cpp
@@ -99,7 +95,6 @@ if(ADD_PYTHON)
 	  Widgets/MacroWidget.cpp
 	  Widgets/MainWindow.cpp
 	  Widgets/MergeDatasetsChoiceDialog.cpp
-	  Widgets/PythonParametersDialog.cpp
 	  Widgets/PythonWidget.cpp
 	  Widgets/ROIGeneralWidget.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
@@ -115,7 +110,6 @@ else()
 	  Widgets/MainWindow.cpp
 	  Widgets/MergeDatasetsChoiceDialog.cpp
 	  Widgets/ROIGeneralWidget.cpp
-	  Widgets/PythonParametersDialog.cpp
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.cpp
 	  Widgets/DatasetAssemblerWidget.cpp

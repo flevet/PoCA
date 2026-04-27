@@ -122,7 +122,6 @@
 #include "../Widgets/PythonWidget.hpp"
 #include "../Widgets/ROIGeneralWidget.hpp"
 #include "../Widgets/MacroWidget.hpp"
-#include "../Widgets/PythonParametersDialog.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 #include "../Widgets/ColorButtonGridWidget.hpp"
 #include "../Widgets/DatasetAssemblerWidget.hpp"
@@ -589,45 +588,6 @@ void MainWindow::createMenus()
 		}
 	}
 
-#ifndef NO_PYTHON
-	QList <QAction*> globalActions = menuB->actions();
-	QAction* act = NULL;
-	for (QAction* cur : globalActions) {
-		if (cur->text() == "Plugins")
-			act = cur;
-	}
-	QMenu* cur = NULL;
-	if (act == NULL) 
-		cur = menuB->addMenu("Plugins");
-	else 
-		cur = act->menu();
-	cur = cur->addMenu("Python");
-	m_pythonParamsAct = new QAction(tr("Parameters"), this);
-	cur->addAction(m_pythonParamsAct);
-	connect(m_pythonParamsAct, SIGNAL(triggered()), this, SLOT(setParametersPython()));
-#endif
-}
-
-void MainWindow::setParametersPython()
-{
-	
-	
-	nlohmann::json& parameters = poca::core::Engine::instance()->getGlobalParameters();
-
-	PythonParametersDialog* ppd = new PythonParametersDialog(parameters);
-	ppd->setModal(true);
-	if (ppd->exec() == QDialog::Accepted) {
-		std::cout << "Here" << std::endl;
-		const std::vector <std::string>& names = ppd->getNameParameters();
-		const std::vector <std::string>& paths = ppd->getPaths();
-		for (auto n = 0; n < paths.size(); n++) {
-			if (paths[n].empty()) continue;
-			parameters["PythonParameters"][names[n]] = paths[n];
-		}
-		std::string textDisplay = parameters.dump(4);
-		std::cout << textDisplay << std::endl;
-	}
-	delete ppd;
 }
 
 void MainWindow::createToolBars()

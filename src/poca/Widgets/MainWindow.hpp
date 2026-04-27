@@ -149,8 +149,6 @@ private slots:
 	void pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool);
 	void pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool);
 
-	void setParametersPython();
-
 	void currentCameraForPath();
 
 	void onGridReleased();
@@ -180,7 +178,6 @@ private:
 	QAction * m_tileWindowsAct, *m_cascadeWindowsAct;
 	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct, * m_freehandROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
-	QAction* m_pythonParamsAct;
 	QAction* m_datasetAssemblerAct;
 	QTabWidget * m_tabWidget;
 	QProgressBar * m_progressBar;

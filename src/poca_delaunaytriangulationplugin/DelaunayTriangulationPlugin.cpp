@@ -88,35 +88,11 @@ void DelaunayTriangulationConstructionCommand::execute(poca::core::CommandInfo* 
 			delau = factory->createDelaunayTriangulation(oneColorObj, DelaunayTriangulationPlugin::m_plugins);
 		else {
 #ifndef NO_PYTHON
-			const std::vector <float>& xs = m_dset->getMyData("x")->getData<float>();
-			const std::vector <float>& ys = m_dset->getMyData("y")->getData<float>();
-			const std::vector <float>& zs = m_dset->getMyData("z")->getData<float>();
-
-			QVector <QVector <double>> coordinates;
-			coordinates.resize(3);
-			for (size_t n = 0; n < 3; n++)
-				coordinates[n].resize(xs.size());
-			for (size_t n = 0; n < xs.size(); n++) {
-				coordinates[0][n] = xs[n];
-				coordinates[1][n] = ys[n];
-				coordinates[2][n] = zs[n];
-			}
-			QVector <double> coeffs;
-			poca::core::PythonInterpreter* py = poca::core::PythonInterpreter::instance();
-			bool res = py->applyFunctionWithNArraysParameterAnd1ArrayReturned(coeffs, coordinates, "sphereFit", "sphereFit");
-			if (res == EXIT_FAILURE) {
-				_ci->errorMessage("python script was not run.");
-			}
-			else {
-				poca::core::Vec3mf centroid(coeffs[0], coeffs[1], coeffs[2]);
-				float radius = coeffs[3];
-
-				std::cout << "center: " << centroid << std::endl;
-				std::cout << "radius: " << radius << std::endl;
-
-				delau = factory->createDelaunayTriangulationOnSphere(oneColorObj, DelaunayTriangulationPlugin::m_plugins, centroid, radius);
-			}
+			_ci->errorMessage("Delaunay triangulation on sphere still needs to be migrated to the run(poca) Python API.");
+			delete factory;
+			return;
 #else
+			delete factory;
 			return;
 #endif
 		}
