@@ -40,6 +40,7 @@
 #include <QtGui/QResizeEvent>
 #include <QtGui/QFocusEvent>
 #include <QtWidgets/QMdiArea>
+#include <QtCore/QPoint>
 
 #include <OpenGL/Camera.hpp>
 
@@ -78,6 +79,7 @@ public slots:
 	void actionNeeded(bool);
 
 	void setFrame(int);
+	void configureFrameOffsets(const QPoint&);
 
 protected slots:
 	void playFrame();
@@ -90,6 +92,7 @@ protected:
 	void mouseMoveEvent(QMouseEvent*);
 
 	int32_t getPlane(int);
+	void applyFramePlane(int32_t);
 
 protected:
 	poca::opengl::CameraInterface * m_widget;
@@ -100,6 +103,7 @@ protected:
 	QLabel* m_tLabel;
 	QTimer* m_timer{ NULL };
 	int32_t m_minT, m_maxT, m_interval;
+	float m_frameLowerOffset{ -0.5f }, m_frameUpperOffset{ 0.5f };
 };
 
 #endif // MdiChild_h__

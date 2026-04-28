@@ -2293,13 +2293,29 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "frameLabelRendering") {
+			Shader* shader = new Shader("./shaders/label_rendering.vert", "./shaders/frame_label_rendering.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		//
 		if (_nameShader == "maximumProjectionAll") {
 			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/maximum_intensity_projection_all.frag");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "frameRenderingAll") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/frame_rendering_all.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "maximumProjectionMulti") {
 			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/maximum_intensity_projection_multi.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
+		if (_nameShader == "frameRenderingMulti") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/frame_rendering_multi.frag");
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}

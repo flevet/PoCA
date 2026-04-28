@@ -34,8 +34,14 @@
 #include <QtGui/QIcon>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QVBoxLayout>
 #include <QtCore/QCoreApplication>
+#include <algorithm>
 #include <float.h>
 #include <dtv.h>
 
@@ -73,7 +79,9 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_2DtButton->setToolTip("2D+t view");
 	m_2DtButton->setCheckable(true);
 	m_2DtButton->setChecked(false);
+	m_2DtButton->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(m_2DtButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	QObject::connect(m_2DtButton, SIGNAL(customContextMenuRequested(const QPoint&)), this, SLOT(configureFrameOffsets(const QPoint&)));
 	m_playButton = new QPushButton();
 	m_playButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_playButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -258,12 +266,7 @@ void MdiChild::actionNeeded(int _val)
 	QObject* sender = QObject::sender();
 	if (sender == m_tSlider) {
 		auto plane = getPlane(_val);
-		poca::core::BoundingBox bbox = cam->getCurrentCrop();
-		bbox[2] = plane;
-		bbox[5] = plane;
-		cam->zoomToBoundingBox(bbox, false);
-		m_tLabel->setText(QString::number(plane).rightJustified(5, '0'));
-		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)plane));
+		applyFramePlane(plane);
 	}
 }
 
@@ -287,15 +290,11 @@ void MdiChild::actionNeeded(bool _val)
 		m_tSlider->setEnabled(_val);
 		cam->fixPlane(poca::opengl::Camera::Plane_XY, true);
 		auto plane = getPlane(m_tSlider->value());
-		poca::core::BoundingBox bbox = cam->getCurrentCrop();
-		bbox[2] = plane;
-		bbox[5] = plane;
-		cam->zoomToBoundingBox(bbox, false);
+		applyFramePlane(plane);
 		m_playButton->show();
 		m_tLabel->show();
 		m_tSlider->show();
 		m_emptyForSliderW->hide();
-		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)plane));
 	}
 	else if (sender == m_playButton) {
 		if (_val) {
@@ -398,9 +397,66 @@ int32_t MdiChild::getPlane(int _val)
 	return m_minT + _val;
 }
 
+void MdiChild::applyFramePlane(int32_t _plane)
+{
+	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_widget);
+	if (cam == NULL)
+		return;
+
+	poca::core::BoundingBox bbox = cam->getCurrentCrop();
+	bbox[2] = (float)_plane + m_frameLowerOffset;
+	bbox[5] = (float)_plane + m_frameUpperOffset;
+	cam->zoomToBoundingBox(bbox, false);
+	m_tLabel->setText(QString::number(_plane).rightJustified(5, '0'));
+	cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)_plane));
+}
+
 void MdiChild::setFrame(int _val)
 {
 
+}
+
+void MdiChild::configureFrameOffsets(const QPoint& _pos)
+{
+	QDialog dialog(this);
+	dialog.setWindowTitle("Frame crop offsets");
+
+	QDoubleSpinBox* lowerSpin = new QDoubleSpinBox(&dialog);
+	lowerSpin->setRange(-100000.0, 100000.0);
+	lowerSpin->setDecimals(3);
+	lowerSpin->setSingleStep(0.1);
+	lowerSpin->setValue(m_frameLowerOffset);
+
+	QDoubleSpinBox* upperSpin = new QDoubleSpinBox(&dialog);
+	upperSpin->setRange(-100000.0, 100000.0);
+	upperSpin->setDecimals(3);
+	upperSpin->setSingleStep(0.1);
+	upperSpin->setValue(m_frameUpperOffset);
+
+	QFormLayout* form = new QFormLayout;
+	form->addRow("Lower offset", lowerSpin);
+	form->addRow("Upper offset", upperSpin);
+
+	QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+	QObject::connect(buttons, SIGNAL(accepted()), &dialog, SLOT(accept()));
+	QObject::connect(buttons, SIGNAL(rejected()), &dialog, SLOT(reject()));
+
+	QVBoxLayout* layout = new QVBoxLayout;
+	layout->addLayout(form);
+	layout->addWidget(buttons);
+	dialog.setLayout(layout);
+	dialog.move(m_2DtButton->mapToGlobal(_pos));
+
+	if (dialog.exec() != QDialog::Accepted)
+		return;
+
+	m_frameLowerOffset = (float)lowerSpin->value();
+	m_frameUpperOffset = (float)upperSpin->value();
+	if (m_frameLowerOffset > m_frameUpperOffset)
+		std::swap(m_frameLowerOffset, m_frameUpperOffset);
+
+	if (m_2DtButton->isChecked())
+		applyFramePlane(getPlane(m_tSlider->value()));
 }
 
 void MdiChild::playFrame()

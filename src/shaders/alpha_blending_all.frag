@@ -116,11 +116,7 @@ bool sampleFeatureValue(int imageIndex, vec3 position, out float featureValue)
     }
     else {
         usampler3D tex = uvolume[imageIndex];
-        ivec3 tsize = textureSize(tex, 0);
-        if (tsize.z == 1)
-            tsize.z = 0;
-        ivec3 texPos = ivec3(position * vec3(tsize));
-        intensity = float(texelFetch(tex, texPos, 0).r);
+        intensity = float(texture(tex, position).r);
     }
 
     if (intensity < pixel_min[imageIndex])

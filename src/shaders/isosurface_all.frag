@@ -93,11 +93,7 @@ float sampleRawIntensity(int imageIndex, vec3 position)
         return texture(volume[imageIndex], position).r;
 
     usampler3D tex = uvolume[imageIndex];
-    ivec3 tsize = textureSize(tex, 0);
-    if (tsize.z == 1)
-        tsize.z = 0;
-    ivec3 texPos = ivec3(position * vec3(tsize));
-    return float(texelFetch(tex, texPos, 0).r);
+    return float(texture(tex, position).r);
 }
 
 bool sampleFeatureValue(int imageIndex, vec3 position, out float featureValue)

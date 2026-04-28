@@ -86,11 +86,7 @@ bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureVa
     }
     else {
         usampler3D uvolume = usampler3D(desc.volumeHandle.xy);
-        ivec3 tsize = textureSize(uvolume, 0);
-        if (tsize.z == 1)
-            tsize.z = 0;
-        ivec3 texPos = ivec3(position * vec3(tsize));
-        intensityTex = float(texelFetch(uvolume, texPos, 0).r);
+        intensityTex = float(texture(uvolume, position).r);
     }
 
     if (intensityTex < desc.featureParams.x || intensityTex > desc.featureParams.y)

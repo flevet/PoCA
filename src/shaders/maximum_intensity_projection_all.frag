@@ -147,11 +147,7 @@ void raycast_normal(vec3 ray_start, vec3 ray_step)
 			if(isFloat[curImage])
 				intensity = texture(volume[curImage], position).r;
 			else{
-				ivec3 tsize = textureSize(uvolume[curImage], 0);
-				if(tsize.z == 1)
-					tsize.z = tsize.z - 1;
-				ivec3 texPos = ivec3(position * vec3(tsize));
-				intensity = float(texelFetch(uvolume[curImage], texPos, 0).r);
+				intensity = float(texture(uvolume[curImage], position).r);
 			}
 				
 			if(intensity >= pixel_min[curImage]){
