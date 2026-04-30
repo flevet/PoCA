@@ -481,11 +481,15 @@ void ObjectListWidget::actionNeeded(bool _val)
 
 void ObjectListWidget::performAction(poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _ci)
 {
+	if (_ci == NULL)
+		return;
 	if (_obj == NULL) {
 		update(NULL, "");
 		return;
 	}
 	poca::core::MyObjectInterface* obj = _obj->currentObject();
+	if (obj == NULL)
+		return;
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT" || _ci->nameCommand == "selected" || _ci->nameCommand == "fill" || _ci->nameCommand == "hilow" || _ci->nameCommand == "pointRendering" || _ci->nameCommand == "shapeRendering") {
 		poca::core::BasicComponentInterface* bc = obj->getBasicComponent("ObjectList");
@@ -493,6 +497,8 @@ void ObjectListWidget::performAction(poca::core::MyObjectInterface* _obj, poca::
 		actionDone = true;
 	}
 	else if (_ci->nameCommand == "selectObject") {
+		if (!_ci->hasParameter("id"))
+			return;
 		int id = _ci->getParameter<int>("id");
 		m_tableObjects->selectRow(id);
 	}

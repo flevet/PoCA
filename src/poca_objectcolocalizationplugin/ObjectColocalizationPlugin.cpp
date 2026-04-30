@@ -374,6 +374,8 @@ void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com)
 
 void ObjectColocalizationPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
+	if (_com == NULL)
+		return;
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
 		if (_context.has<poca::core::JsonFileContext>())

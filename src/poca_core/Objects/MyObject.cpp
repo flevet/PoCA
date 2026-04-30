@@ -271,14 +271,20 @@ namespace poca::core {
 
 	void MyObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 	{
+		if (_ci == NULL)
+			return;
 		if (_ci->nameCommand == "loadROIs") {
 			float cal = 1.f;
 			if(_ci->hasParameter("calibrationXY"))
 				cal = _ci->getParameter<float>("calibrationXY");
+			if (!_ci->hasParameter("filename"))
+				return;
 			std::string filename = _ci->getParameter<std::string>("filename");
 			loadROIs(filename, cal);
 		}
 		else if (_ci->nameCommand == "saveROIs") {
+			if (!_ci->hasParameter("filename"))
+				return;
 			std::string filename = _ci->getParameter<std::string>("filename");
 			saveROIs(filename);
 		}

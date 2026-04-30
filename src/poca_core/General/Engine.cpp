@@ -717,6 +717,9 @@ namespace poca::core {
 
 	void Engine::executeCommand(BasicComponentInterface* _bci, CommandInfo* _com, const CommandExecutionContext& _context, CommandExecutionResult& _result)
 	{
+		if (_bci == NULL || _com == NULL)
+			return;
+
 		auto object = getTopObject(_bci);
 		if (_com != nullptr && _com->nameCommand == "histogram" && _com->hasParameter("action")) {
 			const std::string action = _com->getParameter<std::string>("action");

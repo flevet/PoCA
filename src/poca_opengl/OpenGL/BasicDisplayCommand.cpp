@@ -80,14 +80,20 @@ namespace poca::opengl {
 
 	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos)
 	{
+		if (_infos == NULL)
+			return;
 		if (_infos->nameCommand == "updatePickingBuffer") {
+			if (!_infos->hasParameter("width") || !_infos->hasParameter("height"))
+				return;
 			int w = _infos->getParameter<int>("width"), h = _infos->getParameter<int>("height");
 			updatePickingFBO(w, h);
 		}
 		else if (_infos->nameCommand == "pick") {
 			if (!m_pickingEnabled) return;
+			if (!_infos->hasParameter("x") || !_infos->hasParameter("y"))
+				return;
 			int x = _infos->getParameter<int>("x"), y = _infos->getParameter<int>("y");
-			bool saveImage = _infos->getParameter<bool>("saveImage");
+			bool saveImage = _infos->getParameterOr<bool>("saveImage", false);
 			pick(x, y, saveImage);
 		}
 		else if (_infos->nameCommand == "freeGPU") {
@@ -96,10 +102,12 @@ namespace poca::opengl {
 			m_pickFBO = NULL;
 		}
 		else if(_infos->nameCommand == "togglePicking"){
-			bool val = _infos->getParameter<bool>("togglePicking");
+			bool val = _infos->getParameterOr<bool>("togglePicking", m_pickingEnabled);
 			m_pickingEnabled = val;
 		}
 		else if (_infos->nameCommand == "setIDObjectPicked") {
+			if (!_infos->hasParameter("setIDObjectPicked"))
+				return;
 			int id = _infos->getParameter<int>("setIDObjectPicked");
 			m_idSelection = id;
 		}

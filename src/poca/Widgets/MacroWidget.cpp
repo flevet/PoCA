@@ -338,10 +338,12 @@ void MacroWidget::execute(poca::core::CommandInfo* _com)
 
 void MacroWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
+	if (_com == NULL)
+		return;
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-	if (_context.has<poca::core::JsonFileContext>())
-		json = _context.get<poca::core::JsonFileContext>().file;
+		if (_context.has<poca::core::JsonFileContext>())
+			json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::string nameStr = objectName().toStdString();
@@ -375,7 +377,8 @@ void MacroWidget::loadParameters(const nlohmann::json& _json)
 			catch (nlohmann::json::exception& e) {
 				std::cout << e.what() << std::endl;
 			}
-			m_pathForOpening = _json[nameStr]["path"].get<string>().c_str();
+			if (_json[nameStr].contains("path"))
+				m_pathForOpening = _json[nameStr]["path"].get<string>().c_str();
 		}
 		else {
 			try {

@@ -402,6 +402,8 @@ void ObjectColocalizationWidget::actionNeeded(bool _val)
 
 void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _ci)
 {
+	if (_ci == NULL)
+		return;
 	if (_obj == NULL) {
 		update(NULL, "");
 		return;
@@ -410,7 +412,7 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 	m_object = _obj;
 	bool actionDone = false;
 	if (_ci->nameCommand == "histogram" || _ci->nameCommand == "changeLUT") {
-		std::string action = _ci->getParameter<std::string>("action");
+		std::string action = _ci->getParameterOr<std::string>("action", "");
 		if (action == "save")
 			_ci->addParameter("dir", _obj->getDir());
 		poca::core::BasicComponentInterface* bc = m_object->getBasicComponent("ObjectColocalization");
@@ -439,6 +441,8 @@ void ObjectColocalizationWidget::performAction(poca::core::MyObjectInterface* _o
 		actionDone = true;
 	}*/
 	else if (_ci->nameCommand == "selectObject") {
+		if (!_ci->hasParameter("id"))
+			return;
 		int id = _ci->getParameter<int>("id");
 		if(id < m_tableObjects->rowCount())
 			m_tableObjects->selectRow(id);

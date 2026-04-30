@@ -754,7 +754,11 @@ void MainFilterWidget::setColorBackgroundButton( const unsigned char _r, const u
 
 void MainFilterWidget::performAction(poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _ci)
 {
+	if (_ci == NULL)
+		return;
 	if (_ci->nameCommand == "setImageIndex") {
+		if (!_ci->hasParameter("id"))
+			return;
 		unsigned int val = _ci->getParameter<unsigned int>("id");
 		poca::core::NbObjects = val;
 		this->setFirstIndexObjVariable(val);

@@ -118,6 +118,34 @@ namespace poca::core {
 		std::unordered_map<std::type_index, std::any> m_data;
 	};
 
+	inline bool isTypedCommandParameterJson(const nlohmann::json& _value) {
+		return _value.is_object() && _value.contains("type") && _value["type"].is_string() && _value.contains("value");
+	}
+
+	inline const nlohmann::json& commandParameterJsonValue(const nlohmann::json& _value) {
+		return isTypedCommandParameterJson(_value) ? _value["value"] : _value;
+	}
+
+	inline nlohmann::json rawCommandParametersJson(const nlohmann::json& _params) {
+		if (isTypedCommandParameterJson(_params))
+			return _params["value"];
+		if (!_params.is_object())
+			return _params;
+
+		nlohmann::json raw = nlohmann::json::object();
+		bool sawTypedParameter = false;
+		for (auto& [name, value] : _params.items()) {
+			if (isTypedCommandParameterJson(value)) {
+				raw[name] = value["value"];
+				sawTypedParameter = true;
+			}
+			else {
+				raw[name] = value;
+			}
+		}
+		return sawTypedParameter ? raw : _params;
+	}
+
 	// CommandInfo is the persistent, JSON-serializable command envelope.
 	// Runtime-only inputs must live in CommandExecutionContext.
 	// Runtime-only outputs must live in CommandExecutionResult.
@@ -224,8 +252,21 @@ namespace poca::core {
 		template<typename T>
 		T getParameter(const std::string& _nameParameter) const {
 			if(nameCommand == _nameParameter)
-				return parameters().get<T>();
-			return parameters()[_nameParameter].get<T>();
+				return commandParameterJsonValue(parameters()).template get<T>();
+			return commandParameterJsonValue(parameters()[_nameParameter]).template get<T>();
+		}
+
+		const nlohmann::json& getParameterJson(const std::string& _nameParameter) const {
+			if (nameCommand == _nameParameter)
+				return commandParameterJsonValue(parameters());
+			return commandParameterJsonValue(parameters()[_nameParameter]);
+		}
+
+		template<typename T>
+		T getParameterOr(const std::string& _nameParameter, const T& _defaultValue) const {
+			if (!hasParameter(_nameParameter))
+				return _defaultValue;
+			return getParameter<T>(_nameParameter);
 		}
 
 		inline const nlohmann::json& parameters() const {
@@ -246,7 +287,7 @@ namespace poca::core {
 		inline void setParameters(const nlohmann::json& _params) {
 			if (nameCommand.empty())
 				return;
-			json[nameCommand] = _params;
+			json[nameCommand] = rawCommandParametersJson(_params);
 		}
 
 		inline nlohmann::json toJson() const { return json; }
@@ -291,6 +332,31 @@ namespace poca::core {
 		Array
 	};
 
+	inline const char* commandParameterTypeToString(const CommandParameterType _type) {
+		switch (_type) {
+		case CommandParameterType::Any: return "any";
+		case CommandParameterType::Boolean: return "boolean";
+		case CommandParameterType::Integer: return "integer";
+		case CommandParameterType::UnsignedInteger: return "unsignedInteger";
+		case CommandParameterType::Number: return "number";
+		case CommandParameterType::String: return "string";
+		case CommandParameterType::Object: return "object";
+		case CommandParameterType::Array: return "array";
+		default: return "any";
+		}
+	}
+
+	inline CommandParameterType commandParameterTypeFromString(const std::string& _type) {
+		if (_type == "boolean") return CommandParameterType::Boolean;
+		if (_type == "integer") return CommandParameterType::Integer;
+		if (_type == "unsignedInteger") return CommandParameterType::UnsignedInteger;
+		if (_type == "number") return CommandParameterType::Number;
+		if (_type == "string") return CommandParameterType::String;
+		if (_type == "object") return CommandParameterType::Object;
+		if (_type == "array") return CommandParameterType::Array;
+		return CommandParameterType::Any;
+	}
+
 	struct CommandParameterSpec {
 		std::string name;
 		CommandParameterType type{ CommandParameterType::Any };
@@ -321,10 +387,30 @@ namespace poca::core {
 		inline const std::vector<CommandVariantSpec>& variants() const { return m_variants; }
 		inline bool matches(const std::string& _name) const { return m_name == _name; }
 
+		nlohmann::json typedParametersJson(const nlohmann::json& _params) const {
+			const nlohmann::json params = rawParametersJson(_params);
+			if (!params.is_object())
+				return typedValueJson(params, m_params.empty() ? CommandParameterType::Any : m_params.front().type);
+
+			const std::vector<CommandParameterSpec>* specs = matchingSpecs(params);
+			if (specs == nullptr || specs->empty())
+				return params;
+
+			nlohmann::json typed = nlohmann::json::object();
+			for (auto& [name, value] : params.items()) {
+				typed[name] = typedValueJson(commandParameterJsonValue(value), parameterType(*specs, name, value));
+			}
+			return typed;
+		}
+
+		static nlohmann::json rawParametersJson(const nlohmann::json& _params) {
+			return rawCommandParametersJson(_params);
+		}
+
 		// Build a runtime CommandInfo from JSON. This is the preferred creation
 		// path for macros, init files, and other serialized command payloads.
 		CommandInfo create(const bool _recordable, const nlohmann::json& _rawParams) const {
-			const nlohmann::json params = (_rawParams.is_null() ? nlohmann::json::object() : _rawParams);
+			const nlohmann::json params = (_rawParams.is_null() ? nlohmann::json::object() : rawParametersJson(_rawParams));
 
 			if (!m_variants.empty()) {
 				if (!params.is_object())
@@ -344,6 +430,39 @@ namespace poca::core {
 		}
 
 	private:
+		static nlohmann::json typedValueJson(const nlohmann::json& _value, const CommandParameterType _type) {
+			if (isTypedCommandParameterJson(_value))
+				return _value;
+			return nlohmann::json{
+				{ "type", commandParameterTypeToString(_type) },
+				{ "value", _value }
+			};
+		}
+
+		const std::vector<CommandParameterSpec>* matchingSpecs(const nlohmann::json& params) const {
+			if (m_variants.empty())
+				return &m_params;
+
+			for (const CommandVariantSpec& variant : m_variants) {
+				if (!params.contains(variant.discriminatorName))
+					continue;
+				if (commandParameterJsonValue(params[variant.discriminatorName]) != variant.discriminatorValue)
+					continue;
+				return &variant.params;
+			}
+			return nullptr;
+		}
+
+		static CommandParameterType parameterType(const std::vector<CommandParameterSpec>& _specs, const std::string& _name, const nlohmann::json& _value) {
+			for (const CommandParameterSpec& spec : _specs) {
+				if (spec.name == _name)
+					return spec.type;
+			}
+			if (isTypedCommandParameterJson(_value))
+				return commandParameterTypeFromString(_value["type"].get<std::string>());
+			return CommandParameterType::Any;
+		}
+
 		CommandInfo createFromParams(const bool _recordable, const nlohmann::json& params, const std::vector<CommandParameterSpec>& specs) const {
 			nlohmann::json normalized = nlohmann::json::object();
 
@@ -361,7 +480,7 @@ namespace poca::core {
 
 			for (const CommandParameterSpec& spec : specs) {
 				if (params.is_object() && params.contains(spec.name)) {
-					const nlohmann::json& value = params[spec.name];
+					const nlohmann::json& value = commandParameterJsonValue(params[spec.name]);
 					if (!matchesType(value, spec.type))
 						return CommandInfo();
 					normalized[spec.name] = value;
@@ -441,6 +560,16 @@ namespace poca::core {
 			return m_commandInfos.at(_nameCommand).getParameter<T>(_nameParameter);
 		}
 
+		template <typename T>
+		T getParameterOr(const std::string& _nameCommand, const T& _defaultValue) const {
+			return hasParameter(_nameCommand) ? getParameter<T>(_nameCommand) : _defaultValue;
+		}
+
+		template <typename T>
+		T getParameterOr(const std::string& _nameCommand, const std::string& _nameParameter, const T& _defaultValue) const {
+			return hasParameter(_nameCommand, _nameParameter) ? getParameter<T>(_nameCommand, _nameParameter) : _defaultValue;
+		}
+
 		void addCommandInfo(const CommandInfo& _com) {
 			m_commandInfos[_com.nameCommand] = _com;
 		}
@@ -474,8 +603,19 @@ namespace poca::core {
 		}
 
 		virtual void saveCommands(nlohmann::json& _json) {
-			for (std::map <std::string, CommandInfo>::const_iterator it = m_commandInfos.begin(); it != m_commandInfos.end(); it++)
-				_json[it->first] = it->second.json[it->first];
+			for (std::map <std::string, CommandInfo>::const_iterator it = m_commandInfos.begin(); it != m_commandInfos.end(); it++) {
+				const nlohmann::json params = it->second.json.contains(it->first) ? it->second.json[it->first] : it->second.parameters();
+				bool savedFromSpec = false;
+				for (const CommandSpec& spec : commandSpecs()) {
+					if (!spec.matches(it->first))
+						continue;
+					_json[it->first] = spec.typedParametersJson(params);
+					savedFromSpec = true;
+					break;
+				}
+				if (!savedFromSpec)
+					_json[it->first] = params;
+			}
 		}
 
 	protected:

@@ -90,6 +90,18 @@ namespace poca::core {
 			throw std::runtime_error(std::string("Parameter " + _nameParameter + " for command " + _nameCommand + " not found"));
 		}
 
+		template <typename T>
+		T getParameterOr(const std::string& _nameCommand, const T& _defaultValue)
+		{
+			return hasParameter(_nameCommand) ? getParameter<T>(_nameCommand) : _defaultValue;
+		}
+
+		template <typename T>
+		T getParameterOr(const std::string& _nameCommand, const std::string& _nameParameter, const T& _defaultValue)
+		{
+			return hasParameter(_nameCommand, _nameParameter) ? getParameter<T>(_nameCommand, _nameParameter) : _defaultValue;
+		}
+
 		virtual void executeCommand(const bool _record, const std::string& _name);
 
 		template<typename T>

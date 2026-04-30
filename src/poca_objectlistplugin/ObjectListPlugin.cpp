@@ -177,6 +177,8 @@ void ObjectListPlugin::execute(poca::core::CommandInfo* _com)
 
 void ObjectListPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
+	if (_com == NULL)
+		return;
 	if (_com->isRecordable())
 		poca::core::MacroRecorderSingleton::instance()->addCommand("VoronoiDiagramPlugin", _com);
 	if (_com->nameCommand == "saveParameters") {

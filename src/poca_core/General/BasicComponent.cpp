@@ -158,6 +158,8 @@ namespace poca::core {
 
 	void BasicComponent::executeCommand(CommandInfo* _ci, const CommandExecutionContext& _context, CommandExecutionResult& _result)
 	{
+			if (_ci == NULL)
+				return;
 			if (_ci->nameCommand == "histogram") {
 				if (!_ci->hasParameter("feature") || !_ci->hasParameter("action"))
 					return;
@@ -267,6 +269,8 @@ namespace poca::core {
 				}
 			}
 			else if (_ci->nameCommand == "selected") {
+				if (!_ci->hasParameter("selected"))
+					return;
 				bool val = _ci->getParameter<bool>("selected");
 				m_selected = val;
 			}

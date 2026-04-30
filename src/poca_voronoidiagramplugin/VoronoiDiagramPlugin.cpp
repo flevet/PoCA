@@ -228,6 +228,8 @@ void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com)
 
 void VoronoiDiagramPlugin::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
+	if (_com == NULL)
+		return;
 	bool done = false;
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;

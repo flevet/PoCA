@@ -391,10 +391,12 @@ void PythonWidget::execute(poca::core::CommandInfo* _com)
 
 void PythonWidget::execute(poca::core::CommandInfo* _com, const poca::core::CommandExecutionContext& _context)
 {
+	if (_com == NULL)
+		return;
 	if (_com->nameCommand == "saveParameters") {
 		nlohmann::json* json = nullptr;
-	if (_context.has<poca::core::JsonFileContext>())
-		json = _context.get<poca::core::JsonFileContext>().file;
+		if (_context.has<poca::core::JsonFileContext>())
+			json = _context.get<poca::core::JsonFileContext>().file;
 		if (json == nullptr) return;
 
 		std::vector <nlohmann::json> commands;
