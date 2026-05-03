@@ -136,7 +136,7 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 	addCommandInfo(poca::core::CommandInfo(false, "useDebugSSAO", false));
 	addCommandInfo(poca::core::CommandInfo(false, "currentDebugSSAO", (int)0));
 	if (parameters.contains(name())) {
-		nlohmann::json param = parameters[name()];
+		nlohmann::json param = poca::core::rawCommandParametersJson(parameters[name()]);
 		if (param.contains("zoomFactor"))
 			loadParameters(poca::core::CommandInfo(false, "zoomFactor", param["zoomFactor"].get<float>()));
 		if (param.contains("currentZoom"))
@@ -150,7 +150,7 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 		if (param.contains("positionScaleBar"))
 			loadParameters(poca::core::CommandInfo(false, "positionScaleBar", param["positionScaleBar"].get<uint32_t>()));
 		if (param.contains("scaleBarHeight"))
-			loadParameters(poca::core::CommandInfo(false, "scaleBarHeight", param["positionScaleBar"].get<uint32_t>()));
+			loadParameters(poca::core::CommandInfo(false, "scaleBarHeight", param["scaleBarHeight"].get<uint32_t>()));
 		if (param.contains("displayScaleBar"))
 			loadParameters(poca::core::CommandInfo(false, "displayScaleBar", param["displayScaleBar"].get<bool>()));
 		if (param.contains("colorScaleBar"))

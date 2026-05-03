@@ -2324,6 +2324,11 @@ namespace poca::opengl {
 			m_shaders[_nameShader] = shader;
 			return shader;
 		}
+		if (_nameShader == "pathTracing") {
+			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/path_tracing_all.frag");
+			m_shaders[_nameShader] = shader;
+			return shader;
+		}
 		if (_nameShader == "directRenderingMulti") {
 			Shader* shader = new Shader("./shaders/maximum_intensity_projection_all.vert", "./shaders/direct_rendering_multi.frag");
 			m_shaders[_nameShader] = shader;
