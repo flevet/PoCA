@@ -67,6 +67,13 @@ namespace poca::core {
 		virtual bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const = 0;
 		virtual bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const = 0;
 
+		virtual bool outOfCoreEnabled() const { return m_outOfCoreEnabled; }
+		virtual void setOutOfCoreEnabled(const bool _enabled) { m_outOfCoreEnabled = _enabled; }
+		virtual bool pyramidalRenderingEnabled() const { return m_pyramidalRenderingEnabled; }
+		virtual void setPyramidalRenderingEnabled(const bool _enabled) { m_pyramidalRenderingEnabled = _enabled; }
+		virtual void invalidatePyramidCache() const {}
+		virtual std::size_t pyramidCacheBytes() const { return 0; }
+
 		virtual const uint32_t dimension() const { return (m_depth > 1) ? 3 : 2; }
 		virtual inline uint32_t width() const { return m_width; }
 		virtual inline uint32_t height() const { return m_height; }
@@ -101,6 +108,8 @@ namespace poca::core {
 		float m_min, m_max, m_maxValue;
 		ImageType m_type, m_typeImage;
 		int m_currentFrame{ -1 };
+		bool m_outOfCoreEnabled{ false };
+		bool m_pyramidalRenderingEnabled{ false };
 
 		//Currently just store volumes for labels data, TODO think better about the structure
 		std::vector <float> m_volumes;

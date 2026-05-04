@@ -116,7 +116,8 @@ namespace poca::core {
 		) const;
 
 		// Call this if the underlying pixels change (optional for now)
-		void invalidatePyramidCache() const;
+		void invalidatePyramidCache() const override;
+		std::size_t pyramidCacheBytes() const override;
 
 		PyramidLevelView getOrCreateDownsampled(
 			uint32_t fx, uint32_t fy, uint32_t fz,
@@ -162,6 +163,13 @@ namespace poca::core {
 			DownsampleMode mode
 		);
 
+		static PyramidLevel downsampleRaw(
+			const T* srcData,
+			uint32_t srcW, uint32_t srcH, uint32_t srcD,
+			uint32_t fx, uint32_t fy, uint32_t fz,
+			DownsampleMode mode
+		);
+
 	private:
 		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
 		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
@@ -181,6 +189,8 @@ namespace poca::core {
 	Image<T>::Image(const Image& _o) : ImageInterface(_o)
 	{
 		m_pyramid = _o.m_pyramid;
+		m_outOfCoreEnabled = _o.m_outOfCoreEnabled;
+		m_pyramidalRenderingEnabled = _o.m_pyramidalRenderingEnabled;
 		m_planeReaderCallback = _o.m_planeReaderCallback;
 		m_regionReaderCallback = _o.m_regionReaderCallback;
 	}
@@ -247,6 +257,131 @@ namespace poca::core {
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_pyramid.clear();
+	}
+
+	template <class T>
+	std::size_t Image<T>::pyramidCacheBytes() const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		std::size_t bytes = 0;
+		for (const auto& kv : m_pyramid)
+			bytes += kv.second.data.size() * sizeof(T);
+		return bytes;
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevel Image<T>::downsampleRaw(
+		const T* srcData,
+		uint32_t srcW, uint32_t srcH, uint32_t srcD,
+		uint32_t fx, uint32_t fy, uint32_t fz,
+		DownsampleMode mode
+	)
+	{
+		PyramidLevel src;
+		src.w = srcW;
+		src.h = srcH;
+		src.d = srcD;
+
+		PyramidLevel dst;
+		dst.w = std::max(1u, src.w / fx);
+		dst.h = std::max(1u, src.h / fy);
+		dst.d = std::max(1u, src.d / fz);
+		dst.data.resize(size_t(dst.w) * dst.h * dst.d);
+
+		auto idxSrc = [&](uint32_t x, uint32_t y, uint32_t z) -> size_t {
+			return (size_t(z) * src.h + y) * src.w + x;
+		};
+		auto idxDst = [&](uint32_t x, uint32_t y, uint32_t z) -> size_t {
+			return (size_t(z) * dst.h + y) * dst.w + x;
+		};
+
+		for (uint32_t z = 0; z < dst.d; ++z) {
+			for (uint32_t y = 0; y < dst.h; ++y) {
+				for (uint32_t x = 0; x < dst.w; ++x) {
+					const uint32_t sx0 = x * fx;
+					const uint32_t sy0 = y * fy;
+					const uint32_t sz0 = z * fz;
+
+					if (mode == DownsampleMode::Nearest) {
+						const uint32_t sx = std::min(sx0, src.w - 1);
+						const uint32_t sy = std::min(sy0, src.h - 1);
+						const uint32_t sz = std::min(sz0, src.d - 1);
+						dst.data[idxDst(x, y, z)] = srcData[idxSrc(sx, sy, sz)];
+						continue;
+					}
+
+					if (mode == DownsampleMode::Majority) {
+						if constexpr (!std::is_integral_v<T>) {
+							const uint32_t sx = std::min(sx0, src.w - 1);
+							const uint32_t sy = std::min(sy0, src.h - 1);
+							const uint32_t sz = std::min(sz0, src.d - 1);
+							dst.data[idxDst(x, y, z)] = srcData[idxSrc(sx, sy, sz)];
+						}
+						else {
+							T bestVal = 0;
+							int bestCount = -1;
+							std::vector<T> vals;
+							vals.reserve(size_t(fx) * fy * fz);
+							for (uint32_t dz = 0; dz < fz; ++dz) {
+								uint32_t sz = std::min(sz0 + dz, src.d - 1);
+								for (uint32_t dy = 0; dy < fy; ++dy) {
+									uint32_t sy = std::min(sy0 + dy, src.h - 1);
+									for (uint32_t dx = 0; dx < fx; ++dx) {
+										uint32_t sx = std::min(sx0 + dx, src.w - 1);
+										vals.push_back(srcData[idxSrc(sx, sy, sz)]);
+									}
+								}
+							}
+							for (size_t i = 0; i < vals.size(); ++i) {
+								int count = 0;
+								for (size_t j = 0; j < vals.size(); ++j)
+									count += (vals[j] == vals[i]) ? 1 : 0;
+								if (count > bestCount) {
+									bestCount = count;
+									bestVal = vals[i];
+								}
+							}
+							dst.data[idxDst(x, y, z)] = bestVal;
+						}
+						continue;
+					}
+
+					if constexpr (std::is_integral_v<T>) {
+						uint64_t sum = 0;
+						uint64_t cnt = 0;
+						for (uint32_t dz = 0; dz < fz; ++dz) {
+							uint32_t sz = std::min(sz0 + dz, src.d - 1);
+							for (uint32_t dy = 0; dy < fy; ++dy) {
+								uint32_t sy = std::min(sy0 + dy, src.h - 1);
+								for (uint32_t dx = 0; dx < fx; ++dx) {
+									uint32_t sx = std::min(sx0 + dx, src.w - 1);
+									sum += uint64_t(srcData[idxSrc(sx, sy, sz)]);
+									++cnt;
+								}
+							}
+						}
+						dst.data[idxDst(x, y, z)] = T(sum / std::max<uint64_t>(1, cnt));
+					}
+					else {
+						double sum = 0.0;
+						double cnt = 0.0;
+						for (uint32_t dz = 0; dz < fz; ++dz) {
+							uint32_t sz = std::min(sz0 + dz, src.d - 1);
+							for (uint32_t dy = 0; dy < fy; ++dy) {
+								uint32_t sy = std::min(sy0 + dy, src.h - 1);
+								for (uint32_t dx = 0; dx < fx; ++dx) {
+									uint32_t sx = std::min(sx0 + dx, src.w - 1);
+									sum += double(srcData[idxSrc(sx, sy, sz)]);
+									cnt += 1.0;
+								}
+							}
+						}
+						dst.data[idxDst(x, y, z)] = T(sum / std::max(1.0, cnt));
+					}
+				}
+			}
+		}
+		return dst;
 	}
 
 	template <class T>
@@ -379,6 +514,8 @@ namespace poca::core {
 	) const
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if (!m_pyramidalRenderingEnabled)
+			level = 0;
 		// level 0 is the original full-res pixels
 		if (level <= 0) {
 			PyramidLevelView v;
@@ -403,10 +540,14 @@ namespace poca::core {
 		// Ensure parent exists, then downsample from it
 		PyramidLevel parent;
 		if (level == 1) {
-			parent.w = this->width();
-			parent.h = this->height();
-			parent.d = this->depth();
-			dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->copyValues(parent.data);
+			PyramidLevel lvl = downsampleRaw(this->data(), this->width(), this->height(), this->depth(), fx, fy, fz, mode);
+			auto [insIt, _] = m_pyramid.emplace(key, std::move(lvl));
+			PyramidLevelView v;
+			v.w = insIt->second.w;
+			v.h = insIt->second.h;
+			v.d = insIt->second.d;
+			v.ptr = insIt->second.data.data();
+			return v;
 		}
 		else {
 			PyramidLevelView pv = getOrCreatePyramidLevel(level - 1, fx, fy, fz, mode);
@@ -440,6 +581,14 @@ namespace poca::core {
 	) const
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if (!m_pyramidalRenderingEnabled) {
+			PyramidLevelView v;
+			v.w = this->width();
+			v.h = this->height();
+			v.d = this->depth();
+			v.ptr = this->data();
+			return v;
+		}
 		// clamp factors
 		fx = std::max(1u, fx);
 		fy = std::max(1u, fy);
@@ -458,13 +607,7 @@ namespace poca::core {
 			return v;
 		}
 
-		PyramidLevel src;
-		src.w = this->width();
-		src.h = this->height();
-		src.d = this->depth();
-		dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->copyValues(src.data);
-
-		PyramidLevel dst = downsampleLevel(src, fx, fy, fz, mode);
+		PyramidLevel dst = downsampleRaw(this->data(), this->width(), this->height(), this->depth(), fx, fy, fz, mode);
 		auto [insIt, _] = m_pyramid.emplace(key, std::move(dst));
 
 		PyramidLevelView v;
@@ -597,7 +740,7 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::releasePixels()
 	{
-		if (!canReloadPixels())
+		if (!m_outOfCoreEnabled || !canReloadPixels())
 			return;
 
 		dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"))->releaseValues();
