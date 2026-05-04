@@ -32,9 +32,15 @@
 
 #include <algorithm>
 #include <fstream>
+#include <limits>
+#include <set>
+#include <utility>
 
 #include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QGroupBox>
@@ -45,6 +51,7 @@
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QProgressBar>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QTableWidget>
 #include <QtWidgets/QTableWidgetItem>
@@ -59,12 +66,31 @@
 #include <QtCore/QSet>
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QColor>
+#include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 
 #include <General/Engine.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <Objects/MyMultipleObject.hpp>
+#include <tinytiffreader.h>
 
 #include "../Widgets/DatasetAssemblerWidget.hpp"
+
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
+#else
+#include <sys/sysinfo.h>
+#endif
+
+#ifndef GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX
+#define GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX 0x9049
+#endif
+#ifndef GL_TEXTURE_FREE_MEMORY_ATI
+#define GL_TEXTURE_FREE_MEMORY_ATI 0x87FC
+#endif
 
 namespace {
 	QString buildDatasetName(const QString& rootFolder, const QString& key, const bool prefixRootName, const QString& separator)
@@ -92,6 +118,20 @@ namespace {
 		item->setFlags((item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled) & ~Qt::ItemIsEditable);
 		item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
 		return item;
+	}
+
+	bool isTiffFilename(const QString& filename)
+	{
+		return filename.endsWith(".tif", Qt::CaseInsensitive) || filename.endsWith(".tiff", Qt::CaseInsensitive);
+	}
+
+	uint64_t safeMul(const uint64_t a, const uint64_t b)
+	{
+		if (a == 0 || b == 0)
+			return 0;
+		if (a > std::numeric_limits<uint64_t>::max() / b)
+			return std::numeric_limits<uint64_t>::max();
+		return a * b;
 	}
 }
 
@@ -183,6 +223,13 @@ DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
 	connect(m_previewButton, SIGNAL(released()), this, SLOT(onPreview()));
 	connect(m_assembleButton, SIGNAL(released()), this, SLOT(onAssemble()));
 
+	m_loadingProgressBar = new QProgressBar(this);
+	m_loadingProgressBar->setMinimum(0);
+	m_loadingProgressBar->setValue(0);
+	m_loadingProgressBar->setTextVisible(true);
+	m_loadingProgressBar->setFormat(tr("Loading datasets: %v / %m"));
+	m_loadingProgressBar->setVisible(false);
+
 	QHBoxLayout* actionsLayout = new QHBoxLayout;
 	actionsLayout->addStretch(1);
 	actionsLayout->addWidget(m_previewButton);
@@ -195,6 +242,7 @@ DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
 	mainLayout->addWidget(m_previewTree);
 	mainLayout->addWidget(new QLabel("Log", this));
 	mainLayout->addWidget(m_logEdit);
+	mainLayout->addWidget(m_loadingProgressBar);
 	mainLayout->addLayout(actionsLayout);
 	setLayout(mainLayout);
 
@@ -443,6 +491,10 @@ void DatasetAssemblerWidget::onPreview()
 void DatasetAssemblerWidget::onAssemble()
 {
 	m_logEdit->clear();
+	if (m_loadingProgressBar != nullptr) {
+		m_loadingProgressBar->setVisible(false);
+		m_loadingProgressBar->setValue(0);
+	}
 
 	const std::vector<DatasetRule> rules = rulesFromTable();
 	QStringList roots;
@@ -461,15 +513,83 @@ void DatasetAssemblerWidget::onAssemble()
 
 	populatePreviewTree(roots, rules);
 
+	ImageMemoryEstimate totalEstimate;
+	std::vector<std::pair<QString, ScanResult>> rootScans;
+	for (const QString& rootFolder : roots) {
+		const ScanResult scan = scanRootFolder(rootFolder, rules);
+		const ImageMemoryEstimate estimate = estimateImageMemoryForScan(scan);
+		totalEstimate.cpuBytes += estimate.cpuBytes;
+		totalEstimate.gpuBytes += estimate.gpuBytes;
+		totalEstimate.imageFiles += estimate.imageFiles;
+		totalEstimate.unreadableImageFiles += estimate.unreadableImageFiles;
+		totalEstimate.messages << estimate.messages;
+		rootScans.push_back(std::make_pair(rootFolder, scan));
+	}
+
+	bool useOutOfCore = false;
+	bool usePyramidalRendering = false;
+	if (!confirmImageMemoryPolicy(totalEstimate, useOutOfCore, usePyramidalRendering))
+		return;
+
 	poca::core::Engine* engine = poca::core::Engine::instance();
+
+	engine->setVerbose(true);
+	engine->addVerboseType("lodDebug");
+
 	std::vector<poca::core::MyObjectInterface*> objects;
 	std::vector<AssembledDatasetInfo> assembledInfos;
 	const bool prefixRootName = m_prefixRootNameCBox->isChecked();
 	const QString separator = m_nameSeparatorEdit->text().isEmpty() ? "_" : m_nameSeparatorEdit->text();
 
-	for (const QString& rootFolder : roots) {
+	int totalLoadSteps = 0;
+	for (const auto& rootScan : rootScans) {
+		const ScanResult& scan = rootScan.second;
+		for (auto it = scan.datasets.begin(); it != scan.datasets.end(); ++it) {
+			const DatasetEntry& entry = it.value();
+
+			bool missingRequired = false;
+			for (int ruleIndex = 0; ruleIndex < (int)rules.size(); ++ruleIndex) {
+				const DatasetRule& rule = rules[ruleIndex];
+				if (!rule.enabled || !rule.required)
+					continue;
+				if (!entry.filesByRule.contains(ruleIndex)) {
+					missingRequired = true;
+					break;
+				}
+			}
+
+			if (!missingRequired && !entry.filesByRule.isEmpty())
+				totalLoadSteps += entry.filesByRule.size();
+		}
+	}
+
+	int loadedSteps = 0;
+	if (m_loadingProgressBar != nullptr) {
+		m_loadingProgressBar->setRange(0, std::max(1, totalLoadSteps));
+		m_loadingProgressBar->setValue(0);
+		m_loadingProgressBar->setFormat(tr("Loading datasets: %v / %m"));
+		m_loadingProgressBar->setVisible(totalLoadSteps > 0);
+	}
+	QApplication::processEvents();
+
+	auto advanceLoadingProgress = [&]() {
+		++loadedSteps;
+		if (m_loadingProgressBar != nullptr)
+			m_loadingProgressBar->setValue(std::min(loadedSteps, std::max(1, totalLoadSteps)));
+		QApplication::processEvents();
+	};
+	auto finishLoadingProgress = [&]() {
+		if (m_loadingProgressBar != nullptr) {
+			m_loadingProgressBar->setValue(std::max(1, totalLoadSteps));
+			m_loadingProgressBar->setVisible(false);
+		}
+		QApplication::processEvents();
+	};
+
+	for (const auto& rootScan : rootScans) {
+		const QString& rootFolder = rootScan.first;
+		const ScanResult& scan = rootScan.second;
 		appendLog(QString("Scanning root folder: %1").arg(rootFolder));
-		const ScanResult scan = scanRootFolder(rootFolder, rules);
 		for (const QString& message : scan.messages)
 			appendLog(message);
 
@@ -490,8 +610,9 @@ void DatasetAssemblerWidget::onAssemble()
 			if (missingRequired || entry.filesByRule.isEmpty())
 				continue;
 
-			poca::core::CommandInfo firstLoadInfo(false, "open", "path", entry.filesByRule.begin().value().toStdString());
+			poca::core::CommandInfo firstLoadInfo(false, "open", "path", entry.filesByRule.begin().value().toStdString(), "outOfCore", useOutOfCore, "pyramidalRendering", usePyramidalRendering);
 			poca::core::MyObjectInterface* object = engine->loadDataAndCreateObject(entry.filesByRule.begin().value(), &firstLoadInfo);
+			advanceLoadingProgress();
 			if (object == nullptr) {
 				appendLog(QString("Failed to create object for dataset [%1] from %2").arg(datasetKey).arg(entry.filesByRule.begin().value()));
 				continue;
@@ -501,8 +622,10 @@ void DatasetAssemblerWidget::onAssemble()
 			auto fileIt = entry.filesByRule.begin();
 			++fileIt;
 			for (; fileIt != entry.filesByRule.end(); ++fileIt) {
-				poca::core::CommandInfo addInfo(false, "open", "path", fileIt.value().toStdString());
-				if (!engine->loadDataAndAddToObject(fileIt.value(), object, &addInfo)) {
+				poca::core::CommandInfo addInfo(false, "open", "path", fileIt.value().toStdString(), "outOfCore", useOutOfCore, "pyramidalRendering", usePyramidalRendering);
+				const bool added = engine->loadDataAndAddToObject(fileIt.value(), object, &addInfo);
+				advanceLoadingProgress();
+				if (!added) {
 					appendLog(QString("Failed to add component %1 to dataset [%2]").arg(fileIt.value()).arg(datasetKey));
 					valid = false;
 					break;
@@ -524,12 +647,14 @@ void DatasetAssemblerWidget::onAssemble()
 	}
 
 	if (objects.empty()) {
+		finishLoadingProgress();
 		QMessageBox::information(this, tr("Assembler"), tr("No dataset could be assembled with the current rules."));
 		return;
 	}
 
 	poca::core::MyObjectInterface* createdObject = objects.size() == 1 ? objects.front() : engine->generateMultipleObject(objects);
 	if (createdObject == nullptr) {
+		finishLoadingProgress();
 		QMessageBox::warning(this, tr("Assembler"), tr("The datasets were created but the final object could not be assembled."));
 		return;
 	}
@@ -538,6 +663,7 @@ void DatasetAssemblerWidget::onAssemble()
 	if (multipleObject != nullptr)
 		populateHierarchy(multipleObject, assembledInfos);
 
+	finishLoadingProgress();
 	appendLog(QString("Created %1 object(s).").arg(objects.size()));
 	emit transferNewObjectCreated(createdObject);
 }
@@ -900,6 +1026,180 @@ void DatasetAssemblerWidget::populatePreviewTree(const QStringList& _roots, cons
 		}
 	}
 	m_previewTree->expandAll();
+}
+
+DatasetAssemblerWidget::ImageMemoryEstimate DatasetAssemblerWidget::estimateImageMemoryForScan(const ScanResult& _scan) const
+{
+	ImageMemoryEstimate estimate;
+	QSet<QString> seenFiles;
+	for (auto it = _scan.datasets.begin(); it != _scan.datasets.end(); ++it) {
+		const DatasetEntry& entry = it.value();
+		for (auto fileIt = entry.filesByRule.begin(); fileIt != entry.filesByRule.end(); ++fileIt) {
+			const QString filename = QFileInfo(fileIt.value()).absoluteFilePath();
+			if (seenFiles.contains(filename) || !isTiffFilename(filename))
+				continue;
+			seenFiles.insert(filename);
+
+			uint64_t bytes = 0;
+			if (estimateTiffImageBytes(filename, bytes)) {
+				estimate.cpuBytes += bytes;
+				estimate.gpuBytes += bytes;
+				++estimate.imageFiles;
+			}
+			else {
+				++estimate.unreadableImageFiles;
+				estimate.messages << QString("Could not estimate TIFF memory: %1").arg(filename);
+			}
+		}
+	}
+	return estimate;
+}
+
+bool DatasetAssemblerWidget::estimateTiffImageBytes(const QString& _filename, uint64_t& _bytes) const
+{
+	_bytes = 0;
+	TinyTIFFReaderFile* tiffr = TinyTIFFReader_open(_filename.toStdString().c_str());
+	if (!tiffr)
+		return false;
+
+	if (TinyTIFFReader_wasError(tiffr)) {
+		TinyTIFFReader_close(tiffr);
+		return false;
+	}
+
+	const uint32_t width = TinyTIFFReader_getWidth(tiffr);
+	const uint32_t height = TinyTIFFReader_getHeight(tiffr);
+	const uint16_t bitsPerSample = TinyTIFFReader_getBitsPerSample(tiffr, 0);
+	const uint16_t samplesPerPixel = TinyTIFFReader_getSamplesPerPixel(tiffr);
+	uint32_t depth = TinyTIFFReader_countFrames(tiffr);
+	if (depth == 0)
+		depth = 1;
+	TinyTIFFReader_close(tiffr);
+
+	if (width == 0 || height == 0 || bitsPerSample == 0 || samplesPerPixel == 0)
+		return false;
+
+	const uint64_t bytesPerSample = std::max<uint64_t>(1, static_cast<uint64_t>(bitsPerSample + 7) / 8);
+	_bytes = safeMul(safeMul(safeMul(safeMul(width, height), depth), samplesPerPixel), bytesPerSample);
+	return _bytes > 0;
+}
+
+DatasetAssemblerWidget::RuntimeMemoryStatus DatasetAssemblerWidget::queryRuntimeMemoryStatus() const
+{
+	RuntimeMemoryStatus status;
+
+#if defined(_WIN32)
+	MEMORYSTATUSEX mem;
+	mem.dwLength = sizeof(mem);
+	if (GlobalMemoryStatusEx(&mem)) {
+		status.availableCpuBytes = static_cast<uint64_t>(mem.ullAvailPhys);
+		status.hasCpuBytes = true;
+	}
+#elif defined(__APPLE__)
+	mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+	vm_statistics64_data_t vmstat;
+	if (host_statistics64(mach_host_self(), HOST_VM_INFO64, reinterpret_cast<host_info64_t>(&vmstat), &count) == KERN_SUCCESS) {
+		uint64_t pageSize = 0;
+		size_t pageSizeLen = sizeof(pageSize);
+		if (sysctlbyname("hw.pagesize", &pageSize, &pageSizeLen, nullptr, 0) == 0) {
+			status.availableCpuBytes = static_cast<uint64_t>(vmstat.free_count + vmstat.inactive_count) * pageSize;
+			status.hasCpuBytes = true;
+		}
+	}
+#else
+	struct sysinfo info;
+	if (sysinfo(&info) == 0) {
+		status.availableCpuBytes = static_cast<uint64_t>(info.freeram) * static_cast<uint64_t>(info.mem_unit);
+		status.hasCpuBytes = true;
+	}
+#endif
+
+	QOpenGLContext* context = QOpenGLContext::currentContext();
+	if (context != nullptr) {
+		QOpenGLFunctions* functions = context->functions();
+		const QSet<QByteArray> extensions = context->extensions();
+		GLint value = 0;
+		if (extensions.contains("GL_NVX_gpu_memory_info")) {
+			functions->glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &value);
+			if (value > 0) {
+				status.availableGpuBytes = static_cast<uint64_t>(value) * 1024ull;
+				status.hasGpuBytes = true;
+			}
+		}
+		else if (extensions.contains("GL_ATI_meminfo")) {
+			GLint values[4] = { 0, 0, 0, 0 };
+			functions->glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, values);
+			if (values[0] > 0) {
+				status.availableGpuBytes = static_cast<uint64_t>(values[0]) * 1024ull;
+				status.hasGpuBytes = true;
+			}
+		}
+	}
+
+	return status;
+}
+
+QString DatasetAssemblerWidget::formatBytes(const uint64_t _bytes) const
+{
+	const double gib = static_cast<double>(_bytes) / (1024.0 * 1024.0 * 1024.0);
+	const double mib = static_cast<double>(_bytes) / (1024.0 * 1024.0);
+	if (gib >= 1.0)
+		return QString::number(gib, 'f', 2) + " GiB";
+	return QString::number(mib, 'f', 1) + " MiB";
+}
+
+bool DatasetAssemblerWidget::confirmImageMemoryPolicy(const ImageMemoryEstimate& _estimate, bool& _outOfCore, bool& _pyramidalRendering) const
+{
+	_outOfCore = false;
+	_pyramidalRendering = false;
+	if (_estimate.imageFiles == 0)
+		return true;
+
+	const RuntimeMemoryStatus status = queryRuntimeMemoryStatus();
+	const double safety = 0.75;
+	const uint64_t estimatedProcessBytesWithoutPyramid = _estimate.cpuBytes + _estimate.gpuBytes;
+	const bool cpuExceeded = status.hasCpuBytes && static_cast<double>(_estimate.cpuBytes) > static_cast<double>(status.availableCpuBytes) * safety;
+	const bool processExceeded = status.hasCpuBytes && static_cast<double>(estimatedProcessBytesWithoutPyramid) > static_cast<double>(status.availableCpuBytes) * safety;
+	const bool gpuExceeded = status.hasGpuBytes && static_cast<double>(_estimate.gpuBytes) > static_cast<double>(status.availableGpuBytes) * safety;
+
+	_outOfCore = cpuExceeded;
+	_pyramidalRendering = gpuExceeded || processExceeded;
+
+	if (!cpuExceeded && !gpuExceeded && !processExceeded)
+		return true;
+
+	QDialog dialog(const_cast<DatasetAssemblerWidget*>(this));
+	dialog.setWindowTitle(tr("Image memory sanity check"));
+	QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+	QString message = tr("The assembler found %1 TIFF image(s). Estimated uncompressed image memory:").arg(_estimate.imageFiles);
+	layout->addWidget(new QLabel(message, &dialog));
+	layout->addWidget(new QLabel(tr("CPU RAM retained by full image pixels: %1").arg(formatBytes(_estimate.cpuBytes)), &dialog));
+	layout->addWidget(new QLabel(tr("Full-resolution GPU texture memory if pyramidal rendering is disabled: %1").arg(formatBytes(_estimate.gpuBytes)), &dialog));
+	layout->addWidget(new QLabel(tr("Possible Windows process memory impact without pyramidal rendering: %1").arg(formatBytes(estimatedProcessBytesWithoutPyramid)), &dialog));
+	layout->addWidget(new QLabel(status.hasCpuBytes ? tr("Available CPU RAM: %1").arg(formatBytes(status.availableCpuBytes)) : tr("Available CPU RAM: unknown"), &dialog));
+	layout->addWidget(new QLabel(status.hasGpuBytes ? tr("Available GPU memory: %1").arg(formatBytes(status.availableGpuBytes)) : tr("Available GPU memory: unknown"), &dialog));
+	if (_estimate.unreadableImageFiles > 0)
+		layout->addWidget(new QLabel(tr("Warning: %1 TIFF image(s) could not be estimated.").arg(_estimate.unreadableImageFiles), &dialog));
+
+	QCheckBox* outOfCoreBox = new QCheckBox(tr("Use out-of-core image storage"), &dialog);
+	outOfCoreBox->setChecked(_outOfCore);
+	QCheckBox* pyramidBox = new QCheckBox(tr("Use pyramidal rendering"), &dialog);
+	pyramidBox->setChecked(_pyramidalRendering);
+	layout->addWidget(outOfCoreBox);
+	layout->addWidget(pyramidBox);
+
+	QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+	layout->addWidget(buttons);
+	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+	if (dialog.exec() != QDialog::Accepted)
+		return false;
+
+	_outOfCore = outOfCoreBox->isChecked();
+	_pyramidalRendering = pyramidBox->isChecked();
+	return true;
 }
 
 void DatasetAssemblerWidget::populateHierarchy(MyMultipleObject* _multipleObject, const std::vector<AssembledDatasetInfo>& _assembledInfos) const

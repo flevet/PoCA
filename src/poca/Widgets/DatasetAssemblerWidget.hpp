@@ -36,6 +36,7 @@
 #include <QtWidgets/QWidget>
 #include <QtCore/QMap>
 #include <QtCore/QStringList>
+#include <cstdint>
 #include <General/json.hpp>
 
 class QListWidget;
@@ -46,6 +47,7 @@ class QLineEdit;
 class QCheckBox;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QProgressBar;
 
 namespace poca::core {
 	class MyObjectInterface;
@@ -97,6 +99,21 @@ private:
 		int matchedFiles{ 0 };
 	};
 
+	struct ImageMemoryEstimate {
+		uint64_t cpuBytes{ 0 };
+		uint64_t gpuBytes{ 0 };
+		uint64_t imageFiles{ 0 };
+		uint64_t unreadableImageFiles{ 0 };
+		QStringList messages;
+	};
+
+	struct RuntimeMemoryStatus {
+		uint64_t availableCpuBytes{ 0 };
+		uint64_t availableGpuBytes{ 0 };
+		bool hasCpuBytes{ false };
+		bool hasGpuBytes{ false };
+	};
+
 	struct AssembledDatasetInfo {
 		QString rootFolder;
 		QString datasetKey;
@@ -121,6 +138,11 @@ private:
 	void populatePreviewTree(const QStringList&, const std::vector<DatasetRule>&);
 	QTreeWidgetItem* ensurePreviewNode(QTreeWidgetItem*, const QString&, const QString& = QString());
 	void populateHierarchy(class MyMultipleObject*, const std::vector<AssembledDatasetInfo>&) const;
+	ImageMemoryEstimate estimateImageMemoryForScan(const ScanResult&) const;
+	bool estimateTiffImageBytes(const QString&, uint64_t&) const;
+	RuntimeMemoryStatus queryRuntimeMemoryStatus() const;
+	QString formatBytes(const uint64_t) const;
+	bool confirmImageMemoryPolicy(const ImageMemoryEstimate&, bool&, bool&) const;
 
 	QListWidget* m_rootsList{ nullptr };
 	QPushButton* m_addFolderButton{ nullptr };
@@ -136,6 +158,7 @@ private:
 	QTextEdit* m_logEdit{ nullptr };
 	QLineEdit* m_nameSeparatorEdit{ nullptr };
 	QCheckBox* m_prefixRootNameCBox{ nullptr };
+	QProgressBar* m_loadingProgressBar{ nullptr };
 	QString m_lastRootPath;
 };
 
