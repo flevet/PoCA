@@ -499,7 +499,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_resetedProj(true)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_resetedProj(true)
 	{
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
@@ -734,7 +734,29 @@ namespace poca::opengl {
 
 	void Camera::paintGL()
 	{
-		drawElements();
+		// First paint after the QOpenGLWidget has a valid context and size.
+		// Do not build heavy OpenGL component displays here yet: clear one frame,
+		// emit a generic lifecycle command, then schedule the real display for
+		// the next event-loop pass. This lets the MDI child become visible before
+		// image textures / LOD uploads are created.
+		/*if (!m_openGLContextInitializedNotified) {
+			recalcModelView();
+			glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+			glClearColor(0.f, 0.f, 0.f, 1.f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+			poca::core::CommandInfo ci(false, "OpenGLContextInitialized");
+			poca::core::CommandExecutionContext runtimeContext;
+			runtimeContext.set(poca::opengl::ActiveCamera{ this });
+			m_object->executeGlobalCommand(&ci, runtimeContext);
+
+			m_openGLContextInitializedNotified = true;
+			QTimer::singleShot(0, this, [this]() { this->update(); });
+			return;
+		}*/
+
+		if (m_openGLContextInitializedNotified)
+			drawElements();
 	}
 
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)

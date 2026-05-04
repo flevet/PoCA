@@ -86,6 +86,9 @@ namespace poca::opengl {
 		virtual void drawElementsOnscreen() = 0;
 		virtual void drawElementsOffscreen() = 0;
 
+		virtual bool isOpenGLContextInitialized() = 0;
+		virtual void setOpenGLContextInitialized(const bool) = 0;
+
 	protected:
 		bool m_sizeChanged{ false };
 	};

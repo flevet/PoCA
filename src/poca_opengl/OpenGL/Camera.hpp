@@ -227,6 +227,8 @@ namespace poca::opengl {
 		inline std::vector <QImage>& getMovieFrames() { return m_movieFrames; }
 		inline const std::vector <QImage>& getMovieFrames() const { return m_movieFrames; }
 
+		bool isOpenGLContextInitialized() { return m_openGLContextInitializedNotified; }
+		void setOpenGLContextInitialized(const bool _val) { m_openGLContextInitializedNotified = _val; }
 
 		template < class T, class M >
 		void drawSimpleShader(const GLuint, const SingleGLBuffer<T>&, const SingleGLBuffer<M>&, const GLfloat, const GLfloat, const GLfloat = 1.f, const bool = false, glm::vec4 = glm::vec4(), const SingleGLBuffer<T>& = SingleGLBuffer<T>());
@@ -344,6 +346,7 @@ namespace poca::opengl {
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid;
 		bool m_alreadyInitialized;
+		bool m_openGLContextInitializedNotified;
 		bool m_cullFace, m_fillPolygon;
 
 		StateCamera m_stateCamera;

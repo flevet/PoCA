@@ -880,13 +880,12 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	setActiveMdiChild(child);
 	child->layout()->update();
 	child->layout()->activate();
-	child->getWidget()->update();
 	child->show();
 
 	_obj->notify("LoadObjCharacteristicsAllWidgets");
-	_obj->notifyAll("updateDisplay");
 
 	engine->addCameraToObject(_obj, cam);
+	cam->update();
 }
 
 

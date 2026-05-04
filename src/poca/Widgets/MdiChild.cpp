@@ -501,6 +501,21 @@ bool MyMdiArea::eventFilter( QObject * _receiver, QEvent * _event )
 	return QMdiArea::eventFilter( _receiver, _event );
 }
 
+void MdiChild::showEvent(QShowEvent* event)
+{
+	QMdiSubWindow::showEvent(event);
 
+	if (m_openGLInitTimerScheduled)
+		return;
+
+	m_openGLInitTimerScheduled = true;
+
+	QTimer::singleShot(1000, this, [this]() {
+		if (m_widget != nullptr && !m_widget->isOpenGLContextInitialized()) {
+			m_widget->setOpenGLContextInitialized(true);
+			m_widget->update();
+		}
+		});
+}
 
 

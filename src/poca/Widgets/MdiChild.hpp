@@ -41,6 +41,7 @@
 #include <QtGui/QFocusEvent>
 #include <QtWidgets/QMdiArea>
 #include <QtCore/QPoint>
+#include <QtGui/QShowEvent>
 
 #include <OpenGL/Camera.hpp>
 
@@ -90,6 +91,7 @@ protected:
 	bool eventFilter( QObject *, QEvent * );
 	void mousePressEvent( QMouseEvent * );
 	void mouseMoveEvent(QMouseEvent*);
+	void showEvent(QShowEvent* event) override;
 
 	int32_t getPlane(int);
 	void applyFramePlane(int32_t);
@@ -104,6 +106,7 @@ protected:
 	QTimer* m_timer{ NULL };
 	int32_t m_minT, m_maxT, m_interval;
 	float m_frameLowerOffset{ -0.5f }, m_frameUpperOffset{ 0.5f };
+	bool m_openGLInitTimerScheduled = false;
 };
 
 #endif // MdiChild_h__
