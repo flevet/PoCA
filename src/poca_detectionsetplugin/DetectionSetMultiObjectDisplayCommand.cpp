@@ -182,6 +182,9 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
 	}
+	else if (_infos->nameCommand == "rebuildDisplay") {
+		rebuild();
+	}
 }
 
 poca::core::Command* DetectionSetMultiObjectDisplayCommand::copy()

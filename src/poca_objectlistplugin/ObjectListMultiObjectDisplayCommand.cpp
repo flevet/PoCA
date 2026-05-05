@@ -225,6 +225,9 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
 	}
+	else if (_infos->nameCommand == "rebuildDisplay") {
+		rebuild();
+	}
 }
 
 poca::core::Command* ObjectListMultiObjectDisplayCommand::copy()

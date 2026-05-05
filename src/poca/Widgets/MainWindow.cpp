@@ -3119,6 +3119,7 @@ void MainWindow::onToggleGridCentered(bool _on)
 	if (!mobject) return;
 
 	mobject->resetModelMatrices(_on);
+	mobject->executeGlobalCommand(&poca::core::CommandInfo(false, "rebuildDisplay"));
 	mobject->notifyAll("updateDisplay");
 	resetViewer();
 }
