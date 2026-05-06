@@ -876,6 +876,7 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 	MdiChild* child = new MdiChild(cam);
 	QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
 	QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
+	QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 	m_mdiArea->addSubWindow(child);
 	setActiveMdiChild(child);
 	child->layout()->update();
@@ -1040,6 +1041,7 @@ poca::opengl::CameraInterface* MainWindow::createWindows(poca::core::MyObjectInt
 		MdiChild* child = new MdiChild(cam);
 		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
 		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
+		QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 		m_mdiArea->addSubWindow(child);
 		setActiveMdiChild(child);
 
@@ -1096,6 +1098,7 @@ poca::core::MyObjectInterface* MainWindow::createWindows(poca::core::BasicCompon
 		MdiChild* child = new MdiChild(cam);
 		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
 		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
+		QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 		m_mdiArea->addSubWindow(child);
 		setActiveMdiChild(child);
 

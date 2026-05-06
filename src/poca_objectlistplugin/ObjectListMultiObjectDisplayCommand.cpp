@@ -11,6 +11,7 @@
 #include <Windows.h>
 #include <algorithm>
 #include <limits>
+#include <map>
 
 #include <gl/glew.h>
 #include <gl/GL.h>
@@ -21,9 +22,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Objects/MyMultipleObject.hpp>
+#include <Objects/ObjectCommandContext.hpp>
+#include <General/Engine.hpp>
 #include <General/Histogram.hpp>
 #include <General/Misc.h>
+#include <Geometry/DetectionSet.hpp>
+#include <Geometry/ObjectListDelaunay.hpp>
 #include <Geometry/ObjectListMesh.hpp>
+#include <Geometry/ObjectListPolygon.hpp>
 #include <Geometry/ObjectLists.hpp>
 #include <Interfaces/ObjectListInterface.hpp>
 #include <OpenGL/Camera.hpp>
@@ -71,6 +77,320 @@ namespace {
 	{
 		const glm::vec4 transformed = _model * glm::vec4(_dir.x(), _dir.y(), _dir.z(), 0.f);
 		return poca::core::Vec3mf(transformed.x, transformed.y, transformed.z);
+	}
+
+	std::vector<poca::core::Vec3mf> transformPositions(const glm::mat4& _model, const std::vector<poca::core::Vec3mf>& _positions)
+	{
+		std::vector<poca::core::Vec3mf> transformed;
+		transformed.reserve(_positions.size());
+		for (const auto& position : _positions)
+			transformed.push_back(transformPosition(_model, position));
+		return transformed;
+	}
+
+	std::vector<poca::core::Vec3mf> transformDirections(const glm::mat4& _model, const std::vector<poca::core::Vec3mf>& _directions)
+	{
+		std::vector<poca::core::Vec3mf> transformed;
+		transformed.reserve(_directions.size());
+		for (const auto& direction : _directions)
+			transformed.push_back(transformDirection(_model, direction));
+		return transformed;
+	}
+
+	glm::mat4 currentObjectModel(MyMultipleObject* _object)
+	{
+		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
+		return child != nullptr ? glm::inverse(_object->getModelMatrix()) * child->getModelMatrix() : glm::mat4(1.f);
+	}
+
+	std::string transformedObjectName(poca::core::MyObjectInterface* _source)
+	{
+		const std::string sourceName = _source != nullptr ? _source->getName() : std::string();
+		return sourceName.empty() ? "transformed_object" : sourceName + "_transformed";
+	}
+
+	poca::core::MyObjectInterface* createdObject(poca::core::CommandExecutionResult& _result)
+	{
+		if (!_result.has<poca::core::CreatedObjectContext>())
+			return nullptr;
+		return _result.get<poca::core::CreatedObjectContext>().object;
+	}
+
+	poca::core::MyObjectInterface* addComponentToTransformedObject(poca::core::CommandExecutionResult& _result, poca::core::MyObjectInterface* _source, poca::core::BasicComponentInterface* _component)
+	{
+		if (_source == nullptr || _component == nullptr)
+			return nullptr;
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* object = createdObject(_result);
+		if (object != nullptr) {
+			if (engine->addComponentToObject(object, _component))
+				return object;
+			return nullptr;
+		}
+
+		object = engine->createObject(_source->getDir(), transformedObjectName(_source), _component);
+		if (object != nullptr)
+			_result.set(poca::core::CreatedObjectContext{ object });
+		return object;
+	}
+
+	void copyObjectListState(poca::geometry::ObjectListInterface* _source, poca::geometry::ObjectListInterface* _target)
+	{
+		if (_source == nullptr || _target == nullptr)
+			return;
+		if (_target->nbElements() == _source->nbElements())
+			_target->setSelection(_source->getSelection());
+		const std::string currentHistogram = _source->currentHistogramType();
+		if (!currentHistogram.empty() && _target->hasData(currentHistogram))
+			_target->setCurrentHistogramType(currentHistogram);
+		_target->setSelected(_source->isSelected());
+		_target->setHiLow(_source->isHiLow());
+	}
+
+	poca::geometry::DetectionSet* transformedDetectionSet(poca::geometry::DetectionSet* _source, const glm::mat4& _model)
+	{
+		if (_source == nullptr || !_source->hasData("x") || !_source->hasData("y"))
+			return nullptr;
+
+		std::map<std::string, std::vector<float>> data;
+		for (const auto& name : _source->getNameData())
+			data[name] = _source->getMyData(name)->getOriginalData<float>();
+
+		std::vector<float>& xs = data["x"];
+		std::vector<float>& ys = data["y"];
+		const bool hasZ = data.find("z") != data.end();
+		std::vector<float>* zs = hasZ ? &data["z"] : nullptr;
+		for (size_t n = 0; n < xs.size(); n++) {
+			const float z = zs != nullptr ? (*zs)[n] : 0.f;
+			const poca::core::Vec3mf transformed = transformPosition(_model, poca::core::Vec3mf(xs[n], ys[n], z));
+			xs[n] = transformed.x();
+			ys[n] = transformed.y();
+			if (zs != nullptr)
+				(*zs)[n] = transformed.z();
+		}
+
+		if (data.find("nx") != data.end() && data.find("ny") != data.end() && data.find("nz") != data.end()) {
+			std::vector<float>& nxs = data["nx"];
+			std::vector<float>& nys = data["ny"];
+			std::vector<float>& nzs = data["nz"];
+			for (size_t n = 0; n < nxs.size(); n++) {
+				const poca::core::Vec3mf transformed = transformDirection(_model, poca::core::Vec3mf(nxs[n], nys[n], nzs[n]));
+				nxs[n] = transformed.x();
+				nys[n] = transformed.y();
+				nzs[n] = transformed.z();
+			}
+		}
+
+		poca::geometry::DetectionSet* transformed = new poca::geometry::DetectionSet(data);
+		if (transformed->nbElements() == _source->nbElements())
+			transformed->setSelection(_source->getSelection());
+		const std::string currentHistogram = _source->currentHistogramType();
+		if (!currentHistogram.empty() && transformed->hasData(currentHistogram))
+			transformed->setCurrentHistogramType(currentHistogram);
+		transformed->setSelected(_source->isSelected());
+		transformed->setHiLow(_source->isHiLow());
+		return transformed;
+	}
+
+	poca::geometry::DetectionSet* ensureTransformedDetectionSet(MyMultipleObject* _object, poca::core::CommandExecutionResult& _result)
+	{
+		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
+		if (child == nullptr || !child->hasBasicComponent("DetectionSet"))
+			return nullptr;
+
+		poca::core::MyObjectInterface* object = createdObject(_result);
+		if (object != nullptr && object->hasBasicComponent("DetectionSet"))
+			return dynamic_cast<poca::geometry::DetectionSet*>(object->getBasicComponent("DetectionSet"));
+
+		poca::geometry::DetectionSet* source = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
+		poca::geometry::DetectionSet* transformed = transformedDetectionSet(source, currentObjectModel(_object));
+		if (transformed == nullptr)
+			return nullptr;
+		if (addComponentToTransformedObject(_result, child, transformed) == nullptr)
+			return nullptr;
+		return transformed;
+	}
+
+	poca::geometry::ObjectListInterface* transformedMeshObjectList(poca::geometry::ObjectListMesh* _source, const glm::mat4& _model)
+	{
+		if (_source == nullptr)
+			return nullptr;
+
+		std::vector<Surface_mesh_3_double> meshes = _source->getMeshes();
+		for (auto& mesh : meshes) {
+			for (auto vertex : mesh.vertices()) {
+				const Point_3_double point = mesh.point(vertex);
+				const poca::core::Vec3mf transformed = transformPosition(_model, poca::core::Vec3mf(point.x(), point.y(), point.z()));
+				mesh.point(vertex) = Point_3_double(transformed.x(), transformed.y(), transformed.z());
+			}
+		}
+		poca::geometry::ObjectListMesh* transformed = new poca::geometry::ObjectListMesh(meshes, false, 0.f, 0);
+		transformed->setUseVertexNormals(_source->useVertexNormals());
+		copyObjectListState(_source, transformed);
+		return transformed;
+	}
+
+	std::vector<std::vector<Polygon_2>> transformedPolygons(poca::geometry::ObjectListPolygon* _source, const glm::mat4& _model)
+	{
+		std::vector<std::vector<Polygon_2>> polygons;
+		if (_source == nullptr)
+			return polygons;
+
+		polygons.reserve(_source->getPolygons().size());
+		for (const auto& objectPolygons : _source->getPolygons()) {
+			std::vector<Polygon_2> transformedObjectPolygons;
+			transformedObjectPolygons.reserve(objectPolygons.size());
+			for (const auto& polygon : objectPolygons) {
+				std::vector<Point_2> points;
+				points.reserve(polygon.size());
+				for (auto it = polygon.vertices_begin(); it != polygon.vertices_end(); ++it) {
+					const poca::core::Vec3mf transformed = transformPosition(_model, poca::core::Vec3mf(it->x(), it->y(), 0.f));
+					points.push_back(Point_2(transformed.x(), transformed.y()));
+				}
+				if (!points.empty())
+					transformedObjectPolygons.emplace_back(points.begin(), points.end());
+			}
+			if (!transformedObjectPolygons.empty())
+				polygons.push_back(transformedObjectPolygons);
+		}
+		return polygons;
+	}
+
+	poca::geometry::ObjectListInterface* transformedPolygonObjectList(poca::geometry::ObjectListPolygon* _source, poca::geometry::DetectionSet* _targetDetectionSet, const glm::mat4& _model)
+	{
+		if (_source == nullptr)
+			return nullptr;
+
+		const std::vector<std::vector<Polygon_2>> polygons = transformedPolygons(_source, _model);
+		if (polygons.empty())
+			return nullptr;
+		poca::geometry::ObjectListPolygon* transformed = nullptr;
+		if (_targetDetectionSet != nullptr && _targetDetectionSet->hasData("x") && _targetDetectionSet->hasData("y") && !_source->getLocsObjects().empty()) {
+			const float* zs = _targetDetectionSet->hasData("z") ? _targetDetectionSet->getMyData("z")->getOriginalData<float>().data() : nullptr;
+			transformed = new poca::geometry::ObjectListPolygon(
+				_targetDetectionSet->getMyData("x")->getOriginalData<float>().data(),
+				_targetDetectionSet->getMyData("y")->getOriginalData<float>().data(),
+				zs,
+				polygons,
+				_source->getLocsObjects().getData(),
+				_source->getLocsObjects().getFirstElements(),
+				_source->getLinkTriangulationFacesToObjects());
+		}
+		else {
+			transformed = new poca::geometry::ObjectListPolygon(polygons);
+		}
+		copyObjectListState(_source, transformed);
+		return transformed;
+	}
+
+	poca::geometry::ObjectListInterface* transformedDelaunayObjectList(poca::geometry::ObjectListDelaunay* _source, poca::geometry::DetectionSet* _targetDetectionSet, const glm::mat4& _model)
+	{
+		if (_source == nullptr || _targetDetectionSet == nullptr || !_targetDetectionSet->hasData("x") || !_targetDetectionSet->hasData("y"))
+			return nullptr;
+
+		const float* xs = _targetDetectionSet->getMyData("x")->getOriginalData<float>().data();
+		const float* ys = _targetDetectionSet->getMyData("y")->getOriginalData<float>().data();
+		const float* zs = _targetDetectionSet->hasData("z") ? _targetDetectionSet->getMyData("z")->getOriginalData<float>().data() : nullptr;
+		const std::vector<poca::core::Vec3mf> triangles = transformPositions(_model, _source->getTrianglesObjects().getData());
+
+		poca::geometry::ObjectListDelaunay* transformed = nullptr;
+		if (_source->dimension() == 3) {
+			if (!_source->hasData("volume"))
+				return nullptr;
+			const std::vector<poca::core::Vec3mf> normals = transformDirections(_model, _source->getNormalOutlineLocs());
+			const std::vector<uint32_t> emptyOutlineLocs;
+			const std::vector<uint32_t> emptyOutlineFirsts{ 0 };
+			const poca::core::MyArrayUInt32& sourceOutlineLocs = _source->getLocOutlines();
+			transformed = new poca::geometry::ObjectListDelaunay(
+				xs, ys, zs,
+				_source->getLocsObjects().getData(),
+				_source->getLocsObjects().getFirstElements(),
+				triangles,
+				_source->getTrianglesObjects().getFirstElements(),
+				_source->getMyData("volume")->getOriginalData<float>(),
+				_source->getLinkTriangulationFacesToObjects(),
+				sourceOutlineLocs.empty() ? emptyOutlineLocs : sourceOutlineLocs.getData(),
+				sourceOutlineLocs.empty() ? emptyOutlineFirsts : sourceOutlineLocs.getFirstElements(),
+				normals);
+		}
+		else {
+			const std::vector<poca::core::Vec3mf> outlines = transformPositions(_model, _source->getOutlinesObjects().getData());
+			const std::vector<poca::core::Vec3mf> emptyOutlines;
+			const std::vector<uint32_t> emptyOutlineFirsts{ 0 };
+			const poca::core::MyArrayVec3mf& sourceOutlines = _source->getOutlinesObjects();
+			transformed = new poca::geometry::ObjectListDelaunay(
+				xs, ys, zs,
+				_source->getLocsObjects().getData(),
+				_source->getLocsObjects().getFirstElements(),
+				triangles,
+				_source->getTrianglesObjects().getFirstElements(),
+				sourceOutlines.empty() ? emptyOutlines : outlines,
+				sourceOutlines.empty() ? emptyOutlineFirsts : sourceOutlines.getFirstElements(),
+				_source->getLinkTriangulationFacesToObjects());
+		}
+		copyObjectListState(_source, transformed);
+		return transformed;
+	}
+
+	poca::geometry::ObjectListInterface* transformedObjectList(MyMultipleObject* _object, poca::core::CommandExecutionResult& _result, poca::geometry::ObjectListInterface* _source, const glm::mat4& _model)
+	{
+		if (_source == nullptr)
+			return nullptr;
+
+		if (poca::geometry::ObjectListMesh* mesh = dynamic_cast<poca::geometry::ObjectListMesh*>(_source))
+			return transformedMeshObjectList(mesh, _model);
+
+		if (poca::geometry::ObjectListDelaunay* delaunay = dynamic_cast<poca::geometry::ObjectListDelaunay*>(_source))
+			return transformedDelaunayObjectList(delaunay, ensureTransformedDetectionSet(_object, _result), _model);
+
+		if (poca::geometry::ObjectListPolygon* polygon = dynamic_cast<poca::geometry::ObjectListPolygon*>(_source)) {
+			poca::geometry::DetectionSet* transformedDetection = !_source->getLocsObjects().empty() ? ensureTransformedDetectionSet(_object, _result) : nullptr;
+			return transformedPolygonObjectList(polygon, transformedDetection, _model);
+		}
+
+		return nullptr;
+	}
+
+	bool createTransformedObjectLists(MyMultipleObject* _object, poca::core::CommandExecutionResult& _result)
+	{
+		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
+		if (child == nullptr || !child->hasBasicComponent("ObjectLists"))
+			return false;
+
+		poca::core::MyObjectInterface* object = createdObject(_result);
+		if (object != nullptr && object->hasBasicComponent("ObjectLists"))
+			return true;
+
+		poca::geometry::ObjectLists* lists = dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists"));
+		if (lists == nullptr)
+			return false;
+
+		const glm::mat4 model = currentObjectModel(_object);
+		poca::geometry::ObjectLists* transformedLists = nullptr;
+		uint32_t transformedCurrentIndex = 0;
+		bool hasTransformedCurrentIndex = false;
+		for (uint32_t listIndex = 0; listIndex < lists->nbComponents(); listIndex++) {
+			poca::geometry::ObjectListInterface* objectList = lists->getObjectList(listIndex);
+			poca::geometry::ObjectListInterface* transformed = transformedObjectList(_object, _result, objectList, model);
+			if (transformed == nullptr)
+				continue;
+
+			if (transformedLists == nullptr)
+				transformedLists = new poca::geometry::ObjectLists(transformed, lists->getCommand(listIndex), lists->getPlugin(listIndex), lists->getName(listIndex));
+			else
+				transformedLists->addObjectList(transformed, lists->getCommand(listIndex), lists->getPlugin(listIndex), lists->getName(listIndex));
+			if (listIndex == lists->currentObjectListIndex()) {
+				transformedCurrentIndex = transformedLists->nbComponents() - 1;
+				hasTransformedCurrentIndex = true;
+			}
+		}
+
+		if (transformedLists == nullptr)
+			return false;
+		if (hasTransformedCurrentIndex)
+			transformedLists->setCurrentComponentIndex(transformedCurrentIndex);
+		return addComponentToTransformedObject(_result, child, transformedLists) != nullptr;
 	}
 
 	poca::core::Vec3mf bboxCenter(const poca::core::BoundingBox& _bbox)
@@ -218,6 +538,9 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 	else if (_infos->nameCommand == "updateTransform") {
 		if (!refreshTransformBuffers())
 			freeGPUMemory();
+	}
+	else if (_infos->nameCommand == "createObjectFromCurrentTransform") {
+		createTransformedObjectLists(m_object, _result);
 	}
 	else if (_infos->nameCommand == "useVertexNormals") {
 		freeGPUMemory();

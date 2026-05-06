@@ -82,6 +82,35 @@ namespace poca::core {
 
 			return transformed;
 		}
+
+		glm::vec3 bboxCenter(const poca::core::BoundingBox& _bbox)
+		{
+			return glm::vec3(
+				(_bbox[0] + _bbox[3]) * .5f,
+				(_bbox[1] + _bbox[4]) * .5f,
+				(_bbox[2] + _bbox[5]) * .5f);
+		}
+
+		poca::core::BoundingBox localObjectBoundingBox(const std::vector<poca::core::BasicComponentInterface*>& _components)
+		{
+			if (_components.empty())
+				return poca::core::BoundingBox(0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+
+			poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+			bool hasBBox = false;
+			for (poca::core::BasicComponentInterface* component : _components) {
+				if (component == nullptr)
+					continue;
+				const poca::core::BoundingBox& componentBBox = component->boundingBox();
+				for (int axis = 0; axis < 3; axis++)
+					bbox[axis] = std::min(bbox[axis], componentBBox[axis]);
+				for (int axis = 3; axis < 6; axis++)
+					bbox[axis] = std::max(bbox[axis], componentBBox[axis]);
+				hasBBox = true;
+			}
+
+			return hasBBox ? bbox : poca::core::BoundingBox(0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+		}
 	}
 
 	MyObject::MyObject() :poca::core::CommandableObject("Object")
@@ -107,6 +136,37 @@ namespace poca::core {
 		for (poca::core::BasicComponentInterface* bci : m_components)
 			delete bci;
 		m_components.clear();
+	}
+
+	void MyObject::updateModelMatrixFromTransform()
+	{
+		const glm::vec3 center = bboxCenter(localObjectBoundingBox(m_components));
+		const glm::mat4 translationMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z));
+		const glm::mat4 toCenter = glm::translate(glm::mat4(1.f), center);
+		const glm::mat4 fromCenter = glm::translate(glm::mat4(1.f), -center);
+		m_modelMatrix = translationMatrix * toCenter * m_rotationMatrix * fromCenter;
+	}
+
+	bool MyObject::translateCurrentObjectBy(const glm::vec3& _delta)
+	{
+		poca::core::MyObjectInterface* object = currentObject();
+		if (object == nullptr)
+			return false;
+
+		object->setTranslationVector(object->getTranslationVector() + _delta);
+		object->updateModelMatrixFromTransform();
+		return true;
+	}
+
+	bool MyObject::rotateCurrentObjectBy(const glm::mat4& _delta)
+	{
+		poca::core::MyObjectInterface* object = currentObject();
+		if (object == nullptr)
+			return false;
+
+		object->setRotationMatrix(_delta * object->getRotationMatrix());
+		object->updateModelMatrixFromTransform();
+		return true;
 	}
 
 	bool MyObject::hasBasicComponent(poca::core::BasicComponentInterface* _bc)

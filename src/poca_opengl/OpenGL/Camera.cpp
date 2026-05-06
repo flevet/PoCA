@@ -55,6 +55,7 @@
 #include <General/CommandableObject.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <DesignPatterns/MediatorWObjectFWidget.hpp>
+#include <Objects/ObjectCommandContext.hpp>
 #include <Interfaces/ROIInterface.hpp>
 #include <General/Vec6.hpp>
 #include <General/Vec2.hpp>
@@ -62,7 +63,6 @@
 #include <OpenGL/Helper.h>
 #include <OpenGL/RenderCommandContext.hpp>
 #include <Geometry/CGAL_includes.hpp>
-#include <Objects/MyMultipleObject.hpp>
 #include <General/Engine.hpp>
 
 #include "Camera.hpp"
@@ -366,52 +366,6 @@ namespace glm {
 namespace poca::opengl {
 
 	namespace {
-		glm::vec3 bboxCenter(const poca::core::BoundingBox& _bbox)
-		{
-			return glm::vec3(
-				(_bbox[0] + _bbox[3]) * .5f,
-				(_bbox[1] + _bbox[4]) * .5f,
-				(_bbox[2] + _bbox[5]) * .5f);
-		}
-
-		poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
-		{
-			if (_object == nullptr)
-				return poca::core::BoundingBox(0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
-
-			const std::vector<poca::core::BasicComponentInterface*>& components = _object->getComponents();
-			if (components.empty())
-				return _object->boundingBox();
-
-			poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
-			bool hasBBox = false;
-			for (poca::core::BasicComponentInterface* component : components) {
-				if (component == nullptr)
-					continue;
-				const poca::core::BoundingBox& componentBBox = component->boundingBox();
-				for (int axis = 0; axis < 3; axis++)
-					bbox[axis] = std::min(bbox[axis], componentBBox[axis]);
-				for (int axis = 3; axis < 6; axis++)
-					bbox[axis] = std::max(bbox[axis], componentBBox[axis]);
-				hasBBox = true;
-			}
-
-			return hasBBox ? bbox : _object->boundingBox();
-		}
-
-		glm::mat4 composeObjectModelMatrix(poca::core::MyObjectInterface* _object)
-		{
-			if (_object == nullptr)
-				return glm::mat4(1.f);
-
-			const glm::vec3 center = bboxCenter(localObjectBoundingBox(_object));
-			const glm::vec3& translation = _object->getTranslationVector();
-			const glm::mat4 translationMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-translation.x, -translation.y, -translation.z));
-			const glm::mat4 toCenter = glm::translate(glm::mat4(1.f), center);
-			const glm::mat4 fromCenter = glm::translate(glm::mat4(1.f), -center);
-			return translationMatrix * toCenter * _object->getRotationMatrix() * fromCenter;
-		}
-
 		poca::core::BoundingBox translatedBoundingBox(const poca::core::BoundingBox& _bbox, const glm::vec3& _translation)
 		{
 			return poca::core::BoundingBox(
@@ -1743,23 +1697,24 @@ namespace poca::opengl {
 					if (_event->modifiers() == Qt::ControlModifier) {
 						poca::core::MyObjectInterface* currentObject = m_object->currentObject();
 						if (currentObject != NULL && m_prevClickPoint != m_clickPoint) {
-							glm::mat4& rotationMatrix = currentObject->getRotationMatrix();
+							glm::mat4 rotationDelta(1.f);
 							if (m_dimension == 3) {
 								computePointOnSphere(m_clickPoint, m_stopVector);
 								glm::quat rotation;
 								computeRotationBetweenVectors(m_startVector, m_stopVector, rotation);
 								rotation = glm::inverse(rotation);
-								rotationMatrix = glm::mat4_cast(rotation) * rotationMatrix;
-								m_prevClickPoint = m_clickPoint;
-								m_startVector = m_stopVector;
+								rotationDelta = glm::mat4_cast(rotation);
 							}
 							else {
 								const float angle = (m_clickPoint.x - m_prevClickPoint.x) * 0.01f;
-								rotationMatrix = glm::rotate(glm::mat4(1.f), angle, glm::vec3(0.f, 0.f, 1.f)) * rotationMatrix;
-								m_prevClickPoint = m_clickPoint;
+								rotationDelta = glm::rotate(glm::mat4(1.f), angle, glm::vec3(0.f, 0.f, 1.f));
 							}
-							currentObject->getModelMatrix() = composeObjectModelMatrix(currentObject);
-							m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+							if (m_object->rotateCurrentObjectBy(rotationDelta)) {
+								m_prevClickPoint = m_clickPoint;
+								if (m_dimension == 3)
+									m_startVector = m_stopVector;
+								m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+							}
 						}
 					}
 					else {
@@ -1781,10 +1736,8 @@ namespace poca::opengl {
 					if (_event->modifiers() == Qt::ControlModifier) {
 						poca::core::MyObjectInterface* currentObject = m_object->currentObject();
 						if (currentObject != NULL) {
-							auto& translation = currentObject->getTranslationVector();
-							translation = translation + rightVector + upVector;
-							currentObject->getModelMatrix() = composeObjectModelMatrix(currentObject);
-							m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+							if (m_object->translateCurrentObjectBy(rightVector + upVector))
+								m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
 						}
 					}
 					else {
@@ -1802,6 +1755,7 @@ namespace poca::opengl {
 	void Camera::mouseReleaseEvent(QMouseEvent* _event)
 	{
 		makeCurrent();
+		poca::core::MyObjectInterface* objectToOpen = nullptr;
 		switch (_event->button())
 		{
 		case Qt::LeftButton:
@@ -1961,6 +1915,17 @@ namespace poca::opengl {
 			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 			break;
 		case Qt::RightButton:
+			if (_event->modifiers() == Qt::ControlModifier) {
+				poca::core::CommandInfo transformCi(false, "createObjectFromCurrentTransform");
+				poca::core::CommandExecutionResult transformResult;
+				m_object->executeGlobalCommand(&transformCi, poca::core::CommandExecutionContext(), transformResult);
+				if (transformResult.has<poca::core::CreatedObjectContext>()) {
+					poca::core::MyObjectInterface* object = transformResult.get<poca::core::CreatedObjectContext>().object;
+					if (object != nullptr)
+						objectToOpen = object;
+				}
+				break;
+			}
 			poca::core::CommandInfo ci(false, "pick",
 				"x", _event->pos().x(),
 				"y", _event->pos().y(),
@@ -2004,6 +1969,8 @@ namespace poca::opengl {
 		m_scaling = m_buttonOn = m_leftButtonOn = m_middleButtonOn = m_rightButtonOn = false;
 		doneCurrent();
 		update();
+		if (objectToOpen != nullptr)
+			emit(objectCreated(objectToOpen));
 	}
 
 	void Camera::mouseDoubleClickEvent(QMouseEvent* _event)

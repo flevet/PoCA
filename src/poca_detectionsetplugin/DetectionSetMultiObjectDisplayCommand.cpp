@@ -11,6 +11,7 @@
 #include <Windows.h>
 #include <algorithm>
 #include <limits>
+#include <map>
 
 #include <gl/glew.h>
 #include <gl/GL.h>
@@ -20,6 +21,8 @@
 #include <glm/gtc/matrix_inverse.hpp>
 
 #include <Objects/MyMultipleObject.hpp>
+#include <Objects/ObjectCommandContext.hpp>
+#include <General/Engine.hpp>
 #include <General/Histogram.hpp>
 #include <General/MyData.hpp>
 #include <Geometry/DetectionSet.hpp>
@@ -55,6 +58,107 @@ namespace {
 	{
 		const glm::vec4 transformed = _model * glm::vec4(_dir.x(), _dir.y(), _dir.z(), 0.f);
 		return poca::core::Vec3mf(transformed.x, transformed.y, transformed.z);
+	}
+
+	glm::mat4 currentObjectModel(MyMultipleObject* _object)
+	{
+		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
+		return child != nullptr ? glm::inverse(_object->getModelMatrix()) * child->getModelMatrix() : glm::mat4(1.f);
+	}
+
+	std::string transformedObjectName(poca::core::MyObjectInterface* _source)
+	{
+		const std::string sourceName = _source != nullptr ? _source->getName() : std::string();
+		return sourceName.empty() ? "transformed_object" : sourceName + "_transformed";
+	}
+
+	poca::core::MyObjectInterface* createdObject(poca::core::CommandExecutionResult& _result)
+	{
+		if (!_result.has<poca::core::CreatedObjectContext>())
+			return nullptr;
+		return _result.get<poca::core::CreatedObjectContext>().object;
+	}
+
+	poca::core::MyObjectInterface* addComponentToTransformedObject(poca::core::CommandExecutionResult& _result, poca::core::MyObjectInterface* _source, poca::core::BasicComponentInterface* _component)
+	{
+		if (_source == nullptr || _component == nullptr)
+			return nullptr;
+
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* object = createdObject(_result);
+		if (object != nullptr) {
+			if (engine->addComponentToObject(object, _component))
+				return object;
+			return nullptr;
+		}
+
+		object = engine->createObject(_source->getDir(), transformedObjectName(_source), _component);
+		if (object != nullptr)
+			_result.set(poca::core::CreatedObjectContext{ object });
+		return object;
+	}
+
+	poca::geometry::DetectionSet* transformedDetectionSet(poca::geometry::DetectionSet* _source, const glm::mat4& _model)
+	{
+		if (_source == nullptr || !_source->hasData("x") || !_source->hasData("y"))
+			return nullptr;
+
+		std::map<std::string, std::vector<float>> data;
+		for (const auto& name : _source->getNameData())
+			data[name] = _source->getMyData(name)->getOriginalData<float>();
+
+		std::vector<float>& xs = data["x"];
+		std::vector<float>& ys = data["y"];
+		const bool hasZ = data.find("z") != data.end();
+		std::vector<float>* zs = hasZ ? &data["z"] : nullptr;
+		for (size_t n = 0; n < xs.size(); n++) {
+			const float z = zs != nullptr ? (*zs)[n] : 0.f;
+			const poca::core::Vec3mf transformed = transformPosition(_model, poca::core::Vec3mf(xs[n], ys[n], z));
+			xs[n] = transformed.x();
+			ys[n] = transformed.y();
+			if (zs != nullptr)
+				(*zs)[n] = transformed.z();
+		}
+
+		if (data.find("nx") != data.end() && data.find("ny") != data.end() && data.find("nz") != data.end()) {
+			std::vector<float>& nxs = data["nx"];
+			std::vector<float>& nys = data["ny"];
+			std::vector<float>& nzs = data["nz"];
+			for (size_t n = 0; n < nxs.size(); n++) {
+				const poca::core::Vec3mf transformed = transformDirection(_model, poca::core::Vec3mf(nxs[n], nys[n], nzs[n]));
+				nxs[n] = transformed.x();
+				nys[n] = transformed.y();
+				nzs[n] = transformed.z();
+			}
+		}
+
+		poca::geometry::DetectionSet* transformed = new poca::geometry::DetectionSet(data);
+		if (transformed->nbElements() == _source->nbElements())
+			transformed->setSelection(_source->getSelection());
+		const std::string currentHistogram = _source->currentHistogramType();
+		if (!currentHistogram.empty() && transformed->hasData(currentHistogram))
+			transformed->setCurrentHistogramType(currentHistogram);
+		transformed->setSelected(_source->isSelected());
+		transformed->setHiLow(_source->isHiLow());
+		return transformed;
+	}
+
+	bool createTransformedDetectionSet(MyMultipleObject* _object, poca::core::CommandExecutionResult& _result)
+	{
+		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
+		if (child == nullptr || !child->hasBasicComponent("DetectionSet"))
+			return false;
+
+		poca::core::MyObjectInterface* object = createdObject(_result);
+		if (object != nullptr && object->hasBasicComponent("DetectionSet"))
+			return true;
+
+		poca::geometry::DetectionSet* source = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
+		poca::geometry::DetectionSet* transformed = transformedDetectionSet(source, currentObjectModel(_object));
+		if (transformed == nullptr)
+			return false;
+
+		return addComponentToTransformedObject(_result, child, transformed) != nullptr;
 	}
 
 	QString globalObjectInfo(MyMultipleObject* _object, const size_t _objectIndex)
@@ -178,6 +282,13 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		if (!updateFeatureBuffer())
 			freeGPUMemory();
+	}
+	else if (_infos->nameCommand == "updateTransform") {
+		if (!refreshTransformBuffers())
+			freeGPUMemory();
+	}
+	else if (_infos->nameCommand == "createObjectFromCurrentTransform") {
+		createTransformedDetectionSet(m_object, _result);
 	}
 	else if (_infos->nameCommand == "freeGPU") {
 		freeGPUMemory();
@@ -335,6 +446,55 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 	if (!colors.empty()) {
 		m_colorBuffer.generateBuffer(colors.size(), 4, GL_FLOAT);
 		m_colorBuffer.updateBuffer(colors.data());
+	}
+	return true;
+}
+
+bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
+{
+	if (!canBatch())
+		return false;
+	if (m_pointBuffer.empty())
+		return true;
+
+	std::vector<poca::core::Vec3mf> points, normals;
+	const bool updateNormals = !m_normalBuffer.empty();
+	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
+
+	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
+		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
+		if (dset == nullptr)
+			continue;
+
+		const glm::mat4 model = parentInvModel * child->getModelMatrix();
+		const std::vector<float>& xs = dset->getMyData("x")->getData<float>();
+		const std::vector<float>& ys = dset->getMyData("y")->getData<float>();
+		const std::vector<float>* zs = dset->hasData("z") ? &dset->getMyData("z")->getData<float>() : nullptr;
+		for (size_t idx = 0; idx < xs.size(); idx++) {
+			const float z = zs != nullptr ? (*zs)[idx] : 0.f;
+			points.push_back(transformPosition(model, poca::core::Vec3mf(xs[idx], ys[idx], z)));
+		}
+
+		if (updateNormals) {
+			if (!dset->hasData("nx") || !dset->hasData("ny") || !dset->hasData("nz"))
+				return false;
+			const std::vector<float>& nxs = dset->getMyData("nx")->getData<float>();
+			const std::vector<float>& nys = dset->getMyData("ny")->getData<float>();
+			const std::vector<float>& nzs = dset->getMyData("nz")->getData<float>();
+			for (size_t idx = 0; idx < nxs.size(); idx++)
+				normals.push_back(transformDirection(model, poca::core::Vec3mf(nxs[idx], nys[idx], nzs[idx])));
+		}
+	}
+
+	if (points.size() != m_pointBuffer.getNbElements())
+		return false;
+	m_pointBuffer.updateBuffer(points);
+
+	if (updateNormals) {
+		if (normals.size() != m_normalBuffer.getNbElements())
+			return false;
+		m_normalBuffer.updateBuffer(normals);
 	}
 	return true;
 }

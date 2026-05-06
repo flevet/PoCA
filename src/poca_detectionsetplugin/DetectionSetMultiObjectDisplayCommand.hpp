@@ -37,6 +37,7 @@ public:
 protected:
 	bool canBatch() const;
 	bool rebuild();
+	bool refreshTransformBuffers();
 	bool updateFeatureBuffer();
 	DetectionSetDisplayCommand* referenceDisplayCommand() const;
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);

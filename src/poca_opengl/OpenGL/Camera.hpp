@@ -333,6 +333,7 @@ namespace poca::opengl {
 	signals:
 		void clickInsideWindow();
 		void askForMovieCreation();
+		void objectCreated(poca::core::MyObjectInterface*);
 
 	protected:
 		size_t m_dimension;

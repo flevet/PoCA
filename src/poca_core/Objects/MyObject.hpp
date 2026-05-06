@@ -128,6 +128,9 @@ namespace poca::core {
 		}
 		virtual const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 		virtual glm::mat4& getModelMatrix() { return m_modelMatrix; }
+		virtual void updateModelMatrixFromTransform();
+		virtual bool translateCurrentObjectBy(const glm::vec3&);
+		virtual bool rotateCurrentObjectBy(const glm::mat4&);
 		virtual void setRotationMatrix(const glm::mat4& _mat) { m_rotationMatrix = _mat; }
 		virtual const glm::mat4& getRotationMatrix() const { return m_rotationMatrix; }
 		virtual glm::mat4& getRotationMatrix() { return m_rotationMatrix; }
