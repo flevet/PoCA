@@ -8,6 +8,8 @@ uniform mat4 invMVP;
 
 uniform vec4 viewport;
 uniform vec3 ray_direction;
+uniform vec3 camera_position;
+uniform bool perspective_projection;
 uniform vec3 top;
 uniform vec3 bottom;
 
@@ -333,7 +335,7 @@ vec4 shadeSample(vec3 rayStart, vec3 rayStop, inout uint seed)
 		return vec4(background_colour, 0.0);
 
 	vec3 worldPosition = hitPosition * (top - bottom) + bottom;
-	vec3 viewDirection = normalize(ray_direction);
+	vec3 viewDirection = normalize(rayStop - rayStart);
 	vec3 lightVector = light_position - worldPosition;
 	vec3 lightDirection = normalize(lightVector);
 	lightDirection = sampleAreaLightDirection(lightDirection, seed);
@@ -381,13 +383,16 @@ void main()
 	vec4 clipPos = ndcPos;
 	clipPos.z = -1.0;
 	vec4 eyePos = invMVP * clipPos;
+	eyePos /= eyePos.w;
 	vec3 rayOrigin = eyePos.xyz;
+	vec3 currentRayDirection = perspective_projection ? normalize(rayOrigin - camera_position) : ray_direction;
+	vec3 currentRayOrigin = perspective_projection ? camera_position : rayOrigin + currentRayDirection;
 
 	float t0 = 0.0;
 	float t1 = 0.0;
 	float t0Crop = 0.0;
 	float t1Crop = 0.0;
-	Ray castingRay = Ray(rayOrigin + ray_direction, ray_direction);
+	Ray castingRay = Ray(currentRayOrigin, currentRayDirection);
 	AABB boundingBox = AABB(top, bottom);
 	rayBoxIntersection(castingRay, boundingBox, t0, t1);
 	if (t1 <= t0) {
@@ -406,7 +411,7 @@ void main()
 		t1 = t1Crop;
 	}
 
-	vec3 rayStart = (rayOrigin + ray_direction * t0 - bottom) / (top - bottom);
-	vec3 rayStop = (rayOrigin + ray_direction * t1 - bottom) / (top - bottom);
+	vec3 rayStart = (currentRayOrigin + currentRayDirection * t0 - bottom) / (top - bottom);
+	vec3 rayStop = (currentRayOrigin + currentRayDirection * t1 - bottom) / (top - bottom);
 	writeAccumulated(shadeSample(rayStart, rayStop, seed));
 }

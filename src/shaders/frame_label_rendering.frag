@@ -35,6 +35,8 @@ uniform mat4 invMVP;
 
 uniform vec4 viewport;
 uniform vec3 ray_direction;
+uniform vec3 camera_position;
+uniform bool perspective_projection;
 uniform vec3 top;
 uniform vec3 bottom;
 
@@ -185,7 +187,11 @@ void main()
     vec4 clipPos = ndcPos;
     clipPos.z = -1.0;
     vec4 eyePos = invMVP * clipPos;
-    Ray casting_ray = Ray(eyePos.xyz + ray_direction, ray_direction);
+    eyePos /= eyePos.w;
+    vec3 ray_origin = eyePos.xyz;
+    vec3 current_ray_direction = perspective_projection ? normalize(ray_origin - camera_position) : ray_direction;
+    vec3 current_ray_origin = perspective_projection ? camera_position : ray_origin + current_ray_direction;
+    Ray casting_ray = Ray(current_ray_origin, current_ray_direction);
 
     float planeZ = float(currentFrame) + 0.5;
     if (abs(casting_ray.direction.z) < 1e-6)

@@ -6,6 +6,8 @@ out vec4 a_colour;
 uniform mat4 invMVP;
 uniform vec4 viewport;
 uniform vec3 ray_direction;
+uniform vec3 camera_position;
+uniform bool perspective_projection;
 uniform vec3 background_colour;
 uniform int nbImages;
 uniform int currentFrame;
@@ -125,8 +127,10 @@ void main()
     vec4 clipPos = ndcPos;
     clipPos.z = -1.0;
     vec4 eyePos = invMVP * clipPos;
-    vec3 parentRayOrigin = eyePos.xyz + ray_direction;
-    vec3 parentRayDirection = ray_direction;
+    eyePos /= eyePos.w;
+    vec3 ray_origin = eyePos.xyz;
+    vec3 parentRayDirection = perspective_projection ? normalize(ray_origin - camera_position) : ray_direction;
+    vec3 parentRayOrigin = perspective_projection ? camera_position : ray_origin + parentRayDirection;
 
     a_colour = vec4(0.0);
     bool hasContribution = false;

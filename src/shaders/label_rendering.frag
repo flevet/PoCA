@@ -35,6 +35,8 @@ uniform mat4 invMVP;
 
 uniform vec4 viewport;
 uniform vec3 ray_direction;
+uniform vec3 camera_position;
+uniform bool perspective_projection;
 uniform vec3 top;
 uniform vec3 bottom;
 
@@ -285,10 +287,13 @@ void main()
 	vec4 clipPos = ndcPos;
 	clipPos.z = -1.0;
 	vec4 eyePos  = invMVP * clipPos;
+	eyePos /= eyePos.w;
 	vec3 ray_origin = eyePos.xyz;
+	vec3 current_ray_direction = perspective_projection ? normalize(ray_origin - camera_position) : ray_direction;
+	vec3 current_ray_origin = perspective_projection ? camera_position : ray_origin + current_ray_direction;
 	
     float t_0, t_1, t_0_crop, t_1_crop;
-    Ray casting_ray = Ray(ray_origin, ray_direction);
+    Ray casting_ray = Ray(current_ray_origin, current_ray_direction);
     AABB bounding_box = AABB(top, bottom);
     ray_box_intersection(casting_ray, bounding_box, t_0, t_1);
 	
@@ -301,8 +306,8 @@ void main()
 		t_1 = t_1_crop;
 	}
 	
-    vec3 ray_start = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
-    vec3 ray_stop = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);
+    vec3 ray_start = (current_ray_origin + current_ray_direction * t_0 - bottom) / (top - bottom);
+    vec3 ray_stop = (current_ray_origin + current_ray_direction * t_1 - bottom) / (top - bottom);
 	
 	//vec3 ray_stop = (ray_origin + ray_direction * t_0 - bottom) / (top - bottom);
     //vec3 ray_start = (ray_origin + ray_direction * t_1 - bottom) / (top - bottom);

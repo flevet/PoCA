@@ -135,6 +135,11 @@ namespace poca::opengl {
 			Plane_XZ = 1,
 			Plane_YZ = 2
 		};
+		enum ProjectionType
+		{
+			Orthographic = 0,
+			Perspective = 1
+		};
 
 		Camera(poca::core::MyObjectInterface*, const size_t, QWidget* = 0, Qt::WindowFlags = 0);
 		~Camera();
@@ -195,9 +200,14 @@ namespace poca::opengl {
 		const float* getMatrixFlat();
 		const glm::vec3& getCenter();
 		const glm::vec3& getEye();
+		glm::vec3 getCameraPosition() const;
 		const glm::vec3& getUp();
 		const glm::quat getRotationSum() const { return m_stateCamera.m_rotationSum; }
 		void reset();
+		ProjectionType getProjectionType() const { return m_projectionType; }
+		const bool isPerspectiveProjection() const { return m_projectionType == Perspective; }
+		void setProjectionType(const ProjectionType);
+		void toggleProjectionType();
 		void setCenter(float x, float y, float z);
 		void setCenter(const glm::vec3& c);
 		void setEye(float x, float y, float z);
@@ -220,7 +230,7 @@ namespace poca::opengl {
 
 		inline const float getDistanceOrtho() const { return m_distanceOrtho; }
 		inline const float getOriginalDistanceOrtho() const { return m_originalDistanceOrtho; }
-		inline void setDistanceOrtho(const float _val) { m_distanceOrtho = _val; }
+		void setDistanceOrtho(const float);
 		inline void setOriginalDistanceOrtho(const float _val) { m_originalDistanceOrtho = _val; }
 		inline const bool isCropped() const { return !m_resetedProj; }
 
@@ -304,6 +314,8 @@ namespace poca::opengl {
 		glm::vec2 worldToScreenCoordinates(const glm::mat4&, const glm::mat4&, const glm::mat4&, const glm::uvec4&, const glm::vec3&) const;
 
 	protected:
+		float getCameraDistance() const;
+		void zoomBy(float);
 		void computeRotation();
 		void computeCameraEye(glm::vec3& eye);
 		void computeCameraUp(glm::vec3& up);
@@ -343,12 +355,14 @@ namespace poca::opengl {
 		std::vector <glm::vec4> m_clip;
 		bool m_applyClippingPlanes{ true };
 
-		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho;
+		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho, m_cameraDistance;
+		float m_perspectiveFov;
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid;
 		bool m_alreadyInitialized;
 		bool m_openGLContextInitializedNotified;
 		bool m_cullFace, m_fillPolygon;
+		ProjectionType m_projectionType;
 
 		StateCamera m_stateCamera;
 
@@ -382,7 +396,7 @@ namespace poca::opengl {
 		int m_sizePatch, m_insidePatchId;
 
 		bool m_undoPossible, m_resetedProj;
-		float m_distanceOrthoSaved, m_multAnimation;
+		float m_distanceOrthoSaved, m_cameraDistanceSaved, m_multAnimation;
 		glm::mat4 m_matrixModelSaved, m_matrixViewSaved;
 
 		size_t m_leftFace, m_rightFace, m_upFace;
