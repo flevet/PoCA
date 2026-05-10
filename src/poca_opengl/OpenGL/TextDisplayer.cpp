@@ -166,9 +166,16 @@ namespace poca::opengl {
 		const uint8_t _r, const uint8_t _g, const uint8_t _b, const uint8_t _a, 
 		const float _x, const float _y, const float _t, const int _align)
 	{
+		return renderText(_proj, glm::mat4(1.f), _text, _r, _g, _b, _a, _x, _y, _t, _align);
+	}
+
+	poca::core::Vec2mf TextDisplayer::renderText(const glm::mat4& _proj, const glm::mat4& _modelView, const char* _text,
+		const uint8_t _r, const uint8_t _g, const uint8_t _b, const uint8_t _a,
+		const float _x, const float _y, const float _t, const int _align)
+	{
 		m_shader->use();
 		m_shader->setMat4("projection", _proj);
-		m_shader->setMat4("modelView", glm::mat4(1.f));
+		m_shader->setMat4("modelView", _modelView);
 		m_shader->setFloat("time", _t);
 		m_shader->setVec4("clipPlane", m_clipPlane);
 

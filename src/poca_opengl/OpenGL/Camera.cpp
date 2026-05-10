@@ -375,6 +375,12 @@ namespace poca::opengl {
 				_bbox[0] + _translation.x, _bbox[1] + _translation.y, _bbox[2] + _translation.z,
 				_bbox[3] + _translation.x, _bbox[4] + _translation.y, _bbox[5] + _translation.z);
 		}
+
+		glm::vec3 toGlm(const poca::core::Vec3mf& _v)
+		{
+			return glm::vec3(_v[0], _v[1], _v[2]);
+		}
+
 	}
 
 	double clockToMilliseconds(clock_t ticks) {
@@ -724,6 +730,8 @@ namespace poca::opengl {
 	{
 		auto start = std::chrono::high_resolution_clock::now();
 		GL_CHECK_ERRORS();
+		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
+		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		recomputeFrame(m_currentCrop);
 		clock_t beginFrame = clock();
 
@@ -976,9 +984,7 @@ namespace poca::opengl {
 		}
 		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 		if (displayFont)
-			for (const std::pair<poca::core::Vec3mf, std::string>& frameTxt : m_frameTexts) {
-				m_texDisplayer->renderText(projText, frameTxt.second.c_str(), colorFont[0], colorFont[1], colorFont[2], colorFont[3], frameTxt.first[0], frameTxt.first[1], 0, FONS_ALIGN_CENTER | FONS_ALIGN_MIDDLE);
-			}
+			displayFrameTexts3D(colorFont);
 		for (const std::pair<poca::core::Vec3mf, std::string>& frameTxt : m_frameTextsThumbnail) {
 			m_texDisplayer->renderText(projText, frameTxt.second.c_str(), colorFont[0], colorFont[1], colorFont[2], colorFont[3], frameTxt.first[0], frameTxt.first[1], 0, FONS_ALIGN_CENTER | FONS_ALIGN_MIDDLE);
 		}
@@ -1326,6 +1332,101 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 
 		shader->release();
+	}
+
+	float Camera::worldUnitsPerScreenPixel(const glm::vec3& _position) const
+	{
+		if (this->height() <= 0)
+			return 1.f;
+
+		if (m_projectionType == Perspective) {
+			const glm::vec4 viewPos = m_stateCamera.m_matrixView * m_matrixModel * glm::vec4(_position, 1.f);
+			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
+			const float distance = std::max(0.0001f, std::abs(viewPos.z));
+			return (2.f * distance * tan(halfFov)) / (float)this->height();
+		}
+
+		float factorH = 1.f;
+		const float diffX = (float)this->width(), diffY = (float)this->height();
+		if (diffX > 0.f && diffY > diffX)
+			factorH = diffY / diffX;
+		return (2.f * m_distanceOrtho * factorH) / (float)this->height();
+	}
+
+	void Camera::displayFrameTexts3D(const std::array<uint8_t, 4>& _colorFont)
+	{
+		if (m_frameTexts.empty() || m_texDisplayer == NULL)
+			return;
+
+		glm::vec3 viewDir = m_stateCamera.m_center - m_stateCamera.m_eye;
+		if (glm::dot(viewDir, viewDir) < 1e-8f)
+			viewDir = glm::vec3(0.f, 0.f, -1.f);
+		viewDir = glm::normalize(viewDir);
+
+		for (const FrameText& frameTxt : m_frameTexts) {
+			glm::vec3 tickAxis = toGlm(frameTxt.m_axis);
+			if (glm::dot(tickAxis, tickAxis) < 1e-8f)
+				continue;
+			tickAxis = glm::normalize(tickAxis);
+
+			glm::vec3 labelAxis = toGlm(frameTxt.m_offset);
+			if (glm::dot(labelAxis, labelAxis) < 1e-8f)
+				labelAxis = tickAxis;
+			else
+				labelAxis = glm::normalize(labelAxis);
+
+			// Keep the text plane readable while its baseline follows the adjacent grid/bbox direction.
+			labelAxis = labelAxis - glm::dot(labelAxis, viewDir) * viewDir;
+			if (glm::dot(labelAxis, labelAxis) < 1e-8f)
+				labelAxis = tickAxis - glm::dot(tickAxis, viewDir) * viewDir;
+			if (glm::dot(labelAxis, labelAxis) < 1e-8f)
+				continue;
+			labelAxis = glm::normalize(labelAxis);
+
+			glm::vec3 anchor = toGlm(frameTxt.m_position);
+			float scale = worldUnitsPerScreenPixel(anchor);
+
+			glm::vec3 down = glm::cross(viewDir, labelAxis);
+			if (glm::dot(down, down) < 1e-8f)
+				down = -m_stateCamera.m_up;
+			down = glm::normalize(down);
+
+			glm::vec2 p0 = worldToScreenCoordinates(anchor);
+			glm::vec2 p1 = worldToScreenCoordinates(anchor + labelAxis);
+			glm::vec2 screenAxis = p1 - p0;
+			if (screenAxis.x < 0.f || (std::abs(screenAxis.x) < 0.001f && screenAxis.y < 0.f)) {
+				labelAxis = -labelAxis;
+				down = glm::normalize(glm::cross(viewDir, labelAxis));
+			}
+
+			glm::vec3 offset = toGlm(frameTxt.m_offset);
+			if (glm::dot(offset, offset) >= 1e-8f) {
+				offset = glm::normalize(offset);
+				offset = offset - glm::dot(offset, viewDir) * viewDir;
+				if (glm::dot(offset, offset) >= 1e-8f)
+					anchor += glm::normalize(offset) * scale * 25.f;
+				else
+					anchor -= down * scale * 25.f;
+			}
+			else {
+				anchor -= down * scale * 25.f;
+			}
+
+			const glm::vec4 clipSpacePos = m_matrixProjection * m_stateCamera.m_matrixView * m_matrixModel * glm::vec4(anchor, 1.f);
+			if (clipSpacePos.w <= 0.f)
+				continue;
+
+			glm::mat4 textTransform(1.f);
+			textTransform[0] = glm::vec4(labelAxis * scale, 0.f);
+			textTransform[1] = glm::vec4(down * scale, 0.f);
+			textTransform[2] = glm::vec4(glm::normalize(glm::cross(labelAxis, down)) * scale, 0.f);
+			textTransform[3] = glm::vec4(anchor, 1.f);
+
+			const glm::mat4 modelView = m_stateCamera.m_matrixView * m_matrixModel * textTransform;
+			m_texDisplayer->renderText(m_matrixProjection, modelView, frameTxt.m_text.c_str(),
+				_colorFont[0], _colorFont[1], _colorFont[2], _colorFont[3],
+				0.f, 0.f, 0.f, FONS_ALIGN_CENTER | FONS_ALIGN_MIDDLE);
+		}
 	}
 
 	void Camera::recalcModelView(void)
@@ -2678,16 +2779,16 @@ namespace poca::opengl {
 						cur = stepGrid;
 						float lengthVec = vects[k].length(), curLength = cur;
 						while ((curLength + stepGrid) < lengthVec) {
-							poca::core::Vec3mf tmp = start + nv * cur, tmp2 = tmp + (orthDir * 0.1f);
+							poca::core::Vec3mf tmp = start + nv * cur;
 							curLength = (tmp - start).length();
 							cur += stepGrid;
 
-							const glm::mat4& proj = getProjectionMatrix(), & view = getViewMatrix(), & model = getModelMatrix();
-							glm::vec2 p0(worldToScreenCoordinates(proj, view, model, m_viewport, glm::vec3(tmp[0], tmp[1], tmp[2])));
-							glm::vec2 p1(worldToScreenCoordinates(proj, view, model, m_viewport, glm::vec3(tmp2[0], tmp2[1], tmp2[2])));
-							glm::vec2 vecPix = glm::normalize(p1 - p0);
-							glm::vec2 posTxt = p0 + vecPix * 25.f;//25 pixels
-							m_frameTexts.push_back(std::make_pair(poca::core::Vec3mf(posTxt[0], this->height() - posTxt[1], 0.f), std::to_string((uint32_t)(startingPoint + curLength))));
+							FrameText frameText;
+							frameText.m_position = tmp;
+							frameText.m_axis = nv;
+							frameText.m_offset = orthDir;
+							frameText.m_text = std::to_string((uint32_t)(startingPoint + curLength));
+							m_frameTexts.push_back(frameText);
 						}
 					}
 				}

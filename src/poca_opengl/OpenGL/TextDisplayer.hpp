@@ -48,6 +48,7 @@ namespace poca::opengl {
 		~TextDisplayer();
 
 		poca::core::Vec2mf renderText(const glm::mat4&, const char*, const uint8_t, const uint8_t, const uint8_t, const uint8_t, const float, const float, const float, const int = FONS_ALIGN_LEFT | FONS_ALIGN_TOP);
+		poca::core::Vec2mf renderText(const glm::mat4&, const glm::mat4&, const char*, const uint8_t, const uint8_t, const uint8_t, const uint8_t, const float, const float, const float, const int = FONS_ALIGN_LEFT | FONS_ALIGN_TOP);
 		const float widthOfStr(const char *, const float, const float);
 		const float lineHeight() const;
 

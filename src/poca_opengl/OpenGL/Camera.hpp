@@ -36,8 +36,13 @@
 #include <QtWidgets/QOpenGLWidget>
 #include <QtCore/QTimer>
 
+#include <array>
+#include <cstdint>
 #include <ctime>
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 #define GLM_FORCE_RADIANS
@@ -104,6 +109,14 @@ namespace poca::opengl {
 		poca::core::BoundingBox m_bbox;
 		StateCamera m_state;
 		int m_id;
+	};
+
+	class FrameText {
+	public:
+		poca::core::Vec3mf m_position;
+		poca::core::Vec3mf m_axis;
+		poca::core::Vec3mf m_offset;
+		std::string m_text;
 	};
 
 	const int MAX_CLIPPING_PLANES = 50;
@@ -329,6 +342,8 @@ namespace poca::opengl {
 		void drawOffscreen();
 		void renderQuad(const bool = false) const;
 		void renderRoundedBoxShadow(const float, const float, const float, const float, const float, const float, const float, const float, const float, const float);
+		void displayFrameTexts3D(const std::array<uint8_t, 4>&);
+		float worldUnitsPerScreenPixel(const glm::vec3&) const;
 
 		void createArrowsFrame();
 		void generateDirectionalArrow(const poca::core::Vec3mf&, const poca::core::Vec3mf&, const poca::core::Vec3mf&, const float, const float, std::vector <poca::core::Vec3mf>&);
@@ -383,7 +398,7 @@ namespace poca::opengl {
 
 		poca::opengl::PointGLBuffer <poca::core::Vec3mf> m_simplePointBuffer, m_debugPointBuffer;
 		poca::opengl::LineGLBuffer <poca::core::Vec3mf> m_cropBuffer;
-		std::vector <std::pair<poca::core::Vec3mf, std::string>> m_frameTexts;
+		std::vector <FrameText> m_frameTexts;
 
 		poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_centerSquaresBuffer, m_axisSquaresBuffer;
 
