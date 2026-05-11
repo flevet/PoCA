@@ -1669,6 +1669,7 @@ namespace poca::opengl {
 					m_matrixViewSaved = m_stateCamera.m_matrix;
 					m_stateCamera = m_infoObjects[m_insidePatchId]->m_state;
 					zoomToBoundingBox(m_infoObjects[m_insidePatchId]->m_bbox);
+					m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 					recomputeFrame(m_currentCrop);
 
 					poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
@@ -1867,7 +1868,13 @@ namespace poca::opengl {
 				}
 			}
 		}
-		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+		// Pyramidal image LOD must be driven by zoom/scale changes, not by view
+		// direction changes.  Rotation and panning can happen continuously while the
+		// user explores the volume; requesting a new LOD here caused 90-degree
+		// rotations, for example Z view -> Y view, to upload a different pyramid
+		// level to the graphics graph even though the zoom did not change.
+		if (m_scaling)
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 		doneCurrent();
 		update();
 	}
@@ -1997,6 +2004,7 @@ namespace poca::opengl {
 				m_currentCrop = m_currentCrop.intersect(cropBox);
 				std::cout << "m_currentCrop = " << cropBox << std::endl;
 				zoomToBoundingBox(m_currentCrop);
+				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 			}
 			if (m_leftButtonOn && !m_scaling) {
 				//m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "sortWRTCameraPosition", "cameraPosition", m_stateCamera.m_center, "cameraForward", m_stateCamera.m_eye));
@@ -2014,7 +2022,10 @@ namespace poca::opengl {
 				printf("sortWRTCameraPosition, took %f seconds (%lld microseconds)\n", s, ms);
 			}
 
-			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+			// Do not trigger image pyramid LOD changes on a plain rotation release.
+			// Shift-left drag is the zoom/scale gesture handled in mouseMoveEvent().
+			if (m_scaling)
+				m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 
 			poca::core::CommandInfo ci(false, "pick",
 				"x", _event->pos().x(),
@@ -2032,7 +2043,7 @@ namespace poca::opengl {
 			break;
 		}
 		case Qt::MiddleButton:
-			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+			// Panning should not change the selected pyramid level.
 			break;
 		case Qt::RightButton:
 			if (_event->modifiers() == Qt::ControlModifier) {
@@ -2161,6 +2172,7 @@ namespace poca::opengl {
 				if (runtimeResult.has<poca::opengl::PickedBoundingBoxResult>()) {
 					poca::core::BoundingBox bbox = runtimeResult.get<poca::opengl::PickedBoundingBoxResult>().bbox;
 					zoomToBoundingBox(bbox);
+					m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 					update();
 				}
 			}
@@ -2180,6 +2192,8 @@ namespace poca::opengl {
 			scaleRef = std::max(w, std::max(h, t));
 		}
 		zoomBy(mult * 10.f * (scaleRef / 1000.f));
+		if (m_object != nullptr)
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
 
 		update();
 	}
