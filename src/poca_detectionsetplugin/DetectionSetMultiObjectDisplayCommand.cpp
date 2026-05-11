@@ -505,6 +505,15 @@ void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, 
 		return;
 	if (m_pointBuffer.empty() && !rebuild())
 		return;
+	// Keep batched multi-object vertices synchronized with per-child model matrices.
+	// Gizmo transforms update the child object model; if the command notification is
+	// skipped by a component-specific display path, refreshing here still applies the
+	// current transform before drawing.
+	if (!m_pointBuffer.empty() && !refreshTransformBuffers()) {
+		freeGPUMemory();
+		if (!rebuild())
+			return;
+	}
 
 	DetectionSetDisplayCommand* referenceCommand = referenceDisplayCommand();
 	if (referenceCommand == nullptr)

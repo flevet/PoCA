@@ -33,6 +33,7 @@
 #define STB_RECT_PACK_IMPLEMENTATION
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 #include <General/Vec4.hpp>
@@ -40,6 +41,7 @@
 #include <General/MyData.hpp>
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
+#include <Interfaces/BasicComponentInterface.hpp>
 #include <General/stb_rect_pack.h>
 #include <OpenGL/RenderCommandContext.hpp>
 
@@ -58,6 +60,33 @@ namespace {
 	{
 		if (std::find(_values.begin(), _values.end(), _value) == _values.end())
 			_values.push_back(_value);
+	}
+
+	poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
+	{
+		if (_object == nullptr)
+			return poca::core::BoundingBox::initBBox();
+
+		poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+		bool hasBBox = false;
+		for (poca::core::BasicComponentInterface* component : _object->getComponents()) {
+			if (component == nullptr) continue;
+			const poca::core::BoundingBox& componentBBox = component->boundingBox();
+			for (int ix = 0; ix < 2; ++ix) {
+				for (int iy = 0; iy < 2; ++iy) {
+					for (int iz = 0; iz < 2; ++iz) {
+						const float x = ix == 0 ? componentBBox[0] : componentBBox[3];
+						const float y = iy == 0 ? componentBBox[1] : componentBBox[4];
+						const float z = iz == 0 ? componentBBox[2] : componentBBox[5];
+						if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+							continue;
+						bbox.addPointBBox(x, y, z);
+						hasBBox = true;
+					}
+				}
+			}
+		}
+		return hasBBox ? bbox : _object->boundingBox();
 	}
 
 }
@@ -178,11 +207,27 @@ const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 {
 	poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 	for (poca::core::MyObjectInterface* obj : m_colors) {
-		poca::core::BoundingBox bboxComp = obj->boundingBox();
-		for (size_t i = 0; i < 3; i++)
-			bbox[i] = bboxComp[i] < bbox[i] ? bboxComp[i] : bbox[i];
-		for (size_t i = 3; i < 6; i++)
-			bbox[i] = bboxComp[i] > bbox[i] ? bboxComp[i] : bbox[i];
+		if (obj == NULL) continue;
+		const poca::core::BoundingBox bboxComp = localObjectBoundingBox(obj);
+		const glm::mat4& model = obj->getModelMatrix();
+		for (int ix = 0; ix < 2; ++ix) {
+			for (int iy = 0; iy < 2; ++iy) {
+				for (int iz = 0; iz < 2; ++iz) {
+					glm::vec4 p(
+						ix == 0 ? bboxComp[0] : bboxComp[3],
+						iy == 0 ? bboxComp[1] : bboxComp[4],
+						iz == 0 ? bboxComp[2] : bboxComp[5],
+						1.f);
+					p = model * p;
+					bbox[0] = std::min(bbox[0], p.x);
+					bbox[1] = std::min(bbox[1], p.y);
+					bbox[2] = std::min(bbox[2], p.z);
+					bbox[3] = std::max(bbox[3], p.x);
+					bbox[4] = std::max(bbox[4], p.y);
+					bbox[5] = std::max(bbox[5], p.z);
+				}
+			}
+		}
 	}
 	return bbox;
 }
@@ -249,23 +294,28 @@ void MyMultipleObject::resetModelMatrices(const bool _gridSelected) {
 		float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
 		float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
 
-		//auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(-translationX, -translationY, -translationZ));
-		//auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0], bbox[1], bbox[2]));
-		auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(0, 0, 0));
-		for (auto obj : m_colors)
-			obj->setModelMatrix(matrix);
+		for (auto obj : m_colors) {
+			obj->setTranslationVector(glm::vec3(0.f));
+			obj->setRotationMatrix(glm::mat4(1.f));
+			obj->updateModelMatrixFromTransform();
+		}
 	}
 	else {
 		for (auto n = 0; n < m_colors.size(); n++) {
 			auto obj = m_colors[n];
-			const auto& bboxObj = obj->boundingBox();
+			const auto& bboxObj = localObjectBoundingBox(obj);
 			const auto& bbox = m_gridBBoxes[n];
 			float translationX = bbox[0] + (bbox[3] - bbox[0]) / 2.f;
 			float translationY = bbox[1] + (bbox[4] - bbox[1]) / 2.f;
 			float translationZ = bbox[2] + (bbox[5] - bbox[2]) / 2.f;
 
-			auto matrix = glm::translate(glm::mat4(1.f), glm::vec3(bbox[0] - bboxObj[0], bbox[1] - bboxObj[1], bbox[2] - bboxObj[2]));
-			m_colors[n]->setModelMatrix(matrix);
+			const glm::vec3 offset(bbox[0] - bboxObj[0], bbox[1] - bboxObj[1], bbox[2] - bboxObj[2]);
+			// MyObject::updateModelMatrixFromTransform builds translate(-m_translation).
+			// Store the inverse translation so later gizmo rotations/translations keep
+			// the multiple-object grid placement instead of overwriting it.
+			m_colors[n]->setTranslationVector(-offset);
+			m_colors[n]->setRotationMatrix(glm::mat4(1.f));
+			m_colors[n]->updateModelMatrixFromTransform();
 		}
 	}
 }
@@ -277,9 +327,10 @@ void MyMultipleObject::recomputeGrid()
 	std::vector<stbrp_rect> rects;
 	int cur = 0;
 	float startW = 0.f, startH = 0.f;
+	m_gridBBoxes.clear();
 	for (auto n = 0; n < nbColors(); n++) {
 		auto obj = getObject(n);
-		const auto& bbox = obj->boundingBox();
+		const auto& bbox = localObjectBoundingBox(obj);
 		//gridBBoxes.emplace_back(bbox.x(), bbox.y(), bbox.z(), bbox.width() + PADDING_BINS, bbox.height() + PADDING_BINS, bbox.thick());
 		m_gridBBoxes.emplace_back(startW, 0.f, 0.f, startW + bbox.realWidth(), bbox.realHeight(), bbox.realThick());
 		rects.push_back({ cur++, (int)(bbox.realWidth() + PADDING_BINS), (int)(bbox.realHeight() + PADDING_BINS), 0, 0, 0 });

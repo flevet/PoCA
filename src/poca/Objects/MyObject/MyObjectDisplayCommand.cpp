@@ -55,6 +55,9 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 		addCommandInfo(poca::core::CommandInfo("pointSizeGL", 6u));
 		addCommandInfo(poca::core::CommandInfo("lineWidthGL", 1u));
 		addCommandInfo(poca::core::CommandInfo("colorBakground", std::array<unsigned char, 4>{255, 255, 255, 255}));
+		addCommandInfo(poca::core::CommandInfo("displayBoundingBox", true));
+		addCommandInfo(poca::core::CommandInfo("displayGrid", true));
+		addCommandInfo(poca::core::CommandInfo("displayTransformGizmo", true));
 
 		addCommandInfo(poca::core::CommandInfo("nbGrid", std::array <uint8_t, 3>{ (uint8_t)5, (uint8_t)5, (uint8_t)5 }));
 		addCommandInfo(poca::core::CommandInfo("stepGrid", std::array <float, 3>{ 50.f, 50.f, 50.f }));
@@ -84,6 +87,9 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 		addCommandInfo(poca::core::CommandInfo("pointSizeGL", param["pointSizeGL"].get<uint32_t>()));
 		addCommandInfo(poca::core::CommandInfo("lineWidthGL", param["lineWidthGL"].get<uint32_t>()));
 		addCommandInfo(poca::core::CommandInfo("colorBakground", param["colorBakground"].get<std::array<unsigned char, 4>>()));
+		addCommandInfo(poca::core::CommandInfo("displayBoundingBox", param.contains("displayBoundingBox") ? param["displayBoundingBox"].get<bool>() : true));
+		addCommandInfo(poca::core::CommandInfo("displayGrid", param.contains("displayGrid") ? param["displayGrid"].get<bool>() : true));
+		addCommandInfo(poca::core::CommandInfo("displayTransformGizmo", param.contains("displayTransformGizmo") ? param["displayTransformGizmo"].get<bool>() : true));
 
 		addCommandInfo(poca::core::CommandInfo("nbGrid", param["nbGrid"].get<std::array<uint8_t, 3>>()));
 		addCommandInfo(poca::core::CommandInfo("stepGrid", param["stepGrid"].get<std::array<float, 3>>()));

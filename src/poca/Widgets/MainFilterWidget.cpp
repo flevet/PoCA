@@ -479,9 +479,11 @@ void MainFilterWidget::actionNeeded()
 		if (!ok) return;
 		uint8_t valZ = m_leditDimZNb->text().toUInt(&ok);
 		if (!ok) return;
-		m_object->executeCommand(&poca::core::CommandInfo(true, "nbGrid", std::array <uint8_t, 3>{ valX, valY, valZ }));
-		if(m_object != NULL)
-			m_object->notifyAll("updateDisplay");
+		poca::core::MyObjectInterface* target = m_object != NULL && m_object->currentObject() != NULL ? m_object->currentObject() : m_object;
+		if (target != NULL) {
+			target->executeCommand(&poca::core::CommandInfo(true, "nbGrid", std::array <uint8_t, 3>{ valX, valY, valZ }));
+			target->notifyAll("updateDisplay");
+		}
 	}
 	else if (sender == m_leditDimXLength || sender == m_leditDimYLength || sender == m_leditDimZLength) {
 		QLineEdit* tmp = static_cast <QLineEdit*>(sender);
@@ -513,9 +515,11 @@ void MainFilterWidget::actionNeeded()
 		if (!ok) return;
 		float valZ = m_leditDimZLength->text().toFloat(&ok);
 		if (!ok) return;
-		m_object->executeCommand(&poca::core::CommandInfo(true, "stepGrid", std::array <float, 3>{ valX, valY, valZ }));
-		if (m_object != NULL)
-			m_object->notifyAll("updateDisplay");
+		poca::core::MyObjectInterface* target = m_object != NULL && m_object->currentObject() != NULL ? m_object->currentObject() : m_object;
+		if (target != NULL) {
+			target->executeCommand(&poca::core::CommandInfo(true, "stepGrid", std::array <float, 3>{ valX, valY, valZ }));
+			target->notifyAll("updateDisplay");
+		}
 	}
 	else if (sender == m_savePositionBtn) {
 		//emit(savePosition(QString()));
@@ -682,11 +686,15 @@ void MainFilterWidget::actionNeeded(bool _val)
 	else if (sender == m_smoothLineCB)
 		m_object->executeCommand(&poca::core::CommandInfo(true, "smoothLine", this->isLineSmooth()));
 	else if (sender == m_cboxNbGrid || sender == m_cboxLengthGrid) {
-		m_object->executeCommand(&poca::core::CommandInfo(true, "useNbForGrid", m_cboxNbGrid->isChecked()));
+		poca::core::MyObjectInterface* target = m_object != NULL && m_object->currentObject() != NULL ? m_object->currentObject() : m_object;
+		if (target != NULL)
+			target->executeCommand(&poca::core::CommandInfo(true, "useNbForGrid", m_cboxNbGrid->isChecked()));
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_cboxSameAllDimGrid) {
-		m_object->executeCommand(&poca::core::CommandInfo(true, "isotropicGrid", m_cboxSameAllDimGrid->isChecked()));
+		poca::core::MyObjectInterface* target = m_object != NULL && m_object->currentObject() != NULL ? m_object->currentObject() : m_object;
+		if (target != NULL)
+			target->executeCommand(&poca::core::CommandInfo(true, "isotropicGrid", m_cboxSameAllDimGrid->isChecked()));
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_antialiasCB) {

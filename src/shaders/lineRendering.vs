@@ -3,6 +3,7 @@ layout(location = 0) in vec3 points;
 layout(location = 1) in vec3 vertexNormal;
 layout(location = 2) in float vertexFeature;
 uniform mat4 MVP;
+uniform mat4 model;
 uniform uvec4 viewport;
 const int MAX_CLIPPING_PLANES = 50;
 uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
@@ -26,10 +27,10 @@ void main()
 	v_normal = vertexNormal;
 	v_feature = vertexFeature;
 	
-	vec4 wrldpos = vec4(points, 1.);
+	vec4 wrldpos = model * vec4(points, 1.);
 	v_clipDistance = 3.402823466e+38;
 	for(int n = 0; n < nbClipPlanes; n++){
-		float d = dot(pos, clipPlanes[n]);
+		float d = dot(wrldpos, clipPlanes[n]);
 		v_clipDistance = d < v_clipDistance ? d : v_clipDistance;
 	}
 }

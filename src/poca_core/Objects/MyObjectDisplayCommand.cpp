@@ -112,6 +112,9 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 	addCommandInfo(poca::core::CommandInfo(false, "pointSizeGL", 6u));
 	addCommandInfo(poca::core::CommandInfo(false, "lineWidthGL", 1u));
 	addCommandInfo(poca::core::CommandInfo(false, "colorBakground", std::array<unsigned char, 4>{255, 255, 255, 255}));
+	addCommandInfo(poca::core::CommandInfo(false, "displayBoundingBox", true));
+	addCommandInfo(poca::core::CommandInfo(false, "displayGrid", true));
+	addCommandInfo(poca::core::CommandInfo(false, "displayTransformGizmo", true));
 
 	addCommandInfo(poca::core::CommandInfo(false, "nbGrid", std::array <uint8_t, 3>{ (uint8_t)5, (uint8_t)5, (uint8_t)5 }));
 	addCommandInfo(poca::core::CommandInfo(false, "stepGrid", std::array <float, 3>{ 50.f, 50.f, 50.f }));
@@ -163,6 +166,12 @@ MyObjectDisplayCommand::MyObjectDisplayCommand(poca::core::MyObjectInterface* _o
 			loadParameters(poca::core::CommandInfo(false, "lineWidthGL", param["lineWidthGL"].get<uint32_t>()));
 		if (param.contains("colorBakground"))
 			loadParameters(poca::core::CommandInfo(false, "colorBakground", param["colorBakground"].get<std::array<unsigned char, 4>>()));
+		if (param.contains("displayBoundingBox"))
+			loadParameters(poca::core::CommandInfo(false, "displayBoundingBox", param["displayBoundingBox"].get<bool>()));
+		if (param.contains("displayGrid"))
+			loadParameters(poca::core::CommandInfo(false, "displayGrid", param["displayGrid"].get<bool>()));
+		if (param.contains("displayTransformGizmo"))
+			loadParameters(poca::core::CommandInfo(false, "displayTransformGizmo", param["displayTransformGizmo"].get<bool>()));
 
 		if (param.contains("nbGrid"))
 			loadParameters(poca::core::CommandInfo(false, "nbGrid", param["nbGrid"].get<std::array<uint8_t, 3>>()));
@@ -282,6 +291,9 @@ std::vector<poca::core::CommandSpec> MyObjectDisplayCommand::commandSpecs() cons
 		poca::core::CommandSpec("pointSizeGL", { { "pointSizeGL", poca::core::CommandParameterType::UnsignedInteger, true } }),
 		poca::core::CommandSpec("lineWidthGL", { { "lineWidthGL", poca::core::CommandParameterType::UnsignedInteger, true } }),
 		poca::core::CommandSpec("colorBakground", { { "colorBakground", poca::core::CommandParameterType::Array, true } }),
+		poca::core::CommandSpec("displayBoundingBox", { { "displayBoundingBox", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("displayGrid", { { "displayGrid", poca::core::CommandParameterType::Boolean, true } }),
+		poca::core::CommandSpec("displayTransformGizmo", { { "displayTransformGizmo", poca::core::CommandParameterType::Boolean, true } }),
 		poca::core::CommandSpec("nbGrid", { { "nbGrid", poca::core::CommandParameterType::Array, true } }),
 		poca::core::CommandSpec("stepGrid", { { "stepGrid", poca::core::CommandParameterType::Array, true } }),
 		poca::core::CommandSpec("useNbForGrid", { { "useNbForGrid", poca::core::CommandParameterType::Boolean, true } }),

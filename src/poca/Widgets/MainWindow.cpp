@@ -42,6 +42,7 @@
 #include <QtCore/QSignalMapper>
 #include <QtCore/QDir>
 #include <QtCore/QPluginLoader>
+#include <QtCore/QVariant>
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QProgressBar>
@@ -57,11 +58,21 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QActionGroup>
+#include <QtWidgets/QAbstractItemView>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QHeaderView>
+#include <QtWidgets/QSplitter>
+#include <QtWidgets/QTableWidget>
+#include <QtWidgets/QTableWidgetItem>
+#include <QtWidgets/QTreeWidget>
+#include <QtWidgets/QTreeWidgetItem>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
+#include <QtGui/QBrush>
+#include <QtGui/QColor>
 #include <QtCore/QMimeData>
 #include <qmath.h>
 #include <CGAL/bounding_box.h>
@@ -190,6 +201,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_mdiArea->setObjectName("MdiArea");
 	m_mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 	m_mdiArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	m_mdiArea->setViewMode(QMdiArea::SubWindowView);
 
 	setCentralWidget(m_mdiArea);
 	m_windowMapper = new QSignalMapper(this);
@@ -201,7 +213,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 
 	m_tabWidget = new QTabWidget(this);
 	m_tabWidget->setObjectName("TabWidget");
-	m_tabWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Expanding);
+	m_tabWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_tabWidget->setContentsMargins(0, 0, 0, 0);
 	m_tabWidget->tabBar()->setMovable(true);
 	m_mfw = new MainFilterWidget(mediator, m_tabWidget);
@@ -266,21 +278,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_widgetColors = new ColorButtonGridWidget(this);
 	m_widgetColors->setMaxPerRow(20);
 	m_widgetColors->setRightButtonText("+");
-
-	connect(m_widgetColors->parametersButton(), &QPushButton::clicked, this, [this]() {
-
-		auto* dlg = new ParametersDialog(this);
-		dlg->setAttribute(Qt::WA_DeleteOnClose, true); // auto cleanup
-		dlg->setWindowFlag(Qt::Tool, true);        // small tool window behavior
-		dlg->setWindowFlag(Qt::WindowStaysOnTopHint, true);
-
-		// Forward signals to another window/controller
-		connect(dlg, &ParametersDialog::gridReleased, this, &MainWindow::onGridReleased);
-		connect(dlg, &ParametersDialog::toggleGridCentered, this, &MainWindow::onToggleGridCentered);
-		connect(dlg, &ParametersDialog::exportAllObjects, this, &MainWindow::onExportAllObjects);
-
-		dlg->show(); // or dlg->show()
-		});
+	m_widgetColors->setVisible(false);
 
 	QObject::connect(m_widgetColors, SIGNAL(indexClicked(int)), this, SLOT(changeColorObject(int)));
 	QObject::connect(m_widgetColors, &ColorButtonGridWidget::rightButtonClicked, this, 
@@ -309,28 +307,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_colorButtonsGroup = new QButtonGroup;
 	QObject::connect(m_colorButtonsGroup, SIGNAL(buttonClicked(QAbstractButton*)), this, SLOT(changeColorObject(QAbstractButton*)));*/
 
-	QVBoxLayout* layoutAll = new QVBoxLayout;
-	layoutAll->setContentsMargins(0, 0, 0, 0);
-	layoutAll->setSpacing(0);
-	layoutAll->addWidget(m_widgetColors);
-	layoutAll->addWidget(m_tabWidget);
-	QWidget* widgetAll = new QWidget;
-	widgetAll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-	widgetAll->setLayout(layoutAll);
-
-	QDockWidget* dock = new QDockWidget(this);
-	dock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
-	dock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-	//
-	QScrollArea* area = new QScrollArea;
-	area->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-	area->setWidgetResizable(true);
-	dock->setWidget(area);
-	area->setWidget(widgetAll);
-	dock->setWindowTitle(tr(""));
-	addDockWidget(Qt::RightDockWidgetArea, dock);
-
-	area->resize(600, area->height());
+	createDesignDock();
 
 	setActiveMdiChild(NULL);
 
@@ -341,8 +318,15 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_lblPermanentStatus->setVisible(false);
 	m_progressBar = new QProgressBar(this);
 	m_progressBar->setVisible(false);
+	m_statusObjectLabel = new QLabel(tr("Objects: 0"), this);
+	m_statusBoxLabel = new QLabel(tr("Box: -"), this);
 	statusBar()->addPermanentWidget(m_lblPermanentStatus);
+	statusBar()->addPermanentWidget(m_statusObjectLabel);
+	statusBar()->addPermanentWidget(m_statusBoxLabel);
 	statusBar()->addPermanentWidget(m_progressBar);
+	applyPrototypeStyle();
+	refreshObjectsPanel();
+	refreshPropertiesPanel();
 
 	poca::core::NbObjects = m_mfw->getFirstIndexObj();
 
@@ -447,6 +431,12 @@ void MainWindow::createActions()
 	m_debugPyramidalRenderingAct->setChecked(engine->hasVerboseType("debugPyramidalRendering"));
 	m_debugPyramidalRenderingAct->setStatusTip(tr("Print pyramidal rendering diagnostics"));
 	QObject::connect(m_debugPyramidalRenderingAct, SIGNAL(toggled(bool)), this, SLOT(toggleDebugPyramidalRendering(bool)));
+
+	m_debugGizmoAct = new QAction(tr("debugGizmo"), this);
+	m_debugGizmoAct->setCheckable(true);
+	m_debugGizmoAct->setChecked(engine->hasVerboseType("debugGizmo"));
+	m_debugGizmoAct->setStatusTip(tr("Print transform gizmo diagnostics"));
+	QObject::connect(m_debugGizmoAct, SIGNAL(toggled(bool)), this, SLOT(toggleDebugGizmo(bool)));
 
 	m_cropAct = new QAction(QIcon("./images/crop.png"), tr("&Crop"), this);
 	m_cropAct->setCheckable(true);
@@ -573,6 +563,7 @@ void MainWindow::createMenus()
 	verboseMenu->addAction(m_verboseAct);
 	verboseMenu->addSeparator();
 	verboseMenu->addAction(m_debugPyramidalRenderingAct);
+	verboseMenu->addAction(m_debugGizmoAct);
 	verboseMenu->addAction(m_addVerboseTypeAct);
 	verboseMenu->addAction(m_clearVerboseTypesAct);
 
@@ -644,12 +635,15 @@ void MainWindow::addVerboseType()
 	engine->addVerboseType(trimmed.toStdString());
 	if (trimmed == "debugPyramidalRendering")
 		m_debugPyramidalRenderingAct->setChecked(true);
+	else if (trimmed == "debugGizmo")
+		m_debugGizmoAct->setChecked(true);
 }
 
 void MainWindow::clearVerboseTypes()
 {
 	poca::core::Engine::instance()->clearVerboseTypes();
 	m_debugPyramidalRenderingAct->setChecked(false);
+	m_debugGizmoAct->setChecked(false);
 }
 
 void MainWindow::toggleDebugPyramidalRendering(bool _enabled)
@@ -659,6 +653,15 @@ void MainWindow::toggleDebugPyramidalRendering(bool _enabled)
 		engine->addVerboseType("debugPyramidalRendering");
 	else
 		engine->removeVerboseType("debugPyramidalRendering");
+}
+
+void MainWindow::toggleDebugGizmo(bool _enabled)
+{
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	if (_enabled)
+		engine->addVerboseType("debugGizmo");
+	else
+		engine->removeVerboseType("debugGizmo");
 }
 
 void MainWindow::createToolBars()
@@ -724,7 +727,7 @@ void MainWindow::createToolBars()
 		}
 	}
 
-	addToolBar(Qt::LeftToolBarArea, m_fileToolBar);
+	addToolBar(Qt::TopToolBarArea, m_fileToolBar);
 }
 
 void MainWindow::setCameraInteraction()
@@ -862,6 +865,252 @@ void MainWindow::actionFromPlugin()
 void MainWindow::createStatusBar()
 {
 	statusBar()->showMessage(tr("Ready"));
+}
+
+void MainWindow::createDesignDock()
+{
+	QVBoxLayout* layoutAll = new QVBoxLayout;
+	layoutAll->setContentsMargins(0, 0, 0, 0);
+	layoutAll->setSpacing(6);
+	layoutAll->addWidget(m_tabWidget);
+
+	m_toolsPanel = new QWidget;
+	m_toolsPanel->setObjectName("ToolsPanel");
+	m_toolsPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_toolsPanel->setLayout(layoutAll);
+
+	QScrollArea* toolsArea = new QScrollArea;
+	toolsArea->setObjectName("ControlsScrollArea");
+	toolsArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	toolsArea->setWidgetResizable(true);
+	toolsArea->setFrameShape(QFrame::NoFrame);
+	toolsArea->setWidget(m_toolsPanel);
+
+	m_objectsTree = new QTreeWidget(this);
+	m_objectsTree->setObjectName("ObjectsTree");
+	m_objectsTree->setHeaderLabel(tr("Objects"));
+	m_objectsTree->setAlternatingRowColors(false);
+	m_objectsTree->setSelectionMode(QAbstractItemView::SingleSelection);
+	m_objectsTree->setMinimumHeight(180);
+	connect(m_objectsTree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* _item, int) {
+		if (_item == NULL) return;
+		const QVariant role = _item->data(0, Qt::UserRole);
+		if (role.toString() != QStringLiteral("colorObject")) return;
+		bool ok = false;
+		const int index = _item->data(0, Qt::UserRole + 1).toInt(&ok);
+		if (ok)
+			changeColorObject(index);
+	});
+
+	m_applyAllObjectsButton = new QPushButton(tr("Apply to all objects"), this);
+	m_recomputeGridButton = new QPushButton(tr("Recompute grid"), this);
+	m_toggleGridCenteredButton = new QPushButton(tr("Toggle grid / centered"), this);
+	m_exportObjectsButton = new QPushButton(tr("Export objects"), this);
+	m_applyAllObjectsButton->setCheckable(true);
+	m_toggleGridCenteredButton->setCheckable(true);
+	connect(m_applyAllObjectsButton, &QPushButton::released, this, []() {
+		poca::core::Engine::instance()->toggleGlobalCommands();
+	});
+	connect(m_recomputeGridButton, &QPushButton::released, this, &MainWindow::onGridReleased);
+	connect(m_toggleGridCenteredButton, &QPushButton::clicked, this, &MainWindow::onToggleGridCentered);
+	connect(m_exportObjectsButton, &QPushButton::released, this, &MainWindow::onExportAllObjects);
+
+	QWidget* objectPanel = new QWidget(this);
+	QVBoxLayout* objectLayout = new QVBoxLayout;
+	objectLayout->setContentsMargins(0, 0, 0, 0);
+	objectLayout->setSpacing(4);
+	objectLayout->addWidget(m_objectsTree);
+	QHBoxLayout* firstControlsRow = new QHBoxLayout;
+	firstControlsRow->setContentsMargins(0, 0, 0, 0);
+	firstControlsRow->setSpacing(4);
+	firstControlsRow->addWidget(m_applyAllObjectsButton);
+	firstControlsRow->addWidget(m_recomputeGridButton);
+	objectLayout->addLayout(firstControlsRow);
+	QHBoxLayout* secondControlsRow = new QHBoxLayout;
+	secondControlsRow->setContentsMargins(0, 0, 0, 0);
+	secondControlsRow->setSpacing(4);
+	secondControlsRow->addWidget(m_toggleGridCenteredButton);
+	secondControlsRow->addWidget(m_exportObjectsButton);
+	objectLayout->addLayout(secondControlsRow);
+	objectPanel->setLayout(objectLayout);
+
+	m_propertiesTable = new QTableWidget(this);
+	m_propertiesTable->setObjectName("PropertiesTable");
+	m_propertiesTable->setColumnCount(2);
+	m_propertiesTable->setHorizontalHeaderLabels(QStringList() << tr("Property") << tr("Value"));
+	m_propertiesTable->horizontalHeader()->setStretchLastSection(true);
+	m_propertiesTable->verticalHeader()->setVisible(false);
+	m_propertiesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+	m_propertiesTable->setSelectionMode(QAbstractItemView::NoSelection);
+	m_propertiesTable->setFocusPolicy(Qt::NoFocus);
+
+	m_leftInspectorTabs = new QTabWidget(this);
+	m_leftInspectorTabs->setObjectName("LeftInspectorTabs");
+	m_leftInspectorTabs->addTab(m_propertiesTable, tr("Properties"));
+	m_leftInspectorTabs->addTab(toolsArea, tr("Controls"));
+
+	QSplitter* leftSplitter = new QSplitter(Qt::Vertical, this);
+	leftSplitter->setObjectName("LeftDesignSplitter");
+	leftSplitter->addWidget(objectPanel);
+	leftSplitter->addWidget(m_leftInspectorTabs);
+	leftSplitter->setStretchFactor(0, 1);
+	leftSplitter->setStretchFactor(1, 2);
+	leftSplitter->setChildrenCollapsible(false);
+
+	m_designDock = new QDockWidget(tr("Objects"), this);
+	m_designDock->setObjectName("ObjectsDock");
+	m_designDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
+	m_designDock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	m_designDock->setMinimumWidth(300);
+	m_designDock->setWidget(leftSplitter);
+	addDockWidget(Qt::LeftDockWidgetArea, m_designDock);
+}
+
+void MainWindow::applyPrototypeStyle()
+{
+	menuBar()->setNativeMenuBar(false);
+	m_mdiArea->setBackground(QBrush(QColor(236, 238, 240)));
+	if (m_fileToolBar) {
+		m_fileToolBar->setObjectName("MainPrototypeToolbar");
+		m_fileToolBar->setMovable(false);
+		m_fileToolBar->setIconSize(QSize(24, 24));
+		m_fileToolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+	}
+	setStyleSheet(R"(
+		QMainWindow { background: #f2f4f6; }
+		QMdiArea#MdiArea { background: #e9edf1; }
+		QDockWidget#ObjectsDock { background: #f7f8fa; }
+		QDockWidget#ObjectsDock::title { background: #f0f2f5; text-align: left; padding: 4px 6px; border-bottom: 1px solid #c9cdd2; }
+		QTreeWidget#ObjectsTree, QTableWidget#PropertiesTable { background: #ffffff; color: #202124; gridline-color: #d7dbe0; border: 1px solid #c9cdd2; }
+		QTableWidget#PropertiesTable QHeaderView::section { background: #f0f2f5; color: #202124; border: 1px solid #c9cdd2; padding: 3px; }
+		QTreeWidget#ObjectsTree::item, QTableWidget#PropertiesTable::item { min-height: 20px; padding: 1px 4px; }
+		QTreeWidget#ObjectsTree::item:selected { background: #dcecff; color: #111111; }
+		QMdiArea#MdiArea { background: #eceef0; }
+	)");
+}
+
+void MainWindow::addObjectToTree(poca::core::MyObjectInterface* _object, QTreeWidgetItem* _parent)
+{
+	if (_object == NULL || _parent == NULL) return;
+
+	for (size_t n = 0; n < _object->nbBasicComponents(); n++) {
+		poca::core::BasicComponentInterface* component = _object->getBasicComponent(n);
+		if (component == NULL) continue;
+		QTreeWidgetItem* componentItem = new QTreeWidgetItem(_parent);
+		componentItem->setText(0, QString::fromStdString(component->getName()));
+		componentItem->setCheckState(0, Qt::Checked);
+		componentItem->setData(0, Qt::UserRole, QStringLiteral("component"));
+
+		poca::core::BasicComponentList* list = dynamic_cast<poca::core::BasicComponentList*>(component);
+		if (list == NULL || list->nbComponents() <= 1) continue;
+		for (size_t i = 0; i < list->nbComponents(); i++) {
+			poca::core::BasicComponent* child = list->getComponent(i);
+			if (child == NULL) continue;
+			QTreeWidgetItem* childItem = new QTreeWidgetItem(componentItem);
+			childItem->setText(0, QString::fromStdString(child->getName()));
+			childItem->setCheckState(0, Qt::Checked);
+			childItem->setData(0, Qt::UserRole, QStringLiteral("subcomponent"));
+		}
+	}
+}
+
+void MainWindow::refreshObjectsPanel()
+{
+	if (m_objectsTree == NULL) return;
+	m_objectsTree->clear();
+
+	if (m_currentMdi == NULL || m_currentMdi->getWidget() == NULL || m_currentMdi->getWidget()->getObject() == NULL) {
+		QTreeWidgetItem* emptyItem = new QTreeWidgetItem(m_objectsTree);
+		emptyItem->setText(0, tr("No object loaded"));
+		emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsUserCheckable);
+		m_objectsTree->expandAll();
+		if (m_statusObjectLabel) m_statusObjectLabel->setText(tr("Objects: 0"));
+		refreshObjectControls();
+		return;
+	}
+
+	poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
+	QTreeWidgetItem* root = new QTreeWidgetItem(m_objectsTree);
+	root->setText(0, QString::fromStdString(object->getName().empty() ? std::string("Object") : object->getName()));
+	root->setCheckState(0, Qt::Checked);
+	root->setData(0, Qt::UserRole, QStringLiteral("object"));
+
+	if (object->nbColors() > 1) {
+		for (size_t n = 0; n < object->nbColors(); n++) {
+			poca::core::MyObjectInterface* childObject = object->getObject(n);
+			if (childObject == NULL) continue;
+			QString label = QString::fromStdString(childObject->getName().empty() ? std::string("Object") : childObject->getName());
+			if (n == object->currentObjectID())
+				label.append(tr("  [current]"));
+			QTreeWidgetItem* objectItem = new QTreeWidgetItem(root);
+			objectItem->setText(0, label);
+			objectItem->setCheckState(0, Qt::Checked);
+			objectItem->setData(0, Qt::UserRole, QStringLiteral("colorObject"));
+			objectItem->setData(0, Qt::UserRole + 1, int(n));
+			if (n == object->currentObjectID())
+				m_objectsTree->setCurrentItem(objectItem);
+			addObjectToTree(childObject, objectItem);
+		}
+	}
+	else
+		addObjectToTree(object, root);
+
+	m_objectsTree->expandToDepth(1);
+	if (m_statusObjectLabel)
+		m_statusObjectLabel->setText(tr("Objects: %1").arg(object->nbColors()));
+	refreshObjectControls();
+}
+
+void MainWindow::refreshObjectControls()
+{
+	const bool hasMultipleObject = m_currentMdi != NULL
+		&& m_currentMdi->getWidget() != NULL
+		&& dynamic_cast<MyMultipleObject*>(m_currentMdi->getWidget()->getObject()) != NULL;
+	if (m_applyAllObjectsButton) m_applyAllObjectsButton->setEnabled(hasMultipleObject);
+	if (m_recomputeGridButton) m_recomputeGridButton->setEnabled(hasMultipleObject);
+	if (m_toggleGridCenteredButton) m_toggleGridCenteredButton->setEnabled(hasMultipleObject);
+	if (m_exportObjectsButton) m_exportObjectsButton->setEnabled(hasMultipleObject);
+}
+
+void MainWindow::refreshPropertiesPanel()
+{
+	if (m_propertiesTable == NULL) return;
+	m_propertiesTable->setRowCount(0);
+
+	auto addRow = [this](const QString& _property, const QString& _value) {
+		const int row = m_propertiesTable->rowCount();
+		m_propertiesTable->insertRow(row);
+		m_propertiesTable->setItem(row, 0, new QTableWidgetItem(_property));
+		m_propertiesTable->setItem(row, 1, new QTableWidgetItem(_value));
+	};
+
+	if (m_currentMdi == NULL || m_currentMdi->getWidget() == NULL || m_currentMdi->getWidget()->getObject() == NULL) {
+		addRow(tr("State"), tr("No object loaded"));
+		if (m_statusBoxLabel) m_statusBoxLabel->setText(tr("Box: -"));
+		return;
+	}
+
+	poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
+	const poca::core::BoundingBox bbox = object->boundingBox();
+
+	addRow(tr("Name"), QString::fromStdString(object->getName()));
+	addRow(tr("Directory"), QString::fromStdString(object->getDir()));
+	addRow(tr("Dimension"), QString::number(object->dimension()));
+	addRow(tr("Current object"), QString("%1 / %2").arg(object->currentObjectID() + 1).arg(object->nbColors()));
+	addRow(tr("Basic components"), QString::number(object->nbBasicComponents()));
+	addRow(tr("Box min"), QString("%1, %2, %3").arg(bbox[0], 0, 'f', 3).arg(bbox[1], 0, 'f', 3).arg(bbox[2], 0, 'f', 3));
+	addRow(tr("Box max"), QString("%1, %2, %3").arg(bbox[3], 0, 'f', 3).arg(bbox[4], 0, 'f', 3).arg(bbox[5], 0, 'f', 3));
+	addRow(tr("Box size"), QString("%1 x %2 x %3").arg(object->getWidth(), 0, 'f', 3).arg(object->getHeight(), 0, 'f', 3).arg(object->getThick(), 0, 'f', 3));
+
+	for (size_t n = 0; n < object->nbBasicComponents(); n++) {
+		poca::core::BasicComponentInterface* component = object->getBasicComponent(n);
+		if (component == NULL) continue;
+		addRow(tr("Component %1").arg(n + 1), QString::fromStdString(component->getName()));
+	}
+
+	m_propertiesTable->resizeColumnsToContents();
+	if (m_statusBoxLabel)
+		m_statusBoxLabel->setText(tr("Box: %1 x %2 x %3").arg(object->getWidth(), 0, 'f', 2).arg(object->getHeight(), 0, 'f', 2).arg(object->getThick(), 0, 'f', 2));
 }
 
 void MainWindow::keyPressEvent(QKeyEvent * _e)
@@ -1244,6 +1493,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		m_widgetColors->updateGeometry();*/
 		m_widgetColors->setCount(int(wobj->nbColors()));
 		m_widgetColors->setCurrentIndex(int(wobj->currentObjectID()));
+		m_widgetColors->hide();
 
 		size_t dimension = wobj->dimension();
 		m_line2DROIAct->setEnabled(true);// dimension == 2);
@@ -1283,6 +1533,8 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 		}
 	}
 	updateTabWidget();
+	refreshObjectsPanel();
+	refreshPropertiesPanel();
 }
 
 void MainWindow::aboutDialog()
@@ -1309,6 +1561,9 @@ void MainWindow::closeAllDatasets()
 			mdiChild->freeGPUResources();
 	}
 	m_mdiArea->closeAllSubWindows();
+	m_currentMdi = NULL;
+	refreshObjectsPanel();
+	refreshPropertiesPanel();
 }
 
 MdiChild * MainWindow::getChild(const unsigned int _idx)
@@ -1357,7 +1612,10 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 	if (_action == "LoadObjCharacteristicsAllWidgets" || _action == "UpdateMainTabWidgets") {
 		m_widgetColors->setCount(int(obj->nbColors()));
 		m_widgetColors->setCurrentIndex(int(obj->currentObjectID()));
+		m_widgetColors->hide();
 		updateTabWidget();
+		refreshObjectsPanel();
+		refreshPropertiesPanel();
 	}
 	if (_action == "addCommandLastAddedComponent") {
 		poca::core::BasicComponentInterface* bci = obj->getLastAddedBasicComponent();
@@ -1367,6 +1625,8 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 		poca::core::Engine::instance()->getObject(obj)->notify("LoadObjCharacteristicsAllWidgets");
 
 		updateTabWidget();
+		refreshObjectsPanel();
+		refreshPropertiesPanel();
 		obj->notify("LoadObjCharacteristicsAllWidgets");
 	}
 	if (_action == "duplicateCleanedData") {
@@ -1579,6 +1839,8 @@ void MainWindow::changeColorObject(int _index)
 	obj->setCurrentObject(_index);
 	obj->notify("LoadObjCharacteristicsAllWidgets");
 	obj->notifyAll("updateDisplay");
+	refreshObjectsPanel();
+	refreshPropertiesPanel();
 }
 
 void MainWindow::currentCameraForPath()

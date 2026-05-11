@@ -99,7 +99,7 @@ protected:
 protected:
 	poca::opengl::CameraInterface * m_widget;
 	poca::opengl::Camera* m_camera{ NULL };
-	QPushButton* m_2DtButton, * m_3DButton, * m_playButton;
+	QPushButton* m_2DtButton, * m_3DButton, * m_gizmoButton, * m_clipButton, * m_playButton;
 	QSlider* m_tSlider;
 	QWidget* m_topW, * m_emptyForSliderW;
 	QLabel* m_tLabel;

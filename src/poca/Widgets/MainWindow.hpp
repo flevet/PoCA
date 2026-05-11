@@ -51,6 +51,10 @@ class QPushButton;
 class QButtonGroup;
 class QAbstractButton;
 class QImage;
+class QDockWidget;
+class QTableWidget;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 class MdiChild;
 class MainFilterWidget;
@@ -159,6 +163,7 @@ private slots:
 	void addVerboseType();
 	void clearVerboseTypes();
 	void toggleDebugPyramidalRendering(bool);
+	void toggleDebugGizmo(bool);
 
 public slots:
 	void setPermanentStatusText(const QString &);
@@ -172,6 +177,12 @@ private:
 	void createToolBars();
 	void createStatusBar();
 	void createMenus();
+	void createDesignDock();
+	void applyPrototypeStyle();
+	void refreshObjectsPanel();
+	void refreshPropertiesPanel();
+	void addObjectToTree(poca::core::MyObjectInterface*, QTreeWidgetItem*);
+	void refreshObjectControls();
 
 	QMdiArea * m_mdiArea;
 	QSignalMapper * m_windowMapper;
@@ -183,10 +194,21 @@ private:
 	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct, * m_freehandROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_datasetAssemblerAct;
-	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_debugPyramidalRenderingAct;
+	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
 	QTabWidget * m_tabWidget;
+	QDockWidget* m_designDock{ nullptr };
+	QTreeWidget* m_objectsTree{ nullptr };
+	QTableWidget* m_propertiesTable{ nullptr };
+	QTabWidget* m_leftInspectorTabs{ nullptr };
+	QWidget* m_toolsPanel{ nullptr };
+	QPushButton* m_applyAllObjectsButton{ nullptr };
+	QPushButton* m_recomputeGridButton{ nullptr };
+	QPushButton* m_toggleGridCenteredButton{ nullptr };
+	QPushButton* m_exportObjectsButton{ nullptr };
 	QProgressBar * m_progressBar;
 	QLabel * m_lblPermanentStatus;
+	QLabel* m_statusObjectLabel{ nullptr };
+	QLabel* m_statusBoxLabel{ nullptr };
 	QAction* m_lastActionQuantifToolbar, *m_lastActionColocToolbar, *m_lastActionDisplayToolbar, *m_lastActionMiscToolbar, * m_lastActionROIToolbar;
 
 	bool m_firstLoad;
@@ -211,4 +233,3 @@ private:
 };
 
 #endif // MainWindow_h__ 
-

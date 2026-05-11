@@ -874,6 +874,12 @@ void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, co
 		return;
 	if (m_triangleBuffer.empty() && m_pointBuffer.empty() && !rebuild())
 		return;
+	// Keep the instanced object-model texture synchronized with per-child gizmo transforms.
+	if (!refreshTransformBuffers()) {
+		freeGPUMemory();
+		if (!rebuild())
+			return;
+	}
 	ObjectListDisplayCommand* referenceCommand = referenceDisplayCommand();
 	if (referenceCommand == nullptr)
 		return;

@@ -50,6 +50,7 @@
 #include <glm/gtx/string_cast.hpp>
 
 #include <Interfaces/MyObjectInterface.hpp>
+#include <General/CommandableObject.hpp>
 #include <DesignPatterns/Observer.hpp>
 #include <General/Vec2.hpp>
 #include <General/Vec4.hpp>
@@ -153,6 +154,18 @@ namespace poca::opengl {
 			Orthographic = 0,
 			Perspective = 1
 		};
+		enum TransformGizmoElement
+		{
+			Gizmo_None = 0,
+			Gizmo_TranslateX,
+			Gizmo_TranslateY,
+			Gizmo_TranslateZ,
+			Gizmo_TranslateXY,
+			Gizmo_TranslateXZ,
+			Gizmo_TranslateYZ,
+			Gizmo_TranslateScreen,
+			Gizmo_Rotate
+		};
 
 		Camera(poca::core::MyObjectInterface*, const size_t, QWidget* = 0, Qt::WindowFlags = 0);
 		~Camera();
@@ -193,8 +206,14 @@ namespace poca::opengl {
 		Shader* getShader(const std::string&);
 		void zoomToBoundingBox(const poca::core::BoundingBox&, const bool = true);
 
-		inline void toggleBoundingBoxDisplay() { m_displayBoundingBox = !m_displayBoundingBox; }
-		inline void toggleGridDisplay() { m_displayGrid = !m_displayGrid; }
+		void toggleBoundingBoxDisplay();
+		void toggleGridDisplay();
+		void toggleTransformGizmoDisplay();
+		void setTransformGizmoDisplay(const bool);
+		bool transformGizmoDisplay() const;
+		void toggleClippingPlanesDisplay();
+		void setClippingPlanesDisplay(const bool);
+		bool clippingPlanesDisplay() const;
 		void toggleFontDisplay();
 
 		int getWidth() const { return this->width(); }
@@ -343,7 +362,24 @@ namespace poca::opengl {
 		void renderQuad(const bool = false) const;
 		void renderRoundedBoxShadow(const float, const float, const float, const float, const float, const float, const float, const float, const float, const float);
 		void displayFrameTexts3D(const std::array<uint8_t, 4>&);
+		void displayGridAndBoundingBoxForVisibleObjects(const float, const float);
 		float worldUnitsPerScreenPixel(const glm::vec3&) const;
+
+		void drawTransformGizmos();
+		void drawClippingPlaneHandles();
+		int hitTestClippingPlaneHandle(const QPointF&) const;
+		void applyClippingPlaneDrag(const QPointF&);
+		TransformGizmoElement hitTestTransformGizmo(const QPointF&);
+		void applyTransformGizmoDrag(const QPointF&);
+		bool transformGizmoCenter(glm::vec3&) const;
+		glm::vec3 transformGizmoAxis(const TransformGizmoElement) const;
+		glm::vec3 transformGizmoPlaneNormal(const TransformGizmoElement) const;
+		glm::vec3 screenPlaneDragDelta(const QPointF&, const QPointF&, const glm::vec3&) const;
+
+		poca::core::MyObjectInterface* currentDisplayObject() const;
+		bool objectBoolParameter(const std::string&, bool) const;
+		template <typename T> T objectParameterOr(const std::string& _name, const T& _fallback) const;
+		void setObjectBoolParameter(const std::string&, bool);
 
 		void createArrowsFrame();
 		void generateDirectionalArrow(const poca::core::Vec3mf&, const poca::core::Vec3mf&, const poca::core::Vec3mf&, const float, const float, std::vector <poca::core::Vec3mf>&);
@@ -452,6 +488,17 @@ namespace poca::opengl {
 		std::vector <std::tuple<float, glm::vec3, glm::quat>> m_pathIterations;
 
 		SsaoShader m_ssaoShader;
+
+		TransformGizmoElement m_hoveredTransformGizmo;
+		TransformGizmoElement m_activeTransformGizmo;
+		QPointF m_transformGizmoDragStart;
+		QPointF m_transformGizmoDragPrevious;
+		glm::vec3 m_transformGizmoWorldCenter;
+		bool m_displayTransformGizmo;
+		bool m_displayClippingPlanes;
+		int m_hoveredClippingPlane;
+		int m_activeClippingPlane;
+		QPointF m_clippingPlaneDragPrevious;
 
 		std::vector <QImage> m_movieFrames;
 	};

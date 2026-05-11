@@ -32,6 +32,8 @@
 
 #include <Windows.h>
 #include <QtGui/QIcon>
+#include <QtGui/QPainter>
+#include <QtGui/QPen>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QDialog>
@@ -64,6 +66,52 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	//m_testButton = new QPushButton(QString("Start Game"), w);
 	int maxSize = 50;
 	QGridLayout* layoutTop = new QGridLayout;
+	auto makeGizmoIcon = []() -> QPixmap {
+		QPixmap pix(36, 36);
+		pix.fill(Qt::transparent);
+		QPainter painter(&pix);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		QPointF c(18.0, 18.0);
+		QPen pen(Qt::red, 2.0);
+		painter.setPen(pen);
+		painter.drawLine(c, QPointF(30.0, 18.0));
+		painter.drawLine(QPointF(30.0, 18.0), QPointF(25.0, 14.0));
+		painter.drawLine(QPointF(30.0, 18.0), QPointF(25.0, 22.0));
+		pen.setColor(Qt::green);
+		painter.setPen(pen);
+		painter.drawLine(c, QPointF(18.0, 6.0));
+		painter.drawLine(QPointF(18.0, 6.0), QPointF(14.0, 11.0));
+		painter.drawLine(QPointF(18.0, 6.0), QPointF(22.0, 11.0));
+		pen.setColor(Qt::blue);
+		painter.setPen(pen);
+		painter.drawLine(c, QPointF(8.0, 28.0));
+		painter.drawLine(QPointF(8.0, 28.0), QPointF(8.0, 22.0));
+		painter.drawLine(QPointF(8.0, 28.0), QPointF(14.0, 28.0));
+		pen.setColor(Qt::white);
+		pen.setWidth(2);
+		painter.setPen(pen);
+		painter.drawArc(QRectF(6.0, 6.0, 24.0, 24.0), 20 * 16, 290 * 16);
+		painter.setBrush(Qt::red);
+		painter.setPen(Qt::NoPen);
+		painter.drawEllipse(c, 3.0, 3.0);
+		return pix;
+	};
+	auto makeClipIcon = []() -> QPixmap {
+		QPixmap pix(36, 36);
+		pix.fill(Qt::transparent);
+		QPainter painter(&pix);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		QPen pen(QColor(60, 120, 255), 2.0);
+		painter.setPen(pen);
+		painter.setBrush(QColor(60, 120, 255, 35));
+		painter.drawPolygon(QPolygonF() << QPointF(8, 24) << QPointF(26, 18) << QPointF(28, 8) << QPointF(10, 14));
+		pen.setColor(QColor(255, 80, 30));
+		painter.setPen(pen);
+		painter.drawLine(QPointF(18, 17), QPointF(18, 5));
+		painter.drawLine(QPointF(18, 5), QPointF(14, 10));
+		painter.drawLine(QPointF(18, 5), QPointF(22, 10));
+		return pix;
+	};
 	m_3DButton = new QPushButton();
 	m_3DButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_3DButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -82,6 +130,22 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_2DtButton->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(m_2DtButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QObject::connect(m_2DtButton, SIGNAL(customContextMenuRequested(const QPoint&)), this, SLOT(configureFrameOffsets(const QPoint&)));
+	m_gizmoButton = new QPushButton();
+	m_gizmoButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	m_gizmoButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_gizmoButton->setIcon(QIcon(makeGizmoIcon()));
+	m_gizmoButton->setToolTip("Show transform gizmo");
+	m_gizmoButton->setCheckable(true);
+	m_gizmoButton->setChecked(m_camera == NULL ? true : m_camera->transformGizmoDisplay());
+	QObject::connect(m_gizmoButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_clipButton = new QPushButton();
+	m_clipButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	m_clipButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_clipButton->setIcon(QIcon(makeClipIcon()));
+	m_clipButton->setToolTip("Show clipping planes");
+	m_clipButton->setCheckable(true);
+	m_clipButton->setChecked(m_camera == NULL ? false : m_camera->clippingPlanesDisplay());
+	QObject::connect(m_clipButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	m_playButton = new QPushButton();
 	m_playButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_playButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -114,8 +178,10 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	QObject::connect(m_tSlider, SIGNAL(valueChanged(int)), SLOT(actionNeeded(int)));
 	layoutTop->addWidget(m_3DButton, 0, 0, 1, 1);
 	layoutTop->addWidget(m_2DtButton, 0, 1, 1, 1);
-	layoutTop->addWidget(m_playButton, 0, 2, 1, 1);
-	layoutTop->addWidget(emptyWLine, 0, 3, 1, 1);
+	layoutTop->addWidget(m_gizmoButton, 0, 2, 1, 1);
+	layoutTop->addWidget(m_clipButton, 0, 3, 1, 1);
+	layoutTop->addWidget(m_playButton, 0, 4, 1, 1);
+	layoutTop->addWidget(emptyWLine, 0, 5, 1, 1);
 	layoutTop->addWidget(m_tLabel, 1, 0, 1, 2);
 	layoutTop->addWidget(m_tSlider, 2, 0, 1, 1);
 	layoutTop->addWidget(m_emptyForSliderW, 3, 0, 1, 1);
@@ -295,6 +361,12 @@ void MdiChild::actionNeeded(bool _val)
 		m_tLabel->show();
 		m_tSlider->show();
 		m_emptyForSliderW->hide();
+	}
+	else if (sender == m_gizmoButton) {
+		cam->setTransformGizmoDisplay(_val);
+	}
+	else if (sender == m_clipButton) {
+		cam->setClippingPlanesDisplay(_val);
 	}
 	else if (sender == m_playButton) {
 		if (_val) {

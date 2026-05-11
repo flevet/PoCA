@@ -45,17 +45,21 @@
 #include <glm/gtx/projection.hpp>
 #include <algorithm>
 #include <cmath>
+#include <sstream>
+#include <iomanip>
 #include <iostream>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtCore/qmath.h>
+#include <QtCore/QLineF>
 #include <QtWidgets/QFileDialog>
 #include <CGAL/intersections.h>
 
 #include <General/Command.hpp>
 #include <General/CommandableObject.hpp>
+#include <Interfaces/BasicComponentInterface.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <DesignPatterns/MediatorWObjectFWidget.hpp>
 #include <Objects/ObjectCommandContext.hpp>
@@ -67,6 +71,11 @@
 #include <OpenGL/RenderCommandContext.hpp>
 #include <Geometry/CGAL_includes.hpp>
 #include <General/Engine.hpp>
+#include <Objects/MyMultipleObject.hpp>
+
+#include <QtGui/QPainter>
+#include <QtGui/QPen>
+#include <QtGui/QBrush>
 
 #include "Camera.hpp"
 #include "Shader.hpp"
@@ -369,6 +378,34 @@ namespace glm {
 namespace poca::opengl {
 
 	namespace {
+		static std::string formatTransformGridValue(const float _value)
+		{
+			std::ostringstream oss;
+			float rounded = std::round(_value);
+			if (std::abs(_value - rounded) < 0.01f)
+				oss << static_cast<int32_t>(rounded);
+			else {
+				oss << std::fixed << std::setprecision(2) << _value;
+				std::string text = oss.str();
+				while (!text.empty() && text.back() == '0') text.pop_back();
+				if (!text.empty() && text.back() == '.') text.pop_back();
+				return text;
+			}
+			return oss.str();
+		}
+
+		static float transformedGridCoordinate(const glm::mat4& _model, const poca::core::Vec3mf& _position, const poca::core::Vec3mf& _axis)
+		{
+			const glm::vec3 p = glm::vec3(_model * glm::vec4(_position.x(), _position.y(), _position.z(), 1.f));
+			glm::vec3 axis = glm::vec3(_axis.x(), _axis.y(), _axis.z());
+			if (glm::dot(axis, axis) < 1e-8f)
+				return 0.f;
+			axis = glm::normalize(glm::vec3(_model * glm::vec4(axis, 0.f)));
+			return glm::dot(p, axis);
+		}
+	}
+
+	namespace {
 		poca::core::BoundingBox translatedBoundingBox(const poca::core::BoundingBox& _bbox, const glm::vec3& _translation)
 		{
 			return poca::core::BoundingBox(
@@ -379,6 +416,33 @@ namespace poca::opengl {
 		glm::vec3 toGlm(const poca::core::Vec3mf& _v)
 		{
 			return glm::vec3(_v[0], _v[1], _v[2]);
+		}
+
+		poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
+		{
+			if (_object == NULL)
+				return poca::core::BoundingBox::initBBox();
+
+			poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+			bool hasBBox = false;
+			for (poca::core::BasicComponentInterface* component : _object->getComponents()) {
+				if (component == NULL) continue;
+				const poca::core::BoundingBox& componentBBox = component->boundingBox();
+				for (int ix = 0; ix < 2; ++ix) {
+					for (int iy = 0; iy < 2; ++iy) {
+						for (int iz = 0; iz < 2; ++iz) {
+							const float x = ix == 0 ? componentBBox[0] : componentBBox[3];
+							const float y = iy == 0 ? componentBBox[1] : componentBBox[4];
+							const float z = iz == 0 ? componentBBox[2] : componentBBox[5];
+							if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+								continue;
+							bbox.addPointBBox(x, y, z);
+							hasBBox = true;
+						}
+					}
+				}
+			}
+			return hasBBox ? bbox : _object->boundingBox();
 		}
 
 	}
@@ -462,7 +526,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_resetedProj(true)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true)
 	{
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
@@ -677,10 +741,7 @@ namespace poca::opengl {
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		glDisable(GL_DEPTH_TEST);
-		if (m_displayGrid)
-			displayGrid();
-		if (m_displayBoundingBox)
-			displayBoundingBox(thickness, antialias);
+		displayGridAndBoundingBoxForVisibleObjects(thickness, antialias);
 		glEnable(GL_DEPTH_TEST);
 		poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
 		poca::core::CommandExecutionContext runtimeContext;
@@ -722,8 +783,18 @@ namespace poca::opengl {
 			return;
 		}*/
 
-		if (m_openGLContextInitializedNotified)
+		if (m_openGLContextInitializedNotified) {
 			drawElements();
+			if (poca::core::Engine::instance()->verbose("debugGizmo")) {
+				static unsigned int debugPaintCounter = 0;
+				if ((debugPaintCounter++ % 60) == 0)
+					std::cout << "[debugGizmo] paintGL: drawElements done, calling drawTransformGizmos; size=" << width() << "x" << height() << ", openGLNotified=" << m_openGLContextInitializedNotified << ", object=" << m_object << std::endl;
+			}
+			if (m_displayClippingPlanes)
+				drawClippingPlaneHandles();
+			if (objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo))
+				drawTransformGizmos();
+		}
 	}
 
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)
@@ -807,11 +878,8 @@ namespace poca::opengl {
 		GL_CHECK_ERRORS();
 		glDisable(GL_DEPTH_TEST);
 		GL_CHECK_ERRORS();
-		displayGrid();
+		displayGridAndBoundingBoxForVisibleObjects(thickness, antialias);
 		GL_CHECK_ERRORS();
-		displayBoundingBox(thickness, antialias);
-		GL_CHECK_ERRORS();
-
 		glEnable(GL_DEPTH_TEST);
 		glLineWidth(thickness);
 
@@ -1063,8 +1131,7 @@ namespace poca::opengl {
 			thickness = comObj->getParameter<uint32_t>("lineWidthGL");
 		m_applyClippingPlanes = true;
 		glDisable(GL_DEPTH_TEST);
-		displayGrid();
-		displayBoundingBox(thickness, 1);
+		displayGridAndBoundingBoxForVisibleObjects(thickness, 1);
 
 		static const float transparent[] = { 0, 0, 0, 0 };
 		for(uint32_t i = 1; i < 5; i++)
@@ -1256,9 +1323,116 @@ namespace poca::opengl {
 		shader->release(); 
 	}
 
+
+	poca::core::MyObjectInterface* Camera::currentDisplayObject() const
+	{
+		if (m_object == NULL) return NULL;
+		poca::core::MyObjectInterface* cur = m_object->currentObject();
+		return cur != NULL ? cur : m_object;
+	}
+
+	bool Camera::objectBoolParameter(const std::string& _name, bool _fallback) const
+	{
+		poca::core::MyObjectInterface* obj = currentDisplayObject();
+		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(obj);
+		if (comObj != NULL && comObj->hasParameter(_name))
+			return comObj->getParameter<bool>(_name);
+		return _fallback;
+	}
+
+	void Camera::setObjectBoolParameter(const std::string& _name, bool _value)
+	{
+		poca::core::MyObjectInterface* obj = currentDisplayObject();
+		if (obj == NULL) return;
+		poca::core::CommandInfo ci(true, _name, _value);
+		obj->executeCommand(&ci);
+		poca::core::CommandInfo updateCi(false, "updateDisplay");
+		obj->notifyAll(updateCi);
+	}
+
+	void Camera::toggleBoundingBoxDisplay()
+	{
+		setObjectBoolParameter("displayBoundingBox", !objectBoolParameter("displayBoundingBox", m_displayBoundingBox));
+	}
+
+	void Camera::toggleGridDisplay()
+	{
+		setObjectBoolParameter("displayGrid", !objectBoolParameter("displayGrid", m_displayGrid));
+	}
+
+	void Camera::toggleTransformGizmoDisplay()
+	{
+		setObjectBoolParameter("displayTransformGizmo", !objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo));
+		update();
+	}
+
+	void Camera::setTransformGizmoDisplay(const bool _display)
+	{
+		setObjectBoolParameter("displayTransformGizmo", _display);
+		update();
+	}
+
+	bool Camera::transformGizmoDisplay() const
+	{
+		return objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo);
+	}
+
+	void Camera::toggleClippingPlanesDisplay()
+	{
+		m_displayClippingPlanes = !m_displayClippingPlanes;
+		update();
+	}
+
+	void Camera::setClippingPlanesDisplay(const bool _display)
+	{
+		m_displayClippingPlanes = _display;
+		update();
+	}
+
+	bool Camera::clippingPlanesDisplay() const
+	{
+		return m_displayClippingPlanes;
+	}
+
+
+	void Camera::displayGridAndBoundingBoxForVisibleObjects(const float _thickness, const float _antialias)
+	{
+		const glm::mat4 cameraOnlyModel = m_matrixModel;
+		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
+		if (multi != NULL && multi->nbColors() > 0) {
+			const size_t oldIndex = multi->currentObjectID();
+			for (size_t n = 0; n < multi->nbColors(); ++n) {
+				poca::core::MyObjectInterface* child = multi->getObject(n);
+				if (child == NULL) continue;
+				multi->setCurrentObject(n);
+				recomputeFrame(localObjectBoundingBox(child));
+				m_matrixModel = cameraOnlyModel * child->getModelMatrix();
+				if (objectBoolParameter("displayGrid", m_displayGrid))
+					displayGrid();
+				if (objectBoolParameter("displayBoundingBox", m_displayBoundingBox))
+					displayBoundingBox(_thickness, _antialias);
+			}
+			multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
+			m_matrixModel = cameraOnlyModel;
+			recomputeFrame(currentDisplayObject() != NULL ? localObjectBoundingBox(currentDisplayObject()) : m_currentCrop);
+			return;
+		}
+
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject != NULL) {
+			recomputeFrame(localObjectBoundingBox(displayObject));
+			m_matrixModel = cameraOnlyModel * displayObject->getModelMatrix();
+		}
+		if (objectBoolParameter("displayGrid", m_displayGrid))
+			displayGrid();
+		if (objectBoolParameter("displayBoundingBox", m_displayBoundingBox))
+			displayBoundingBox(_thickness, _antialias);
+		m_matrixModel = cameraOnlyModel;
+	}
+
 	void Camera::displayBoundingBox(const float _thickness, const float _antialias)
 	{
-		if (!m_displayBoundingBox) return;
+		if (!objectBoolParameter("displayBoundingBox", m_displayBoundingBox)) return;
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		for (size_t n = 0; n < 4; n++)
@@ -1289,7 +1463,7 @@ namespace poca::opengl {
 
 	void Camera::displayGrid()
 	{
-		if (m_faceGridBuffer.empty() || !m_displayGrid || m_lineGridBuffer.getNbElements() == 0) return;
+		if (m_faceGridBuffer.empty() || !objectBoolParameter("displayGrid", m_displayGrid) || m_lineGridBuffer.getNbElements() == 0) return;
 
 		GL_CHECK_ERRORS();
 		GLfloat bkColor[4];
@@ -1358,22 +1532,38 @@ namespace poca::opengl {
 		if (m_frameTexts.empty() || m_texDisplayer == NULL)
 			return;
 
+		// Grid labels belong to the currently displayed object, like the grid/bbox geometry.
+		// At this point in the main display path m_matrixModel is usually back to the
+		// camera-only model, so explicitly compose the object model here.
+		const glm::mat4 cameraOnlyModel = m_matrixModel;
+		glm::mat4 objectOnlyModel(1.f);
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject != NULL)
+			objectOnlyModel = displayObject->getModelMatrix();
+		const glm::mat4 displayModel = cameraOnlyModel * objectOnlyModel;
+
 		glm::vec3 viewDir = m_stateCamera.m_center - m_stateCamera.m_eye;
 		if (glm::dot(viewDir, viewDir) < 1e-8f)
 			viewDir = glm::vec3(0.f, 0.f, -1.f);
 		viewDir = glm::normalize(viewDir);
 
 		for (const FrameText& frameTxt : m_frameTexts) {
-			glm::vec3 tickAxis = toGlm(frameTxt.m_axis);
-			if (glm::dot(tickAxis, tickAxis) < 1e-8f)
+			glm::vec3 tickAxisLocal = toGlm(frameTxt.m_axis);
+			if (glm::dot(tickAxisLocal, tickAxisLocal) < 1e-8f)
 				continue;
-			tickAxis = glm::normalize(tickAxis);
+			tickAxisLocal = glm::normalize(tickAxisLocal);
 
-			glm::vec3 labelAxis = toGlm(frameTxt.m_offset);
-			if (glm::dot(labelAxis, labelAxis) < 1e-8f)
-				labelAxis = tickAxis;
+			glm::vec3 labelAxisLocal = toGlm(frameTxt.m_offset);
+			if (glm::dot(labelAxisLocal, labelAxisLocal) < 1e-8f)
+				labelAxisLocal = tickAxisLocal;
 			else
-				labelAxis = glm::normalize(labelAxis);
+				labelAxisLocal = glm::normalize(labelAxisLocal);
+
+			// Convert label orientation to world/camera space.  The grid geometry is stored
+			// in object-local coordinates and transformed by the object's model matrix,
+			// so the label basis must be transformed the same way.
+			glm::vec3 tickAxis = glm::normalize(glm::vec3(displayModel * glm::vec4(tickAxisLocal, 0.f)));
+			glm::vec3 labelAxis = glm::normalize(glm::vec3(displayModel * glm::vec4(labelAxisLocal, 0.f)));
 
 			// Keep the text plane readable while its baseline follows the adjacent grid/bbox direction.
 			labelAxis = labelAxis - glm::dot(labelAxis, viewDir) * viewDir;
@@ -1383,23 +1573,39 @@ namespace poca::opengl {
 				continue;
 			labelAxis = glm::normalize(labelAxis);
 
-			glm::vec3 anchor = toGlm(frameTxt.m_position);
-			float scale = worldUnitsPerScreenPixel(anchor);
+			glm::vec3 anchorLocal = toGlm(frameTxt.m_position);
+			glm::vec3 anchor = glm::vec3(displayModel * glm::vec4(anchorLocal, 1.f));
+			const glm::vec4 viewPos = m_stateCamera.m_matrixView * glm::vec4(anchor, 1.f);
+			float scale = 1.f;
+			if (this->height() > 0) {
+				if (m_projectionType == Perspective) {
+					const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
+					const float distance = std::max(0.0001f, std::abs(viewPos.z));
+					scale = (2.f * distance * tan(halfFov)) / (float)this->height();
+				}
+				else {
+					float factorH = 1.f;
+					const float diffX = (float)this->width(), diffY = (float)this->height();
+					if (diffX > 0.f && diffY > diffX)
+						factorH = diffY / diffX;
+					scale = (2.f * m_distanceOrtho * factorH) / (float)this->height();
+				}
+			}
 
 			glm::vec3 down = glm::cross(viewDir, labelAxis);
 			if (glm::dot(down, down) < 1e-8f)
 				down = -m_stateCamera.m_up;
 			down = glm::normalize(down);
 
-			glm::vec2 p0 = worldToScreenCoordinates(anchor);
-			glm::vec2 p1 = worldToScreenCoordinates(anchor + labelAxis);
+			glm::vec2 p0 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, anchor);
+			glm::vec2 p1 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, anchor + labelAxis);
 			glm::vec2 screenAxis = p1 - p0;
 			if (screenAxis.x < 0.f || (std::abs(screenAxis.x) < 0.001f && screenAxis.y < 0.f)) {
 				labelAxis = -labelAxis;
 				down = glm::normalize(glm::cross(viewDir, labelAxis));
 			}
 
-			glm::vec3 offset = toGlm(frameTxt.m_offset);
+			glm::vec3 offset = glm::vec3(displayModel * glm::vec4(toGlm(frameTxt.m_offset), 0.f));
 			if (glm::dot(offset, offset) >= 1e-8f) {
 				offset = glm::normalize(offset);
 				offset = offset - glm::dot(offset, viewDir) * viewDir;
@@ -1412,7 +1618,7 @@ namespace poca::opengl {
 				anchor -= down * scale * 25.f;
 			}
 
-			const glm::vec4 clipSpacePos = m_matrixProjection * m_stateCamera.m_matrixView * m_matrixModel * glm::vec4(anchor, 1.f);
+			const glm::vec4 clipSpacePos = m_matrixProjection * m_stateCamera.m_matrixView * glm::vec4(anchor, 1.f);
 			if (clipSpacePos.w <= 0.f)
 				continue;
 
@@ -1422,8 +1628,9 @@ namespace poca::opengl {
 			textTransform[2] = glm::vec4(glm::normalize(glm::cross(labelAxis, down)) * scale, 0.f);
 			textTransform[3] = glm::vec4(anchor, 1.f);
 
-			const glm::mat4 modelView = m_stateCamera.m_matrixView * m_matrixModel * textTransform;
-			m_texDisplayer->renderText(m_matrixProjection, modelView, frameTxt.m_text.c_str(),
+			const glm::mat4 modelView = m_stateCamera.m_matrixView * textTransform;
+			const std::string dynamicGridText = formatTransformGridValue(transformedGridCoordinate(displayModel, frameTxt.m_position, frameTxt.m_axis));
+			m_texDisplayer->renderText(m_matrixProjection, modelView, dynamicGridText.c_str(),
 				_colorFont[0], _colorFont[1], _colorFont[2], _colorFont[3],
 				0.f, 0.f, 0.f, FONS_ALIGN_CENTER | FONS_ALIGN_MIDDLE);
 		}
@@ -1603,6 +1810,36 @@ namespace poca::opengl {
 		emit(clickInsideWindow());
 		makeCurrent();
 		setClickPoint(_event->pos().x(), _event->pos().y());
+		if (m_currentInteractionMode == poca::opengl::Camera::None && _event->button() == Qt::LeftButton) {
+			if (m_displayClippingPlanes) {
+				int clipHit = hitTestClippingPlaneHandle(QPointF(_event->pos()));
+				if (clipHit >= 0) {
+					m_activeClippingPlane = clipHit;
+					m_hoveredClippingPlane = clipHit;
+					m_clippingPlaneDragPrevious = QPointF(_event->pos());
+					m_buttonOn = true;
+					m_leftButtonOn = true;
+					doneCurrent();
+					update();
+					return;
+				}
+			}
+			TransformGizmoElement elem = hitTestTransformGizmo(QPointF(_event->pos()));
+			if (poca::core::Engine::instance()->verbose("debugGizmo"))
+				std::cout << "[debugGizmo] mousePress: pos=(" << _event->pos().x() << "," << _event->pos().y() << "), hitElem=" << elem << std::endl;
+			if (elem != Gizmo_None) {
+				m_activeTransformGizmo = elem;
+				m_hoveredTransformGizmo = elem;
+				m_transformGizmoDragStart = QPointF(_event->pos());
+				m_transformGizmoDragPrevious = m_transformGizmoDragStart;
+				transformGizmoCenter(m_transformGizmoWorldCenter);
+				m_buttonOn = true;
+				m_leftButtonOn = true;
+				doneCurrent();
+				update();
+				return;
+			}
+		}
 		m_tmp = glm::vec2(_event->pos().x(), this->height() - _event->pos().y());
 		m_cropPointBegin.set(_event->pos().x(), this->height() - _event->pos().y(), 0.f);
 		m_cropPointEnd = m_cropPointBegin;
@@ -1705,6 +1942,34 @@ namespace poca::opengl {
 		int x = _event->pos().x(), y = _event->pos().y();
 		makeCurrent();
 		setClickPoint(_event->pos().x(), _event->pos().y());
+		if (m_activeClippingPlane >= 0) {
+			applyClippingPlaneDrag(QPointF(_event->pos()));
+			doneCurrent();
+			update();
+			return;
+		}
+		if (m_activeTransformGizmo != Gizmo_None) {
+			applyTransformGizmoDrag(QPointF(_event->pos()));
+			doneCurrent();
+			update();
+			return;
+		}
+		if (!m_buttonOn && m_currentInteractionMode == poca::opengl::Camera::None) {
+			if (m_displayClippingPlanes) {
+				int clipHit = hitTestClippingPlaneHandle(QPointF(_event->pos()));
+				if (clipHit != m_hoveredClippingPlane) {
+					m_hoveredClippingPlane = clipHit;
+					update();
+				}
+			}
+			TransformGizmoElement elem = hitTestTransformGizmo(QPointF(_event->pos()));
+			if (elem != m_hoveredTransformGizmo) {
+				if (poca::core::Engine::instance()->verbose("debugGizmo"))
+					std::cout << "[debugGizmo] mouseMove hover: pos=(" << _event->pos().x() << "," << _event->pos().y() << "), old=" << m_hoveredTransformGizmo << ", new=" << elem << std::endl;
+				m_hoveredTransformGizmo = elem;
+				update();
+			}
+		}
 		m_cropPointEnd.set(_event->pos().x(), this->height() - _event->pos().y(), 0.f);
 
 		glm::vec3 wrldCoords = getWorldCoordinates(glm::vec2(x, this->height() - y));
@@ -1882,6 +2147,24 @@ namespace poca::opengl {
 	void Camera::mouseReleaseEvent(QMouseEvent* _event)
 	{
 		makeCurrent();
+		if (m_activeClippingPlane >= 0) {
+			m_activeClippingPlane = -1;
+			m_leftButtonOn = false;
+			m_buttonOn = false;
+			m_hoveredClippingPlane = hitTestClippingPlaneHandle(QPointF(_event->pos()));
+			doneCurrent();
+			update();
+			return;
+		}
+		if (m_activeTransformGizmo != Gizmo_None) {
+			m_activeTransformGizmo = Gizmo_None;
+			m_leftButtonOn = false;
+			m_buttonOn = false;
+			m_hoveredTransformGizmo = hitTestTransformGizmo(QPointF(_event->pos()));
+			doneCurrent();
+			update();
+			return;
+		}
 		poca::core::MyObjectInterface* objectToOpen = nullptr;
 		switch (_event->button())
 		{
@@ -2534,14 +2817,20 @@ namespace poca::opengl {
 	{
 		bool faceFrontCameraHaveChanged = false;
 
-		glm::vec3 camDir = m_stateCamera.m_eye;
-		camDir = glm::normalize(camDir);
-
+		glm::mat3 objectNormalMatrix(1.f);
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject != NULL)
+			objectNormalMatrix = glm::transpose(glm::inverse(glm::mat3(displayObject->getModelMatrix())));
 
 		for (unsigned int n = 0; n < 6; n++) {
-			double dot = glm::dot(cubeNormals[n], camDir);
-			m_facingDirections[n] = dot > 0.f;
-			faceFrontCameraHaveChanged = faceFrontCameraHaveChanged || (m_facingDirections[n] != m_facingDirections[n]);
+			const bool oldFacing = m_facingDirections[n];
+			glm::vec3 normalWorld = objectNormalMatrix * cubeNormals[n];
+			if (glm::dot(normalWorld, normalWorld) < 1e-8f)
+				normalWorld = cubeNormals[n];
+			normalWorld = glm::normalize(normalWorld);
+			glm::vec3 normalView = glm::normalize(glm::vec3(m_stateCamera.m_matrixView * glm::vec4(normalWorld, 0.f)));
+			m_facingDirections[n] = normalView.z > 0.f;
+			faceFrontCameraHaveChanged = faceFrontCameraHaveChanged || (oldFacing != m_facingDirections[n]);
 		}
 		return faceFrontCameraHaveChanged;
 	}
@@ -2552,10 +2841,16 @@ namespace poca::opengl {
 		std::array <float, 3> dots[3];
 		std::array <size_t, 3> indexFaces;
 		size_t cpt = 0;
+		glm::mat3 objectNormalMatrix(1.f);
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject != NULL)
+			objectNormalMatrix = glm::transpose(glm::inverse(glm::mat3(displayObject->getModelMatrix())));
 		for (size_t n = 0; n < 6; n++) {
 			if (!m_facingDirections[n]) continue;
-			glm::vec4 vec = m_stateCamera.m_matrixView * glm::vec4(cubeNormals[n], 1.f);
-			glm::vec3 vec2 = glm::vec3(vec[0], vec[1], vec[2]);
+			glm::vec3 normalWorld = objectNormalMatrix * cubeNormals[n];
+			if (glm::dot(normalWorld, normalWorld) < 1e-8f) normalWorld = cubeNormals[n];
+			normalWorld = glm::normalize(normalWorld);
+			glm::vec3 vec2 = glm::normalize(glm::vec3(m_stateCamera.m_matrixView * glm::vec4(normalWorld, 0.f)));
 			indexFaces[cpt] = n;
 			dots[cpt] = { glm::dot(vec2, left), fabs(glm::dot(vec2, up)), glm::dot(vec2, right) };
 			cpt++;
@@ -2573,10 +2868,11 @@ namespace poca::opengl {
 
 	void Camera::recomputeFrame(const poca::core::BoundingBox& _bbox)
 	{
-		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
-		if (!comObj) return;
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(displayObject);
+		if (!comObj || displayObject == NULL) return;
 
-		const poca::core::BoundingBox& bboxObject = m_object->boundingBox();
+		const poca::core::BoundingBox& bboxObject = displayObject->boundingBox();
 
 		testWhichFaceFrontCamera();
 
@@ -2627,10 +2923,15 @@ namespace poca::opengl {
 		std::array <float, 3> dots[3];
 		std::array <size_t, 3> indexFaces;
 		size_t cpt = 0;
+		glm::mat3 objectNormalMatrix(1.f);
+		if (displayObject != NULL)
+			objectNormalMatrix = glm::transpose(glm::inverse(glm::mat3(displayObject->getModelMatrix())));
 		for (size_t n = 0; n < 6; n++) {
 			if (!m_facingDirections[n]) continue;
-			glm::vec4 vec = m_stateCamera.m_matrixView * glm::vec4(cubeNormals[n], 1.f);
-			glm::vec3 vec2 = glm::vec3(vec[0], vec[1], vec[2]);
+			glm::vec3 normalWorld = objectNormalMatrix * cubeNormals[n];
+			if (glm::dot(normalWorld, normalWorld) < 1e-8f) normalWorld = cubeNormals[n];
+			normalWorld = glm::normalize(normalWorld);
+			glm::vec3 vec2 = glm::normalize(glm::vec3(m_stateCamera.m_matrixView * glm::vec4(normalWorld, 0.f)));
 			indexFaces[cpt] = n;
 			dots[cpt] = { glm::dot(vec2, left), fabs(glm::dot(vec2, up)), glm::dot(vec2, right) };
 			cpt++;
@@ -2801,7 +3102,7 @@ namespace poca::opengl {
 							frameText.m_position = tmp;
 							frameText.m_axis = nv;
 							frameText.m_offset = orthDir;
-							frameText.m_text = std::to_string((uint32_t)(startingPoint + curLength));
+							frameText.m_text = formatTransformGridValue(startingPoint + curLength);
 							m_frameTexts.push_back(frameText);
 						}
 					}
@@ -3247,6 +3548,567 @@ namespace poca::opengl {
 		shader->release();
 	}
 
+
+	bool Camera::transformGizmoCenter(glm::vec3& _center) const
+	{
+		const bool dbg = poca::core::Engine::instance()->verbose("debugGizmo");
+		if (!objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo)) {
+			if (dbg) std::cout << "[debugGizmo] transformGizmoCenter: disabled by m_displayTransformGizmo=false" << std::endl;
+			return false;
+		}
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject == nullptr) {
+			if (dbg) std::cout << "[debugGizmo] transformGizmoCenter: no display object on camera" << std::endl;
+			return false;
+		}
+
+		const poca::core::BoundingBox bbox = localObjectBoundingBox(displayObject);
+		for (size_t i = 0; i < 6; ++i) {
+			if (!std::isfinite(bbox[i])) {
+				if (dbg) std::cout << "[debugGizmo] transformGizmoCenter: bbox contains non-finite value at " << i << ": " << bbox[i] << std::endl;
+				return false;
+			}
+		}
+		if (bbox[3] < bbox[0] || bbox[4] < bbox[1] || bbox[5] < bbox[2]) {
+			if (dbg) std::cout << "[debugGizmo] transformGizmoCenter: invalid bbox min/max: [" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "] -> [" << bbox[3] << "," << bbox[4] << "," << bbox[5] << "]" << std::endl;
+			return false;
+		}
+
+		const glm::vec3 localCenter((bbox[0] + bbox[3]) * 0.5f, (bbox[1] + bbox[4]) * 0.5f, (bbox[2] + bbox[5]) * 0.5f);
+		// The gizmo is drawn and picked in world/display coordinates. For children of a
+		// MyMultipleObject, the local bbox center must be transformed by the child model
+		// matrix; otherwise the middle/uneven datasets can be hit-tested or drawn at the
+		// wrong place and rotations make the gizmo/bbox relationship drift.
+		_center = glm::vec3(displayObject->getModelMatrix() * glm::vec4(localCenter, 1.f));
+		if (dbg) {
+			static unsigned int debugCenterCounter = 0;
+			if ((debugCenterCounter++ % 120) == 0) {
+				glm::vec2 screen = worldToScreenCoordinates(_center);
+				std::cout << "[debugGizmo] transformGizmoCenter: bbox=[" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "] -> [" << bbox[3] << "," << bbox[4] << "," << bbox[5] << "], center=" << glm::to_string(_center) << ", screenGL=(" << screen.x << "," << screen.y << "), screenQt=(" << screen.x << "," << (static_cast<float>(height()) - screen.y) << ")" << std::endl;
+			}
+		}
+		return true;
+	}
+
+	glm::vec3 Camera::transformGizmoAxis(const TransformGizmoElement _elem) const
+	{
+		glm::vec3 localAxis(0.f);
+		switch (_elem) {
+		case Gizmo_TranslateX: localAxis = glm::vec3(1.f, 0.f, 0.f); break;
+		case Gizmo_TranslateY: localAxis = glm::vec3(0.f, 1.f, 0.f); break;
+		case Gizmo_TranslateZ: localAxis = glm::vec3(0.f, 0.f, 1.f); break;
+		default: return glm::vec3(0.f);
+		}
+
+		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
+		if (displayObject != NULL) {
+			glm::vec3 worldAxis = glm::vec3(displayObject->getModelMatrix() * glm::vec4(localAxis, 0.f));
+			if (glm::dot(worldAxis, worldAxis) > 1e-8f)
+				return glm::normalize(worldAxis);
+		}
+		return localAxis;
+	}
+
+	glm::vec3 Camera::transformGizmoPlaneNormal(const TransformGizmoElement _elem) const
+	{
+		switch (_elem) {
+		case Gizmo_TranslateXY: {
+			glm::vec3 n = glm::cross(transformGizmoAxis(Gizmo_TranslateX), transformGizmoAxis(Gizmo_TranslateY));
+			return glm::dot(n, n) > 1e-8f ? glm::normalize(n) : glm::vec3(0.f, 0.f, 1.f);
+		}
+		case Gizmo_TranslateXZ: {
+			glm::vec3 n = glm::cross(transformGizmoAxis(Gizmo_TranslateX), transformGizmoAxis(Gizmo_TranslateZ));
+			return glm::dot(n, n) > 1e-8f ? glm::normalize(n) : glm::vec3(0.f, 1.f, 0.f);
+		}
+		case Gizmo_TranslateYZ: {
+			glm::vec3 n = glm::cross(transformGizmoAxis(Gizmo_TranslateY), transformGizmoAxis(Gizmo_TranslateZ));
+			return glm::dot(n, n) > 1e-8f ? glm::normalize(n) : glm::vec3(1.f, 0.f, 0.f);
+		}
+		case Gizmo_TranslateScreen:
+		case Gizmo_Rotate: {
+			glm::vec3 n = getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
+			return glm::length(n) > 0.f ? glm::normalize(n) : glm::vec3(0.f, 0.f, 1.f);
+		}
+		default: break;
+		}
+		return glm::vec3(0.f, 0.f, 1.f);
+	}
+
+	glm::vec3 Camera::screenPlaneDragDelta(const QPointF& _from, const QPointF& _to, const glm::vec3& _center) const
+	{
+		glm::vec3 right = glm::cross(m_stateCamera.m_up, m_stateCamera.m_eye);
+		if (glm::length(right) <= 0.f)
+			right = glm::vec3(1.f, 0.f, 0.f);
+		right = glm::normalize(right);
+		glm::vec3 up = glm::length(m_stateCamera.m_up) > 0.f ? glm::normalize(m_stateCamera.m_up) : glm::vec3(0.f, 1.f, 0.f);
+		const float s = worldUnitsPerScreenPixel(_center);
+		const float dx = static_cast<float>(_to.x() - _from.x());
+		const float dy = static_cast<float>(_to.y() - _from.y());
+		return right * dx * s - up * dy * s;
+	}
+
+	Camera::TransformGizmoElement Camera::hitTestTransformGizmo(const QPointF& _pos)
+	{
+		static bool testingSingleObject = false;
+		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
+		if (!testingSingleObject && multi != NULL && multi->nbColors() > 0) {
+			const size_t oldIndex = multi->currentObjectID();
+			testingSingleObject = true;
+			for (size_t n = 0; n < multi->nbColors(); ++n) {
+				multi->setCurrentObject(n);
+				TransformGizmoElement elem = hitTestTransformGizmo(_pos);
+				if (elem != Gizmo_None) {
+					testingSingleObject = false;
+					return elem;
+				}
+			}
+			multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
+			testingSingleObject = false;
+			return Gizmo_None;
+		}
+
+		glm::vec3 center;
+		if (!transformGizmoCenter(center))
+			return Gizmo_None;
+		const QPointF c(worldToScreenCoordinates(center).x, static_cast<float>(height()) - worldToScreenCoordinates(center).y);
+		const float arrowLen = 74.f, planeOffset = 34.f, planeSize = 28.f, circleRadius = 8.f, hit = 9.f, arcRadius = 100.f;
+		const float wupp = worldUnitsPerScreenPixel(center);
+		auto screenPoint = [&](const glm::vec3& p) {
+			glm::vec2 s = worldToScreenCoordinates(p);
+			return QPointF(s.x, static_cast<float>(height()) - s.y);
+		};
+		auto axisEnd = [&](const glm::vec3& a) {
+			return screenPoint(center + a * wupp * arrowLen);
+		};
+		auto distSeg = [](const QPointF& p, const QPointF& a, const QPointF& b) {
+			QPointF ab = b - a;
+			double den = ab.x() * ab.x() + ab.y() * ab.y();
+			double t = den > 0. ? ((p.x() - a.x()) * ab.x() + (p.y() - a.y()) * ab.y()) / den : 0.;
+			t = std::max(0., std::min(1., t));
+			QPointF q(a.x() + ab.x() * t, a.y() + ab.y() * t);
+			return std::hypot(p.x() - q.x(), p.y() - q.y());
+		};
+		if (std::hypot(_pos.x() - c.x(), _pos.y() - c.y()) <= circleRadius + hit)
+			return Gizmo_TranslateScreen;
+		double dArc = std::abs(std::hypot(_pos.x() - c.x(), _pos.y() - c.y()) - arcRadius);
+		auto distProjectedCircle = [&](const glm::vec3& a, const glm::vec3& b) {
+			double best = 1e30;
+			const float rWorld = wupp * arcRadius;
+			QPointF prevPt;
+			for (int i = 0; i <= 96; ++i) {
+				const float t = static_cast<float>(6.2831853071795864769 * double(i) / 96.0);
+				QPointF curPt = screenPoint(center + (a * std::cos(t) + b * std::sin(t)) * rWorld);
+				if (i > 0)
+					best = std::min(best, distSeg(_pos, prevPt, curPt));
+				prevPt = curPt;
+			}
+			return best;
+		};
+		if (dArc <= hit ||
+			distProjectedCircle(glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, 0.f, 1.f)) <= hit ||
+			distProjectedCircle(glm::vec3(1.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f)) <= hit ||
+			distProjectedCircle(glm::vec3(1.f, 0.f, 0.f), glm::vec3(0.f, 1.f, 0.f)) <= hit)
+			return Gizmo_Rotate;
+		QPointF ex = axisEnd(transformGizmoAxis(Gizmo_TranslateX));
+		QPointF ey = axisEnd(transformGizmoAxis(Gizmo_TranslateY));
+		if (distSeg(_pos, c, ex) <= hit) return Gizmo_TranslateX;
+		if (distSeg(_pos, c, ey) <= hit) return Gizmo_TranslateY;
+		if (m_dimension == 3) {
+			QPointF ez = axisEnd(transformGizmoAxis(Gizmo_TranslateZ));
+			if (distSeg(_pos, c, ez) <= hit) return Gizmo_TranslateZ;
+		}
+		auto planePath = [&](const glm::vec3& a, const glm::vec3& b) {
+			const glm::vec3 o = center + (a + b) * wupp * planeOffset;
+			const glm::vec3 da = a * wupp * planeSize * .5f;
+			const glm::vec3 db = b * wupp * planeSize * .5f;
+			QPolygonF poly;
+			poly << screenPoint(o - da - db) << screenPoint(o + da - db) << screenPoint(o + da + db) << screenPoint(o - da + db);
+			QPainterPath path;
+			path.addPolygon(poly);
+			path.closeSubpath();
+			return path;
+		};
+		if (planePath(transformGizmoAxis(Gizmo_TranslateX), transformGizmoAxis(Gizmo_TranslateY)).contains(_pos)) return Gizmo_TranslateXY;
+		if (m_dimension == 3 && planePath(transformGizmoAxis(Gizmo_TranslateX), transformGizmoAxis(Gizmo_TranslateZ)).contains(_pos)) return Gizmo_TranslateXZ;
+		if (m_dimension == 3 && planePath(transformGizmoAxis(Gizmo_TranslateY), transformGizmoAxis(Gizmo_TranslateZ)).contains(_pos)) return Gizmo_TranslateYZ;
+		return Gizmo_None;
+	}
+
+	void Camera::applyTransformGizmoDrag(const QPointF& _pos)
+	{
+		if (m_object == nullptr || m_object->currentObject() == nullptr)
+			return;
+		const QPointF prev = m_transformGizmoDragPrevious;
+		glm::vec3 delta(0.f);
+		if (m_activeTransformGizmo == Gizmo_Rotate) {
+			const QPointF c(worldToScreenCoordinates(m_transformGizmoWorldCenter).x, static_cast<float>(height()) - worldToScreenCoordinates(m_transformGizmoWorldCenter).y);
+			const float radius = 100.f;
+			auto pointOnGizmoSphere = [&](const QPointF& p) {
+				float x = static_cast<float>((p.x() - c.x()) / radius);
+				float y = static_cast<float>((c.y() - p.y()) / radius);
+				float len2 = x * x + y * y;
+				float z = len2 <= .5f ? std::sqrt(1.f - len2) : .5f / std::sqrt(std::max(len2, 1e-6f));
+				glm::vec3 v(x, y, z);
+				return glm::normalize(v);
+			};
+			glm::vec3 start = pointOnGizmoSphere(prev);
+			glm::vec3 stop = pointOnGizmoSphere(_pos);
+			glm::vec3 axisLocal = glm::cross(start, stop);
+			const float axisLen = glm::length(axisLocal);
+			if (axisLen > 1e-5f) {
+				axisLocal /= axisLen;
+				const float angle = std::acos(std::max(-1.f, std::min(1.f, glm::dot(start, stop))));
+				glm::vec3 view = glm::length(m_stateCamera.m_eye) > 0.f ? glm::normalize(m_stateCamera.m_eye) : glm::vec3(0.f, 0.f, 1.f);
+				glm::vec3 up = glm::length(m_stateCamera.m_up) > 0.f ? glm::normalize(m_stateCamera.m_up) : glm::vec3(0.f, 1.f, 0.f);
+				glm::vec3 right = glm::cross(up, view);
+				if (glm::length(right) < 1e-5f) right = glm::vec3(1.f, 0.f, 0.f);
+				right = glm::normalize(right);
+				up = glm::normalize(glm::cross(view, right));
+				glm::vec3 axisWorld = glm::normalize(right * axisLocal.x + up * axisLocal.y + view * axisLocal.z);
+				glm::mat4 rotationDelta = glm::rotate(glm::mat4(1.f), angle, axisWorld);
+				if (m_object->rotateCurrentObjectBy(rotationDelta)) {
+					poca::core::CommandInfo ci(false, "updateTransform");
+					m_object->executeGlobalCommand(&ci);
+				}
+			}
+			m_transformGizmoDragPrevious = _pos;
+			return;
+		}
+		delta = screenPlaneDragDelta(prev, _pos, m_transformGizmoWorldCenter);
+		if (m_activeTransformGizmo == Gizmo_TranslateX || m_activeTransformGizmo == Gizmo_TranslateY || m_activeTransformGizmo == Gizmo_TranslateZ) {
+			glm::vec3 axis = transformGizmoAxis(m_activeTransformGizmo);
+			delta = glm::dot(delta, axis) * axis;
+		}
+		else if (m_activeTransformGizmo == Gizmo_TranslateXY || m_activeTransformGizmo == Gizmo_TranslateXZ || m_activeTransformGizmo == Gizmo_TranslateYZ) {
+			glm::vec3 n = transformGizmoPlaneNormal(m_activeTransformGizmo);
+			delta = delta - glm::dot(delta, n) * n;
+		}
+		if (glm::length(delta) > 0.f && m_object->translateCurrentObjectBy(-delta)) {
+			// MyObject stores translation with the opposite sign in its model matrix.
+			// Keep the gizmo visually under the cursor while sending the inverse delta to the object.
+			m_transformGizmoWorldCenter += delta;
+			poca::core::CommandInfo ci(false, "updateTransform");
+			m_object->executeGlobalCommand(&ci);
+		}
+		m_transformGizmoDragPrevious = _pos;
+	}
+
+
+	void Camera::drawClippingPlaneHandles()
+	{
+		if (width() <= 0 || height() <= 0 || m_clip.empty())
+			return;
+
+		GLint previousFbo = 0;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+		glViewport(0, 0, width(), height());
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_STENCIL_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUseProgram(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+		glFlush();
+
+		QPainter painter(this);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+		GLfloat bkColor[4];
+		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
+		const float luminance = 0.2126f * bkColor[0] + 0.7152f * bkColor[1] + 0.0722f * bkColor[2];
+		const QColor baseColor = luminance > 0.5f ? QColor(30, 30, 30, 220) : QColor(240, 240, 240, 230);
+		const QColor activeColor = QColor(255, 80, 30, 240);
+
+		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		const float mn[3] = { translatedBBox[0], translatedBBox[1], translatedBBox[2] };
+		const float mx[3] = { translatedBBox[3], translatedBBox[4], translatedBBox[5] };
+
+		for (int i = 0; i < (int)m_clip.size() && i < 6; ++i) {
+			const glm::vec3 n(m_clip[i].x, m_clip[i].y, m_clip[i].z);
+			int axis = std::abs(n.x) > 0.5f ? 0 : (std::abs(n.y) > 0.5f ? 1 : 2);
+			const float coord = std::abs(n[axis]) < 1e-6f ? 0.f : -m_clip[i].w / n[axis];
+			glm::vec3 c((mn[0] + mx[0]) * 0.5f, (mn[1] + mx[1]) * 0.5f, (mn[2] + mx[2]) * 0.5f);
+			c[axis] = coord;
+
+			glm::vec3 u(0.f), v(0.f);
+			if (axis == 0) { u.y = mx[1] - mn[1]; v.z = mx[2] - mn[2]; }
+			else if (axis == 1) { u.x = mx[0] - mn[0]; v.z = mx[2] - mn[2]; }
+			else { u.x = mx[0] - mn[0]; v.y = mx[1] - mn[1]; }
+
+			const glm::vec3 p3d[4] = { c - 0.5f * u - 0.5f * v, c + 0.5f * u - 0.5f * v, c + 0.5f * u + 0.5f * v, c - 0.5f * u + 0.5f * v };
+			QPolygonF poly;
+			for (int k = 0; k < 4; ++k) {
+				glm::vec2 sp = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, p3d[k]);
+				poly << QPointF(sp.x, height() - sp.y);
+			}
+
+			QColor col = (i == m_hoveredClippingPlane || i == m_activeClippingPlane) ? activeColor : baseColor;
+			QPen pen(col, (i == m_hoveredClippingPlane || i == m_activeClippingPlane) ? 3.0 : 1.5);
+			painter.setPen(pen);
+			painter.setBrush(QColor(col.red(), col.green(), col.blue(), (i == m_hoveredClippingPlane || i == m_activeClippingPlane) ? 95 : 65));
+			painter.drawPolygon(poly);
+
+			glm::vec2 c0 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c);
+			glm::vec3 nUnit = glm::normalize(n);
+			float arrowLen = worldUnitsPerScreenPixel(c) * 45.f;
+			glm::vec2 c1 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c + nUnit * arrowLen);
+			QPointF q0(c0.x, height() - c0.y), q1(c1.x, height() - c1.y);
+			painter.setBrush(col);
+			painter.drawLine(q0, q1);
+			QLineF line(q0, q1);
+			if (line.length() > 1.0) {
+				line.setLength(10.0);
+				line.setAngle(line.angle() + 150.0);
+				painter.drawLine(q1, line.p2());
+				line.setAngle(line.angle() - 300.0);
+				painter.drawLine(q1, line.p2());
+			}
+		}
+		painter.end();
+		glBindFramebuffer(GL_FRAMEBUFFER, previousFbo);
+	}
+
+	int Camera::hitTestClippingPlaneHandle(const QPointF& _pos) const
+	{
+		if (!m_displayClippingPlanes || m_clip.empty())
+			return -1;
+		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		const float mn[3] = { translatedBBox[0], translatedBBox[1], translatedBBox[2] };
+		const float mx[3] = { translatedBBox[3], translatedBBox[4], translatedBBox[5] };
+		int best = -1;
+		double bestDist = 14.0;
+		for (int i = 0; i < (int)m_clip.size() && i < 6; ++i) {
+			const glm::vec3 n(m_clip[i].x, m_clip[i].y, m_clip[i].z);
+			int axis = std::abs(n.x) > 0.5f ? 0 : (std::abs(n.y) > 0.5f ? 1 : 2);
+			const float coord = std::abs(n[axis]) < 1e-6f ? 0.f : -m_clip[i].w / n[axis];
+			glm::vec3 c((mn[0] + mx[0]) * 0.5f, (mn[1] + mx[1]) * 0.5f, (mn[2] + mx[2]) * 0.5f);
+			c[axis] = coord;
+			glm::vec2 sp = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c);
+			QPointF q(sp.x, height() - sp.y);
+			double d = QLineF(q, _pos).length();
+			if (d < bestDist) { bestDist = d; best = i; }
+		}
+		return best;
+	}
+
+	void Camera::applyClippingPlaneDrag(const QPointF& _pos)
+	{
+		if (m_activeClippingPlane < 0 || m_activeClippingPlane >= (int)m_clip.size())
+			return;
+		glm::vec3 n(m_clip[m_activeClippingPlane].x, m_clip[m_activeClippingPlane].y, m_clip[m_activeClippingPlane].z);
+		if (glm::dot(n, n) < 1e-8f)
+			return;
+		n = glm::normalize(n);
+
+		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		glm::vec3 c((translatedBBox[0] + translatedBBox[3]) * 0.5f, (translatedBBox[1] + translatedBBox[4]) * 0.5f, (translatedBBox[2] + translatedBBox[5]) * 0.5f);
+		int axis = std::abs(n.x) > 0.5f ? 0 : (std::abs(n.y) > 0.5f ? 1 : 2);
+		c[axis] = -m_clip[m_activeClippingPlane].w / (std::abs(n[axis]) < 1e-6f ? 1.f : n[axis]);
+
+		glm::vec2 s0 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c);
+		glm::vec2 s1 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c + n * worldUnitsPerScreenPixel(c) * 50.f);
+		glm::vec2 screenAxis(s1.x - s0.x, -(s1.y - s0.y));
+		if (glm::dot(screenAxis, screenAxis) < 1e-8f)
+			return;
+		screenAxis = glm::normalize(screenAxis);
+		glm::vec2 delta((float)(_pos.x() - m_clippingPlaneDragPrevious.x()), (float)(_pos.y() - m_clippingPlaneDragPrevious.y()));
+		float signedPixels = glm::dot(delta, screenAxis);
+		float worldDelta = signedPixels * worldUnitsPerScreenPixel(c);
+		m_clip[m_activeClippingPlane].w -= worldDelta;
+		m_clippingPlaneDragPrevious = _pos;
+	}
+
+	void Camera::drawTransformGizmos()
+	{
+		static bool drawingSingleObject = false;
+		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
+		if (!drawingSingleObject && multi != NULL && multi->nbColors() > 0) {
+			const size_t selectedIndex = multi->currentObjectID();
+			const TransformGizmoElement savedHover = m_hoveredTransformGizmo;
+			const TransformGizmoElement savedActive = m_activeTransformGizmo;
+			drawingSingleObject = true;
+			for (size_t n = 0; n < multi->nbColors(); ++n) {
+				multi->setCurrentObject(n);
+				if (n != selectedIndex) {
+					m_hoveredTransformGizmo = Gizmo_None;
+					m_activeTransformGizmo = Gizmo_None;
+				}
+				else {
+					m_hoveredTransformGizmo = savedHover;
+					m_activeTransformGizmo = savedActive;
+				}
+				drawTransformGizmos();
+			}
+			multi->setCurrentObject(selectedIndex < multi->nbColors() ? selectedIndex : 0);
+			m_hoveredTransformGizmo = savedHover;
+			m_activeTransformGizmo = savedActive;
+			drawingSingleObject = false;
+			return;
+		}
+
+		const bool dbg = poca::core::Engine::instance()->verbose("debugGizmo");
+		glm::vec3 center;
+		if (!transformGizmoCenter(center)) {
+			if (dbg) std::cout << "[debugGizmo] drawTransformGizmos: no valid center, skip drawing" << std::endl;
+			return;
+		}
+		if (width() <= 0 || height() <= 0) {
+			if (dbg) std::cout << "[debugGizmo] drawTransformGizmos: invalid widget size " << width() << "x" << height() << ", skip drawing" << std::endl;
+			return;
+		}
+
+		// Reset OpenGL state that may have been changed by the scene/overlay pass.
+		// QPainter-on-QOpenGLWidget is very sensitive to stale GL state. In particular,
+		// some object display commands can leave color/depth/stencil/cull/scissor state
+		// in a configuration where the painter is active but writes nothing visible on
+		// later repaints. Force a conservative 2D-overlay state before creating QPainter.
+		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+		glViewport(0, 0, width(), height());
+		glScissor(0, 0, width(), height());
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		glDisable(GL_SAMPLE_COVERAGE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUseProgram(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+		glFlush();
+
+		QPainter painter(this);
+		if (dbg) {
+			static unsigned int debugDrawCounter = 0;
+			if ((debugDrawCounter++ % 60) == 0) {
+				GLint boundFbo = 0, viewport[4] = { 0, 0, 0, 0 };
+				GLboolean colorMask[4] = { GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE };
+				GLboolean depthMask = GL_FALSE;
+				glGetIntegerv(GL_FRAMEBUFFER_BINDING, &boundFbo);
+				glGetIntegerv(GL_VIEWPORT, viewport);
+				glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+				glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+				std::cout << "[debugGizmo] drawTransformGizmos: painterActive=" << painter.isActive()
+					<< ", defaultFBO=" << defaultFramebufferObject()
+					<< ", boundFBO=" << boundFbo
+					<< ", viewport=[" << viewport[0] << "," << viewport[1] << "," << viewport[2] << "," << viewport[3] << "]"
+					<< ", colorMask=[" << int(colorMask[0]) << "," << int(colorMask[1]) << "," << int(colorMask[2]) << "," << int(colorMask[3]) << "]"
+					<< ", depthMask=" << int(depthMask)
+					<< ", depthTest=" << glIsEnabled(GL_DEPTH_TEST)
+					<< ", scissor=" << glIsEnabled(GL_SCISSOR_TEST)
+					<< ", stencil=" << glIsEnabled(GL_STENCIL_TEST)
+					<< ", cull=" << glIsEnabled(GL_CULL_FACE)
+					<< ", blend=" << glIsEnabled(GL_BLEND)
+					<< ", size=" << width() << "x" << height() << std::endl;
+			}
+		}
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+		glm::vec2 centerScreen = worldToScreenCoordinates(center);
+		const QPointF c(centerScreen.x, static_cast<float>(height()) - centerScreen.y);
+		if (dbg) {
+			static unsigned int debugScreenCounter = 0;
+			if ((debugScreenCounter++ % 60) == 0)
+				std::cout << "[debugGizmo] drawTransformGizmos: centerWorld=" << glm::to_string(center) << ", centerQt=(" << c.x() << "," << c.y() << "), worldUnitsPerPixel=" << worldUnitsPerScreenPixel(center) << ", hovered=" << m_hoveredTransformGizmo << ", active=" << m_activeTransformGizmo << std::endl;
+		}
+		QColor highlight = palette().color(QPalette::Window).lightness() > 128 ? Qt::black : Qt::white;
+		if (dbg) {
+			painter.setPen(QPen(highlight, 1.0));
+			painter.drawText(QPointF(10.0, 20.0), QString("debugGizmo overlay active"));
+		}
+		const QColor red(240, 60, 40), green(90, 230, 70), blue(70, 120, 255), gray(170, 170, 170);
+		const float arrowLen = 74.f, planeOffset = 34.f, planeSize = 28.f, arcRadius = 100.f;
+		auto screenForAxis = [&](const glm::vec3& a) {
+			glm::vec2 s = worldToScreenCoordinates(center + a * worldUnitsPerScreenPixel(center) * arrowLen);
+			return QPointF(s.x, static_cast<float>(height()) - s.y);
+		};
+		auto drawArrow = [&](const glm::vec3& axis, const QColor& base, TransformGizmoElement e) {
+			const QPointF end = screenForAxis(axis);
+			const QColor col = (m_hoveredTransformGizmo == e || m_activeTransformGizmo == e) ? highlight : base;
+			painter.setPen(QPen(col, 3.0, Qt::SolidLine, Qt::RoundCap));
+			painter.drawLine(c, end);
+			QPointF v = end - c;
+			double l = std::hypot(v.x(), v.y());
+			if (l > 1.) {
+				v /= l;
+				QPointF n(-v.y(), v.x());
+				QPolygonF tri; tri << end << end - v * 14. + n * 6. << end - v * 14. - n * 6.;
+				painter.setBrush(QBrush(col));
+				painter.drawPolygon(tri);
+			}
+		};
+		auto drawPlane = [&](const glm::vec3& a, const glm::vec3& b, const QColor& base, TransformGizmoElement e) {
+			const float wupp = worldUnitsPerScreenPixel(center);
+			const glm::vec3 o = center + (a + b) * wupp * planeOffset;
+			const glm::vec3 da = a * wupp * planeSize * .5f;
+			const glm::vec3 db = b * wupp * planeSize * .5f;
+			QPolygonF poly;
+			poly << screenForAxis((o - da - db - center) / (wupp * arrowLen))
+				 << screenForAxis((o + da - db - center) / (wupp * arrowLen))
+				 << screenForAxis((o + da + db - center) / (wupp * arrowLen))
+				 << screenForAxis((o - da + db - center) / (wupp * arrowLen));
+			QColor col = (m_hoveredTransformGizmo == e || m_activeTransformGizmo == e) ? highlight : base;
+			painter.setPen(QPen(col, 2.0));
+			QColor fill = col; fill.setAlpha(35);
+			painter.setBrush(fill);
+			painter.drawPolygon(poly);
+		};
+		// Plane handles use the color of the axis they are orthogonal to:
+		// XY -> blue, XZ -> green, YZ -> red.
+		const glm::vec3 axisX = transformGizmoAxis(Gizmo_TranslateX);
+		const glm::vec3 axisY = transformGizmoAxis(Gizmo_TranslateY);
+		const glm::vec3 axisZ = transformGizmoAxis(Gizmo_TranslateZ);
+		drawPlane(axisX, axisY, blue, Gizmo_TranslateXY);
+		if (m_dimension == 3) {
+			drawPlane(axisX, axisZ, green, Gizmo_TranslateXZ);
+			drawPlane(axisY, axisZ, red, Gizmo_TranslateYZ);
+		}
+		drawArrow(axisX, red, Gizmo_TranslateX);
+		drawArrow(axisY, green, Gizmo_TranslateY);
+		if (m_dimension == 3) drawArrow(axisZ, blue, Gizmo_TranslateZ);
+		const bool rotateHighlighted = (m_hoveredTransformGizmo == Gizmo_Rotate || m_activeTransformGizmo == Gizmo_Rotate);
+		auto drawProjectedCircle = [&](const glm::vec3& a, const glm::vec3& b, const QColor& base, double width) {
+			QPolygonF poly;
+			const float rWorld = worldUnitsPerScreenPixel(center) * arcRadius;
+			for (int i = 0; i <= 96; ++i) {
+				const float t = static_cast<float>(6.2831853071795864769 * double(i) / 96.0);
+				glm::vec3 p = center + (a * std::cos(t) + b * std::sin(t)) * rWorld;
+				glm::vec2 ss = worldToScreenCoordinates(p);
+				poly << QPointF(ss.x, static_cast<float>(height()) - ss.y);
+			}
+			painter.setPen(QPen(rotateHighlighted ? highlight : base, width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+			painter.setBrush(Qt::NoBrush);
+			painter.drawPolyline(poly);
+		};
+		// Trackball-style rotation: draw the three world-axis great circles.
+		// Hovering any ring highlights all rings; dragging on any ring uses free trackball rotation.
+		drawProjectedCircle(axisY, axisZ, red, 4.0);
+		drawProjectedCircle(axisX, axisZ, green, 4.0);
+		drawProjectedCircle(axisX, axisY, blue, 4.0);
+		QRectF arc(c.x() - arcRadius, c.y() - arcRadius, arcRadius * 2.f, arcRadius * 2.f);
+		painter.setPen(QPen(rotateHighlighted ? highlight : gray, 2.0));
+		painter.setBrush(Qt::NoBrush);
+		painter.drawEllipse(arc);
+		QColor centerColor = (m_hoveredTransformGizmo == Gizmo_TranslateScreen || m_activeTransformGizmo == Gizmo_TranslateScreen) ? highlight : red;
+		painter.setPen(QPen(Qt::white, 1.5));
+		painter.setBrush(QBrush(centerColor));
+		painter.drawEllipse(c, 7.5, 7.5);
+		painter.end();
+		glFlush();
+	}
+
 	void Camera::setCameraInteraction(const int _val) 
 	{
 		m_currentInteractionMode = _val;
@@ -3474,4 +4336,3 @@ namespace poca::opengl {
 		m_matrixModel = _matrix;
 	}
 }
-
