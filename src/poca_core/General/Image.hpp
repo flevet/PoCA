@@ -100,6 +100,7 @@ namespace poca::core {
 		enum class DownsampleMode : uint8_t {
 			Average,     // intensity
 			Nearest,     // labels / fast
+			MIP,         // maximum intensity / maximum ID in block
 			Majority     // labels (slow but better IDs)
 		};
 
@@ -310,6 +311,22 @@ namespace poca::core {
 						continue;
 					}
 
+					if (mode == DownsampleMode::MIP) {
+						T maxVal = srcData[idxSrc(std::min(sx0, src.w - 1), std::min(sy0, src.h - 1), std::min(sz0, src.d - 1))];
+						for (uint32_t dz = 0; dz < fz; ++dz) {
+							uint32_t sz = std::min(sz0 + dz, src.d - 1);
+							for (uint32_t dy = 0; dy < fy; ++dy) {
+								uint32_t sy = std::min(sy0 + dy, src.h - 1);
+								for (uint32_t dx = 0; dx < fx; ++dx) {
+									uint32_t sx = std::min(sx0 + dx, src.w - 1);
+									maxVal = std::max(maxVal, srcData[idxSrc(sx, sy, sz)]);
+								}
+							}
+						}
+						dst.data[idxDst(x, y, z)] = maxVal;
+						continue;
+					}
+
 					if (mode == DownsampleMode::Majority) {
 						if constexpr (!std::is_integral_v<T>) {
 							const uint32_t sx = std::min(sx0, src.w - 1);
@@ -407,6 +424,7 @@ namespace poca::core {
 
 		// Average: good for intensity
 		// Nearest: fast and safe for labels
+		// MIP: preserves bright/raw maxima and can keep non-zero labels visible
 		// Majority: more correct for labels (IDs), more expensive
 		for (uint32_t z = 0; z < dst.d; ++z) {
 			for (uint32_t y = 0; y < dst.h; ++y) {
@@ -420,6 +438,22 @@ namespace poca::core {
 						const uint32_t sy = std::min(sy0, src.h - 1);
 						const uint32_t sz = std::min(sz0, src.d - 1);
 						dst.data[idxDst(x, y, z)] = src.data[idxSrc(sx, sy, sz)];
+						continue;
+					}
+
+					if (mode == DownsampleMode::MIP) {
+						T maxVal = src.data[idxSrc(std::min(sx0, src.w - 1), std::min(sy0, src.h - 1), std::min(sz0, src.d - 1))];
+						for (uint32_t dz = 0; dz < fz; ++dz) {
+							uint32_t sz = std::min(sz0 + dz, src.d - 1);
+							for (uint32_t dy = 0; dy < fy; ++dy) {
+								uint32_t sy = std::min(sy0 + dy, src.h - 1);
+								for (uint32_t dx = 0; dx < fx; ++dx) {
+									uint32_t sx = std::min(sx0 + dx, src.w - 1);
+									maxVal = std::max(maxVal, src.data[idxSrc(sx, sy, sz)]);
+								}
+							}
+						}
+						dst.data[idxDst(x, y, z)] = maxVal;
 						continue;
 					}
 
@@ -870,4 +904,3 @@ namespace poca::core {
 }
 
 #endif
-
