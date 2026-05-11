@@ -13,11 +13,21 @@
 #include "LodUpdateManager.hpp"
 
 #include <algorithm>
+#include <iostream>
 #include <QtCore/QMetaObject>
+
+#include <General/Engine.hpp>
 
 #include "Camera.hpp"
 
 namespace poca::opengl {
+	namespace {
+		bool lodDebugEnabled()
+		{
+			poca::core::Engine* engine = poca::core::Engine::instance();
+			return engine->verbose("debugPyramidalRendering") || engine->verbose("lodDebug");
+		}
+	}
 
 	LodUpdateManager::LodUpdateManager(Camera* _camera)
 		: m_camera(_camera)
@@ -54,6 +64,8 @@ namespace poca::opengl {
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
 			state.priority = std::max(state.priority, _request.priority);
 			state.lastVisibleFrame = _frameIndex;
+			if (lodDebugEnabled())
+				std::cout << "[PoCA][ImageLOD][queue-skip-same] " << _request << " queueSize=" << m_requests.size() << " readySize=" << m_ready.size() << std::endl;
 			return state.latestVersion;
 		}
 
@@ -68,6 +80,16 @@ namespace poca::opengl {
 		ImageLodRequest queued = _request;
 		queued.requestVersion = state.latestVersion;
 		m_requests.push(std::move(queued));
+		if (lodDebugEnabled())
+			std::cout << "[PoCA][ImageLOD][queue-push] imageID=" << _request.imageId
+				<< " level=" << _request.requestedLevel
+				<< " version=" << state.latestVersion
+				<< " priority=" << _request.priority
+				<< " target=" << _request.targetDims.x << "x" << _request.targetDims.y << "x" << _request.targetDims.z
+				<< " visible=" << (_request.visible ? 1 : 0)
+				<< " queueSize=" << m_requests.size()
+				<< " readySize=" << m_ready.size()
+				<< std::endl;
 		m_condition.notify_one();
 		//std::cout << "request = " << queued << std::endl;
 		return state.latestVersion;
@@ -124,6 +146,8 @@ namespace poca::opengl {
 				continue;
 
 			_request = request;
+			if (lodDebugEnabled())
+				std::cout << "[PoCA][ImageLOD][queue-pop] " << _request << " remainingQueue=" << m_requests.size() << std::endl;
 			return true;
 		}
 
@@ -146,11 +170,15 @@ namespace poca::opengl {
 		std::vector<ImageLodReady> ready;
 		if (_maxUploads == 0 || _maxUploads >= m_ready.size()) {
 			ready.swap(m_ready);
+			if (lodDebugEnabled() && !ready.empty())
+				std::cout << "[PoCA][ImageLOD][ready-drain] count=" << ready.size() << " remainingReady=" << m_ready.size() << std::endl;
 			return ready;
 		}
 
 		ready.insert(ready.end(), m_ready.begin(), m_ready.begin() + _maxUploads);
 		m_ready.erase(m_ready.begin(), m_ready.begin() + _maxUploads);
+		if (lodDebugEnabled() && !ready.empty())
+			std::cout << "[PoCA][ImageLOD][ready-drain] count=" << ready.size() << " remainingReady=" << m_ready.size() << std::endl;
 		return ready;
 	}
 
@@ -177,6 +205,8 @@ namespace poca::opengl {
 
 		it->second.status = LodRequestStatus::Ready;
 		m_ready.push_back(_ready);
+		if (lodDebugEnabled())
+			std::cout << "[PoCA][ImageLOD][ready-push] " << _ready << " readySize=" << m_ready.size() << std::endl;
 	}
 
 	void LodUpdateManager::markUploaded(uint64_t _imageId, uint32_t _displayedLevel)
@@ -243,6 +273,8 @@ namespace poca::opengl {
 
 				it->second.status = LodRequestStatus::Ready;
 				m_ready.push_back(ready);
+				if (lodDebugEnabled())
+					std::cout << "[PoCA][ImageLOD][worker-ready] " << ready << " readySize=" << m_ready.size() << std::endl;
 			}
 
 			if (m_camera != nullptr)

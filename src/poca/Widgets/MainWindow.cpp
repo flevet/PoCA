@@ -57,6 +57,8 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QActionGroup>
+#include <QtWidgets/QInputDialog>
+#include <QtWidgets/QLineEdit>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
@@ -366,6 +368,8 @@ MainWindow::~MainWindow()
 	m_datasetAssemblerW->saveParameters(parameters);
 	if (m_pythonW != NULL)
 		m_pythonW->execute(&command, runtimeContext);
+	parameters["Preferences"]["verbose"] = engine->verboseEnabled();
+	parameters["Preferences"]["verboseTypes"] = engine->verboseTypes();
 
 	std::string text = parameters.dump(), textDisplay = parameters.dump(4);
 	std::cout << textDisplay << std::endl;
@@ -380,6 +384,8 @@ void MainWindow::closeEvent(QCloseEvent * event)
 
 void MainWindow::createActions()
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
+
 	m_openFileAct = new QAction(QIcon(QPixmap(poca::plot::openFileIcon)), tr("&Open file"), this);
 	m_openFileAct->setShortcuts(QKeySequence::Open);
 	m_openFileAct->setStatusTip(tr("Open an existing file"));
@@ -421,6 +427,26 @@ void MainWindow::createActions()
 	m_exitAct->setShortcuts(QKeySequence::Quit);
 	m_exitAct->setStatusTip(tr("Exit the application"));
 	connect(m_exitAct, SIGNAL(triggered()), qApp, SLOT(closeAllWindows()));
+
+	m_verboseAct = new QAction(tr("Verbose"), this);
+	m_verboseAct->setCheckable(true);
+	m_verboseAct->setChecked(engine->verboseEnabled());
+	m_verboseAct->setStatusTip(tr("Enable verbose output"));
+	QObject::connect(m_verboseAct, SIGNAL(toggled(bool)), this, SLOT(toggleVerbose(bool)));
+
+	m_addVerboseTypeAct = new QAction(tr("Add verbose type..."), this);
+	m_addVerboseTypeAct->setStatusTip(tr("Add a verbose output type filter"));
+	QObject::connect(m_addVerboseTypeAct, SIGNAL(triggered()), this, SLOT(addVerboseType()));
+
+	m_clearVerboseTypesAct = new QAction(tr("Clear verbose types"), this);
+	m_clearVerboseTypesAct->setStatusTip(tr("Clear verbose output type filters"));
+	QObject::connect(m_clearVerboseTypesAct, SIGNAL(triggered()), this, SLOT(clearVerboseTypes()));
+
+	m_debugPyramidalRenderingAct = new QAction(tr("debugPyramidalRendering"), this);
+	m_debugPyramidalRenderingAct->setCheckable(true);
+	m_debugPyramidalRenderingAct->setChecked(engine->hasVerboseType("debugPyramidalRendering"));
+	m_debugPyramidalRenderingAct->setStatusTip(tr("Print pyramidal rendering diagnostics"));
+	QObject::connect(m_debugPyramidalRenderingAct, SIGNAL(toggled(bool)), this, SLOT(toggleDebugPyramidalRendering(bool)));
 
 	m_cropAct = new QAction(QIcon("./images/crop.png"), tr("&Crop"), this);
 	m_cropAct->setCheckable(true);
@@ -542,6 +568,14 @@ void MainWindow::createMenus()
 	openMenu->addAction(m_openDirAct);
 	openMenu->addAction(m_plusAct);
 
+	QMenu* preferencesMenu = menuB->addMenu("Preferences");
+	QMenu* verboseMenu = preferencesMenu->addMenu("Verbose");
+	verboseMenu->addAction(m_verboseAct);
+	verboseMenu->addSeparator();
+	verboseMenu->addAction(m_debugPyramidalRenderingAct);
+	verboseMenu->addAction(m_addVerboseTypeAct);
+	verboseMenu->addAction(m_clearVerboseTypesAct);
+
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
 	for (size_t n = 0; n < plugins.size(); n++) {
@@ -588,6 +622,43 @@ void MainWindow::createMenus()
 		}
 	}
 
+}
+
+void MainWindow::toggleVerbose(bool _enabled)
+{
+	poca::core::Engine::instance()->setVerbose(_enabled);
+}
+
+void MainWindow::addVerboseType()
+{
+	bool ok = false;
+	const QString type = QInputDialog::getText(this, tr("Verbose type"), tr("Type:"), QLineEdit::Normal, QString(), &ok);
+	if (!ok)
+		return;
+
+	const QString trimmed = type.trimmed();
+	if (trimmed.isEmpty())
+		return;
+
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	engine->addVerboseType(trimmed.toStdString());
+	if (trimmed == "debugPyramidalRendering")
+		m_debugPyramidalRenderingAct->setChecked(true);
+}
+
+void MainWindow::clearVerboseTypes()
+{
+	poca::core::Engine::instance()->clearVerboseTypes();
+	m_debugPyramidalRenderingAct->setChecked(false);
+}
+
+void MainWindow::toggleDebugPyramidalRendering(bool _enabled)
+{
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	if (_enabled)
+		engine->addVerboseType("debugPyramidalRendering");
+	else
+		engine->removeVerboseType("debugPyramidalRendering");
 }
 
 void MainWindow::createToolBars()

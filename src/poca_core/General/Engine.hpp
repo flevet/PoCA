@@ -162,12 +162,18 @@ namespace poca::core {
 				return m_verbose;
 			if (_type.empty())
 				return m_verbose;
+			if (m_verboseTypes.empty())
+				return m_verbose;
 			return std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) != m_verboseTypes.end();
 		}
 		inline void setVerbose(const bool _val) { m_verbose = _val; }
+		inline bool verboseEnabled() const { return m_verbose; }
 		inline void addVerboseType(const std::string& _type) {
 			if (std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) == m_verboseTypes.end())
 				m_verboseTypes.push_back(_type);
+		}
+		inline bool hasVerboseType(const std::string& _type) const {
+			return std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) != m_verboseTypes.end();
 		}
 		inline void removeVerboseType(const std::string& _type) {
 			m_verboseTypes.erase(std::remove(m_verboseTypes.begin(), m_verboseTypes.end(), _type), m_verboseTypes.end());
@@ -207,4 +213,3 @@ namespace poca::core {
 }
 
 #endif
-

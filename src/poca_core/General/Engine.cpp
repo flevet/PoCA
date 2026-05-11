@@ -160,6 +160,17 @@ namespace poca::core {
 		if (fs.good())
 			fs >> m_globalParameters;
 		fs.close();
+		if (m_globalParameters.contains("Preferences")) {
+			const nlohmann::json& preferences = m_globalParameters["Preferences"];
+			if (preferences.contains("verbose"))
+				m_verbose = preferences["verbose"].get<bool>();
+			if (preferences.contains("verboseTypes") && preferences["verboseTypes"].is_array()) {
+				m_verboseTypes.clear();
+				for (const auto& type : preferences["verboseTypes"])
+					if (type.is_string())
+						addVerboseType(type.get<std::string>());
+			}
+		}
 
 		poca::core::MediatorWObjectFWidget* med = poca::core::MediatorWObjectFWidget::instance();
 		poca::core::MacroRecorderSingleton* macroRecord = poca::core::MacroRecorderSingleton::instance();
