@@ -31,6 +31,8 @@
 */
 
 #include <fstream>
+#include <algorithm>
+#include <cctype>
 #include <QtCore/QDir>
 #include <QtWidgets/QApplication>
 #include <QtCore/QPluginLoader>
@@ -45,6 +47,7 @@
 #include "../DesignPatterns/MacroRecorderSingleton.hpp"
 #include "../DesignPatterns/MacroRecorderSingleton.hpp"
 #include "../DesignPatterns/MediatorWObjectFWidget.hpp"
+#include "../General/Command.hpp"
 #include "../General/Misc.h"
 #include "../Interfaces/BasicComponentInterface.hpp"
 #include "../Objects/MyObject.hpp"
@@ -63,6 +66,77 @@
 
 namespace poca::core {
 	Engine* Engine::m_instance = 0;
+
+	namespace {
+		nlohmann::json coerceTypedCommandParameterValue(const nlohmann::json& _typedValue)
+		{
+			nlohmann::json rawValue = poca::core::commandParameterJsonValue(_typedValue);
+			const std::string type = _typedValue["type"].get<std::string>();
+			try {
+				if (type == "boolean") {
+					if (rawValue.is_boolean())
+						return rawValue;
+					if (rawValue.is_number_integer())
+						return rawValue.get<int>() != 0;
+					if (rawValue.is_string()) {
+						std::string value = rawValue.get<std::string>();
+						std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+						if (value == "true" || value == "1")
+							return true;
+						if (value == "false" || value == "0")
+							return false;
+					}
+				}
+				else if (type == "number") {
+					if (rawValue.is_number())
+						return rawValue;
+					if (rawValue.is_string())
+						return std::stof(rawValue.get<std::string>());
+				}
+				else if (type == "integer") {
+					if (rawValue.is_number_integer())
+						return rawValue;
+					if (rawValue.is_string())
+						return std::stoi(rawValue.get<std::string>());
+				}
+				else if (type == "unsignedInteger") {
+					if (rawValue.is_number_unsigned() || (rawValue.is_number_integer() && rawValue.get<long long>() >= 0))
+						return rawValue;
+					if (rawValue.is_string()) {
+						const long value = std::stol(rawValue.get<std::string>());
+						if (value >= 0)
+							return value;
+					}
+				}
+				else if (type == "string") {
+					if (rawValue.is_string())
+						return rawValue;
+					return rawValue.dump();
+				}
+			}
+			catch (const std::exception&) {
+			}
+			return rawValue;
+		}
+
+		void normalizeLoadedCommandParameters(nlohmann::json& _value)
+		{
+			if (poca::core::isTypedCommandParameterJson(_value)) {
+				nlohmann::json rawValue = coerceTypedCommandParameterValue(_value);
+				_value = rawValue;
+				normalizeLoadedCommandParameters(_value);
+				return;
+			}
+			if (_value.is_object()) {
+				for (auto& item : _value.items())
+					normalizeLoadedCommandParameters(item.value());
+			}
+			else if (_value.is_array()) {
+				for (auto& item : _value)
+					normalizeLoadedCommandParameters(item);
+			}
+		}
+	}
 
 	Engine* Engine::instance()
 	{
@@ -160,6 +234,7 @@ namespace poca::core {
 		if (fs.good())
 			fs >> m_globalParameters;
 		fs.close();
+		normalizeLoadedCommandParameters(m_globalParameters);
 		if (m_globalParameters.contains("Preferences")) {
 			const nlohmann::json& preferences = m_globalParameters["Preferences"];
 			if (preferences.contains("verbose"))
@@ -740,7 +815,18 @@ namespace poca::core {
 
 		if (object != NULL && object->nbColors() > 1 && m_globalCommands) {
 			if (object->nbColors() > 1) {
-				for (auto n = 0; n < object->nbColors(); n++) {
+				std::vector<size_t> indices;
+				MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);
+				if (multipleObject != NULL && multipleObject->hasSelectedObjectIndices())
+					indices = multipleObject->selectedObjectIndices();
+				else {
+					indices.resize(object->nbColors());
+					for (size_t n = 0; n < object->nbColors(); ++n)
+						indices[n] = n;
+				}
+				for (const size_t n : indices) {
+					if (n >= object->nbColors())
+						continue;
 					auto obj = object->getObject(n);
 					if (obj->hasBasicComponent(_bci->getName())) {
 						auto bc = obj->getBasicComponent(_bci->getName());
