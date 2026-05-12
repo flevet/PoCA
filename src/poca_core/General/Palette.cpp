@@ -175,6 +175,19 @@ namespace poca::core {
 		}
 	}
 
+	const std::vector<std::string>& Palette::getStaticLutNames()
+	{
+		static const std::vector<std::string> names = {
+			"Gray", "Red", "Green", "Blue", "AllGray", "AllYellow", "AllRedColorBlind", "AllGreenColorBlind",
+			"Fire", "InvFire", "Ice", "Blue2Scale", "Green2Scale", "RedScale", "OrangeScale", "TomatoScale",
+			"CyanScale", "TurquoiseScale", "AllRedColorBlindScale", "AllGreenColorBlindScale", "AllBlue", "AllGreen",
+			"AllRed", "AllOrange", "AllTomato", "AllCyan", "AllTurquoise", "AllWhite", "AllBlack", "AllGrey1",
+			"AllPinkish", "HotCold", "HotCold2", "HiLow", "Heatmap", "HiLo", "Random", "RandomOneColor",
+			"LightGrayscale", "DarkGrayscale", "3color-BMR", "3color-CGY"
+		};
+		return names;
+	}
+
 	Palette Palette::getStaticLut(const std::string& _lut)
 	{
 		if (_lut == std::string("Gray")) {

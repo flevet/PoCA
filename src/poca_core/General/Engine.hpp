@@ -41,6 +41,7 @@
 #include <any>
 
 #include <General/json.hpp>
+#include <General/Palette.hpp>
 
 class LoaderInterface;
 class GuiInterface;
@@ -181,6 +182,12 @@ namespace poca::core {
 		inline void clearVerboseTypes() { m_verboseTypes.clear(); }
 		inline const std::vector<std::string>& verboseTypes() const { return m_verboseTypes; }
 
+		const std::map<std::string, poca::core::Palette>& palettes() const { return m_palettes; }
+		poca::core::Palette* palette(const std::string&);
+		void addOrReplacePalette(const std::string&, const poca::core::Palette&);
+		void removePalette(const std::string&);
+		void savePalettesToGlobalParameters();
+
 		inline const bool globalCommands() const { return m_globalCommands; }
 		inline void setGlobalCommands(const bool _val) { m_globalCommands = _val; }
 		inline void toggleGlobalCommands() { m_globalCommands = !m_globalCommands; }
@@ -209,6 +216,9 @@ namespace poca::core {
 
 		bool m_verbose{ true }, m_globalCommands{ false };
 		std::vector<std::string> m_verboseTypes;
+		std::map<std::string, poca::core::Palette> m_palettes;
+
+		void initializePalettes();
 	};
 }
 

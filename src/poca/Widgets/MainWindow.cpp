@@ -123,7 +123,6 @@
 #include <Objects/MyMultipleObject.hpp>
 #include <Geometry/ObjectListPolygon.hpp>
 #include <General/Misc.h>
-
 #include "../../include/GuiInterface.hpp"
 #include "../../include/PluginInterface.hpp"
 
@@ -140,6 +139,7 @@
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 #include "../Widgets/ColorButtonGridWidget.hpp"
 #include "../Widgets/DatasetAssemblerWidget.hpp"
+#include "../Widgets/CustomColorDialog.hpp"
 #include "../../poca_voronoidiagramplugin/VoronoiCommandContext.hpp"
 
 #undef max 
@@ -356,6 +356,7 @@ MainWindow::~MainWindow()
 		m_pythonW->execute(&command, runtimeContext);
 	parameters["Preferences"]["verbose"] = engine->verboseEnabled();
 	parameters["Preferences"]["verboseTypes"] = engine->verboseTypes();
+	engine->savePalettesToGlobalParameters();
 
 	std::string text = parameters.dump(), textDisplay = parameters.dump(4);
 	std::cout << textDisplay << std::endl;
@@ -427,6 +428,10 @@ void MainWindow::createActions()
 	m_clearVerboseTypesAct = new QAction(tr("Clear verbose types"), this);
 	m_clearVerboseTypesAct->setStatusTip(tr("Clear verbose output type filters"));
 	QObject::connect(m_clearVerboseTypesAct, SIGNAL(triggered()), this, SLOT(clearVerboseTypes()));
+
+	m_palettesAct = new QAction(tr("Palettes"), this);
+	m_palettesAct->setStatusTip(tr("Edit application palettes"));
+	QObject::connect(m_palettesAct, SIGNAL(triggered()), this, SLOT(openPalettesDialog()));
 
 	m_debugPyramidalRenderingAct = new QAction(tr("debugPyramidalRendering"), this);
 	m_debugPyramidalRenderingAct->setCheckable(true);
@@ -568,6 +573,7 @@ void MainWindow::createMenus()
 	verboseMenu->addAction(m_debugGizmoAct);
 	verboseMenu->addAction(m_addVerboseTypeAct);
 	verboseMenu->addAction(m_clearVerboseTypesAct);
+	preferencesMenu->addAction(m_palettesAct);
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
@@ -615,6 +621,12 @@ void MainWindow::createMenus()
 		}
 	}
 
+}
+
+void MainWindow::openPalettesDialog()
+{
+	CustomColorDialog dlg(this);
+	dlg.exec();
 }
 
 void MainWindow::toggleVerbose(bool _enabled)

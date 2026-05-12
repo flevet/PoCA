@@ -41,6 +41,7 @@ set(WIDGET_HEADER_FILES
   Widgets/ReorganizeRenderingWidget.hpp
   Widgets/ColorButtonGridWidget.hpp
   Widgets/DatasetAssemblerWidget.hpp
+  Widgets/CustomColorDialog.hpp
   )
 
 set(WIDGET_SOURCE_FILES
@@ -55,6 +56,7 @@ set(WIDGET_SOURCE_FILES
   Widgets/ReorganizeRenderingWidget.cpp
   Widgets/ColorButtonGridWidget.cpp
   Widgets/DatasetAssemblerWidget.cpp
+  Widgets/CustomColorDialog.cpp
  )
 
 if(ADD_PYTHON)
@@ -70,6 +72,7 @@ if(ADD_PYTHON)
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/ColorButtonGridWidget.hpp
 	  Widgets/DatasetAssemblerWidget.hpp
+	  Widgets/CustomColorDialog.hpp
 	)
 else()
 	set(FOO_MOC_HEADERS
@@ -83,6 +86,7 @@ else()
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/DatasetAssemblerWidget.hpp
 	  Widgets/ColorButtonGridWidget.cpp
+	  Widgets/CustomColorDialog.hpp
 	)
 
 endif()
@@ -100,6 +104,7 @@ if(ADD_PYTHON)
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.hpp
 	  Widgets/DatasetAssemblerWidget.cpp
+	  Widgets/CustomColorDialog.cpp
 	  )
 else()
 	set(FOO_SOURCE_FILES
@@ -113,6 +118,7 @@ else()
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.cpp
 	  Widgets/DatasetAssemblerWidget.cpp
+	  Widgets/CustomColorDialog.cpp
 	  )
 
 endif()

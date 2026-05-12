@@ -235,6 +235,7 @@ namespace poca::core {
 			fs >> m_globalParameters;
 		fs.close();
 		normalizeLoadedCommandParameters(m_globalParameters);
+		initializePalettes();
 		if (m_globalParameters.contains("Preferences")) {
 			const nlohmann::json& preferences = m_globalParameters["Preferences"];
 			if (preferences.contains("verbose"))
@@ -262,6 +263,75 @@ namespace poca::core {
 		poca::core::PythonInterpreter* python = poca::core::PythonInterpreter::instance();
 		m_singletons["PythonInterpreter"] = python;
 #endif
+	}
+
+	void Engine::initializePalettes()
+	{
+		m_palettes.clear();
+		if (m_globalParameters.contains("Palettes") && m_globalParameters["Palettes"].is_object()) {
+			for (const auto& item : m_globalParameters["Palettes"].items()) {
+				const nlohmann::json& palJson = item.value();
+				if (!palJson.contains("points") || !palJson["points"].is_array()) continue;
+				poca::core::Palette palette;
+				palette.setName(item.key());
+				if (palJson.contains("hilow") && palJson["hilow"].is_boolean()) palette.setHiLow(palJson["hilow"].get<bool>());
+				for (const auto& point : palJson["points"]) {
+					if (!point.contains("position") || !point.contains("color") || !point["color"].is_array() || point["color"].size() < 3) continue;
+					float position = point["position"].get<float>();
+					unsigned char r = point["color"][0].get<unsigned char>();
+					unsigned char g = point["color"][1].get<unsigned char>();
+					unsigned char b = point["color"][2].get<unsigned char>();
+					unsigned char a = point["color"].size() > 3 ? point["color"][3].get<unsigned char>() : 255;
+					palette.setColor(position, Color4uc(r, g, b, a));
+				}
+				if (!palette.null()) m_palettes[item.key()] = palette;
+			}
+		}
+		if (m_palettes.empty()) {
+			for (const std::string& name : poca::core::Palette::getStaticLutNames()) {
+				poca::core::Palette palette = poca::core::Palette::getStaticLut(name);
+				if (!palette.null()) m_palettes[name] = palette;
+			}
+		}
+	}
+
+	poca::core::Palette* Engine::palette(const std::string& _name)
+	{
+		auto it = m_palettes.find(_name);
+		return it == m_palettes.end() ? nullptr : &it->second;
+	}
+
+	void Engine::addOrReplacePalette(const std::string& _name, const poca::core::Palette& _palette)
+	{
+		poca::core::Palette palette(_palette);
+		palette.setName(_name);
+		m_palettes[_name] = palette;
+	}
+
+	void Engine::removePalette(const std::string& _name)
+	{
+		m_palettes.erase(_name);
+	}
+
+	void Engine::savePalettesToGlobalParameters()
+	{
+		nlohmann::json palettesJson = nlohmann::json::object();
+		for (const auto& item : m_palettes) {
+			std::vector<float> positions;
+			std::vector<poca::core::Color4uc> colors;
+			item.second.getGradientInfos(positions, colors);
+			nlohmann::json palJson;
+			palJson["hilow"] = item.second.isHiLow();
+			palJson["points"] = nlohmann::json::array();
+			for (size_t n = 0; n < positions.size(); n++) {
+				nlohmann::json point;
+				point["position"] = positions[n];
+				point["color"] = { colors[n][0], colors[n][1], colors[n][2], colors[n][3] };
+				palJson["points"].push_back(point);
+			}
+			palettesJson[item.first] = palJson;
+		}
+		m_globalParameters["Palettes"] = palettesJson;
 	}
 
 	void Engine::setAllSingletons()

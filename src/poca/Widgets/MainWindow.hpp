@@ -163,6 +163,7 @@ private slots:
 	void toggleVerbose(bool);
 	void addVerboseType();
 	void clearVerboseTypes();
+	void openPalettesDialog();
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
 
@@ -197,7 +198,7 @@ private:
 	QAction* m_line2DROIAct, * m_triangle2DROIAct, * m_circle2DROIAct, * m_square2DROIAct, * m_polyline2DROIAct, * m_sphere3DROIAct, * m_planeROIAct, * m_polyplaneROIAct, * m_freehandROIAct;
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_datasetAssemblerAct;
-	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
+	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
 	QTabWidget * m_tabWidget;
 	QDockWidget* m_designDock{ nullptr };
 	QTreeWidget* m_objectsTree{ nullptr };

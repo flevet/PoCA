@@ -174,6 +174,7 @@ namespace poca::core {
 		inline const bool null() const { return m_gradient.empty(); }
 		const size_t size() const { return m_gradient.size(); }
 
+		static const std::vector<std::string>& getStaticLutNames();
 		static Palette getStaticLut(const std::string&);
 		static Palette* getStaticLutPtr(const std::string&);
 		static Palette* getMonochromePalette(const int, const int, const int);
