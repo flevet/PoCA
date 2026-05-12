@@ -39,6 +39,7 @@
 #include <random>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <QtCore/QSignalMapper>
 #include <QtCore/QDir>
 #include <QtCore/QPluginLoader>
@@ -73,6 +74,7 @@
 #include <QtGui/QImage>
 #include <QtGui/QBrush>
 #include <QtGui/QColor>
+#include <QtGui/QFont>
 #include <QtCore/QMimeData>
 #include <qmath.h>
 #include <CGAL/bounding_box.h>
@@ -895,11 +897,27 @@ void MainWindow::createDesignDock()
 	connect(m_objectsTree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* _item, int) {
 		if (_item == NULL) return;
 		const QVariant role = _item->data(0, Qt::UserRole);
-		if (role.toString() != QStringLiteral("colorObject")) return;
-		bool ok = false;
-		const int index = _item->data(0, Qt::UserRole + 1).toInt(&ok);
-		if (ok)
+		MyMultipleObject* multipleObject = (m_currentMdi != NULL && m_currentMdi->getWidget() != NULL)
+			? dynamic_cast<MyMultipleObject*>(m_currentMdi->getWidget()->getObject()) : NULL;
+		if (role.toString() == QStringLiteral("colorObject")) {
+			bool ok = false;
+			const int index = _item->data(0, Qt::UserRole + 1).toInt(&ok);
+			if (!ok) return;
+			if (multipleObject != NULL)
+				multipleObject->setSelectedObjectIndices({ (size_t)index });
 			changeColorObject(index);
+			updateObjectsTreeSelectionCue(multipleObject);
+			return;
+		}
+		if (role.toString() == QStringLiteral("hierarchyNode") && multipleObject != NULL) {
+			bool ok = false;
+			const int index = _item->data(0, Qt::UserRole + 1).toInt(&ok);
+			if (!ok) return;
+			multipleObject->setSelectedObjectIndices(multipleObject->collectObjectIndicesForHierarchyNode((size_t)index));
+			if (multipleObject->hasSelectedObjectIndices())
+				changeColorObject((int)multipleObject->selectedObjectIndices().front());
+			updateObjectsTreeSelectionCue(multipleObject);
+		}
 	});
 
 	m_applyAllObjectsButton = new QPushButton(tr("Apply to all objects"), this);
@@ -1014,6 +1032,73 @@ void MainWindow::addObjectToTree(poca::core::MyObjectInterface* _object, QTreeWi
 	}
 }
 
+void MainWindow::addHierarchyNodeToTree(MyMultipleObject* _object, size_t _nodeIndex, QTreeWidgetItem* _parent)
+{
+	if (_object == NULL || _parent == NULL || _nodeIndex >= _object->hierarchy().size()) return;
+	const auto& node = _object->hierarchy()[_nodeIndex];
+	QString label = QString::fromStdString(node.label.empty() ? node.levelName : node.label);
+	if (!node.levelName.empty() && node.levelName != node.label)
+		label = QString::fromStdString(node.levelName + ": " + node.label);
+
+	QTreeWidgetItem* nodeItem = new QTreeWidgetItem(_parent);
+	nodeItem->setText(0, label);
+	nodeItem->setCheckState(0, Qt::Checked);
+	nodeItem->setData(0, Qt::UserRole, QStringLiteral("hierarchyNode"));
+	nodeItem->setData(0, Qt::UserRole + 1, int(_nodeIndex));
+
+	for (const size_t childIndex : node.children)
+		addHierarchyNodeToTree(_object, childIndex, nodeItem);
+
+	for (const size_t objectIndex : node.objectIndices) {
+		if (objectIndex >= _object->nbColors()) continue;
+		poca::core::MyObjectInterface* childObject = _object->getObject(objectIndex);
+		if (childObject == NULL) continue;
+		QString childLabel = QString::fromStdString(childObject->getName().empty() ? std::string("Object") : childObject->getName());
+		if (objectIndex == _object->currentObjectID())
+			childLabel.append(tr("  [current]"));
+		QTreeWidgetItem* objectItem = new QTreeWidgetItem(nodeItem);
+		objectItem->setText(0, childLabel);
+		objectItem->setCheckState(0, Qt::Checked);
+		objectItem->setData(0, Qt::UserRole, QStringLiteral("colorObject"));
+		objectItem->setData(0, Qt::UserRole + 1, int(objectIndex));
+		addObjectToTree(childObject, objectItem);
+	}
+}
+
+void MainWindow::updateObjectsTreeSelectionCue(MyMultipleObject* _object)
+{
+	if (m_objectsTree == NULL || _object == NULL) return;
+	const std::vector<size_t>& selected = _object->selectedObjectIndices();
+	std::function<void(QTreeWidgetItem*)> updateItem = [&](QTreeWidgetItem* item) {
+		if (item == NULL) return;
+		const QString role = item->data(0, Qt::UserRole).toString();
+		bool isSelected = false;
+		if (role == QStringLiteral("colorObject")) {
+			bool ok = false;
+			const int index = item->data(0, Qt::UserRole + 1).toInt(&ok);
+			isSelected = ok && std::find(selected.begin(), selected.end(), (size_t)index) != selected.end();
+		}
+		else if (role == QStringLiteral("hierarchyNode")) {
+			bool ok = false;
+			const int index = item->data(0, Qt::UserRole + 1).toInt(&ok);
+			if (ok) {
+				const std::vector<size_t> nodeSelection = _object->collectObjectIndicesForHierarchyNode((size_t)index);
+				isSelected = !nodeSelection.empty() && std::all_of(nodeSelection.begin(), nodeSelection.end(), [&](size_t objectIndex) {
+					return std::find(selected.begin(), selected.end(), objectIndex) != selected.end();
+				});
+			}
+		}
+		item->setForeground(0, isSelected ? QBrush(QColor(0, 96, 180)) : QBrush(QColor(32, 33, 36)));
+		QFont font = item->font(0);
+		font.setBold(isSelected);
+		item->setFont(0, font);
+		for (int i = 0; i < item->childCount(); ++i)
+			updateItem(item->child(i));
+	};
+	for (int i = 0; i < m_objectsTree->topLevelItemCount(); ++i)
+		updateItem(m_objectsTree->topLevelItem(i));
+}
+
 void MainWindow::refreshObjectsPanel()
 {
 	if (m_objectsTree == NULL) return;
@@ -1035,7 +1120,32 @@ void MainWindow::refreshObjectsPanel()
 	root->setCheckState(0, Qt::Checked);
 	root->setData(0, Qt::UserRole, QStringLiteral("object"));
 
-	if (object->nbColors() > 1) {
+	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);
+	if (multipleObject != NULL && multipleObject->hasHierarchy()) {
+		std::vector<bool> attached(multipleObject->nbColors(), false);
+		for (size_t n = 0; n < multipleObject->hierarchy().size(); n++)
+			if (multipleObject->hierarchy()[n].parentIndex < 0)
+				addHierarchyNodeToTree(multipleObject, n, root);
+		for (const auto& node : multipleObject->hierarchy())
+			for (const size_t objectIndex : node.objectIndices)
+				if (objectIndex < attached.size())
+					attached[objectIndex] = true;
+		for (size_t n = 0; n < multipleObject->nbColors(); n++) {
+			if (attached[n]) continue;
+			poca::core::MyObjectInterface* childObject = multipleObject->getObject(n);
+			if (childObject == NULL) continue;
+			QString label = QString::fromStdString(childObject->getName().empty() ? std::string("Object") : childObject->getName());
+			if (n == multipleObject->currentObjectID())
+				label.append(tr("  [current]"));
+			QTreeWidgetItem* objectItem = new QTreeWidgetItem(root);
+			objectItem->setText(0, label);
+			objectItem->setCheckState(0, Qt::Checked);
+			objectItem->setData(0, Qt::UserRole, QStringLiteral("colorObject"));
+			objectItem->setData(0, Qt::UserRole + 1, int(n));
+			addObjectToTree(childObject, objectItem);
+		}
+	}
+	else if (object->nbColors() > 1) {
 		for (size_t n = 0; n < object->nbColors(); n++) {
 			poca::core::MyObjectInterface* childObject = object->getObject(n);
 			if (childObject == NULL) continue;
@@ -1055,6 +1165,7 @@ void MainWindow::refreshObjectsPanel()
 	else
 		addObjectToTree(object, root);
 
+	updateObjectsTreeSelectionCue(multipleObject);
 	m_objectsTree->expandToDepth(1);
 	if (m_statusObjectLabel)
 		m_statusObjectLabel->setText(tr("Objects: %1").arg(object->nbColors()));

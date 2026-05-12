@@ -196,8 +196,16 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	for (poca::core::MyObjectInterface* obj : m_colors) {
-		obj->executeCommand(_ci, _context, _result);
+	if (!m_selectedObjectIndices.empty()) {
+		for (const size_t index : m_selectedObjectIndices) {
+			if (index < m_colors.size() && m_colors[index] != NULL)
+				m_colors[index]->executeCommand(_ci, _context, _result);
+		}
+	}
+	else {
+		for (poca::core::MyObjectInterface* obj : m_colors) {
+			obj->executeCommand(_ci, _context, _result);
+		}
 	}
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	poca::core::CommandableObject::executeCommand(_ci, _context, _result);
@@ -256,8 +264,16 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 		bci->executeCommand(_ci, _context, _result);
 	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
 		return;
-	for (poca::core::MyObjectInterface* obj : m_colors)
-		obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+	if (!m_selectedObjectIndices.empty()) {
+		for (const size_t index : m_selectedObjectIndices) {
+			if (index < m_colors.size() && m_colors[index] != NULL)
+				m_colors[index]->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+		}
+	}
+	else {
+		for (poca::core::MyObjectInterface* obj : m_colors)
+			obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+	}
 }
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci)
@@ -276,8 +292,16 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 {
 	//executeCommand(_ci);
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
-	for (poca::core::MyObjectInterface* obj : m_colors)
-		obj->executeGlobalCommand(_ci, _context, _result);
+	if (!m_selectedObjectIndices.empty()) {
+		for (const size_t index : m_selectedObjectIndices) {
+			if (index < m_colors.size() && m_colors[index] != NULL)
+				m_colors[index]->executeGlobalCommand(_ci, _context, _result);
+		}
+	}
+	else {
+		for (poca::core::MyObjectInterface* obj : m_colors)
+			obj->executeGlobalCommand(_ci, _context, _result);
+	}
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;
 		if (isComponentFamilyHandled(_result, bc->getName()))
@@ -421,4 +445,15 @@ std::vector<size_t> MyMultipleObject::collectObjectIndicesForHierarchyNode(const
 	}
 
 	return objectIndices;
+}
+
+void MyMultipleObject::setSelectedObjectIndices(const std::vector<size_t>& _indices)
+{
+	m_selectedObjectIndices.clear();
+	for (const size_t index : _indices) {
+		if (index < m_colors.size())
+			appendUnique(m_selectedObjectIndices, index);
+	}
+	if (!m_selectedObjectIndices.empty())
+		m_currentColor = m_selectedObjectIndices.front();
 }

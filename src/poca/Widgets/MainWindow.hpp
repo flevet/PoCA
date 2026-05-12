@@ -62,6 +62,7 @@ class PythonWidget;
 class ROIGeneralWidget;
 class MacroWidget;
 class DatasetAssemblerWidget;
+class MyMultipleObject;
 
 class LoaderLocalizationsInterface;
 class LoaderImageInterface;
@@ -182,6 +183,8 @@ private:
 	void refreshObjectsPanel();
 	void refreshPropertiesPanel();
 	void addObjectToTree(poca::core::MyObjectInterface*, QTreeWidgetItem*);
+	void addHierarchyNodeToTree(MyMultipleObject*, size_t, QTreeWidgetItem*);
+	void updateObjectsTreeSelectionCue(MyMultipleObject*);
 	void refreshObjectControls();
 
 	QMdiArea * m_mdiArea;

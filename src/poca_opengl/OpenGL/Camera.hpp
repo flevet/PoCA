@@ -372,6 +372,7 @@ namespace poca::opengl {
 		TransformGizmoElement hitTestTransformGizmo(const QPointF&);
 		void applyTransformGizmoDrag(const QPointF&);
 		bool transformGizmoCenter(glm::vec3&) const;
+		float transformGizmoScreenScale() const;
 		glm::vec3 transformGizmoAxis(const TransformGizmoElement) const;
 		glm::vec3 transformGizmoPlaneNormal(const TransformGizmoElement) const;
 		glm::vec3 screenPlaneDragDelta(const QPointF&, const QPointF&, const glm::vec3&) const;
@@ -1317,4 +1318,3 @@ namespace poca::opengl {
 }
 
 #endif
-

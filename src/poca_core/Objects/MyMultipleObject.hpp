@@ -104,6 +104,9 @@ public:
 	void attachObjectToHierarchyNode(const size_t, const size_t);
 	const std::vector<HierarchyNode>& hierarchy() const { return m_hierarchy; }
 	std::vector<size_t> collectObjectIndicesForHierarchyNode(const size_t, const bool = true) const;
+	void setSelectedObjectIndices(const std::vector<size_t>&);
+	const std::vector<size_t>& selectedObjectIndices() const { return m_selectedObjectIndices; }
+	bool hasSelectedObjectIndices() const { return !m_selectedObjectIndices.empty(); }
 
 protected:
 	std::vector <poca::core::MyObjectInterface*> m_colors;
@@ -112,6 +115,7 @@ protected:
 	std::vector <poca::core::BoundingBox> m_gridBBoxes;
 	bool m_gridSelected{ true };
 	std::vector <HierarchyNode> m_hierarchy;
+	std::vector<size_t> m_selectedObjectIndices;
 };
 
 #endif // SMLMObject_h__

@@ -1828,6 +1828,10 @@ namespace poca::opengl {
 			if (poca::core::Engine::instance()->verbose("debugGizmo"))
 				std::cout << "[debugGizmo] mousePress: pos=(" << _event->pos().x() << "," << _event->pos().y() << "), hitElem=" << elem << std::endl;
 			if (elem != Gizmo_None) {
+				if (MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object)) {
+					multi->setSelectedObjectIndices({ multi->currentObjectID() });
+					multi->notify("LoadObjCharacteristicsAllWidgets");
+				}
 				m_activeTransformGizmo = elem;
 				m_hoveredTransformGizmo = elem;
 				m_transformGizmoDragStart = QPointF(_event->pos());
@@ -3590,6 +3594,15 @@ namespace poca::opengl {
 		return true;
 	}
 
+	float Camera::transformGizmoScreenScale() const
+	{
+		const float referenceDistance = std::abs(m_originalDistanceOrtho);
+		const float currentDistance = std::abs(m_distanceOrtho);
+		if (referenceDistance <= 1e-6f || currentDistance <= 1e-6f)
+			return 1.f;
+		return std::max(0.5f, std::min(1.f, referenceDistance / currentDistance));
+	}
+
 	glm::vec3 Camera::transformGizmoAxis(const TransformGizmoElement _elem) const
 	{
 		glm::vec3 localAxis(0.f);
@@ -3671,7 +3684,8 @@ namespace poca::opengl {
 		if (!transformGizmoCenter(center))
 			return Gizmo_None;
 		const QPointF c(worldToScreenCoordinates(center).x, static_cast<float>(height()) - worldToScreenCoordinates(center).y);
-		const float arrowLen = 74.f, planeOffset = 34.f, planeSize = 28.f, circleRadius = 8.f, hit = 9.f, arcRadius = 100.f;
+		const float gizmoScale = transformGizmoScreenScale();
+		const float arrowLen = 74.f * gizmoScale, planeOffset = 34.f * gizmoScale, planeSize = 28.f * gizmoScale, circleRadius = 8.f * gizmoScale, hit = 9.f, arcRadius = 100.f * gizmoScale;
 		const float wupp = worldUnitsPerScreenPixel(center);
 		auto screenPoint = [&](const glm::vec3& p) {
 			glm::vec2 s = worldToScreenCoordinates(p);
@@ -3825,7 +3839,8 @@ namespace poca::opengl {
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		const float luminance = 0.2126f * bkColor[0] + 0.7152f * bkColor[1] + 0.0722f * bkColor[2];
 		const QColor baseColor = luminance > 0.5f ? QColor(30, 30, 30, 220) : QColor(240, 240, 240, 230);
-		const QColor activeColor = QColor(255, 80, 30, 240);
+		const QColor activeColor = QColor(0, 120, 255, 245);
+		const QColor handleColor = QColor(0, 120, 255, 235);
 
 		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
 		const float mn[3] = { translatedBBox[0], translatedBBox[1], translatedBBox[2] };
@@ -3857,20 +3872,11 @@ namespace poca::opengl {
 			painter.drawPolygon(poly);
 
 			glm::vec2 c0 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c);
-			glm::vec3 nUnit = glm::normalize(n);
-			float arrowLen = worldUnitsPerScreenPixel(c) * 45.f;
-			glm::vec2 c1 = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, glm::mat4(1.f), m_viewport, c + nUnit * arrowLen);
-			QPointF q0(c0.x, height() - c0.y), q1(c1.x, height() - c1.y);
-			painter.setBrush(col);
-			painter.drawLine(q0, q1);
-			QLineF line(q0, q1);
-			if (line.length() > 1.0) {
-				line.setLength(10.0);
-				line.setAngle(line.angle() + 150.0);
-				painter.drawLine(q1, line.p2());
-				line.setAngle(line.angle() - 300.0);
-				painter.drawLine(q1, line.p2());
-			}
+			QPointF q0(c0.x, height() - c0.y);
+			const bool selected = (i == m_hoveredClippingPlane || i == m_activeClippingPlane);
+			painter.setPen(QPen(Qt::white, selected ? 2.0 : 1.25));
+			painter.setBrush(selected ? activeColor : handleColor);
+			painter.drawEllipse(q0, selected ? 7.5 : 6.0, selected ? 7.5 : 6.0);
 		}
 		painter.end();
 		glBindFramebuffer(GL_FRAMEBUFFER, previousFbo);
@@ -4029,7 +4035,8 @@ namespace poca::opengl {
 			painter.drawText(QPointF(10.0, 20.0), QString("debugGizmo overlay active"));
 		}
 		const QColor red(240, 60, 40), green(90, 230, 70), blue(70, 120, 255), gray(170, 170, 170);
-		const float arrowLen = 74.f, planeOffset = 34.f, planeSize = 28.f, arcRadius = 100.f;
+		const float gizmoScale = transformGizmoScreenScale();
+		const float arrowLen = 74.f * gizmoScale, planeOffset = 34.f * gizmoScale, planeSize = 28.f * gizmoScale, arcRadius = 100.f * gizmoScale;
 		auto screenForAxis = [&](const glm::vec3& a) {
 			glm::vec2 s = worldToScreenCoordinates(center + a * worldUnitsPerScreenPixel(center) * arrowLen);
 			return QPointF(s.x, static_cast<float>(height()) - s.y);
