@@ -44,6 +44,7 @@
 #include <General/CommandableObject.hpp>
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
+#include <Widgets/ButtonLayer.hpp>
 #include <Geometry/ObjectListMesh.hpp>
 #include <Geometry/ObjectLists.hpp>
 #include <General/PluginList.hpp>
@@ -62,109 +63,48 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	this->addActionToObserve("LoadObjCharacteristicsVoronoiDiagramWidget");
 	this->addActionToObserve("UpdateHistogramVoronoiDiagramWidget");
 
-	m_lutsWidget = new QWidget;
-	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	QHBoxLayout* layoutLuts = new QHBoxLayout;
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("HotCold2")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("InvFire")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Fire")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Ice")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllRedColorBlind")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllGreenColorBlind")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlue")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllWhite")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlack")));
 	int maxSize = 20;
-	for (size_t n = 0; n < m_lutButtons.size(); n++) {
-		m_lutButtons[n].first->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-		m_lutButtons[n].first->setMaximumSize(QSize(maxSize, maxSize));
-		QImage im = poca::core::generateImage(maxSize, maxSize, &poca::core::Palette::getStaticLut(m_lutButtons[n].second));
-		QPixmap pix = QPixmap::fromImage(im);
-		QIcon icon(pix);
-		m_lutButtons[n].first->setIcon(icon);
-		layoutLuts->addWidget(m_lutButtons[n].first);
-
-		QObject::connect(m_lutButtons[n].first, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+	nlohmann::json buttonLayerConfig = {
+		{ "iconSize", maxSize },
+		{ "palettes", { { { "name", "HotCold2" } }, { { "name", "InvFire" } }, { { "name", "Fire" } }, { { "name", "Ice" } }, { { "name", "AllRedColorBlind" } }, { { "name", "AllGreenColorBlind" } }, { { "name", "AllBlue" } }, { { "name", "AllWhite" } }, { { "name", "AllBlack" } } } },
+		{ "actions", {
+			{ { "identifier", "transferCells" }, { "icon", "export" }, { "tooltip", "Transfer cells" } },
+			{ { "identifier", "invertSelection" }, { "icon", "invert" }, { "tooltip", "Invert selection" } },
+			{ { "identifier", "bboxSelection" }, { "icon", "bbox" }, { "tooltip", "Toggle bbox selection" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "createObjects" }, { "icon", "object" }, { "tooltip", "Create objects" } },
+			{ { "identifier", "pointRendering" }, { "icon", "pointRendering" }, { "tooltip", "Render points" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "polytopeRendering" }, { "icon", "polytopeRendering" }, { "tooltip", "Render polytopes" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "fill" }, { "icon", "fill" }, { "tooltip", "Toggle fill/line" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } }
+		} }
+	};
+	auto buttonLayer = poca::qt::generateButtonLayer(buttonLayerConfig, this);
+	m_lutsWidget = buttonLayer;
+	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	for (const auto& palette : buttonLayerConfig["palettes"]) {
+		std::string name = palette["name"].get<std::string>();
+		QPushButton* button = buttonLayer->paletteButton(QString::fromStdString(name));
+		if (button != nullptr) {
+			m_lutButtons.push_back(std::make_pair(button, name));
+			QObject::connect(button, SIGNAL(pressed()), this, SLOT(actionNeeded()));
+		}
 	}
-	QWidget* emptyLuts = new QWidget;
-	emptyLuts->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	layoutLuts->addWidget(emptyLuts);
-
-	m_transferCellsButton = new QPushButton();
-	m_transferCellsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_transferCellsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_transferCellsButton->setIcon(QIcon(QPixmap(poca::plot::exportIcon)));
-	m_transferCellsButton->setToolTip("Transfer cells");
-	layoutLuts->addWidget(m_transferCellsButton, 0, Qt::AlignRight);
+	m_transferCellsButton = buttonLayer->button("transferCells");
+	m_invertSelectionButton = buttonLayer->button("invertSelection");
+	m_bboxSelectionButton = buttonLayer->button("bboxSelection");
+	m_creationFlteredObjectsButton = buttonLayer->button("createObjects");
+	m_pointRenderButton = buttonLayer->button("pointRendering");
+	m_polyRenderButton = buttonLayer->button("polytopeRendering");
+	m_fillButton = buttonLayer->button("fill");
+	m_displayButton = buttonLayer->button("display");
 	QObject::connect(m_transferCellsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
-	
-	m_invertSelectionButton = new QPushButton();
-	m_invertSelectionButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_invertSelectionButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_invertSelectionButton->setIcon(QIcon(QPixmap(poca::plot::invertIcon)));
-	m_invertSelectionButton->setToolTip("Invert selection");
-	layoutLuts->addWidget(m_invertSelectionButton, 0, Qt::AlignRight);
 	QObject::connect(m_invertSelectionButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-	m_bboxSelectionButton = new QPushButton();
-	m_bboxSelectionButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_bboxSelectionButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_bboxSelectionButton->setIcon(QIcon(QPixmap(poca::plot::bboxIcon)));
-	m_bboxSelectionButton->setToolTip("Toggle bbox selection");
-	m_bboxSelectionButton->setCheckable(true);
-	m_bboxSelectionButton->setChecked(true);
-	layoutLuts->addWidget(m_bboxSelectionButton, 0, Qt::AlignRight);
 	QObject::connect(m_bboxSelectionButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_creationFlteredObjectsButton = new QPushButton();
-	m_creationFlteredObjectsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_creationFlteredObjectsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_creationFlteredObjectsButton->setIcon(QIcon(QPixmap(poca::plot::objectIcon)));
-	m_creationFlteredObjectsButton->setToolTip("Create objects");
-	layoutLuts->addWidget(m_creationFlteredObjectsButton, 0, Qt::AlignRight);
 	QObject::connect(m_creationFlteredObjectsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-	m_pointRenderButton = new QPushButton();
-	m_pointRenderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_pointRenderButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_pointRenderButton->setIcon(QIcon(QPixmap(poca::plot::pointRenderingIcon)));
-	m_pointRenderButton->setToolTip("Render points");
-	m_pointRenderButton->setCheckable(true);
-	m_pointRenderButton->setChecked(true);
-	layoutLuts->addWidget(m_pointRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_pointRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_polyRenderButton = new QPushButton();
-	m_polyRenderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_polyRenderButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_polyRenderButton->setIcon(QIcon(QPixmap(poca::plot::polytopeRenderingIcon)));
-	m_polyRenderButton->setToolTip("Render polytopes");
-	m_polyRenderButton->setCheckable(true);
-	m_polyRenderButton->setChecked(true);
-	layoutLuts->addWidget(m_polyRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_polyRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_fillButton = new QPushButton();
-	m_fillButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_fillButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_fillButton->setIcon(QIcon(QPixmap(poca::plot::fillIcon)));
-	m_fillButton->setToolTip("Toggle fill/line");
-	m_fillButton->setCheckable(true);
-	m_fillButton->setChecked(true);
-	layoutLuts->addWidget(m_fillButton, 0, Qt::AlignRight);
 	QObject::connect(m_fillButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_displayButton = new QPushButton();
-	m_displayButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_displayButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_displayButton->setIcon(QIcon(QPixmap(poca::plot::brushIcon)));
-	m_displayButton->setToolTip("Toggle display");
-	m_displayButton->setCheckable(true);
-	m_displayButton->setChecked(true);
-	layoutLuts->addWidget(m_displayButton, 0, Qt::AlignRight);
 	QObject::connect(m_displayButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_lutsWidget->setLayout(layoutLuts);
 
 	m_buttonsWidget = new QWidget;
 	m_buttonsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -336,7 +276,8 @@ void VoronoiDiagramWidget::actionNeeded()
 	for (size_t n = 0; n < m_lutButtons.size() && !found; n++) {
 		found = (m_lutButtons[n].first == sender);
 		if (found) {
-			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
+			QString paletteName = m_lutButtons[n].first->property("poca_palette").toString();
+			engine->executeCommand(bc, true, "changeLUT", "LUT", paletteName.isEmpty() ? m_lutButtons[n].second : paletteName.toStdString());
 			for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");

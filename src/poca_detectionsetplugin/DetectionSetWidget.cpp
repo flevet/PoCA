@@ -48,6 +48,7 @@
 #include <General/CommandableObject.hpp>
 #include <General/Engine.hpp>
 #include <Objects/ObjectCommandContext.hpp>
+#include <Widgets/ButtonLayer.hpp>
 
 #include "DetectionSetWidget.hpp"
 #include "DetectionSetCommandContext.hpp"
@@ -63,119 +64,51 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	this->addActionToObserve("UpdateHistogramDetectionSetWidget");
 	int maxSize = 20;
 
-	m_lutsWidget = new QWidget;
+	nlohmann::json buttonLayerConfig = {
+		{ "iconSize", maxSize },
+		{ "maxPalettesOnFirstLine", 9 },
+		{ "palettes", { { { "name", "HotCold2" } }, { { "name", "InvFire" } }, { { "name", "Fire" } }, { { "name", "Ice" } }, { { "name", "AllRedColorBlind" } }, { { "name", "AllGreenColorBlind" } }, { { "name", "AllRed" } }, { { "name", "AllBlue" } }, { { "name", "AllWhite" } }, { { "name", "AllBlack" } }, { { "name", "AllCyan" } }, { { "name", "AllPinkish" } }, { { "name", "AllYellow" } }, { { "name", "AllOrange" } }, { { "name", "AllGrey1" } }, { { "name", "Gray" } }, { { "name", "Random" } }, { { "name", "RandomOneColor" } } } },
+		{ "actions", {
+			{ { "identifier", "saveDetectionsSVG" }, { "icon", "save" }, { "tooltip", "Save detections as SVG" } },
+			{ { "identifier", "saveDetections" }, { "icon", "save" }, { "tooltip", "Save detections" } },
+			{ { "identifier", "pointRendering" }, { "icon", "pointRendering" }, { "tooltip", "Render points" }, { "checkable", true }, { "checked", true }, { "exclusive", true } },
+			{ { "identifier", "heatmap" }, { "icon", "heatmap" }, { "tooltip", "Toggle heatmap" }, { "checkable", true }, { "checked", true }, { "exclusive", true } },
+			{ { "identifier", "gaussian" }, { "icon", "gaussian" }, { "tooltip", "Toggle gaussian rendering" }, { "checkable", true }, { "checked", true }, { "exclusive", true } },
+			{ { "identifier", "createObjectsOnLabels" }, { "icon", "object" }, { "tooltip", "Create objects" } },
+			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } }
+		} }
+	};
+	auto buttonLayer = poca::qt::generateButtonLayer(buttonLayerConfig, this);
+	m_lutsWidget = buttonLayer;
 	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	QHBoxLayout* layoutLuts = new QHBoxLayout, * layoutLine2 = new QHBoxLayout;
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("HotCold2")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("InvFire")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Fire")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Ice")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllRedColorBlind")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllGreenColorBlind")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllRed")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlue")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllWhite")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllBlack")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllCyan")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllPinkish")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllYellow")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllOrange")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("AllGrey1")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Gray")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("Random")));
-	m_lutButtons.push_back(std::make_pair(new QPushButton(), std::string("RandomOneColor")));
-	for (size_t n = 0; n < m_lutButtons.size(); n++) {
-		m_lutButtons[n].first->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-		m_lutButtons[n].first->setMaximumSize(QSize(maxSize, maxSize));
-		if ((m_lutButtons[n].second != "RandomOneColor")) {
-			QImage im = poca::core::generateImage(maxSize, maxSize, &poca::core::Palette::getStaticLut(m_lutButtons[n].second));
-			QPixmap pix = QPixmap::fromImage(im);
-			QIcon icon(pix);
-			m_lutButtons[n].first->setIcon(icon);
+	for (const auto& palette : buttonLayerConfig["palettes"]) {
+		std::string name = palette["name"].get<std::string>();
+		QPushButton* button = buttonLayer->paletteButton(QString::fromStdString(name));
+		if (button != nullptr) {
+			m_lutButtons.push_back(std::make_pair(button, name));
+			QObject::connect(button, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 		}
-		else
-			m_lutButtons[n].first->setIcon(QIcon(QPixmap(poca::plot::randomIcon)));
-		if (n < 9)
-			layoutLuts->addWidget(m_lutButtons[n].first, 0, Qt::AlignLeft);
-		else
-			layoutLine2->addWidget(m_lutButtons[n].first);
-		QObject::connect(m_lutButtons[n].first, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	}
-	QWidget* emptyLuts = new QWidget;
-	emptyLuts->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	layoutLuts->addWidget(emptyLuts);
-
-	m_saveDetectionsSVGButton = new QPushButton();
-	m_saveDetectionsSVGButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_saveDetectionsSVGButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_saveDetectionsSVGButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
-	m_saveDetectionsSVGButton->setToolTip("Save detections as SVG");
-	layoutLuts->addWidget(m_saveDetectionsSVGButton, 0, Qt::AlignRight);
+	m_saveDetectionsSVGButton = buttonLayer->button("saveDetectionsSVG");
+	m_saveDetectionsButton = buttonLayer->button("saveDetections");
+	m_pointRenderButton = buttonLayer->button("pointRendering");
+	m_heatmapButton = buttonLayer->button("heatmap");
+	m_gaussianButton = buttonLayer->button("gaussian");
+	m_creationObjectsOnLabelsButton = buttonLayer->button("createObjectsOnLabels");
+	m_displayButton = buttonLayer->button("display");
 	QObject::connect(m_saveDetectionsSVGButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-	m_saveDetectionsButton = new QPushButton();
-	m_saveDetectionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_saveDetectionsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_saveDetectionsButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
-	m_saveDetectionsButton->setToolTip("Save detections");
-	layoutLuts->addWidget(m_saveDetectionsButton, 0, Qt::AlignRight);
 	QObject::connect(m_saveDetectionsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-	m_pointRenderButton = new QPushButton();
-	m_pointRenderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_pointRenderButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_pointRenderButton->setIcon(QIcon(QPixmap(poca::plot::pointRenderingIcon)));
-	m_pointRenderButton->setToolTip("Render points");
-	m_pointRenderButton->setCheckable(true);
-	m_pointRenderButton->setChecked(true);
-	layoutLuts->addWidget(m_pointRenderButton, 0, Qt::AlignRight);
 	QObject::connect(m_pointRenderButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
-	
-	m_heatmapButton = new QPushButton();
-	m_heatmapButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_heatmapButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_heatmapButton->setIcon(QIcon(QPixmap(poca::plot::heatmapIcon)));
-	m_heatmapButton->setToolTip("Toggle heatmap");
-	m_heatmapButton->setCheckable(true);
-	m_heatmapButton->setChecked(true);
-	layoutLuts->addWidget(m_heatmapButton, 0, Qt::AlignRight);
 	QObject::connect(m_heatmapButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_gaussianButton = new QPushButton();
-	m_gaussianButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_gaussianButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_gaussianButton->setIcon(QIcon(QPixmap(poca::plot::gauss3DIcon)));
-	m_gaussianButton->setToolTip("Toggle gaussian rendering");
-	m_gaussianButton->setCheckable(true);
-	m_gaussianButton->setChecked(true);
-	layoutLuts->addWidget(m_gaussianButton, 0, Qt::AlignRight);
 	QObject::connect(m_gaussianButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
-
 	m_buttonGroup = new QButtonGroup(this);
 	m_buttonGroup->addButton(m_pointRenderButton);
 	m_buttonGroup->addButton(m_heatmapButton);
 	m_buttonGroup->addButton(m_gaussianButton);
-
-	m_creationObjectsOnLabelsButton = new QPushButton();
-	m_creationObjectsOnLabelsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_creationObjectsOnLabelsButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_creationObjectsOnLabelsButton->setIcon(QIcon(QPixmap(poca::plot::objectIcon)));
-	m_creationObjectsOnLabelsButton->setToolTip("Create objects");
-	layoutLuts->addWidget(m_creationObjectsOnLabelsButton, 0, Qt::AlignRight);
 	QObject::connect(m_creationObjectsOnLabelsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-	m_displayButton = new QPushButton();
-	m_displayButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_displayButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_displayButton->setIcon(QIcon(QPixmap(poca::plot::brushIcon)));
-	m_displayButton->setToolTip("Toggle display");
-	m_displayButton->setCheckable(true);
-	m_displayButton->setChecked(true);
-	layoutLuts->addWidget(m_displayButton, 0, Qt::AlignRight);
 	QObject::connect(m_displayButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 
-	m_lutsWidget->setLayout(layoutLuts);
-
+	QHBoxLayout* layoutLine2 = new QHBoxLayout;
 	m_line2Widget = new QWidget;
 	QWidget* emptyLine2 = new QWidget;
 	emptyLine2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -505,7 +438,8 @@ void DetectionSetWidget::actionNeeded()
 	for (size_t n = 0; n < m_lutButtons.size() && !found; n++) {
 		found = (m_lutButtons[n].first == sender);
 		if (found) {
-			engine->executeCommand(bc, true, "changeLUT", "LUT", m_lutButtons[n].second);
+			QString paletteName = m_lutButtons[n].first->property("poca_palette").toString();
+			engine->executeCommand(bc, true, "changeLUT", "LUT", paletteName.isEmpty() ? m_lutButtons[n].second : paletteName.toStdString());
 			for (poca::plot::FilterHistogramWidget* histW : m_histWidgets)
 				histW->redraw();
 			m_object->notifyAll("updateDisplay");

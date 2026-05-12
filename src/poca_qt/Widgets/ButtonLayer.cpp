@@ -119,7 +119,7 @@ namespace poca::qt {
 	void ButtonLayer::addPaletteButton(const nlohmann::json& _item, QHBoxLayout* _line1, QHBoxLayout* _line2, const int _maxPalettesOnFirstLine, const int _paletteIndex)
 	{
 		QString paletteName = stringValue(_item, "name");
-		if (paletteName.isEmpty() || !isKnownPalette(paletteName.toStdString()))
+		if (paletteName.isEmpty() || (!isKnownPalette(paletteName.toStdString()) && paletteName != "RandomOneColor" && paletteName != "Random"))
 			return;
 
 		QPushButton* button = new QPushButton;
@@ -244,6 +244,10 @@ namespace poca::qt {
 
 	void ButtonLayer::updatePaletteButtonIcon(QPushButton* _button, const QString& _paletteName) const
 	{
+		if (_paletteName == "RandomOneColor" || _paletteName == "Random") {
+			_button->setIcon(QIcon(QPixmap(poca::plot::randomIcon)));
+			return;
+		}
 		poca::core::Palette palette = poca::core::Palette::getStaticLut(_paletteName.toStdString());
 		QImage image = poca::core::generateImage(m_iconSize, m_iconSize, &palette);
 		_button->setIcon(QIcon(QPixmap::fromImage(image)));
@@ -305,6 +309,7 @@ namespace poca::qt {
 		if (id == "screenshot") return QIcon(QPixmap(poca::plot::screenShotIcon));
 		if (id == "play") return QIcon(QPixmap(poca::plot::playIcon));
 		if (id == "plus") return QIcon(QPixmap(poca::plot::plusIcon));
+		if (id == "RandomOneColor") return QIcon(QPixmap(poca::plot::randomIcon));
 		return QIcon();
 	}
 
