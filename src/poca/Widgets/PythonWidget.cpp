@@ -59,7 +59,7 @@
 
 PythonWidget::PythonWidget(poca::core::MediatorWObjectFWidget* _mediator, QWidget* _parent/*= 0*/) :QTabWidget(_parent)
 {
-	m_parentTab = (QTabWidget*)_parent;
+	m_parentTab = qobject_cast<QTabWidget*>(_parent);
 	m_mediator = _mediator;
 	m_object = NULL;
 
@@ -348,7 +348,8 @@ void PythonWidget::update(poca::core::SubjectInterface* _subject, const poca::co
 
 	bool visible = true;// (objOneColor != NULL && objOneColor->hasBasicComponent("DetectionSet"));
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-	m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
+	if (m_parentTab != NULL)
+		m_parentTab->setTabVisible(m_parentTab->indexOf(this), visible);
 #endif
 
 	m_lists[0]->clear();

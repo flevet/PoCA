@@ -70,6 +70,7 @@
 #include <QtWidgets/QTreeWidget>
 #include <QtWidgets/QTreeWidgetItem>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QTabBar>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
@@ -218,7 +219,7 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_tabWidget->setObjectName("TabWidget");
 	m_tabWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_tabWidget->setContentsMargins(0, 0, 0, 0);
-	m_tabWidget->tabBar()->setMovable(true);
+	configureInspectorTabWidget(m_tabWidget);
 	m_mfw = new MainFilterWidget(mediator, m_tabWidget);
 	mediator->addWidget(m_mfw);
 	QTabWidget* tabMisc = new QTabWidget;
@@ -245,17 +246,20 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_datasetAssemblerW->loadParameters(engine->getGlobalParameters());
 	QObject::connect(m_datasetAssemblerW, SIGNAL(transferNewObjectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 
+	m_ROIsW = new ROIGeneralWidget(mediator, this);
+	mediator->addWidget(m_ROIsW);
+
 	engine->addGUI(m_tabWidget);
 
 #ifndef NO_PYTHON
-	m_pythonW = new PythonWidget(mediator, m_tabWidget);
+	m_pythonW = new PythonWidget(mediator, this);
+	m_pythonW->setWindowFlags(m_pythonW->windowFlags() | Qt::Window);
+	m_pythonW->setWindowTitle(tr("Python"));
+	m_pythonW->resize(420, 320);
 	mediator->addWidget(m_pythonW);
-	m_tabWidget->addTab(m_pythonW, QObject::tr("Python"));
 	m_pythonW->loadParameters(engine->getGlobalParameters());
+	m_pythonW->hide();
 #endif
-
-	m_ROIsW = new ROIGeneralWidget(mediator, this);
-	mediator->addWidget(m_ROIsW);
 
 	for (int n = 0; n < m_tabWidget->count(); n++) {
 /*#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
@@ -388,6 +392,12 @@ void MainWindow::createActions()
 	m_datasetAssemblerAct = new QAction(QIcon(QPixmap(poca::plot::openDirIcon)), tr("Dataset assembler"), this);
 	m_datasetAssemblerAct->setStatusTip(tr("Open the dataset assembler"));
 	QObject::connect(m_datasetAssemblerAct, SIGNAL(triggered()), this, SLOT(openDatasetAssembler()));
+
+#ifndef NO_PYTHON
+	m_pythonWidgetAct = new QAction(QIcon(QPixmap(poca::plot::openFileIcon)), tr("Python"), this);
+	m_pythonWidgetAct->setStatusTip(tr("Open the Python widget"));
+	QObject::connect(m_pythonWidgetAct, SIGNAL(triggered()), this, SLOT(openPythonWidget()));
+#endif
 
 	m_duplicateAct = new QAction(QIcon("./images/duplicate.png"), tr("Duplicate localizations"), this);
 	m_duplicateAct->setStatusTip(tr("Open an existing file"));
@@ -684,6 +694,9 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_openDirAct);
 	m_fileToolBar->addAction(m_plusAct);
 	m_fileToolBar->addAction(m_datasetAssemblerAct);
+#ifndef NO_PYTHON
+	m_fileToolBar->addAction(m_pythonWidgetAct);
+#endif
 	m_fileToolBar->addAction(m_duplicateAct);
 	m_fileToolBar->addSeparator();
 	m_lastActionQuantifToolbar = m_fileToolBar->addSeparator();
@@ -965,6 +978,7 @@ void MainWindow::createDesignDock()
 
 	m_objectTreeTabs = new QTabWidget(this);
 	m_objectTreeTabs->setObjectName("ObjectsTreeTabs");
+	configureInspectorTabWidget(m_objectTreeTabs);
 	m_objectTreeTabs->addTab(objectPanel, tr("Objects"));
 	m_objectTreeTabs->setVisible(false);
 
@@ -980,6 +994,7 @@ void MainWindow::createDesignDock()
 
 	m_leftInspectorTabs = new QTabWidget(this);
 	m_leftInspectorTabs->setObjectName("LeftInspectorTabs");
+	configureInspectorTabWidget(m_leftInspectorTabs);
 	m_leftInspectorTabs->addTab(m_propertiesTable, tr("Properties"));
 	m_leftInspectorTabs->addTab(toolsArea, tr("Controls"));
 
@@ -1021,21 +1036,24 @@ void MainWindow::createDesignDock()
 	m_leftInspectorTabs->addTab(cameraArea, tr("Camera"));
 	if (m_ROIsW != NULL)
 		m_leftInspectorTabs->addTab(m_ROIsW, tr("ROI Manager"));
+	poca::core::utils::processPendingWidgetsForNamedLayouts(this);
 
-	QTabWidget* dockTabs = new QTabWidget(this);
-	dockTabs->setObjectName("ObjectsDockTabs");
+	m_objectsDockTabs = new QTabWidget(this);
+	m_objectsDockTabs->setObjectName("ObjectsDockTabs");
+	configureInspectorTabWidget(m_objectsDockTabs);
 	if (m_macroW != NULL)
-		dockTabs->addTab(m_macroW, tr("Macro"));
+		m_objectsDockTabs->addTab(m_macroW, tr("Macro"));
 	if (m_datasetAssemblerW != NULL)
-		dockTabs->addTab(m_datasetAssemblerW, tr("Assembler"));
-	dockTabs->addTab(objectsSplitter, tr("Objects"));
+		m_objectsDockTabs->addTab(m_datasetAssemblerW, tr("Assembler"));
+	m_objectsDockObjectsPage = objectsSplitter;
+	m_objectsDockTabs->addTab(m_objectsDockObjectsPage, tr("Objects"));
 
 	m_designDock = new QDockWidget(tr("Objects"), this);
 	m_designDock->setObjectName("ObjectsDock");
 	m_designDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
 	m_designDock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_designDock->setMinimumWidth(300);
-	m_designDock->setWidget(dockTabs);
+	m_designDock->setWidget(m_objectsDockTabs);
 	addDockWidget(Qt::LeftDockWidgetArea, m_designDock);
 }
 
@@ -1060,6 +1078,16 @@ void MainWindow::applyPrototypeStyle()
 		QTreeWidget#ObjectsTree::item:selected { background: #dcecff; color: #111111; }
 		QMdiArea#MdiArea { background: #eceef0; }
 	)");
+}
+
+void MainWindow::configureInspectorTabWidget(QTabWidget* _tabWidget)
+{
+	if (_tabWidget == NULL || _tabWidget->tabBar() == NULL)
+		return;
+	_tabWidget->tabBar()->setExpanding(false);
+	_tabWidget->tabBar()->setMovable(false);
+	_tabWidget->tabBar()->setUsesScrollButtons(false);
+	_tabWidget->setElideMode(Qt::ElideRight);
 }
 
 void MainWindow::addObjectToTree(poca::core::MyObjectInterface* _object, QTreeWidgetItem* _parent)
@@ -1162,6 +1190,10 @@ void MainWindow::refreshObjectsPanel()
 	if (m_currentMdi == NULL || m_currentMdi->getWidget() == NULL || m_currentMdi->getWidget()->getObject() == NULL) {
 		if (m_objectTreeTabs != NULL)
 			m_objectTreeTabs->setVisible(false);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+		if (m_objectsDockTabs != NULL && m_objectsDockObjectsPage != NULL)
+			m_objectsDockTabs->setTabVisible(m_objectsDockTabs->indexOf(m_objectsDockObjectsPage), false);
+#endif
 		QTreeWidgetItem* emptyItem = new QTreeWidgetItem(m_objectsTree);
 		emptyItem->setText(0, tr("No object loaded"));
 		emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsUserCheckable);
@@ -1173,6 +1205,10 @@ void MainWindow::refreshObjectsPanel()
 
 	if (m_objectTreeTabs != NULL)
 		m_objectTreeTabs->setVisible(true);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+	if (m_objectsDockTabs != NULL && m_objectsDockObjectsPage != NULL)
+		m_objectsDockTabs->setTabVisible(m_objectsDockTabs->indexOf(m_objectsDockObjectsPage), true);
+#endif
 
 	poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
 	QTreeWidgetItem* root = new QTreeWidgetItem(m_objectsTree);
@@ -2368,8 +2404,22 @@ void MainWindow::actionNeeded()
 
 void MainWindow::openDatasetAssembler()
 {
-	if (m_tabWidget == NULL || m_datasetAssemblerW == NULL) return;
-	m_tabWidget->setCurrentWidget(m_datasetAssemblerW);
+	if (m_objectsDockTabs == NULL || m_datasetAssemblerW == NULL) return;
+	m_objectsDockTabs->setCurrentWidget(m_datasetAssemblerW);
+	if (m_designDock != NULL) {
+		m_designDock->show();
+		m_designDock->raise();
+	}
+}
+
+void MainWindow::openPythonWidget()
+{
+#ifndef NO_PYTHON
+	if (m_pythonW == NULL) return;
+	m_pythonW->show();
+	m_pythonW->raise();
+	m_pythonW->activateWindow();
+#endif
 }
 
 void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedFiles)

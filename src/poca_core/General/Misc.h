@@ -386,6 +386,9 @@ namespace poca::geometry {
 namespace poca::core::utils {
 	QTabWidget* addSingleTabWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget);
 	QTabWidget* addWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget, bool _first = true);
+	bool addWidgetToNamedLayout(QWidget* _root, const QString& _objectName, QWidget* _widget, bool _first = true);
+	void addOrQueueWidgetToNamedLayout(QWidget* _root, const QString& _objectName, QWidget* _widget, bool _first = true);
+	void processPendingWidgetsForNamedLayouts(QWidget* _root);
 	const bool isFileExtensionInList(const QString&, const QStringList&);
 	const bool isExtensionInList(const QString&, const QStringList&);
 	void getJsonsFromString(const QString&, std::vector <nlohmann::json>&);

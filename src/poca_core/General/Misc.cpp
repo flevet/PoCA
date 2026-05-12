@@ -39,6 +39,8 @@
 #include <random>
 #include <assert.h>
 #include <sys/stat.h>
+#include <QtCore/QPointer>
+#include <QtWidgets/QApplication>
 
 #include "Misc.h"
 
@@ -834,6 +836,38 @@ namespace poca::geometry {
 }
 
 namespace poca::core::utils {
+	namespace {
+		struct PendingNamedLayoutWidget {
+			QPointer<QWidget> root;
+			QString objectName;
+			QPointer<QWidget> widget;
+			bool first;
+		};
+
+		std::vector<PendingNamedLayoutWidget> g_pendingNamedLayoutWidgets;
+
+		QWidget* findNamedWidget(QWidget* _root, const QString& _objectName)
+		{
+			if (_root != NULL) {
+				QWidget* target = _root->objectName() == _objectName ? _root : _root->findChild<QWidget*>(_objectName);
+				if (target != NULL)
+					return target;
+				QWidget* window = _root->window();
+				if (window != NULL && window != _root) {
+					target = window->objectName() == _objectName ? window : window->findChild<QWidget*>(_objectName);
+					if (target != NULL)
+						return target;
+				}
+			}
+			for (QWidget* widget : QApplication::topLevelWidgets()) {
+				QWidget* target = widget->objectName() == _objectName ? widget : widget->findChild<QWidget*>(_objectName);
+				if (target != NULL)
+					return target;
+			}
+			return NULL;
+		}
+	}
+
 	QTabWidget* addSingleTabWidget(QTabWidget* _parent, const QString& _nameMainTab, const QString& _nameSubTab, QWidget* _widget)
 	{
 		QTabWidget* tabW = NULL;
@@ -908,6 +942,45 @@ namespace poca::core::utils {
 			miscWidget->update();
 		}
 		return parentTab;
+	}
+
+	bool addWidgetToNamedLayout(QWidget* _root, const QString& _objectName, QWidget* _widget, bool _first)
+	{
+		if (_root == NULL || _widget == NULL)
+			return false;
+		QWidget* target = findNamedWidget(_root, _objectName);
+		if (target == NULL || target->layout() == NULL)
+			return false;
+		QVBoxLayout* layout = dynamic_cast<QVBoxLayout*>(target->layout());
+		if (layout == NULL)
+			return false;
+		int size = layout->count();
+		size = size > 0 ? size - 1 : size;
+		layout->insertWidget(_first ? 0 : size, _widget);
+		target->update();
+		return true;
+	}
+
+	void addOrQueueWidgetToNamedLayout(QWidget* _root, const QString& _objectName, QWidget* _widget, bool _first)
+	{
+		if (addWidgetToNamedLayout(_root, _objectName, _widget, _first))
+			return;
+		g_pendingNamedLayoutWidgets.push_back({ _root, _objectName, _widget, _first });
+	}
+
+	void processPendingWidgetsForNamedLayouts(QWidget* _root)
+	{
+		for (auto it = g_pendingNamedLayoutWidgets.begin(); it != g_pendingNamedLayoutWidgets.end();) {
+			if (it->widget == NULL) {
+				it = g_pendingNamedLayoutWidgets.erase(it);
+				continue;
+			}
+			QWidget* root = _root != NULL ? _root : it->root.data();
+			if (addWidgetToNamedLayout(root, it->objectName, it->widget, it->first))
+				it = g_pendingNamedLayoutWidgets.erase(it);
+			else
+				++it;
+		}
 	}
 
 	const bool isFileExtensionInList(const QString& _filename, const QStringList& _extensions)
