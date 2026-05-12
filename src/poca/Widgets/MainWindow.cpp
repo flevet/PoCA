@@ -69,6 +69,7 @@
 #include <QtWidgets/QTableWidgetItem>
 #include <QtWidgets/QTreeWidget>
 #include <QtWidgets/QTreeWidgetItem>
+#include <QtWidgets/QGroupBox>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
@@ -234,15 +235,13 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	mediator->addWidget(rrw);
 	poca::core::utils::addWidget(m_tabWidget, QString("Misc."), QString("Reorganize rendering"), rrw, false);
 
-	m_macroW = new MacroWidget(mediator, m_tabWidget);
+	m_macroW = new MacroWidget(mediator, this);
 	mediator->addWidget(m_macroW);
-	m_tabWidget->addTab(m_macroW, QObject::tr("Macro"));
 	macroRecord->setTextEdit(m_macroW->getTextEdit());
 	macroRecord->setJson(m_macroW->getJson());
 	m_macroW->loadParameters(engine->getGlobalParameters());
 
-	m_datasetAssemblerW = new DatasetAssemblerWidget(m_tabWidget);
-	m_tabWidget->addTab(m_datasetAssemblerW, QObject::tr("Assembler"));
+	m_datasetAssemblerW = new DatasetAssemblerWidget(this);
 	m_datasetAssemblerW->loadParameters(engine->getGlobalParameters());
 	QObject::connect(m_datasetAssemblerW, SIGNAL(transferNewObjectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 
@@ -255,9 +254,8 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_pythonW->loadParameters(engine->getGlobalParameters());
 #endif
 
-	m_ROIsW = new ROIGeneralWidget(mediator, m_tabWidget);
+	m_ROIsW = new ROIGeneralWidget(mediator, this);
 	mediator->addWidget(m_ROIsW);
-	poca::core::utils::addWidget(m_tabWidget, QString("ROI Manager"), QString("General"), m_ROIsW, false);
 
 	for (int n = 0; n < m_tabWidget->count(); n++) {
 /*#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
@@ -275,7 +273,8 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 		cur2++;
 	}
 
-	m_tabWidget->setCurrentWidget(m_macroW);
+	if (m_tabWidget->count() > 0)
+		m_tabWidget->setCurrentIndex(0);
 
 	m_widgetColors = new ColorButtonGridWidget(this);
 	m_widgetColors->setMaxPerRow(20);
@@ -964,6 +963,11 @@ void MainWindow::createDesignDock()
 	objectLayout->addLayout(secondControlsRow);
 	objectPanel->setLayout(objectLayout);
 
+	m_objectTreeTabs = new QTabWidget(this);
+	m_objectTreeTabs->setObjectName("ObjectsTreeTabs");
+	m_objectTreeTabs->addTab(objectPanel, tr("Objects"));
+	m_objectTreeTabs->setVisible(false);
+
 	m_propertiesTable = new QTableWidget(this);
 	m_propertiesTable->setObjectName("PropertiesTable");
 	m_propertiesTable->setColumnCount(2);
@@ -979,20 +983,59 @@ void MainWindow::createDesignDock()
 	m_leftInspectorTabs->addTab(m_propertiesTable, tr("Properties"));
 	m_leftInspectorTabs->addTab(toolsArea, tr("Controls"));
 
-	QSplitter* leftSplitter = new QSplitter(Qt::Vertical, this);
-	leftSplitter->setObjectName("LeftDesignSplitter");
-	leftSplitter->addWidget(objectPanel);
-	leftSplitter->addWidget(m_leftInspectorTabs);
-	leftSplitter->setStretchFactor(0, 1);
-	leftSplitter->setStretchFactor(1, 2);
-	leftSplitter->setChildrenCollapsible(false);
+	QSplitter* objectsSplitter = new QSplitter(Qt::Vertical, this);
+	objectsSplitter->setObjectName("LeftObjectsSplitter");
+	objectsSplitter->addWidget(m_objectTreeTabs);
+	objectsSplitter->addWidget(m_leftInspectorTabs);
+	objectsSplitter->setStretchFactor(0, 1);
+	objectsSplitter->setStretchFactor(1, 2);
+	objectsSplitter->setChildrenCollapsible(false);
+
+	QWidget* cameraPanel = new QWidget(this);
+	QVBoxLayout* cameraLayout = new QVBoxLayout;
+	cameraLayout->setContentsMargins(0, 0, 0, 0);
+	cameraLayout->setSpacing(4);
+	QGroupBox* cameraPathGroup = new QGroupBox(tr("Camera path"), cameraPanel);
+	QVBoxLayout* cameraPathLayout = new QVBoxLayout;
+	cameraPathLayout->setContentsMargins(4, 4, 4, 4);
+	cameraPathLayout->addWidget(new QLabel(tr("Camera path controls are not available in this build."), cameraPathGroup));
+	cameraPathGroup->setLayout(cameraPathLayout);
+	cameraLayout->addWidget(cameraPathGroup);
+	if (m_mfw != NULL && m_mfw->cameraPositionDockWidget() != NULL)
+		cameraLayout->addWidget(m_mfw->cameraPositionDockWidget());
+	if (m_mfw != NULL && m_mfw->generalDockWidget() != NULL)
+		cameraLayout->addWidget(m_mfw->generalDockWidget());
+	if (m_mfw != NULL && m_mfw->ssaoDockWidget() != NULL)
+		cameraLayout->addWidget(m_mfw->ssaoDockWidget());
+	QWidget* cameraSpacer = new QWidget(cameraPanel);
+	cameraSpacer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+	cameraLayout->addWidget(cameraSpacer);
+	cameraPanel->setLayout(cameraLayout);
+
+	QScrollArea* cameraArea = new QScrollArea;
+	cameraArea->setObjectName("CameraScrollArea");
+	cameraArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	cameraArea->setWidgetResizable(true);
+	cameraArea->setFrameShape(QFrame::NoFrame);
+	cameraArea->setWidget(cameraPanel);
+	m_leftInspectorTabs->addTab(cameraArea, tr("Camera"));
+	if (m_ROIsW != NULL)
+		m_leftInspectorTabs->addTab(m_ROIsW, tr("ROI Manager"));
+
+	QTabWidget* dockTabs = new QTabWidget(this);
+	dockTabs->setObjectName("ObjectsDockTabs");
+	if (m_macroW != NULL)
+		dockTabs->addTab(m_macroW, tr("Macro"));
+	if (m_datasetAssemblerW != NULL)
+		dockTabs->addTab(m_datasetAssemblerW, tr("Assembler"));
+	dockTabs->addTab(objectsSplitter, tr("Objects"));
 
 	m_designDock = new QDockWidget(tr("Objects"), this);
 	m_designDock->setObjectName("ObjectsDock");
 	m_designDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetClosable);
 	m_designDock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_designDock->setMinimumWidth(300);
-	m_designDock->setWidget(leftSplitter);
+	m_designDock->setWidget(dockTabs);
 	addDockWidget(Qt::LeftDockWidgetArea, m_designDock);
 }
 
@@ -1117,6 +1160,8 @@ void MainWindow::refreshObjectsPanel()
 	m_objectsTree->clear();
 
 	if (m_currentMdi == NULL || m_currentMdi->getWidget() == NULL || m_currentMdi->getWidget()->getObject() == NULL) {
+		if (m_objectTreeTabs != NULL)
+			m_objectTreeTabs->setVisible(false);
 		QTreeWidgetItem* emptyItem = new QTreeWidgetItem(m_objectsTree);
 		emptyItem->setText(0, tr("No object loaded"));
 		emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsUserCheckable);
@@ -1125,6 +1170,9 @@ void MainWindow::refreshObjectsPanel()
 		refreshObjectControls();
 		return;
 	}
+
+	if (m_objectTreeTabs != NULL)
+		m_objectTreeTabs->setVisible(true);
 
 	poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
 	QTreeWidgetItem* root = new QTreeWidgetItem(m_objectsTree);

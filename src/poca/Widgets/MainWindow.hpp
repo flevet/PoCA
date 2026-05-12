@@ -204,6 +204,7 @@ private:
 	QTreeWidget* m_objectsTree{ nullptr };
 	QTableWidget* m_propertiesTable{ nullptr };
 	QTabWidget* m_leftInspectorTabs{ nullptr };
+	QTabWidget* m_objectTreeTabs{ nullptr };
 	QWidget* m_toolsPanel{ nullptr };
 	QPushButton* m_applyAllObjectsButton{ nullptr };
 	QPushButton* m_recomputeGridButton{ nullptr };

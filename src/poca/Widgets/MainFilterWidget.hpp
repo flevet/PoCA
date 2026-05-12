@@ -95,6 +95,10 @@ public:
 
 	inline void setCurrentCamera(poca::opengl::Camera* _cur) { m_currentCamera = _cur; }
 
+	inline QDockWidget* generalDockWidget() const { return m_dockGeneral; }
+	inline QDockWidget* cameraPositionDockWidget() const { return m_dockCameraPosition; }
+	inline QDockWidget* ssaoDockWidget() const { return m_dockSSAO; }
+
 protected slots:
 	void actionNeeded();
 	void actionNeeded( int );
