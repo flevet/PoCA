@@ -66,7 +66,8 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 
 	nlohmann::json buttonLayerConfig = {
 		{ "iconSize", maxSize },
-		{ "maxPalettesOnFirstLine", 9 },
+		{ "paletteLayout", { { "lines", 2 }, { "columns", 9 } } },
+		{ "actionLayout", { { "lines", 2 }, { "columns", 7 } } },
 		{ "palettes", { { { "name", "HotCold2" } }, { { "name", "InvFire" } }, { { "name", "Fire" } }, { { "name", "Ice" } }, { { "name", "AllRedColorBlind" } }, { { "name", "AllGreenColorBlind" } }, { { "name", "AllRed" } }, { { "name", "AllBlue" } }, { { "name", "AllWhite" } }, { { "name", "AllBlack" } }, { { "name", "AllCyan" } }, { { "name", "AllPinkish" } }, { { "name", "AllYellow" } }, { { "name", "AllOrange" } }, { { "name", "AllGrey1" } }, { { "name", "Gray" } }, { { "name", "Random" } }, { { "name", "RandomOneColor" } } } },
 		{ "actions", {
 			{ { "identifier", "saveDetectionsSVG" }, { "icon", "save" }, { "tooltip", "Save detections as SVG" } },
@@ -75,7 +76,11 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 			{ { "identifier", "heatmap" }, { "icon", "heatmap" }, { "tooltip", "Toggle heatmap" }, { "checkable", true }, { "checked", true }, { "exclusive", true } },
 			{ { "identifier", "gaussian" }, { "icon", "gaussian" }, { "tooltip", "Toggle gaussian rendering" }, { "checkable", true }, { "checked", true }, { "exclusive", true } },
 			{ { "identifier", "createObjectsOnLabels" }, { "icon", "object" }, { "tooltip", "Create objects" } },
-			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } }
+			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "pointSize" }, { "type", "spinbox" }, { "icon", "pointSize" }, { "tooltip", "Point size" }, { "minimum", 1 }, { "maximum", 100 }, { "value", 1 } },
+			{ { "identifier", "parameters" }, { "icon", "parameters" }, { "tooltip", "Parameter dialog" }, { "checkable", true } },
+			{ { "identifier", "world" }, { "icon", "world" }, { "tooltip", "World coordinates" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "screen" }, { "icon", "screen" }, { "tooltip", "Screen coordinates" }, { "checkable", true }, { "checked", false } }
 		} }
 	};
 	auto buttonLayer = poca::qt::generateButtonLayer(buttonLayerConfig, this);
@@ -96,6 +101,10 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	m_gaussianButton = buttonLayer->button("gaussian");
 	m_creationObjectsOnLabelsButton = buttonLayer->button("createObjectsOnLabels");
 	m_displayButton = buttonLayer->button("display");
+	m_sizePointSpn = buttonLayer->spinBox("pointSize");
+	m_parametersButton = buttonLayer->button("parameters");
+	m_worldButton = buttonLayer->button("world");
+	m_screenButton = buttonLayer->button("screen");
 	QObject::connect(m_saveDetectionsSVGButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_saveDetectionsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_pointRenderButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
@@ -108,50 +117,13 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	QObject::connect(m_creationObjectsOnLabelsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_displayButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 
-	QHBoxLayout* layoutLine2 = new QHBoxLayout;
-	m_line2Widget = new QWidget;
-	QWidget* emptyLine2 = new QWidget;
-	emptyLine2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	layoutLine2->addWidget(emptyLine2);
-	QLabel* sizePointLbl = new QLabel();
-	sizePointLbl->setMaximumSize(QSize(maxSize, maxSize));
-	sizePointLbl->setPixmap(QPixmap(poca::plot::pointSizeIcon).scaled(maxSize, maxSize, Qt::KeepAspectRatio));
-	layoutLine2->addWidget(sizePointLbl, 0, Qt::AlignRight);
-	m_sizePointSpn = new QSpinBox;
-	m_sizePointSpn->setRange(1, 100);
-	m_sizePointSpn->setValue(1);
-	m_sizePointSpn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	QObject::connect(m_sizePointSpn, SIGNAL(valueChanged(int)), this, SLOT(actionNeeded(int)));
-	layoutLine2->addWidget(m_sizePointSpn, 0, Qt::AlignRight);
-	m_parametersButton = new QPushButton();
-	m_parametersButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_parametersButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_parametersButton->setIcon(QIcon(QPixmap(poca::plot::parametersIcon)));
-	m_parametersButton->setToolTip("Parameter dialog");
-	layoutLine2->addWidget(m_parametersButton, 0, Qt::AlignRight);
 	QObject::connect(m_parametersButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-	m_worldButton = new QPushButton();
-	m_worldButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_worldButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_worldButton->setIcon(QIcon(QPixmap(poca::plot::worldIcon)));
-	m_worldButton->setToolTip("World coordinates");
-	m_worldButton->setCheckable(true);
-	m_worldButton->setChecked(true);
-	layoutLine2->addWidget(m_worldButton, 0, Qt::AlignRight);
 	QObject::connect(m_worldButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
-	m_screenButton = new QPushButton();
-	m_screenButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_screenButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_screenButton->setIcon(QIcon(QPixmap(poca::plot::screenIcon)));
-	m_screenButton->setToolTip("Screen coordinates");
-	m_screenButton->setCheckable(true);
-	m_screenButton->setChecked(false);
-	layoutLine2->addWidget(m_screenButton, 0, Qt::AlignRight);
 	QObject::connect(m_screenButton, SIGNAL(toggled(bool)), this, SLOT(actionNeeded(bool)));
 	m_worldScreenbuttonGroup = new QButtonGroup(this);
 	m_worldScreenbuttonGroup->addButton(m_worldButton);
 	m_worldScreenbuttonGroup->addButton(m_screenButton);
-	m_line2Widget->setLayout(layoutLine2);
 
 	m_detectionSetFilteringWidget = new QWidget;
 	m_detectionSetFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -300,7 +272,6 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	vboxgb1->setContentsMargins(1, 1, 1, 1);
 	vboxgb1->setSpacing(1);
 	vboxgb1->addWidget(m_lutsWidget);
-	vboxgb1->addWidget(m_line2Widget);
 	vboxgb1->addWidget(m_detectionSetFilteringWidget);
 	vboxgb1->addWidget(m_nbLocsLbl);
 	groupBox1->setLayout(vboxgb1); 

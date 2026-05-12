@@ -139,7 +139,7 @@
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
 #include "../Widgets/ColorButtonGridWidget.hpp"
 #include "../Widgets/DatasetAssemblerWidget.hpp"
-#include "../Widgets/CustomColorDialog.hpp"
+#include <Widgets/CustomColorDialog.hpp>
 #include "../../poca_voronoidiagramplugin/VoronoiCommandContext.hpp"
 
 #undef max 

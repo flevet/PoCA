@@ -10,14 +10,17 @@ link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(QT_WIDGET_HEADER_FILES
   Widgets/ButtonLayer.hpp
+  Widgets/CustomColorDialog.hpp
   )
 
 set(QT_WIDGET_SOURCE_FILES
   Widgets/ButtonLayer.cpp
+  Widgets/CustomColorDialog.cpp
   )
 
 set(FOO_MOC_HEADERS
   Widgets/ButtonLayer.hpp
+  Widgets/CustomColorDialog.hpp
   )
 
 set(header_list

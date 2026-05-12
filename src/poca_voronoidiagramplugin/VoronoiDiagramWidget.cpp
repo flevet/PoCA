@@ -66,6 +66,8 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	int maxSize = 20;
 	nlohmann::json buttonLayerConfig = {
 		{ "iconSize", maxSize },
+		{ "paletteLayout", { { "columns", 9 }, { "lines", 1 } } },
+		{ "actionLayout", { { "columns", 7 }, { "lines", 2 } } },
 		{ "palettes", { { { "name", "HotCold2" } }, { { "name", "InvFire" } }, { { "name", "Fire" } }, { { "name", "Ice" } }, { { "name", "AllRedColorBlind" } }, { { "name", "AllGreenColorBlind" } }, { { "name", "AllBlue" } }, { { "name", "AllWhite" } }, { { "name", "AllBlack" } } } },
 		{ "actions", {
 			{ { "identifier", "transferCells" }, { "icon", "export" }, { "tooltip", "Transfer cells" } },
@@ -75,7 +77,9 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 			{ { "identifier", "pointRendering" }, { "icon", "pointRendering" }, { "tooltip", "Render points" }, { "checkable", true }, { "checked", true } },
 			{ { "identifier", "polytopeRendering" }, { "icon", "polytopeRendering" }, { "tooltip", "Render polytopes" }, { "checkable", true }, { "checked", true } },
 			{ { "identifier", "fill" }, { "icon", "fill" }, { "tooltip", "Toggle fill/line" }, { "checkable", true }, { "checked", true } },
-			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } }
+			{ { "identifier", "display" }, { "icon", "display" }, { "tooltip", "Toggle display" }, { "checkable", true }, { "checked", true } },
+			{ { "identifier", "saveAsSVG" }, { "icon", "save" }, { "tooltip", "Save voronoi as SVG" } },
+			{ { "identifier", "pointSize" }, { "type", "spinbox" }, { "icon", "pointSize" }, { "tooltip", "Point size" }, { "minimum", 1 }, { "maximum", 100 }, { "value", 1 } }
 		} }
 	};
 	auto buttonLayer = poca::qt::generateButtonLayer(buttonLayerConfig, this);
@@ -97,6 +101,8 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	m_polyRenderButton = buttonLayer->button("polytopeRendering");
 	m_fillButton = buttonLayer->button("fill");
 	m_displayButton = buttonLayer->button("display");
+	m_saveAsSVGButton = buttonLayer->button("saveAsSVG");
+	m_sizePointSpn = buttonLayer->spinBox("pointSize");
 	QObject::connect(m_transferCellsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QObject::connect(m_invertSelectionButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_bboxSelectionButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
@@ -105,34 +111,8 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	QObject::connect(m_polyRenderButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QObject::connect(m_fillButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QObject::connect(m_displayButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
-
-	m_buttonsWidget = new QWidget;
-	m_buttonsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	QHBoxLayout* layoutButtons = new QHBoxLayout;
-	QWidget* emptyButtons = new QWidget;
-	emptyButtons->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	layoutButtons->addWidget(emptyButtons);
-
-	m_saveAsSVGButton = new QPushButton();
-	m_saveAsSVGButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-	m_saveAsSVGButton->setMaximumSize(QSize(maxSize, maxSize));
-	m_saveAsSVGButton->setIcon(QIcon(QPixmap(poca::plot::saveIcon)));
-	m_saveAsSVGButton->setToolTip("Save voronoi as SVG");
-	layoutButtons->addWidget(m_saveAsSVGButton, 0, Qt::AlignRight);
 	QObject::connect(m_saveAsSVGButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
-
-
-	QLabel* sizePointLbl = new QLabel();
-	sizePointLbl->setMaximumSize(QSize(maxSize, maxSize));
-	sizePointLbl->setPixmap(QPixmap(poca::plot::pointSizeIcon).scaled(maxSize, maxSize, Qt::KeepAspectRatio));
-	layoutButtons->addWidget(sizePointLbl, 0, Qt::AlignRight);
-	m_sizePointSpn = new QSpinBox;
-	m_sizePointSpn->setRange(1, 100);
-	m_sizePointSpn->setValue(1);
-	m_sizePointSpn->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	QObject::connect(m_sizePointSpn, SIGNAL(valueChanged(int)), this, SLOT(actionNeeded(int)));
-	layoutButtons->addWidget(m_sizePointSpn, 0, Qt::AlignRight);
-	m_buttonsWidget->setLayout(layoutButtons);
 
 	m_voronoiFilteringWidget = new QWidget;
 	m_voronoiFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -250,7 +230,6 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	layout->setContentsMargins(1, 1, 1, 1);
 	layout->setSpacing(1);
 	layout->addWidget(m_lutsWidget);
-	layout->addWidget(m_buttonsWidget);
 	layout->addWidget(m_voronoiFilteringWidget);
 	layout->addWidget(widgetFilter);
 	layout->addWidget(m_dockVoronoiCharateristics);

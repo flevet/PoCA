@@ -44,6 +44,7 @@
 class QPushButton;
 class QCheckBox;
 class QPlainTextEdit;
+class QSpinBox;
 
 namespace poca::core {
 	class EquationFit;
@@ -80,7 +81,7 @@ protected:
 	poca::core::MediatorWObjectFWidgetInterface* m_mediator;
 
 	//Filtering/display
-	QWidget* m_lutsWidget, * m_detectionSetFilteringWidget, *m_emptyWidget, * m_line2Widget;
+	QWidget* m_lutsWidget, * m_detectionSetFilteringWidget, *m_emptyWidget;
 	std::vector <std::pair<QPushButton*, std::string>> m_lutButtons, m_lutHeatmapButtons;
 	std::vector <poca::plot::FilterHistogramWidget*> m_histWidgets;
 	QPushButton * m_displayButton, * m_heatmapButton, * m_pointRenderButton, * m_saveDetectionsSVGButton, * m_saveDetectionsButton, * m_gaussianButton, * m_parametersButton, * m_creationObjectsOnLabelsButton;

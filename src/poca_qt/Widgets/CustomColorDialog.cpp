@@ -13,7 +13,6 @@
 #include <QtCore/QEvent>
 
 #include <General/Engine.hpp>
-#include <General/Misc.h>
 #include <Plot/Misc.h>
 
 #include "CustomColorDialog.hpp"
@@ -183,8 +182,10 @@ CustomColorDialog::CustomColorDialog(QWidget* _parent) : QColorDialog(_parent)
 	QObject::connect(m_saveButton, SIGNAL(clicked()), this, SLOT(savePalette()));
 	m_deleteButton = buttons->addButton(tr("Delete"), QDialogButtonBox::DestructiveRole);
 	QObject::connect(m_deleteButton, SIGNAL(clicked()), this, SLOT(deletePalette()));
+	QPushButton* select = buttons->addButton(tr("Select"), QDialogButtonBox::AcceptRole);
+	QObject::connect(select, SIGNAL(clicked()), this, SLOT(selectPalette()));
 	QPushButton* close = buttons->addButton(QDialogButtonBox::Close);
-	QObject::connect(close, SIGNAL(clicked()), this, SLOT(accept()));
+	QObject::connect(close, SIGNAL(clicked()), this, SLOT(reject()));
 
 	QVBoxLayout* mainLay = dynamic_cast<QVBoxLayout*>(layout);
 	if (mainLay) {
@@ -273,7 +274,12 @@ void CustomColorDialog::loadPalette(const std::string& _name, const poca::core::
 
 void CustomColorDialog::newPalette()
 {
-	poca::core::Palette palette(poca::core::randomColorB(), poca::core::randomColorB(), "New palette");
+	float r = (float)rand() / (float)RAND_MAX;
+	float g = (float)rand() / (float)RAND_MAX;
+	float b = (float)rand() / (float)RAND_MAX;
+	float a = 1.f;
+	poca::core::Color4D color(r * 255.f, g * 255.f, b * 255.f, a * 255.f);
+	poca::core::Palette palette(color, color, "New palette");
 	loadPalette("New palette", palette, true);
 }
 
@@ -282,8 +288,15 @@ void CustomColorDialog::paletteButtonClicked()
 	QPushButton* button = qobject_cast<QPushButton*>(sender());
 	if (button == nullptr) return;
 	std::string name = button->property("paletteName").toString().toStdString();
-	poca::core::Palette* palette = poca::core::Engine::instance()->palette(name);
-	if (palette != nullptr) loadPalette(name, *palette, false);
+	setSelectedPalette(name);
+}
+
+bool CustomColorDialog::setSelectedPalette(const std::string& _name)
+{
+	poca::core::Palette* palette = poca::core::Engine::instance()->palette(_name);
+	if (palette == nullptr) return false;
+	loadPalette(_name, *palette, false);
+	return true;
 }
 
 void CustomColorDialog::savePalette()
@@ -302,6 +315,18 @@ void CustomColorDialog::savePalette()
 	m_saveButton->setText(tr("Save changes"));
 	if (m_deleteButton != nullptr) m_deleteButton->setEnabled(true);
 	rebuildPaletteButtons();
+}
+
+
+void CustomColorDialog::selectPalette()
+{
+	if (m_newPalette)
+		savePalette();
+	if (m_currentName.empty()) {
+		QMessageBox::warning(this, tr("Palette"), tr("Please select a palette."));
+		return;
+	}
+	accept();
 }
 
 void CustomColorDialog::deletePalette()

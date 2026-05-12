@@ -59,7 +59,8 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	int maxSize = 20;
 	nlohmann::json buttonLayerConfig = {
 		{ "iconSize", maxSize },
-		{ "maxPalettesOnFirstLine", 9 },
+		{ "paletteLayout", { { "columns", 9 }, { "lines", 2 } } },
+		{ "actionLayout", { { "columns", 7 }, { "lines", 2 } } },
 		{ "palettes", { { { "name", "HotCold2" } }, { { "name", "InvFire" } }, { { "name", "Fire" } }, { { "name", "Ice" } }, { { "name", "AllRedColorBlind" } }, { { "name", "AllGreenColorBlind" } }, { { "name", "AllBlue" } }, { { "name", "AllWhite" } }, { { "name", "AllBlack" } }, { { "name", "AllRed" } }, { { "name", "AllGreen" } }, { { "name", "AllOrange" } }, { { "name", "AllTomato" } }, { { "name", "AllCyan" } }, { { "name", "Random" } } } },
 		{ "actions", {
 			{ { "identifier", "transferCells" }, { "icon", "export" }, { "tooltip", "Transfer cells" } },
@@ -73,9 +74,6 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	auto buttonLayer = poca::qt::generateButtonLayer(buttonLayerConfig, this);
 	m_lutsWidget = buttonLayer;
 	m_lutsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	m_lutsWidget2 = new QWidget;
-	m_lutsWidget2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	m_lutsWidget2->hide();
 	for (const auto& palette : buttonLayerConfig["palettes"]) {
 		std::string name = palette["name"].get<std::string>();
 		QPushButton* button = buttonLayer->paletteButton(QString::fromStdString(name));
@@ -84,13 +82,11 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 			QObject::connect(button, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 		}
 	}
-	m_transferCellsButton = buttonLayer->button("transferCells");
 	m_invertSelectionButton = buttonLayer->button("invertSelection");
 	m_bboxSelectionButton = buttonLayer->button("bboxSelection");
 	m_creationFlteredObjectsButton = buttonLayer->button("createObjects");
 	m_fillButton = buttonLayer->button("fill");
 	m_displayButton = buttonLayer->button("display");
-	QObject::connect(m_transferCellsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QObject::connect(m_invertSelectionButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	QObject::connect(m_bboxSelectionButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	QObject::connect(m_creationFlteredObjectsButton, SIGNAL(pressed()), this, SLOT(actionNeeded()));
@@ -157,7 +153,6 @@ DelaunayTriangulationWidget::DelaunayTriangulationWidget(poca::core::MediatorWOb
 	layout->setContentsMargins(1, 1, 1, 1);
 	layout->setSpacing(1);
 	layout->addWidget(m_lutsWidget);
-	layout->addWidget(m_lutsWidget2);
 	layout->addWidget(m_delaunayTriangulationFilteringWidget);
 	layout->addWidget(widgetFilter);
 	layout->addWidget(m_emptyWidget);

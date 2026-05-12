@@ -13,13 +13,15 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QButtonGroup>
-#include <QtWidgets/QColorDialog>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QHBoxLayout>
-#include <QtWidgets/QMenu>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QSizePolicy>
 #include <QtGui/QIcon>
@@ -27,6 +29,8 @@
 #include <QtGui/QPixmap>
 
 #include <General/Palette.hpp>
+#include <General/Engine.hpp>
+#include "CustomColorDialog.hpp"
 #include <Plot/Icons.hpp>
 #include <Plot/Misc.h>
 
@@ -64,6 +68,14 @@ namespace poca::qt {
 		return nullptr;
 	}
 
+	QSpinBox* ButtonLayer::spinBox(const QString& _identifier) const
+	{
+		for (const auto& s : m_spinBoxes)
+			if (s.second == _identifier)
+				return s.first;
+		return nullptr;
+	}
+
 	nlohmann::json ButtonLayer::saveConfiguration() const
 	{
 		nlohmann::json config = m_configuration;
@@ -81,42 +93,61 @@ namespace poca::qt {
 
 	void ButtonLayer::buildFromConfiguration()
 	{
-		QHBoxLayout* line1 = new QHBoxLayout;
-		QHBoxLayout* line2 = nullptr;
-		const bool allowSecondLine = boolValue(m_configuration, "allowSecondLine", true);
-		if (allowSecondLine)
-			line2 = new QHBoxLayout;
+		const int paletteColumns = intValue(m_configuration.contains("paletteLayout") ? m_configuration["paletteLayout"] : m_configuration, "columns", intValue(m_configuration, "maxPalettesOnFirstLine", 9));
+		const int requestedPaletteLines = intValue(m_configuration.contains("paletteLayout") ? m_configuration["paletteLayout"] : m_configuration, "lines", 1);
+		const int actionColumns = intValue(m_configuration.contains("actionLayout") ? m_configuration["actionLayout"] : m_configuration, "columns", 7);
+		const int requestedActionLines = intValue(m_configuration.contains("actionLayout") ? m_configuration["actionLayout"] : m_configuration, "lines", 1);
 
-		const int maxPalettesOnFirstLine = intValue(m_configuration, "maxPalettesOnFirstLine", 9);
+		const int nbPalettes = (m_configuration.contains("palettes") && m_configuration["palettes"].is_array()) ? (int)m_configuration["palettes"].size() : 0;
+		const int nbActions = (m_configuration.contains("actions") && m_configuration["actions"].is_array()) ? (int)m_configuration["actions"].size() : 0;
+		const int paletteLines = std::max(requestedPaletteLines, rowIndexForItem(std::max(0, nbPalettes - 1), paletteColumns, requestedPaletteLines) + 1);
+		const int actionLines = std::max(requestedActionLines, rowIndexForItem(std::max(0, nbActions - 1), actionColumns, requestedActionLines) + 1);
+		const int nbLines = std::max(1, std::max(paletteLines, actionLines));
+
+		std::vector<QHBoxLayout*> lines;
+		for (int n = 0; n < nbLines; ++n)
+			lines.push_back(new QHBoxLayout);
+
 		int paletteIndex = 0;
 		if (m_configuration.contains("palettes") && m_configuration["palettes"].is_array())
 			for (const auto& item : m_configuration["palettes"]) {
-				addPaletteButton(item, line1, line2, maxPalettesOnFirstLine, paletteIndex);
+				const int row = rowIndexForItem(paletteIndex, paletteColumns, requestedPaletteLines);
+				if (row >= 0 && row < (int)lines.size())
+					addPaletteButton(item, lines[row]);
 				++paletteIndex;
 			}
 
-		QWidget* spacer = new QWidget;
-		spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-		line1->addWidget(spacer);
+		for (QHBoxLayout* line : lines) {
+			QWidget* spacer = new QWidget;
+			spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+			line->addWidget(spacer);
+		}
 
+		int actionIndex = 0;
 		if (m_configuration.contains("actions") && m_configuration["actions"].is_array())
-			for (const auto& item : m_configuration["actions"])
-				addActionButton(item, line1, m_iconSize);
+			for (const auto& item : m_configuration["actions"]) {
+				const int row = rowIndexForItem(actionIndex, actionColumns, requestedActionLines);
+				if (row >= 0 && row < (int)lines.size()) {
+					const QString type = stringValue(item, "type", "button");
+					if (type == "spinbox" || type == "spinBox")
+						addSpinBox(item, lines[row], m_iconSize);
+					else
+						addActionButton(item, lines[row], m_iconSize);
+				}
+				++actionIndex;
+			}
 
 		QVBoxLayout* mainLayout = new QVBoxLayout;
 		mainLayout->setContentsMargins(0, 0, 0, 0);
 		mainLayout->setSpacing(0);
-		mainLayout->addLayout(line1);
-		if (line2 != nullptr && line2->count() > 0) {
-			QWidget* spacer2 = new QWidget;
-			spacer2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-			line2->addWidget(spacer2);
-			mainLayout->addLayout(line2);
-		}
+		for (QHBoxLayout* line : lines)
+			if (line->count() > 1)
+				mainLayout->addLayout(line);
 		setLayout(mainLayout);
 	}
 
-	void ButtonLayer::addPaletteButton(const nlohmann::json& _item, QHBoxLayout* _line1, QHBoxLayout* _line2, const int _maxPalettesOnFirstLine, const int _paletteIndex)
+
+	void ButtonLayer::addPaletteButton(const nlohmann::json& _item, QHBoxLayout* _layout)
 	{
 		QString paletteName = stringValue(_item, "name");
 		if (paletteName.isEmpty() || (!isKnownPalette(paletteName.toStdString()) && paletteName != "RandomOneColor" && paletteName != "Random"))
@@ -130,13 +161,13 @@ namespace poca::qt {
 		button->setContextMenuPolicy(Qt::CustomContextMenu);
 		updatePaletteButtonIcon(button, paletteName);
 
-		QHBoxLayout* targetLine = (_line2 != nullptr && _paletteIndex >= _maxPalettesOnFirstLine) ? _line2 : _line1;
-		targetLine->addWidget(button, 0, Qt::AlignLeft);
+		_layout->addWidget(button, 0, Qt::AlignLeft);
 		connect(button, SIGNAL(pressed()), this, SLOT(processPaletteButton()));
 		connect(button, SIGNAL(customContextMenuRequested(const QPoint&)), this, SLOT(processPaletteContextMenu(const QPoint&)));
 
 		m_paletteButtons.push_back({ button, paletteName, "palette" });
 	}
+
 
 	void ButtonLayer::addActionButton(const nlohmann::json& _item, QHBoxLayout* _layout, const int _maxSize)
 	{
@@ -170,6 +201,35 @@ namespace poca::qt {
 		m_buttons.push_back({ button, identifier, "action" });
 	}
 
+	void ButtonLayer::addSpinBox(const nlohmann::json& _item, QHBoxLayout* _layout, const int _maxSize)
+	{
+		QString identifier = stringValue(_item, "identifier");
+		if (identifier.isEmpty())
+			identifier = stringValue(_item, "id");
+		if (identifier.isEmpty())
+			return;
+
+		const QString iconId = stringValue(_item, "icon");
+		if (!iconId.isEmpty()) {
+			QLabel* label = new QLabel;
+			label->setMaximumSize(QSize(_maxSize, _maxSize));
+			label->setPixmap(iconFromIdentifier(iconId).pixmap(_maxSize, _maxSize));
+			label->setToolTip(stringValue(_item, "tooltip", identifier));
+			_layout->addWidget(label, 0, Qt::AlignRight);
+		}
+
+		QSpinBox* spin = new QSpinBox;
+		spin->setRange(intValue(_item, "minimum", intValue(_item, "min", 0)), intValue(_item, "maximum", intValue(_item, "max", 100)));
+		spin->setValue(intValue(_item, "value", intValue(_item, "default", spin->minimum())));
+		spin->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+		spin->setProperty("poca_action", identifier);
+		spin->setToolTip(stringValue(_item, "tooltip", identifier));
+		_layout->addWidget(spin, 0, Qt::AlignRight);
+		connect(spin, SIGNAL(valueChanged(int)), this, SLOT(processSpinBox(int)));
+		m_spinBoxes.push_back(std::make_pair(spin, identifier));
+	}
+
+
 	void ButtonLayer::processPaletteButton()
 	{
 		QPushButton* button = qobject_cast<QPushButton*>(sender());
@@ -184,25 +244,16 @@ namespace poca::qt {
 		if (button == nullptr)
 			return;
 
-		QMenu* menu = buildPaletteMenu(button);
-		QAction* selected = menu->exec(button->mapToGlobal(_pos));
-		if (selected == nullptr)
-			return;
-
 		QString previousPalette = button->property("poca_palette").toString();
-		if (selected->data().toString() == "__custom_color__") {
-			QColor color = QColorDialog::getColor(Qt::white, this, tr("Choose palette color"));
-			if (!color.isValid())
-				return;
-			QString newName = QString("Custom:%1,%2,%3").arg(color.red()).arg(color.green()).arg(color.blue());
-			button->setProperty("poca_palette", newName);
-			updateMonochromePaletteButtonIcon(button, color);
-			emit paletteChanged(previousPalette, newName);
+		CustomColorDialog dialog(this);
+		dialog.setSelectedPalette(previousPalette.toStdString());
+		if (dialog.exec() != QDialog::Accepted)
 			return;
-		}
 
-		QString newPalette = selected->data().toString();
+		QString newPalette = QString::fromStdString(dialog.selectedPaletteName());
 		if (newPalette.isEmpty() || newPalette == previousPalette)
+			return;
+		if (!isKnownPalette(newPalette.toStdString()))
 			return;
 		button->setProperty("poca_palette", newPalette);
 		button->setToolTip(newPalette);
@@ -226,29 +277,30 @@ namespace poca::qt {
 		emit actionToggled(button->property("poca_action").toString(), _checked);
 	}
 
-	QMenu* ButtonLayer::buildPaletteMenu(QPushButton* _button) const
+	void ButtonLayer::processSpinBox(const int _value)
 	{
-		QMenu* menu = new QMenu(_button);
-		const QString current = _button->property("poca_palette").toString();
-		for (const QString& name : knownPalettes()) {
-			QAction* action = menu->addAction(name);
-			action->setData(name);
-			action->setCheckable(true);
-			action->setChecked(name == current);
-		}
-		menu->addSeparator();
-		QAction* custom = menu->addAction(tr("Custom color..."));
-		custom->setData("__custom_color__");
-		return menu;
+		QSpinBox* spin = qobject_cast<QSpinBox*>(sender());
+		if (spin == nullptr)
+			return;
+		emit spinBoxValueChanged(spin->property("poca_action").toString(), _value);
 	}
+
+	int ButtonLayer::rowIndexForItem(const int _index, const int _columns, const int)
+	{
+		if (_index < 0)
+			return 0;
+		return _index / std::max(1, _columns);
+	}
+
 
 	void ButtonLayer::updatePaletteButtonIcon(QPushButton* _button, const QString& _paletteName) const
 	{
-		if (_paletteName == "RandomOneColor" || _paletteName == "Random") {
+		if (_paletteName == "RandomOneColor") {
 			_button->setIcon(QIcon(QPixmap(poca::plot::randomIcon)));
 			return;
 		}
-		poca::core::Palette palette = poca::core::Palette::getStaticLut(_paletteName.toStdString());
+		poca::core::Palette* enginePalette = poca::core::Engine::instance()->palette(_paletteName.toStdString());
+		poca::core::Palette palette = enginePalette != nullptr ? *enginePalette : poca::core::Palette::getStaticLut(_paletteName.toStdString());
 		QImage image = poca::core::generateImage(m_iconSize, m_iconSize, &palette);
 		_button->setIcon(QIcon(QPixmap::fromImage(image)));
 	}
@@ -266,16 +318,17 @@ namespace poca::qt {
 
 	bool ButtonLayer::isKnownPalette(const std::string& _name)
 	{
-		const std::vector<std::string>& names = poca::core::Palette::getStaticLutNames();
-		return std::find(names.begin(), names.end(), _name) != names.end();
+		if (_name == "RandomOneColor" || _name == "Random")
+			return true;
+		return poca::core::Engine::instance()->palette(_name) != nullptr;
 	}
 
 	QStringList ButtonLayer::knownPalettes()
 	{
 		QStringList result;
-		const std::vector<std::string>& names = poca::core::Palette::getStaticLutNames();
-		for (const std::string& name : names)
-			result << QString::fromStdString(name);
+		const auto& palettes = poca::core::Engine::instance()->palettes();
+		for (const auto& item : palettes)
+			result << QString::fromStdString(item.first);
 		return result;
 	}
 
@@ -288,6 +341,7 @@ namespace poca::qt {
 		if (id == "export") return QIcon(QPixmap(poca::plot::exportIcon));
 		if (id == "object" || id == "createObjects") return QIcon(QPixmap(poca::plot::objectIcon));
 		if (id == "pointRendering" || id == "points") return QIcon(QPixmap(poca::plot::pointRenderingIcon));
+		if (id == "pointSize") return QIcon(QPixmap(poca::plot::pointSizeIcon));
 		if (id == "outlinePointRendering" || id == "outlines") return QIcon(QPixmap(poca::plot::outlinePointRenderingIcon));
 		if (id == "polytopeRendering" || id == "polytope") return QIcon(QPixmap(poca::plot::polytopeRenderingIcon));
 		if (id == "bbox" || id == "boundingBox") return QIcon(QPixmap(poca::plot::bboxIcon));
@@ -299,7 +353,7 @@ namespace poca::qt {
 		if (id == "gaussian" || id == "gauss3D") return QIcon(QPixmap(poca::plot::gauss3DIcon));
 		if (id == "world") return QIcon(QPixmap(poca::plot::worldIcon));
 		if (id == "screen") return QIcon(QPixmap(poca::plot::screenIcon));
-		if (id == "random") return QIcon(QPixmap(poca::plot::randomIcon));
+		//if (id == "random") return QIcon(QPixmap(poca::plot::randomIcon));
 		if (id == "clear") return QIcon(QPixmap(poca::plot::clearIcon));
 		if (id == "reset") return QIcon(QPixmap(poca::plot::resetIcon));
 		if (id == "color") return QIcon(QPixmap(poca::plot::colorIcon));

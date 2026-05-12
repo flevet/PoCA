@@ -46,11 +46,15 @@ public:
 	CustomColorDialog(QWidget* = nullptr);
 	~CustomColorDialog();
 
+	std::string selectedPaletteName() const { return m_currentName; }
+	bool setSelectedPalette(const std::string&);
+
 public slots:
 	void positionChanged();
 	void newPalette();
 	void paletteButtonClicked();
 	void savePalette();
+	void selectPalette();
 	void deletePalette();
 
 protected:

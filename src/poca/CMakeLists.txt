@@ -7,6 +7,7 @@ include_directories(${CMAKE_SOURCE_DIR}/poca_core)
 include_directories(${CMAKE_SOURCE_DIR}/poca_opengl)
 include_directories(${CMAKE_SOURCE_DIR}/poca_plot)
 include_directories(${CMAKE_SOURCE_DIR}/poca_geometry)
+include_directories(${CMAKE_SOURCE_DIR}/poca_qt)
 include_directories(${CMAKE_SOURCE_DIR}/../include)
 link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
@@ -41,7 +42,6 @@ set(WIDGET_HEADER_FILES
   Widgets/ReorganizeRenderingWidget.hpp
   Widgets/ColorButtonGridWidget.hpp
   Widgets/DatasetAssemblerWidget.hpp
-  Widgets/CustomColorDialog.hpp
   )
 
 set(WIDGET_SOURCE_FILES
@@ -56,7 +56,6 @@ set(WIDGET_SOURCE_FILES
   Widgets/ReorganizeRenderingWidget.cpp
   Widgets/ColorButtonGridWidget.cpp
   Widgets/DatasetAssemblerWidget.cpp
-  Widgets/CustomColorDialog.cpp
  )
 
 if(ADD_PYTHON)
@@ -72,7 +71,6 @@ if(ADD_PYTHON)
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/ColorButtonGridWidget.hpp
 	  Widgets/DatasetAssemblerWidget.hpp
-	  Widgets/CustomColorDialog.hpp
 	)
 else()
 	set(FOO_MOC_HEADERS
@@ -86,7 +84,6 @@ else()
   	  Widgets/ReorganizeRenderingWidget.hpp
 	  Widgets/DatasetAssemblerWidget.hpp
 	  Widgets/ColorButtonGridWidget.cpp
-	  Widgets/CustomColorDialog.hpp
 	)
 
 endif()
@@ -104,7 +101,6 @@ if(ADD_PYTHON)
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.hpp
 	  Widgets/DatasetAssemblerWidget.cpp
-	  Widgets/CustomColorDialog.cpp
 	  )
 else()
 	set(FOO_SOURCE_FILES
@@ -118,7 +114,6 @@ else()
   	  Widgets/ReorganizeRenderingWidget.cpp
 	  Widgets/ColorButtonGridWidget.cpp
 	  Widgets/DatasetAssemblerWidget.cpp
-	  Widgets/CustomColorDialog.cpp
 	  )
 
 endif()
@@ -234,6 +229,8 @@ IF(MSVC)
 ENDIF(MSVC)
 
 target_link_libraries(${targetname} Qt5::Widgets Qt5::Core Qt5::Gui Qt5::OpenGL Qt5::PrintSupport)
+target_link_libraries(${targetname} debug poca_qtd.lib)
+target_link_libraries(${targetname} optimized poca_qt.lib)
 
 find_package(OpenGL REQUIRED)
 include_directories(${OPENGL_INCLUDE_DIRS})
