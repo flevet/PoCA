@@ -571,8 +571,11 @@ namespace poca::core {
 			return v;
 		}
 
-		// Ensure parent exists, then downsample from it
-		PyramidLevel parent;
+		// Ensure parent exists, then downsample from it without copying the full
+		// parent level. With hundreds of images, that copy becomes visible during
+		// interactive LOD changes.
+		PyramidLevel fallbackParent;
+		const PyramidLevel* parent = nullptr;
 		if (level == 1) {
 			PyramidLevel lvl = downsampleRaw(this->data(), this->width(), this->height(), this->depth(), fx, fy, fz, mode);
 			auto [insIt, _] = m_pyramid.emplace(key, std::move(lvl));
@@ -588,16 +591,17 @@ namespace poca::core {
 			PyramidKey pkey{ level - 1, fx, fy, fz, uint8_t(mode) };
 			auto pit = m_pyramid.find(pkey);
 			if (pit != m_pyramid.end()) {
-				parent = pit->second;
+				parent = &pit->second;
 			}
 			else {
 				// fallback (should not happen)
-				parent.w = pv.w; parent.h = pv.h; parent.d = pv.d;
-				parent.data.assign(pv.ptr, pv.ptr + size_t(pv.w) * pv.h * pv.d);
+				fallbackParent.w = pv.w; fallbackParent.h = pv.h; fallbackParent.d = pv.d;
+				fallbackParent.data.assign(pv.ptr, pv.ptr + size_t(pv.w) * pv.h * pv.d);
+				parent = &fallbackParent;
 			}
 		}
 
-		PyramidLevel lvl = downsampleLevel(parent, fx, fy, fz, mode);
+		PyramidLevel lvl = downsampleLevel(*parent, fx, fy, fz, mode);
 		auto [insIt, _] = m_pyramid.emplace(key, std::move(lvl));
 
 		PyramidLevelView v;

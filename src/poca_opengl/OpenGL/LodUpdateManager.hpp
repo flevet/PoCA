@@ -45,6 +45,7 @@ namespace poca::opengl {
 		uint32_t requestVersion{ 0 };
 		float priority{ 0.f };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
+		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		bool visible{ true };
 		std::function<bool(const ImageLodRequest&, ImageLodReady&)> prepareCallback;
 
@@ -76,6 +77,7 @@ namespace poca::opengl {
 		LodRequestStatus status{ LodRequestStatus::Idle };
 		uint64_t lastVisibleFrame{ 0 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
+		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		bool visible{ true };
 	
 		friend std::ostream& operator<<(std::ostream&, const ImageLodState&);
@@ -98,7 +100,7 @@ namespace poca::opengl {
 
 		bool popNextQueuedRequest(ImageLodRequest&);
 		std::vector<ImageLodRequest> drainQueuedRequests();
-		std::vector<ImageLodReady> drainReadyUploads(std::size_t maxUploads = 0);
+		std::vector<ImageLodReady> drainReadyUploads(std::size_t maxUploads = 0, std::size_t maxPreparedVoxels = 0);
 
 		void markPreparing(uint64_t imageId, uint32_t requestVersion);
 		void markReady(const ImageLodReady&);
@@ -111,6 +113,8 @@ namespace poca::opengl {
 	private:
 		void workerLoop();
 		bool popNextQueuedRequestUnsafe(ImageLodRequest&);
+		void removeQueuedRequestsForImageUnsafe(uint64_t imageId);
+		void removeReadyUploadsForImageUnsafe(uint64_t imageId);
 
 		Camera* m_camera{ nullptr };
 		std::priority_queue<ImageLodRequest> m_requests;
@@ -118,7 +122,7 @@ namespace poca::opengl {
 		std::unordered_map<uint64_t, ImageLodState> m_states;
 		mutable std::mutex m_mutex;
 		std::condition_variable m_condition;
-		std::thread m_worker;
+		std::vector<std::thread> m_workers;
 		bool m_stopWorker{ false };
 	};
 }
