@@ -203,6 +203,7 @@ namespace {
 			return;
 
 		_object->setCurrentObject(_objectIndex);
+		_object->setSelectedObjectIndices({ _objectIndex });
 		_object->notify("LoadObjCharacteristicsAllWidgets");
 		_object->notifyAll("updateDisplay");
 	}
@@ -235,9 +236,15 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 
 void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	poca::opengl::BasicDisplayCommand::execute(_infos);
+	if (_infos == nullptr)
+		return;
+	if (_infos->nameCommand != "pick" && _infos->nameCommand != "updatePickingBuffer")
+		poca::opengl::BasicDisplayCommand::execute(_infos);
 
-	if (_infos->nameCommand == "display") {
+	if (_infos->nameCommand == "updatePickingBuffer") {
+		markComponentFamilyHandled(_result);
+	}
+	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
 		if (_context.has<poca::opengl::ActiveCamera>())
 			cam = _context.get<poca::opengl::ActiveCamera>().camera;
@@ -248,29 +255,19 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 	}
 	else if (_infos->nameCommand == "pick") {
 		if (!canBatch()) return;
-		const QString infos = getInfosLocalization(m_idSelection);
-		if (!infos.isEmpty()) {
-			poca::core::stringList listInfos;
-			if (_result.has<poca::opengl::PickedInfoListResult>())
-				listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
-			listInfos.push_back(infos.toLatin1().data());
-			_result.set(poca::opengl::PickedInfoListResult{ listInfos });
-		}
-		if (m_idSelection >= 0 && (size_t)m_idSelection < m_pickMap.size()) {
-			const auto& picked = m_pickMap[m_idSelection];
-			appendGlobalObjectInfo(_result, m_object, picked.objectIndex);
-			handlePickedObjectSelection(_infos, m_object, picked.objectIndex);
-			poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-			poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
-			if (dset) {
-				const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
-				float x = dset->getMyData("x")->getData<float>()[picked.localIndex];
-				float y = dset->getMyData("y")->getData<float>()[picked.localIndex];
-				float z = dset->dimension() == 3 ? dset->getMyData("z")->getData<float>()[picked.localIndex] : 0.f;
+		if (!pickObjectBoundingBox(_infos, _context, m_object, m_idSelection))
+			return;
+		if (m_idSelection >= 0 && (size_t)m_idSelection < m_object->nbColors()) {
+			const size_t objectIndex = (size_t)m_idSelection;
+			appendGlobalObjectInfo(_result, m_object, objectIndex);
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
+			handlePickedObjectSelection(_infos, m_object, objectIndex);
+			poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+			if (child != nullptr) {
 				std::vector<poca::core::Vec3mf> pickedPoints;
 				if (_result.has<poca::opengl::PickedPointsResult>())
 					pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
-				pickedPoints.push_back(transformPosition(model, poca::core::Vec3mf(x, y, z)));
+				pickedPoints.push_back(childObjectBoundingBox(m_object, child).centroid());
 				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
 		}
@@ -353,9 +350,8 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		return false;
 
 	std::vector<poca::core::Vec3mf> points, normals;
-	std::vector<float> ids, features;
+	std::vector<float> features;
 	std::vector<poca::core::Color4D> colors;
-	m_pickMap.clear();
 
 	m_minOriginalFeature = std::numeric_limits<float>::max();
 	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
@@ -380,7 +376,6 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		const std::vector<float>* zs = dset->hasData("z") ? &dset->getMyData("z")->getData<float>() : nullptr;
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = dset->getSelection();
-		const size_t base = m_pickMap.size();
 
 		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
 		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
@@ -391,9 +386,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		for (size_t idx = 0; idx < xs.size(); idx++) {
 			const float z = zs != nullptr ? (*zs)[idx] : 0.f;
 			points.push_back(transformPosition(model, poca::core::Vec3mf(xs[idx], ys[idx], z)));
-			ids.push_back((float)(base + idx + 1));
 			features.push_back(dset->isSelected() && selection[idx] ? values[idx] : -10000.f);
-			m_pickMap.push_back({ (uint32_t)objectIndex, (uint32_t)idx });
 		}
 
 		if (dset->hasData("nx") && dset->hasData("ny") && dset->hasData("nz")) {
@@ -433,10 +426,8 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 
 	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(referenceDset->getPalette());
 	m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
-	m_idBuffer.generateBuffer(ids.size(), 1, GL_FLOAT);
 	m_featureBuffer.generateBuffer(features.size(), 1, GL_FLOAT);
 	m_pointBuffer.updateBuffer(points.data());
-	m_idBuffer.updateBuffer(ids.data());
 	m_featureBuffer.updateBuffer(features.data());
 
 	if (!normals.empty()) {
@@ -501,6 +492,7 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 
 void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
+	(void)_offscreen;
 	if (!canBatch())
 		return;
 	if (m_pointBuffer.empty() && !rebuild())
@@ -524,8 +516,6 @@ void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, 
 		return;
 
 	drawElements(_cam, _ssao, referenceCommand);
-	if (!_offscreen)
-		drawPicking(_cam);
 	markComponentFamilyHandled(_result);
 }
 
@@ -595,68 +585,11 @@ void DetectionSetMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _
 			m_isScaleLUT, pointSize, _ssao, screenCoordinates);
 }
 
-void DetectionSetMultiObjectDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
-{
-	if (m_pickFBO == nullptr)
-		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
-	if (m_pickFBO == nullptr)
-		return;
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
-	glDisable(GL_BLEND);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	glDisable(GL_CULL_FACE);
-
-	GLfloat bkColor[4];
-	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-	glClearColor(0.f, 0.f, 0.f, 0.f);
-	const bool success = m_pickFBO->bind();
-	if (!success) std::cout << "Problem with binding" << std::endl;
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	_cam->drawPickingShader<poca::core::Vec3mf, float>(m_pointBuffer, m_idBuffer, m_featureBuffer, m_minOriginalFeature);
-	m_pickFBO->release();
-	glBindFramebuffer(GL_FRAMEBUFFER, _cam->defaultFramebufferObject());
-	glClearColor(bkColor[0], bkColor[1], bkColor[2], bkColor[3]);
-}
-
-QString DetectionSetMultiObjectDisplayCommand::getInfosLocalization(const int _id) const
-{
-	if (_id < 0 || (size_t)_id >= m_pickMap.size())
-		return QString();
-
-	const auto& picked = m_pickMap[_id];
-	poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-	poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
-	if (dset == nullptr)
-		return QString();
-
-	QString text;
-	poca::core::stringList nameData = dset->getNameData();
-	float x = dset->getMyData("x")->getData<float>()[picked.localIndex];
-	float y = dset->getMyData("y")->getData<float>()[picked.localIndex];
-	text.append(QString("Localization id: %1\n").arg(picked.localIndex));
-	text.append(QString("Coords: [x=%1,y=%2").arg(x).arg(y));
-	if (dset->hasData("z")) {
-		float z = dset->getMyData("z")->getData<float>()[picked.localIndex];
-		text.append(QString(",z=%1").arg(z));
-	}
-	text.append("]");
-	for (const std::string& type : nameData) {
-		if (type == "x" || type == "y" || type == "z") continue;
-		float val = dset->getMyData(type)->getData<float>()[picked.localIndex];
-		text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
-	}
-	return text;
-}
-
 void DetectionSetMultiObjectDisplayCommand::freeGPUMemory()
 {
 	m_pointBuffer.freeGPUMemory();
 	m_normalBuffer.freeGPUMemory();
-	m_idBuffer.freeGPUMemory();
 	m_featureBuffer.freeGPUMemory();
 	m_colorBuffer.freeGPUMemory();
-	m_pickMap.clear();
 	m_textureLutID = 0;
 }

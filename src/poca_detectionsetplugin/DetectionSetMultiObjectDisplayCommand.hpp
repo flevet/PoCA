@@ -17,7 +17,6 @@
 #include <General/Vec4.hpp>
 #include <OpenGL/BasicDisplayCommand.hpp>
 #include <OpenGL/GLBuffer.hpp>
-#include <OpenGL/MultiPrimitiveData.hpp>
 
 class MyMultipleObject;
 class DetectionSetDisplayCommand;
@@ -42,8 +41,6 @@ protected:
 	DetectionSetDisplayCommand* referenceDisplayCommand() const;
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, const bool, DetectionSetDisplayCommand*);
-	void drawPicking(poca::opengl::Camera*);
-	QString getInfosLocalization(const int) const;
 
 protected:
 	MyMultipleObject* m_object;
@@ -52,11 +49,8 @@ protected:
 	bool m_isScaleLUT;
 
 	poca::opengl::PointSingleGLBuffer<poca::core::Vec3mf> m_pointBuffer, m_normalBuffer;
-	poca::opengl::PointSingleGLBuffer<float> m_idBuffer;
 	poca::opengl::FeatureSingleGLBuffer<float> m_featureBuffer;
 	poca::opengl::PointSingleGLBuffer<poca::core::Color4D> m_colorBuffer;
-
-	std::vector<poca::opengl::PickMappingEntry> m_pickMap;
 };
 
 #endif

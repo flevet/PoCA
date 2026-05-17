@@ -103,6 +103,7 @@ namespace {
 			return;
 
 		_object->setCurrentObject(_objectIndex);
+		_object->setSelectedObjectIndices({ _objectIndex });
 		_object->notify("LoadObjCharacteristicsAllWidgets");
 		_object->notifyAll("updateDisplay");
 	}
@@ -140,9 +141,15 @@ void VoronoiMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void VoronoiMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	poca::opengl::BasicDisplayCommand::execute(_infos);
+	if (_infos == nullptr)
+		return;
+	if (_infos->nameCommand != "pick" && _infos->nameCommand != "updatePickingBuffer")
+		poca::opengl::BasicDisplayCommand::execute(_infos);
 
-	if (_infos->nameCommand == "display") {
+	if (_infos->nameCommand == "updatePickingBuffer") {
+		markComponentFamilyHandled(_result);
+	}
+	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
 		if (_context.has<poca::opengl::ActiveCamera>())
 			cam = _context.get<poca::opengl::ActiveCamera>().camera;
@@ -152,34 +159,22 @@ void VoronoiMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, 
 	}
 	else if (_infos->nameCommand == "pick") {
 		if (!canBatch()) return;
-		QString infos = getInfosTriangle(m_idSelection);
-		if (!infos.isEmpty()) {
-			poca::core::stringList listInfos;
-			if (_result.has<poca::opengl::PickedInfoListResult>())
-				listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
-			listInfos.push_back(infos.toLatin1().data());
-			_result.set(poca::opengl::PickedInfoListResult{ listInfos });
-		}
-		if (m_hasCells && m_idSelection >= 0 && (size_t)m_idSelection < m_trianglePickMap.size()) {
+		if (!pickObjectBoundingBox(_infos, _context, m_object, m_idSelection))
+			return;
+		if (m_idSelection >= 0 && (size_t)m_idSelection < m_object->nbColors()) {
 			generateBoundingBoxSelection(m_idSelection);
-			const poca::opengl::PickMappingEntry& picked = m_trianglePickMap[m_idSelection];
-			appendGlobalObjectInfo(_result, m_object, picked.objectIndex);
-			handlePickedObjectSelection(_infos, m_object, picked.objectIndex);
-			poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-			poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-			if (voro) {
+			const size_t objectIndex = (size_t)m_idSelection;
+			appendGlobalObjectInfo(_result, m_object, objectIndex);
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
+			handlePickedObjectSelection(_infos, m_object, objectIndex);
+			poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+			if (child != nullptr) {
 				std::vector<poca::core::Vec3mf> pickedPoints;
 				if (_result.has<poca::opengl::PickedPointsResult>())
 					pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
-				const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
-				pickedPoints.push_back(transformPosition(model, voro->computeBarycenterElement((int)picked.localIndex)));
+				pickedPoints.push_back(childObjectBoundingBox(m_object, child).centroid());
 				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
-		}
-		else if (!m_hasCells && m_idSelection >= 0 && (size_t)m_idSelection < m_pointPickMap.size()) {
-			const poca::opengl::PickMappingEntry& picked = m_pointPickMap[m_idSelection];
-			appendGlobalObjectInfo(_result, m_object, picked.objectIndex);
-			handlePickedObjectSelection(_infos, m_object, picked.objectIndex);
 		}
 		markComponentFamilyHandled(_result);
 	}
@@ -282,33 +277,19 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 		const std::vector<bool>& selection = voro->getSelection();
 		const std::vector<bool>& borderLocs = voro->borderLocalizations();
 
-		const size_t pointBase = pointData.pickMap.size();
 		for (size_t idx = 0; idx < voro->nbFaces(); idx++) {
 			const float z = voro->getZs() != nullptr ? voro->getZs()[idx] : 0.f;
 			pointData.vertices.push_back(transformPosition(model, poca::core::Vec3mf(voro->getXs()[idx], voro->getYs()[idx], z)));
-			pointData.ids.push_back((float)(pointBase + idx + 1));
 			pointData.features.push_back(voro->isSelected() && selection[idx] && !borderLocs[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			pointData.pickMap.push_back({ (uint32_t)objectIndex, (uint32_t)idx });
 		}
 
 		if (!voro->hasCells())
 			continue;
 
-		const size_t triangleBase = triangleData.pickMap.size();
-		for (size_t idx = 0; idx < voro->nbFaces(); idx++)
-			triangleData.pickMap.push_back({ (uint32_t)objectIndex, (uint32_t)idx });
-
 		std::vector<poca::core::Vec3mf> triangles;
 		voro->generateTriangles(triangles);
 		for (const auto& vertex : triangles)
 			triangleData.vertices.push_back(transformPosition(model, vertex));
-
-		std::vector<float> triangleIds;
-		voro->generatePickingIndices(triangleIds);
-		for (float id : triangleIds) {
-			const uint32_t localIndex = id > 0.f ? (uint32_t)(id - 1.f) : 0u;
-			triangleData.ids.push_back((float)(triangleBase + localIndex + 1));
-		}
 
 		std::vector<float> triangleFeatures;
 		voro->getFeatureInSelection(triangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER, false);
@@ -353,22 +334,19 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 
 	if (!pointData.vertices.empty()) {
 		m_pointBuffer.generateBuffer(pointData.vertices.size(), 3, GL_FLOAT);
-		m_idLocsBuffer.generateBuffer(pointData.ids.size(), 1, GL_FLOAT);
 		m_locsFeatureBuffer.generateBuffer(pointData.features.size(), 1, GL_FLOAT);
 		m_pointBuffer.updateBuffer(pointData.vertices.data());
-		m_idLocsBuffer.updateBuffer(pointData.ids.data());
 		m_locsFeatureBuffer.updateBuffer(pointData.features.data());
-		m_pointPickMap = std::move(pointData.pickMap);
 	}
 
 	if (!triangleData.vertices.empty()) {
 		m_triangleBuffer.generateBuffer(triangleData.vertices.size(), 512 * 512, 3, GL_FLOAT);
 		m_triangleFeatureBuffer.generateBuffer(triangleData.features.size(), 512 * 512, 1, GL_FLOAT);
-		m_idPolytopeBuffer.generateBuffer(triangleData.ids.size(), 512 * 512, 1, GL_FLOAT);
 		m_triangleBuffer.updateBuffer(triangleData.vertices.data());
 		m_triangleFeatureBuffer.updateBuffer(triangleData.features.data());
-		m_idPolytopeBuffer.updateBuffer(triangleData.ids.data());
-		m_trianglePickMap = std::move(triangleData.pickMap);
+		m_boundingBoxSelection.generateBuffer(24, 512 * 512, 3, GL_FLOAT);
+	}
+	else if (!pointData.vertices.empty()) {
 		m_boundingBoxSelection.generateBuffer(24, 512 * 512, 3, GL_FLOAT);
 	}
 
@@ -388,6 +366,7 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 
 void VoronoiMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, poca::core::CommandExecutionResult& _result)
 {
+	(void)_offscreen;
 	if (!canBatch())
 		return;
 	if (m_pointBuffer.empty() && !rebuild())
@@ -398,8 +377,6 @@ void VoronoiMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const
 		return;
 
 	drawElements(_cam, referenceCommand);
-	if (!_offscreen)
-		drawPicking(_cam);
 	markComponentFamilyHandled(_result);
 }
 
@@ -510,7 +487,7 @@ void VoronoiMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, 
 	glDisable(GL_BLEND);
 	glDisable(GL_DEPTH_TEST);
 
-	if (m_idSelection >= 0 && displayBboxSelection && m_hasCells && !m_boundingBoxSelection.empty()) {
+	if (m_idSelection >= 0 && displayBboxSelection && !m_boundingBoxSelection.empty()) {
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		const poca::core::Color4D color = poca::core::contrastColor(
@@ -519,91 +496,31 @@ void VoronoiMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, 
 	}
 }
 
-void VoronoiMultiObjectDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
-{
-	if (m_pickFBO == nullptr)
-		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
-	if (m_pickFBO == nullptr)
-		return;
-
-	glEnable(GL_DEPTH_TEST);
-	GLfloat bkColor[4];
-	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-	glClearColor(0.f, 0.f, 0.f, 0.f);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	const bool successBind = m_pickFBO->bind();
-	if (!successBind) std::cout << "Problem with binding" << std::endl;
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	if (m_hasCells)
-		_cam->drawPickingShader<poca::core::Vec3mf, float>(m_triangleBuffer, m_idPolytopeBuffer, m_triangleFeatureBuffer, m_minOriginalFeature);
-	else
-		_cam->drawPickingShader<poca::core::Vec3mf, float>(m_pointBuffer, m_idLocsBuffer, m_locsFeatureBuffer, m_minOriginalFeature);
-
-	const bool successRelease = m_pickFBO->release();
-	if (!successRelease) std::cout << "Problem with releasing" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, _cam->defaultFramebufferObject());
-	glClearColor(bkColor[0], bkColor[1], bkColor[2], bkColor[3]);
-}
-
-QString VoronoiMultiObjectDisplayCommand::getInfosTriangle(const int _id) const
-{
-	if (_id < 0)
-		return QString();
-
-	const std::vector<poca::opengl::PickMappingEntry>& pickMap = m_hasCells ? m_trianglePickMap : m_pointPickMap;
-	if ((size_t)_id >= pickMap.size())
-		return QString();
-
-	const poca::opengl::PickMappingEntry& picked = pickMap[_id];
-	poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-	poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-	if (voro == nullptr)
-		return QString();
-
-	QString text;
-	text.append(QString("Voronoi diagram id: %1").arg(picked.localIndex));
-	for (const std::string& type : voro->getNameData()) {
-		const std::vector<float>& values = voro->getMyData(type)->getData<float>();
-		if (picked.localIndex < values.size())
-			text.append(QString("\n%1: %2").arg(type.c_str()).arg(values[picked.localIndex]));
-	}
-	return text;
-}
-
 void VoronoiMultiObjectDisplayCommand::generateBoundingBoxSelection(const int _idx)
 {
-	if (_idx < 0 || (size_t)_idx >= m_trianglePickMap.size())
+	if (_idx < 0 || (size_t)_idx >= m_object->nbColors())
 		return;
 
-	const poca::opengl::PickMappingEntry& picked = m_trianglePickMap[_idx];
-	poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-	poca::geometry::VoronoiDiagram* voro = dynamic_cast<poca::geometry::VoronoiDiagram*>(child->getBasicComponent("VoronoiDiagram"));
-	if (voro == nullptr || !voro->hasCells())
+	poca::core::MyObjectInterface* child = m_object->getObject((size_t)_idx);
+	if (child == nullptr)
 		return;
 
-	poca::core::BoundingBox bbox = voro->computeBoundingBoxElement((int)picked.localIndex);
 	std::vector<poca::core::Vec3mf> cube(24);
-	poca::geometry::createCubeFromVector(cube, bbox);
-	const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
-	for (auto& point : cube)
-		point = transformPosition(model, point);
+	poca::geometry::createCubeFromVector(cube, childObjectBoundingBox(m_object, child));
+	if (m_boundingBoxSelection.empty())
+		m_boundingBoxSelection.generateBuffer(24, 512 * 512, 3, GL_FLOAT);
 	m_boundingBoxSelection.updateBuffer(cube.data());
 }
 
 void VoronoiMultiObjectDisplayCommand::freeGPUMemory()
 {
 	m_pointBuffer.freeGPUMemory();
-	m_idLocsBuffer.freeGPUMemory();
 	m_locsFeatureBuffer.freeGPUMemory();
 	m_triangleBuffer.freeGPUMemory();
-	m_idPolytopeBuffer.freeGPUMemory();
 	m_triangleFeatureBuffer.freeGPUMemory();
 	m_lineBuffer.freeGPUMemory();
 	m_lineNormalBuffer.freeGPUMemory();
 	m_lineFeatureBuffer.freeGPUMemory();
 	m_boundingBoxSelection.freeGPUMemory();
-	m_pointPickMap.clear();
-	m_trianglePickMap.clear();
 	m_textureLutID = 0;
 }

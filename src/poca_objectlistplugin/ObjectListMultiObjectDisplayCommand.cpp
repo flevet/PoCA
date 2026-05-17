@@ -393,11 +393,6 @@ namespace {
 		return addComponentToTransformedObject(_result, child, transformedLists) != nullptr;
 	}
 
-	poca::core::Vec3mf bboxCenter(const poca::core::BoundingBox& _bbox)
-	{
-		return poca::core::Vec3mf((_bbox[0] + _bbox[3]) * .5f, (_bbox[1] + _bbox[4]) * .5f, (_bbox[2] + _bbox[5]) * .5f);
-	}
-
 	QString globalObjectInfo(MyMultipleObject* _object, const size_t _objectIndex)
 	{
 		if (_object == nullptr || _objectIndex >= _object->nbColors())
@@ -440,6 +435,7 @@ namespace {
 			return;
 
 		_object->setCurrentObject(_objectIndex);
+		_object->setSelectedObjectIndices({ _objectIndex });
 		_object->notify("LoadObjCharacteristicsAllWidgets");
 		_object->notify("UpdateMainTabWidgets");
 		_object->notifyAll("updateDisplay");
@@ -498,9 +494,15 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 
 void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	poca::opengl::BasicDisplayCommand::execute(_infos);
+	if (_infos == nullptr)
+		return;
+	if (_infos->nameCommand != "pick" && _infos->nameCommand != "updatePickingBuffer")
+		poca::opengl::BasicDisplayCommand::execute(_infos);
 
-	if (_infos->nameCommand == "display") {
+	if (_infos->nameCommand == "updatePickingBuffer") {
+		markComponentFamilyHandled(_result);
+	}
+	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
 		if (_context.has<poca::opengl::ActiveCamera>())
 			cam = _context.get<poca::opengl::ActiveCamera>().camera;
@@ -511,18 +513,20 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 	}
 	else if (_infos->nameCommand == "pick") {
 		if (!canBatch()) return;
+		if (!pickObjectBoundingBox(_infos, _context, m_object, m_idSelection))
+			return;
 		if (m_idSelection >= 0 && (size_t)m_idSelection < m_object->nbColors()) {
 			generateBoundingBoxSelection(m_idSelection);
 			const size_t objectIndex = (size_t)m_idSelection;
 			appendGlobalObjectInfo(_result, m_object, objectIndex);
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
 			handlePickedObjectSelection(_infos, m_object, objectIndex);
 			poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
 			if (child != nullptr) {
-				const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
 				std::vector<poca::core::Vec3mf> pickedPoints;
 				if (_result.has<poca::opengl::PickedPointsResult>())
 					pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
-				pickedPoints.push_back(transformPosition(model, bboxCenter(child->boundingBox())));
+				pickedPoints.push_back(childObjectBoundingBox(m_object, child).centroid());
 				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
 		}
@@ -604,7 +608,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		return false;
 
 	std::vector<poca::core::Vec3mf> points, outlinePoints, triangles, triangleNormals, lines, skeletons, links;
-	std::vector<float> pointIds, pointFeatures, outlinePointFeatures, triangleIds, triangleFeatures, lineFeatures, ellipsoidFeatures;
+	std::vector<float> pointFeatures, outlinePointFeatures, triangleFeatures, lineFeatures, ellipsoidFeatures;
 	std::vector<float> pointObjectIndices, outlinePointObjectIndices, triangleObjectIndices, lineObjectIndices, skeletonObjectIndices, linkObjectIndices, ellipsoidObjectIndices;
 	std::vector<poca::core::Color4D> colorSkeletons, colorLinks;
 	std::vector<glm::mat4> ellipsoidTransforms;
@@ -631,9 +635,6 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		objs->generateLocs(localPoints);
 		points.insert(points.end(), localPoints.begin(), localPoints.end());
 		pointObjectIndices.insert(pointObjectIndices.end(), localPoints.size(), (float)objectIndex);
-		std::vector<float> localPointIds;
-		objs->generateLocsPickingIndices(localPointIds);
-		pointIds.insert(pointIds.end(), localPointIds.size(), (float)(objectIndex + 1));
 		std::vector<float> localPointFeatures;
 		if (objs->isHiLow()) {
 			float inter = histInterface->getMax() - histInterface->getMin();
@@ -676,9 +677,6 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		std::vector<poca::core::Vec3mf> localNormals;
 		objs->generateNormals(localNormals);
 		triangleNormals.insert(triangleNormals.end(), localNormals.begin(), localNormals.end());
-		std::vector<float> localTriangleIds;
-		objs->generatePickingIndices(localTriangleIds);
-		triangleIds.insert(triangleIds.end(), localTriangleIds.size(), (float)(objectIndex + 1));
 		std::vector<float> localTriangleFeatures;
 		if (objs->isHiLow()) {
 			float inter = histInterface->getMax() - histInterface->getMin();
@@ -804,11 +802,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(reference->getPalette());
 	if (!points.empty()) {
 		m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
-		m_idLocsBuffer.generateBuffer(pointIds.size(), 1, GL_FLOAT);
 		m_locsFeatureBuffer.generateBuffer(pointFeatures.size(), 1, GL_FLOAT);
 		m_pointObjectIndexBuffer.generateBuffer(pointObjectIndices.size(), 1, GL_FLOAT);
 		m_pointBuffer.updateBuffer(points.data());
-		m_idLocsBuffer.updateBuffer(pointIds.data());
 		m_locsFeatureBuffer.updateBuffer(pointFeatures.data());
 		m_pointObjectIndexBuffer.updateBuffer(pointObjectIndices.data());
 	}
@@ -824,13 +820,14 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		m_triangleBuffer.generateBuffer(triangles.size(), 3, GL_FLOAT);
 		m_triangleNormalBuffer.generateBuffer(triangleNormals.size(), 3, GL_FLOAT);
 		m_triangleFeatureBuffer.generateBuffer(triangleFeatures.size(), 1, GL_FLOAT);
-		m_idBuffer.generateBuffer(triangleIds.size(), 1, GL_FLOAT);
 		m_triangleObjectIndexBuffer.generateBuffer(triangleObjectIndices.size(), 1, GL_FLOAT);
 		m_triangleBuffer.updateBuffer(triangles.data());
 		m_triangleNormalBuffer.updateBuffer(triangleNormals.data());
 		m_triangleFeatureBuffer.updateBuffer(triangleFeatures.data());
-		m_idBuffer.updateBuffer(triangleIds.data());
 		m_triangleObjectIndexBuffer.updateBuffer(triangleObjectIndices.data());
+		m_boundingBoxSelection.generateBuffer(24, 3, GL_FLOAT);
+	}
+	else if (!points.empty()) {
 		m_boundingBoxSelection.generateBuffer(24, 3, GL_FLOAT);
 	}
 	if (!lines.empty()) {
@@ -870,6 +867,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 
 void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
+	(void)_offscreen;
 	if (!canBatch())
 		return;
 	if (m_triangleBuffer.empty() && m_pointBuffer.empty() && !rebuild())
@@ -885,8 +883,6 @@ void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, co
 		return;
 
 	drawElements(_cam, _ssao, referenceCommand);
-	if (!_offscreen)
-		drawPicking(_cam, referenceCommand);
 	markComponentFamilyHandled(_result);
 }
 
@@ -1273,80 +1269,6 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	}
 }
 
-void ObjectListMultiObjectDisplayCommand::drawPicking(poca::opengl::Camera* _cam, ObjectListDisplayCommand* _referenceCommand)
-{
-	if (m_pickFBO == nullptr)
-		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
-	if (m_pickFBO == nullptr)
-		return;
-
-	const bool shapeRendering = _referenceCommand->getParameter<bool>("shapeRendering");
-	glEnable(GL_DEPTH_TEST);
-	GLfloat bkColor[4];
-	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-	glClearColor(0.f, 0.f, 0.f, 0.f);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	const bool success = m_pickFBO->bind();
-	if (!success) std::cout << "Problem with binding" << std::endl;
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	poca::opengl::Shader* shader = _cam->getShader("multiObjectPickShader");
-	shader->use();
-	shader->setMat4("MVP", _cam->getProjectionMatrix() * _cam->getViewMatrix() * _cam->getModelMatrix());
-	shader->setMat4("model", _cam->getModelMatrix());
-	shader->setBool("hasFeature", true);
-	shader->setFloat("minFeatureValue", m_minOriginalFeature);
-	shader->setVec4v("clipPlanes", _cam->getClipPlanes());
-	shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
-	shader->setBool("clip", _cam->clip());
-	shader->setInt("objectModels", 1);
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_BUFFER, m_objectModelTextureID);
-	if (shapeRendering && !m_triangleBuffer.empty()) {
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		m_triangleBuffer.bindBuffer(0);
-		m_idBuffer.bindBuffer(1);
-		m_triangleFeatureBuffer.bindBuffer(2);
-		m_triangleObjectIndexBuffer.bindBuffer(3);
-		glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(2);
-		glDisableVertexAttribArray(3);
-	}
-	else if (!m_pointBuffer.empty()) {
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		m_pointBuffer.bindBuffer(0);
-		m_idLocsBuffer.bindBuffer(1);
-		m_locsFeatureBuffer.bindBuffer(2);
-		m_pointObjectIndexBuffer.bindBuffer(3);
-		glDrawArrays(m_pointBuffer.getMode(), 0, m_pointBuffer.getNbElements());
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(2);
-		glDisableVertexAttribArray(3);
-	}
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindTexture(GL_TEXTURE_BUFFER, 0);
-	glActiveTexture(GL_TEXTURE0);
-	shader->release();
-	m_pickFBO->release();
-	glBindFramebuffer(GL_FRAMEBUFFER, _cam->defaultFramebufferObject());
-	glClearColor(bkColor[0], bkColor[1], bkColor[2], bkColor[3]);
-}
-
-QString ObjectListMultiObjectDisplayCommand::getInfosTriangle(const int _id) const
-{
-	if (_id < 0 || (size_t)_id >= m_object->nbColors())
-		return QString();
-	return globalObjectInfo(m_object, (size_t)_id);
-}
-
 void ObjectListMultiObjectDisplayCommand::generateBoundingBoxSelection(const int _idx)
 {
 	if (_idx < 0 || (size_t)_idx >= m_object->nbColors())
@@ -1355,7 +1277,9 @@ void ObjectListMultiObjectDisplayCommand::generateBoundingBoxSelection(const int
 	if (child == nullptr)
 		return;
 	std::vector<poca::core::Vec3mf> cube(24);
-	poca::geometry::createCubeFromVector(cube, child->boundingBox());
+	poca::geometry::createCubeFromVector(cube, childObjectBoundingBox(m_object, child));
+	if (m_boundingBoxSelection.empty())
+		m_boundingBoxSelection.generateBuffer(24, 3, GL_FLOAT);
 	m_boundingBoxSelection.updateBuffer(cube.data());
 }
 
@@ -1363,14 +1287,12 @@ void ObjectListMultiObjectDisplayCommand::freeGPUMemory()
 {
 	m_pointBuffer.freeGPUMemory();
 	m_outlinePointBuffer.freeGPUMemory();
-	m_idLocsBuffer.freeGPUMemory();
 	m_locsFeatureBuffer.freeGPUMemory();
 	m_outlineLocsFeatureBuffer.freeGPUMemory();
 	m_pointObjectIndexBuffer.freeGPUMemory();
 	m_outlinePointObjectIndexBuffer.freeGPUMemory();
 	m_triangleBuffer.freeGPUMemory();
 	m_triangleNormalBuffer.freeGPUMemory();
-	m_idBuffer.freeGPUMemory();
 	m_triangleFeatureBuffer.freeGPUMemory();
 	m_triangleObjectIndexBuffer.freeGPUMemory();
 	m_lineBuffer.freeGPUMemory();

@@ -2001,7 +2001,9 @@ namespace poca::opengl {
 					"y", _event->pos().y(), 
 					"saveImage", false);
 				poca::core::CommandExecutionResult result;
-				m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), result);
+				poca::core::CommandExecutionContext pickContext;
+				pickContext.set(poca::opengl::ActiveCamera{ this });
+				m_object->executeGlobalCommand(&ci, pickContext, result);
 				m_infoPicking.clear();
 				poca::core::stringList listInfos;
 				if (result.has<poca::opengl::PickedInfoListResult>())
@@ -2320,7 +2322,9 @@ namespace poca::opengl {
 				"saveImage", false,
 				"click", std::string("left"));
 			poca::core::CommandExecutionResult result;
-			m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), result);
+			poca::core::CommandExecutionContext pickContext;
+			pickContext.set(poca::opengl::ActiveCamera{ this });
+			m_object->executeGlobalCommand(&ci, pickContext, result);
 			m_infoPicking.clear();
 			poca::core::stringList listInfos;
 			if (result.has<poca::opengl::PickedInfoListResult>())
@@ -2349,7 +2353,9 @@ namespace poca::opengl {
 				"y", _event->pos().y(),
 				"saveImage", false);
 			poca::core::CommandExecutionResult pickResult;
-			m_object->executeGlobalCommand(&ci, poca::core::CommandExecutionContext(), pickResult);
+			poca::core::CommandExecutionContext pickContext;
+			pickContext.set(poca::opengl::ActiveCamera{ this });
+			m_object->executeGlobalCommand(&ci, pickContext, pickResult);
 			m_infoPicking.clear();
 			poca::core::stringList listInfos;
 			if (pickResult.has<poca::opengl::PickedInfoListResult>())

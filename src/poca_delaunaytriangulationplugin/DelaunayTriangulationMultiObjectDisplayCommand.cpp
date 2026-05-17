@@ -93,6 +93,7 @@ namespace {
 			return;
 
 		_object->setCurrentObject(_objectIndex);
+		_object->setSelectedObjectIndices({ _objectIndex });
 		_object->notify("LoadObjCharacteristicsAllWidgets");
 		_object->notifyAll("updateDisplay");
 	}
@@ -128,9 +129,15 @@ void DelaunayTriangulationMultiObjectDisplayCommand::execute(poca::core::Command
 
 void DelaunayTriangulationMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	poca::opengl::BasicDisplayCommand::execute(_infos);
+	if (_infos == nullptr)
+		return;
+	if (_infos->nameCommand != "pick" && _infos->nameCommand != "updatePickingBuffer")
+		poca::opengl::BasicDisplayCommand::execute(_infos);
 
-	if (_infos->nameCommand == "display") {
+	if (_infos->nameCommand == "updatePickingBuffer") {
+		markComponentFamilyHandled(_result);
+	}
+	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
 		if (_context.has<poca::opengl::ActiveCamera>())
 			cam = _context.get<poca::opengl::ActiveCamera>().camera;
@@ -140,27 +147,20 @@ void DelaunayTriangulationMultiObjectDisplayCommand::execute(poca::core::Command
 	}
 	else if (_infos->nameCommand == "pick") {
 		if (!canBatch()) return;
-		const QString infos = getInfosTriangle(m_idSelection);
-		if (!infos.isEmpty()) {
-			poca::core::stringList listInfos;
-			if (_result.has<poca::opengl::PickedInfoListResult>())
-				listInfos = _result.get<poca::opengl::PickedInfoListResult>().infos;
-			listInfos.push_back(infos.toLatin1().data());
-			_result.set(poca::opengl::PickedInfoListResult{ listInfos });
-		}
-		if (m_idSelection >= 0 && (size_t)m_idSelection < m_pickMap.size()) {
+		if (!pickObjectBoundingBox(_infos, _context, m_object, m_idSelection))
+			return;
+		if (m_idSelection >= 0 && (size_t)m_idSelection < m_object->nbColors()) {
 			generateBoundingBoxSelection(m_idSelection);
-			const auto& picked = m_pickMap[m_idSelection];
-			appendGlobalObjectInfo(_result, m_object, picked.objectIndex);
-			handlePickedObjectSelection(_infos, m_object, picked.objectIndex);
-			poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-			poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast<poca::geometry::DelaunayTriangulationInterface*>(child->getBasicComponent("DelaunayTriangulation"));
-			if (delau) {
-				const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
+			const size_t objectIndex = (size_t)m_idSelection;
+			appendGlobalObjectInfo(_result, m_object, objectIndex);
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
+			handlePickedObjectSelection(_infos, m_object, objectIndex);
+			poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+			if (child != nullptr) {
 				std::vector<poca::core::Vec3mf> pickedPoints;
 				if (_result.has<poca::opengl::PickedPointsResult>())
 					pickedPoints = _result.get<poca::opengl::PickedPointsResult>().points;
-				pickedPoints.push_back(transformPosition(model, delau->computeBarycenterElement((int)picked.localIndex)));
+				pickedPoints.push_back(childObjectBoundingBox(m_object, child).centroid());
 				_result.set(poca::opengl::PickedPointsResult{ pickedPoints });
 			}
 		}
@@ -226,8 +226,7 @@ bool DelaunayTriangulationMultiObjectDisplayCommand::rebuild()
 		return false;
 
 	std::vector<poca::core::Vec3mf> triangles;
-	std::vector<float> ids, features;
-	m_pickMap.clear();
+	std::vector<float> features;
 	m_minOriginalFeature = std::numeric_limits<float>::max();
 	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
 
@@ -246,21 +245,10 @@ bool DelaunayTriangulationMultiObjectDisplayCommand::rebuild()
 		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
 		const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
 
-		const size_t base = m_pickMap.size();
-		for (size_t idx = 0; idx < delau->nbFaces(); idx++)
-			m_pickMap.push_back({ (uint32_t)objectIndex, (uint32_t)idx });
-
 		std::vector<poca::core::Vec3mf> localTriangles;
 		delau->generateTriangles(localTriangles);
 		for (const auto& vertex : localTriangles)
 			triangles.push_back(transformPosition(model, vertex));
-
-		std::vector<float> localIds;
-		delau->generatePickingIndices(localIds);
-		for (float id : localIds) {
-			const uint32_t localIndex = id > 0.f ? (uint32_t)(id - 1.f) : 0u;
-			ids.push_back((float)(base + localIndex + 1));
-		}
 
 		std::vector<float> localFeatures;
 		delau->getFeatureInSelection(localFeatures, histogram->getValues(), delau->getSelection(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
@@ -287,10 +275,8 @@ bool DelaunayTriangulationMultiObjectDisplayCommand::rebuild()
 
 	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(reference->getPalette());
 	m_triangleBuffer.generateBuffer(triangles.size(), 512 * 512, 3, GL_FLOAT);
-	m_idBuffer.generateBuffer(ids.size(), 512 * 512, 1, GL_FLOAT);
 	m_featureBuffer.generateBuffer(features.size(), 512 * 512, 1, GL_FLOAT);
 	m_triangleBuffer.updateBuffer(triangles.data());
-	m_idBuffer.updateBuffer(ids.data());
 	m_featureBuffer.updateBuffer(features.data());
 	m_boundingBoxSelection.generateBuffer(24, 512 * 512, 3, GL_FLOAT);
 	return true;
@@ -298,6 +284,7 @@ bool DelaunayTriangulationMultiObjectDisplayCommand::rebuild()
 
 void DelaunayTriangulationMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, poca::core::CommandExecutionResult& _result)
 {
+	(void)_offscreen;
 	if (!canBatch())
 		return;
 	if (m_triangleBuffer.empty() && !rebuild())
@@ -308,8 +295,6 @@ void DelaunayTriangulationMultiObjectDisplayCommand::display(poca::opengl::Camer
 		return;
 
 	drawElements(_cam, referenceCommand);
-	if (!_offscreen)
-		drawPicking(_cam);
 	markComponentFamilyHandled(_result);
 }
 
@@ -378,72 +363,25 @@ void DelaunayTriangulationMultiObjectDisplayCommand::drawElements(poca::opengl::
 	}
 }
 
-void DelaunayTriangulationMultiObjectDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
-{
-	if (m_pickFBO == nullptr)
-		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
-	if (m_pickFBO == nullptr)
-		return;
-
-	glEnable(GL_DEPTH_TEST);
-	GLfloat bkColor[4];
-	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-	glClearColor(0.f, 0.f, 0.f, 0.f);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	const bool success = m_pickFBO->bind();
-	if (!success) std::cout << "Problem with binding" << std::endl;
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	_cam->drawPickingShader<poca::core::Vec3mf, float>(m_triangleBuffer, m_idBuffer, m_featureBuffer, m_minOriginalFeature);
-	m_pickFBO->release();
-	glBindFramebuffer(GL_FRAMEBUFFER, _cam->defaultFramebufferObject());
-	glClearColor(bkColor[0], bkColor[1], bkColor[2], bkColor[3]);
-}
-
-QString DelaunayTriangulationMultiObjectDisplayCommand::getInfosTriangle(const int _id) const
-{
-	if (_id < 0 || (size_t)_id >= m_pickMap.size())
-		return QString();
-
-	const auto& picked = m_pickMap[_id];
-	poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-	poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast<poca::geometry::DelaunayTriangulationInterface*>(child->getBasicComponent("DelaunayTriangulation"));
-	if (delau == nullptr)
-		return QString();
-
-	QString text;
-	text.append(QString("Delaunay triangulation\n"));
-	text.append(QString("Triangle id: %1").arg(picked.localIndex));
-	for (const std::string& type : delau->getNameData()) {
-		float val = delau->getMyData(type)->getData<float>()[picked.localIndex];
-		text.append(QString("\n%1: %2").arg(type.c_str()).arg(val));
-	}
-	return text;
-}
-
 void DelaunayTriangulationMultiObjectDisplayCommand::generateBoundingBoxSelection(const int _idx)
 {
-	if (_idx < 0 || (size_t)_idx >= m_pickMap.size())
+	if (_idx < 0 || (size_t)_idx >= m_object->nbColors())
 		return;
-	const auto& picked = m_pickMap[_idx];
-	poca::core::MyObjectInterface* child = m_object->getObject(picked.objectIndex);
-	poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast<poca::geometry::DelaunayTriangulationInterface*>(child->getBasicComponent("DelaunayTriangulation"));
-	if (delau == nullptr)
+	poca::core::MyObjectInterface* child = m_object->getObject((size_t)_idx);
+	if (child == nullptr)
 		return;
 
 	std::vector<poca::core::Vec3mf> cube(24);
-	poca::geometry::createCubeFromVector(cube, delau->computeBoundingBoxElement((int)picked.localIndex));
-	const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
-	for (auto& point : cube)
-		point = transformPosition(model, point);
+	poca::geometry::createCubeFromVector(cube, childObjectBoundingBox(m_object, child));
+	if (m_boundingBoxSelection.empty())
+		m_boundingBoxSelection.generateBuffer(24, 512 * 512, 3, GL_FLOAT);
 	m_boundingBoxSelection.updateBuffer(cube.data());
 }
 
 void DelaunayTriangulationMultiObjectDisplayCommand::freeGPUMemory()
 {
 	m_triangleBuffer.freeGPUMemory();
-	m_idBuffer.freeGPUMemory();
 	m_featureBuffer.freeGPUMemory();
 	m_boundingBoxSelection.freeGPUMemory();
-	m_pickMap.clear();
 	m_textureLutID = 0;
 }

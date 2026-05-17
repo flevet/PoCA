@@ -34,11 +34,13 @@
 #define BasicDisplayCommand_h__
 
 #include <General/Command.hpp>
+#include <General/Vec6.hpp>
 
 class QOpenGLFramebufferObject;
 
 namespace poca::core {
 	class BasicComponent;
+	class MyObjectInterface;
 }
 
 namespace poca::opengl {
@@ -60,6 +62,9 @@ namespace poca::opengl {
 		void pick(const int, const int, const bool);
 
 	protected:
+		poca::core::BoundingBox childObjectBoundingBox(poca::core::MyObjectInterface*, poca::core::MyObjectInterface*) const;
+		bool pickObjectBoundingBox(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::MyObjectInterface*, int&) const;
+
 		poca::core::BasicComponentInterface* m_component;
 
 		QOpenGLFramebufferObject* m_pickFBO;
