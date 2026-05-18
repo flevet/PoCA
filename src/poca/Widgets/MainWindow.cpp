@@ -139,6 +139,7 @@
 #include "../Widgets/ROIGeneralWidget.hpp"
 #include "../Widgets/MacroWidget.hpp"
 #include "../Widgets/ReorganizeRenderingWidget.hpp"
+#include <Widgets/PerformanceWidget.hpp>
 #include "../Widgets/ColorButtonGridWidget.hpp"
 #include "../Widgets/DatasetAssemblerWidget.hpp"
 #include <Widgets/CustomColorDialog.hpp>
@@ -442,6 +443,12 @@ void MainWindow::createActions()
 	m_palettesAct->setStatusTip(tr("Edit application palettes"));
 	QObject::connect(m_palettesAct, SIGNAL(triggered()), this, SLOT(openPalettesDialog()));
 
+	m_performanceWidgetAct = new QAction(tr("Performance"), this);
+	m_performanceWidgetAct->setCheckable(true);
+	m_performanceWidgetAct->setChecked(false);
+	m_performanceWidgetAct->setStatusTip(tr("Show performance monitor"));
+	QObject::connect(m_performanceWidgetAct, SIGNAL(toggled(bool)), this, SLOT(togglePerformanceWidget(bool)));
+
 	m_debugPyramidalRenderingAct = new QAction(tr("debugPyramidalRendering"), this);
 	m_debugPyramidalRenderingAct->setCheckable(true);
 	m_debugPyramidalRenderingAct->setChecked(engine->hasVerboseType("debugPyramidalRendering"));
@@ -582,6 +589,7 @@ void MainWindow::createMenus()
 	verboseMenu->addAction(m_debugGizmoAct);
 	verboseMenu->addAction(m_addVerboseTypeAct);
 	verboseMenu->addAction(m_clearVerboseTypesAct);
+	preferencesMenu->addAction(m_performanceWidgetAct);
 	preferencesMenu->addAction(m_palettesAct);
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
@@ -636,6 +644,33 @@ void MainWindow::openPalettesDialog()
 {
 	CustomColorDialog dlg(this);
 	dlg.exec();
+}
+
+void MainWindow::togglePerformanceWidget(bool _enabled)
+{
+	if (_enabled) {
+		if (m_performanceW == nullptr) {
+			m_performanceW = new poca::qt::PerformanceWidget(this);
+			m_performanceW->setWindowFlags(m_performanceW->windowFlags() | Qt::Window);
+			m_performanceW->setAttribute(Qt::WA_DeleteOnClose, true);
+			m_performanceW->setWindowTitle(tr("Performance"));
+			m_performanceW->resize(520, 300);
+			QObject::connect(m_performanceW, &QWidget::destroyed, this, [this]() {
+				m_performanceW = nullptr;
+				if (m_performanceWidgetAct != nullptr) {
+					m_performanceWidgetAct->blockSignals(true);
+					m_performanceWidgetAct->setChecked(false);
+					m_performanceWidgetAct->blockSignals(false);
+				}
+			});
+		}
+		m_performanceW->show();
+		m_performanceW->raise();
+		m_performanceW->activateWindow();
+	}
+	else if (m_performanceW != nullptr) {
+		m_performanceW->close();
+	}
 }
 
 void MainWindow::toggleVerbose(bool _enabled)

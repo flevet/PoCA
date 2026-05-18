@@ -78,6 +78,7 @@ set(GENERAL_HEADER_FILES
   General/MyArray.hpp
   General/MyData.hpp
   General/Palette.hpp
+  General/PerformanceProfiler.hpp
   General/PluginList.hpp
   General/PythonInterpreter.hpp
   General/Region3D.hpp
@@ -101,6 +102,7 @@ set(GENERAL_HEADER_FILES
   General/Misc.cpp
   General/MyData.cpp
   General/Palette.cpp
+  General/PerformanceProfiler.cpp
   General/PluginList.cpp
   General/PythonInterpreter.cpp
   General/Scatterplot.cpp

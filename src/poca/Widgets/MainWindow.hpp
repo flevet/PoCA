@@ -84,6 +84,10 @@ namespace poca::opengl {
 	class CameraInterface;
 }
 
+namespace poca::qt {
+	class PerformanceWidget;
+}
+
 class MainWindow : public QMainWindow, public poca::core::Observer {
 	Q_OBJECT
 
@@ -165,6 +169,7 @@ private slots:
 	void addVerboseType();
 	void clearVerboseTypes();
 	void openPalettesDialog();
+	void togglePerformanceWidget(bool);
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
 
@@ -202,6 +207,7 @@ private:
 	QAction* m_datasetAssemblerAct;
 	QAction* m_pythonWidgetAct{ nullptr };
 	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
+	QAction* m_performanceWidgetAct{ nullptr };
 	QTabWidget * m_tabWidget;
 	QDockWidget* m_designDock{ nullptr };
 	QTreeWidget* m_objectsTree{ nullptr };
@@ -226,6 +232,7 @@ private:
 
 	MainFilterWidget * m_mfw;
 	PythonWidget* m_pythonW{ nullptr }; 
+	poca::qt::PerformanceWidget* m_performanceW{ nullptr };
 	ROIGeneralWidget* m_ROIsW{ nullptr };
 	MacroWidget* m_macroW{ nullptr };
 	DatasetAssemblerWidget* m_datasetAssemblerW{ nullptr };

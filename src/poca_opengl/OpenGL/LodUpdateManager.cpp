@@ -17,6 +17,7 @@
 #include <QtCore/QMetaObject>
 
 #include <General/Engine.hpp>
+#include <General/PerformanceProfiler.hpp>
 
 #include "Camera.hpp"
 
@@ -59,6 +60,7 @@ namespace poca::opengl {
 
 	uint32_t LodUpdateManager::request(const ImageLodRequest& _request, uint64_t _frameIndex)
 	{
+		poca::core::PerformanceProfiler::ScopedTimer timer("LOD queue", "Queue image LOD request");
 		std::lock_guard<std::mutex> lock(m_mutex);
 		ImageLodState& state = m_states[_request.imageId];
 
@@ -191,6 +193,7 @@ namespace poca::opengl {
 
 	std::vector<ImageLodReady> LodUpdateManager::drainReadyUploads(std::size_t _maxUploads, std::size_t _maxPreparedVoxels)
 	{
+		poca::core::PerformanceProfiler::ScopedTimer timer("LOD queue", "Drain ready LOD uploads");
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_ready.erase(std::remove_if(m_ready.begin(), m_ready.end(),
 			[this](const ImageLodReady& _ready) {

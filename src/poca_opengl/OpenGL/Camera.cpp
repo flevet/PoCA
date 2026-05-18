@@ -71,6 +71,7 @@
 #include <OpenGL/RenderCommandContext.hpp>
 #include <Geometry/CGAL_includes.hpp>
 #include <General/Engine.hpp>
+#include <General/PerformanceProfiler.hpp>
 #include <Objects/MyMultipleObject.hpp>
 
 #include <QtGui/QPainter>
@@ -526,7 +527,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true)
 	{
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
@@ -762,6 +763,7 @@ namespace poca::opengl {
 
 	void Camera::paintGL()
 	{
+		poca::core::PerformanceProfiler::ScopedTimer timer("Rendering", "Camera::paintGL");
 		// First paint after the QOpenGLWidget has a valid context and size.
 		// Do not build heavy OpenGL component displays here yet: clear one frame,
 		// emit a generic lifecycle command, then schedule the real display for
@@ -799,6 +801,7 @@ namespace poca::opengl {
 
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)
 	{
+		poca::core::PerformanceProfiler::ScopedTimer timer("Rendering", _buffOffscreen == NULL ? "Camera::drawElements onscreen" : "Camera::drawElements offscreen");
 		auto start = std::chrono::high_resolution_clock::now();
 		GL_CHECK_ERRORS();
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
@@ -1392,6 +1395,18 @@ namespace poca::opengl {
 	bool Camera::clippingPlanesDisplay() const
 	{
 		return m_displayClippingPlanes;
+	}
+
+	void Camera::setPickingEnabled(const bool _enabled)
+	{
+		m_pickingEnabled = _enabled;
+		if (m_object != nullptr)
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(true, "togglePicking", _enabled));
+	}
+
+	bool Camera::pickingEnabled() const
+	{
+		return m_pickingEnabled;
 	}
 
 

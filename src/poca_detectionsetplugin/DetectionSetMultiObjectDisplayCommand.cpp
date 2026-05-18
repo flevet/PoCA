@@ -30,6 +30,7 @@
 #include <OpenGL/Helper.h>
 #include <OpenGL/RenderCommandContext.hpp>
 #include <OpenGL/Shader.hpp>
+#include <General/PerformanceProfiler.hpp>
 
 #include "DetectionSetDisplayCommand.hpp"
 #include "DetectionSetMultiObjectDisplayCommand.hpp"
@@ -492,6 +493,7 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 
 void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
+	poca::core::PerformanceProfiler::ScopedTimer timer("DetectionSet", "DetectionSet multi-object display");
 	(void)_offscreen;
 	if (!canBatch())
 		return;

@@ -31,6 +31,7 @@
 #include <OpenGL/Helper.h>
 #include <OpenGL/RenderCommandContext.hpp>
 #include <OpenGL/Shader.hpp>
+#include <OpenGL/MultiPrimitiveData.hpp>
 
 #include "VoronoiDiagramDisplayCommand.hpp"
 #include "VoronoiMultiObjectDisplayCommand.hpp"

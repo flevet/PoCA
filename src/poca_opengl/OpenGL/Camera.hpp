@@ -214,6 +214,8 @@ namespace poca::opengl {
 		void toggleClippingPlanesDisplay();
 		void setClippingPlanesDisplay(const bool);
 		bool clippingPlanesDisplay() const;
+		void setPickingEnabled(const bool);
+		bool pickingEnabled() const;
 		void toggleFontDisplay();
 
 		int getWidth() const { return this->width(); }
@@ -497,6 +499,7 @@ namespace poca::opengl {
 		glm::vec3 m_transformGizmoWorldCenter;
 		bool m_displayTransformGizmo;
 		bool m_displayClippingPlanes;
+		bool m_pickingEnabled;
 		int m_hoveredClippingPlane;
 		int m_activeClippingPlane;
 		QPointF m_clippingPlaneDragPrevious;

@@ -36,6 +36,7 @@
 #include <OpenGL/Helper.h>
 #include <OpenGL/RenderCommandContext.hpp>
 #include <OpenGL/Shader.hpp>
+#include <General/PerformanceProfiler.hpp>
 
 #include "ObjectListDisplayCommand.hpp"
 #include "ObjectListMultiObjectDisplayCommand.hpp"
@@ -867,6 +868,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 
 void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
+	poca::core::PerformanceProfiler::ScopedTimer timer("ObjectList", "ObjectList multi-object display");
 	(void)_offscreen;
 	if (!canBatch())
 		return;
