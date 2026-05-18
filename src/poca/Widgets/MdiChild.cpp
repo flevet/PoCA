@@ -112,6 +112,23 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 		painter.drawLine(QPointF(18, 5), QPointF(22, 10));
 		return pix;
 	};
+	auto makePickingIcon = []() -> QPixmap {
+		QPixmap pix(36, 36);
+		pix.fill(Qt::transparent);
+		QPainter painter(&pix);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		QPen pen(QColor(240, 240, 240), 2.0);
+		painter.setPen(pen);
+		painter.drawEllipse(QPointF(18, 18), 11, 11);
+		painter.drawLine(QPointF(18, 5), QPointF(18, 12));
+		painter.drawLine(QPointF(18, 24), QPointF(18, 31));
+		painter.drawLine(QPointF(5, 18), QPointF(12, 18));
+		painter.drawLine(QPointF(24, 18), QPointF(31, 18));
+		painter.setBrush(QColor(255, 80, 30));
+		painter.setPen(Qt::NoPen);
+		painter.drawEllipse(QPointF(18, 18), 3.5, 3.5);
+		return pix;
+	};
 	m_3DButton = new QPushButton();
 	m_3DButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_3DButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -146,6 +163,14 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	m_clipButton->setCheckable(true);
 	m_clipButton->setChecked(m_camera == NULL ? false : m_camera->clippingPlanesDisplay());
 	QObject::connect(m_clipButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
+	m_pickingButton = new QPushButton();
+	m_pickingButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	m_pickingButton->setMaximumSize(QSize(maxSize, maxSize));
+	m_pickingButton->setIcon(QIcon(makePickingIcon()));
+	m_pickingButton->setToolTip("Enable picking");
+	m_pickingButton->setCheckable(true);
+	m_pickingButton->setChecked(m_camera == NULL ? true : m_camera->pickingEnabled());
+	QObject::connect(m_pickingButton, SIGNAL(clicked(bool)), this, SLOT(actionNeeded(bool)));
 	m_playButton = new QPushButton();
 	m_playButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	m_playButton->setMaximumSize(QSize(maxSize, maxSize));
@@ -180,8 +205,9 @@ MdiChild::MdiChild(poca::opengl::CameraInterface* _widget, QWidget * _parent /*=
 	layoutTop->addWidget(m_2DtButton, 0, 1, 1, 1);
 	layoutTop->addWidget(m_gizmoButton, 0, 2, 1, 1);
 	layoutTop->addWidget(m_clipButton, 0, 3, 1, 1);
-	layoutTop->addWidget(m_playButton, 0, 4, 1, 1);
-	layoutTop->addWidget(emptyWLine, 0, 5, 1, 1);
+	layoutTop->addWidget(m_pickingButton, 0, 4, 1, 1);
+	layoutTop->addWidget(m_playButton, 0, 5, 1, 1);
+	layoutTop->addWidget(emptyWLine, 0, 6, 1, 1);
 	layoutTop->addWidget(m_tLabel, 1, 0, 1, 2);
 	layoutTop->addWidget(m_tSlider, 2, 0, 1, 1);
 	layoutTop->addWidget(m_emptyForSliderW, 3, 0, 1, 1);
@@ -367,6 +393,9 @@ void MdiChild::actionNeeded(bool _val)
 	}
 	else if (sender == m_clipButton) {
 		cam->setClippingPlanesDisplay(_val);
+	}
+	else if (sender == m_pickingButton) {
+		cam->setPickingEnabled(_val);
 	}
 	else if (sender == m_playButton) {
 		if (_val) {
@@ -589,5 +618,4 @@ void MdiChild::showEvent(QShowEvent* event)
 		}
 		});
 }
-
 
