@@ -36,6 +36,7 @@
 #include <QtCore/QDir>
 #include <QtWidgets/QApplication>
 #include <QtCore/QPluginLoader>
+#include <QtCore/QVariant>
 
 #include <OpenGL/Helper.h>
 #include <Interfaces/CameraInterface.hpp>
@@ -138,20 +139,68 @@ namespace poca::core {
 		}
 	}
 
+	namespace {
+		const char* engineApplicationPropertyName()
+		{
+			return "poca.core.Engine.instance";
+		}
+
+		Engine* engineFromApplicationProperty()
+		{
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app == nullptr)
+				return nullptr;
+
+			QVariant value = app->property(engineApplicationPropertyName());
+			if (!value.isValid())
+				return nullptr;
+
+			return reinterpret_cast<Engine*>(value.value<quintptr>());
+		}
+
+		void setEngineApplicationProperty(Engine* _engine)
+		{
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app != nullptr)
+				app->setProperty(engineApplicationPropertyName(), QVariant::fromValue<quintptr>(reinterpret_cast<quintptr>(_engine)));
+		}
+	}
+
 	Engine* Engine::instance()
 	{
-		if (m_instance == 0)
+		/*
+		 * poca_core is linked as a static library by the application and by plugins.
+		 * A plain static Engine* is therefore duplicated per module. Store the real
+		 * process-wide Engine pointer on QCoreApplication, exactly as the shared
+		 * PerformanceProfiler does, so verbose state and verbose type filters are
+		 * read consistently from plugins/opengl workers as well as from the main UI.
+		 */
+		Engine* sharedEngine = engineFromApplicationProperty();
+		if (sharedEngine != nullptr) {
+			m_instance = sharedEngine;
+			return m_instance;
+		}
+
+		if (m_instance == 0) {
 			m_instance = new Engine;
+			setEngineApplicationProperty(m_instance);
+		}
 		return m_instance;
 	}
 
 	void Engine::setEngineSingleton(poca::core::Engine* _eng)
 	{
 		m_instance = _eng;
+		setEngineApplicationProperty(m_instance);
 	}
 
 	void Engine::deleteInstance()
 	{
+		QCoreApplication* app = QCoreApplication::instance();
+		Engine* sharedEngine = engineFromApplicationProperty();
+		if (app != nullptr && sharedEngine == m_instance)
+			app->setProperty(engineApplicationPropertyName(), QVariant());
+
 		if (m_instance != 0)
 			delete m_instance;
 		m_instance = 0;
@@ -247,6 +296,13 @@ namespace poca::core {
 						addVerboseType(type.get<std::string>());
 			}
 		}
+		/*
+		 * Publish the loaded verbose state through QCoreApplication as soon as the
+		 * ini file is read. This avoids static-library/plugin copies of Engine from
+		 * falling back to their constructor defaults before the menu state changes.
+		 */
+		publishVerboseTypes();
+		setVerbose(m_verbose);
 
 		poca::core::MediatorWObjectFWidget* med = poca::core::MediatorWObjectFWidget::instance();
 		poca::core::MacroRecorderSingleton* macroRecord = poca::core::MacroRecorderSingleton::instance();

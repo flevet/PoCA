@@ -34,6 +34,9 @@
 #define Engine_hpp__
 
 #include <QtWidgets/QTabWidget>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QStringList>
+#include <QtCore/QVariant>
 #include <vector>
 #include <algorithm>
 #include <map>
@@ -159,27 +162,61 @@ namespace poca::core {
 		inline const QStringList& extensions() const { return m_fileExtensions; }
 
 		inline bool verbose(const std::string& _type = "") const {
-			if (!m_verbose)
-				return m_verbose;
+			const bool enabled = verboseEnabled();
+			if (!enabled)
+				return false;
 			if (_type.empty())
-				return m_verbose;
+				return true;
+
+			const QStringList sharedTypes = sharedVerboseTypes();
+			if (!sharedTypes.isEmpty())
+				return sharedTypes.contains(QString::fromStdString(_type));
+
 			if (m_verboseTypes.empty())
-				return m_verbose;
+				return true;
 			return std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) != m_verboseTypes.end();
 		}
-		inline void setVerbose(const bool _val) { m_verbose = _val; }
-		inline bool verboseEnabled() const { return m_verbose; }
+
+		inline void setVerbose(const bool _val) {
+			m_verbose = _val;
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app != nullptr)
+				app->setProperty(verboseEnabledPropertyName(), _val);
+		}
+
+		inline bool verboseEnabled() const {
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app != nullptr) {
+				const QVariant value = app->property(verboseEnabledPropertyName());
+				if (value.isValid())
+					return value.toBool();
+			}
+			return m_verbose;
+		}
+
 		inline void addVerboseType(const std::string& _type) {
 			if (std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) == m_verboseTypes.end())
 				m_verboseTypes.push_back(_type);
+			publishVerboseTypes();
 		}
+
 		inline bool hasVerboseType(const std::string& _type) const {
+			const QStringList sharedTypes = sharedVerboseTypes();
+			if (!sharedTypes.isEmpty())
+				return sharedTypes.contains(QString::fromStdString(_type));
 			return std::find(m_verboseTypes.begin(), m_verboseTypes.end(), _type) != m_verboseTypes.end();
 		}
+
 		inline void removeVerboseType(const std::string& _type) {
 			m_verboseTypes.erase(std::remove(m_verboseTypes.begin(), m_verboseTypes.end(), _type), m_verboseTypes.end());
+			publishVerboseTypes();
 		}
-		inline void clearVerboseTypes() { m_verboseTypes.clear(); }
+
+		inline void clearVerboseTypes() {
+			m_verboseTypes.clear();
+			publishVerboseTypes();
+		}
+
 		inline const std::vector<std::string>& verboseTypes() const { return m_verboseTypes; }
 
 		const std::map<std::string, poca::core::Palette>& palettes() const { return m_palettes; }
@@ -214,9 +251,33 @@ namespace poca::core {
 		//Replacing both StateSoftwareSingleton & GlobalParametersSingleton
 		nlohmann::json m_stateParameters, m_globalParameters;
 
-		bool m_verbose{ true }, m_globalCommands{ false };
+		bool m_verbose{ false }, m_globalCommands{ false };
 		std::vector<std::string> m_verboseTypes;
 		std::map<std::string, poca::core::Palette> m_palettes;
+
+
+		static inline const char* verboseEnabledPropertyName() { return "poca.core.Engine.verboseEnabled"; }
+		static inline const char* verboseTypesPropertyName() { return "poca.core.Engine.verboseTypes"; }
+
+		inline QStringList sharedVerboseTypes() const {
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app != nullptr) {
+				const QVariant value = app->property(verboseTypesPropertyName());
+				if (value.isValid())
+					return value.toStringList();
+			}
+			return QStringList();
+		}
+
+		inline void publishVerboseTypes() const {
+			QCoreApplication* app = QCoreApplication::instance();
+			if (app == nullptr)
+				return;
+			QStringList types;
+			for (const std::string& type : m_verboseTypes)
+				types << QString::fromStdString(type);
+			app->setProperty(verboseTypesPropertyName(), types);
+		}
 
 		void initializePalettes();
 	};

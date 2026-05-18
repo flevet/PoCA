@@ -533,8 +533,8 @@ void DatasetAssemblerWidget::onAssemble()
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 
-	engine->setVerbose(true);
-			engine->addVerboseType("debugPyramidalRendering");
+	//engine->setVerbose(true);
+	engine->addVerboseType("debugPyramidalRendering");
 
 	std::vector<poca::core::MyObjectInterface*> objects;
 	std::vector<AssembledDatasetInfo> assembledInfos;

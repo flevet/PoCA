@@ -49,6 +49,7 @@
 
 #include <OpenGL/Camera.hpp>
 #include <General/Engine.hpp>
+#include <General/PerformanceProfiler.hpp>
 #include <General/Command.hpp>
 #include <Plot/Icons.hpp>
 
@@ -270,6 +271,7 @@ void MdiChild::freeGPUResources()
 
 void MdiChild::resizeEvent( QResizeEvent * _event )
 {
+	poca::core::PerformanceProfiler::ScopedTimer timer("MdiChild resize", "MdiChild::resizeEvent");
 	const QSize& size = _event->size();
 	QWidget * wid = this->parentWidget();
 	int x = this->parentWidget()->x(), y = this->parentWidget()->y(), w = this->parentWidget()->width(), h = this->parentWidget()->height();

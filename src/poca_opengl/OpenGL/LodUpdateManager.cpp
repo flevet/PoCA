@@ -26,7 +26,17 @@ namespace poca::opengl {
 		bool lodDebugEnabled()
 		{
 			poca::core::Engine* engine = poca::core::Engine::instance();
-			return engine->verbose("debugPyramidalRendering") || engine->verbose("lodDebug");
+			if (!engine->verboseEnabled())
+				return false;
+
+			/*
+			 * LOD/raycasting diagnostics are noisy and should only be printed when
+			 * their explicit verbose category is selected. Do not use Engine::verbose()
+			 * here because an empty verbose-type list currently means "all verbose",
+			 * which made image raycasting logs appear even after all debug categories
+			 * were unchecked.
+			 */
+			return engine->hasVerboseType("debugPyramidalRendering") || engine->hasVerboseType("lodDebug");
 		}
 	}
 

@@ -2508,24 +2508,43 @@ namespace poca::opengl {
 
 	void Camera::resizeEvent(QResizeEvent* _event)
 	{
-		makeCurrent();
-		QOpenGLWidget::resizeEvent(_event);
-		recalcModelView();
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("Camera makeCurrent", "Camera::resizeEvent makeCurrent");
+			makeCurrent();
+		}
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("Camera widget resize", "QOpenGLWidget::resizeEvent");
+			QOpenGLWidget::resizeEvent(_event);
+		}
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("Camera matrices", "Camera::resizeEvent recalcModelView");
+			recalcModelView();
+		}
 	
-		if (m_offscreenFBO != NULL)
-			delete m_offscreenFBO;
 		int w = this->width(), h = this->height();
-		m_offscreenFBO = new QOpenGLFramebufferObject(this->width(), this->height(), QOpenGLFramebufferObject::Depth, GL_TEXTURE_2D, GL_RGBA);
-		glBindTexture(GL_TEXTURE_2D, m_offscreenFBO->texture());
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this->width(), this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glBindTexture(GL_TEXTURE_2D, 0);
-		
-		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
-		m_ssaoShader.update(w, h);
-
-		update();
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("FBO resize", "Camera::resizeEvent recreate offscreen FBO");
+			if (m_offscreenFBO != NULL)
+				delete m_offscreenFBO;
+			m_offscreenFBO = new QOpenGLFramebufferObject(this->width(), this->height(), QOpenGLFramebufferObject::Depth, GL_TEXTURE_2D, GL_RGBA);
+			glBindTexture(GL_TEXTURE_2D, m_offscreenFBO->texture());
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, this->width(), this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("Picking buffer resize", "Camera::resizeEvent updatePickingBuffer");
+			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
+		}
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("SSAO resize", "Camera::resizeEvent SSAO update");
+			m_ssaoShader.update(w, h);
+		}
+		{
+			poca::core::PerformanceProfiler::ScopedTimer timer("Camera update request", "Camera::resizeEvent update");
+			update();
+		}
 	}
 
 	Shader* Camera::getShader(const std::string& _nameShader) 

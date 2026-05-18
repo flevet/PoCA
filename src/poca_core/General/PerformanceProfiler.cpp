@@ -10,6 +10,9 @@
 
 #include "PerformanceProfiler.hpp"
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QVariant>
+
 namespace poca::core {
 
 	PerformanceProfiler::ScopedTimer::ScopedTimer(const std::string& _category, const std::string& _name)
@@ -26,8 +29,34 @@ namespace poca::core {
 
 	PerformanceProfiler& PerformanceProfiler::instance()
 	{
-		static PerformanceProfiler profiler;
-		return profiler;
+		/*
+		 * poca_core is currently built as a static library and is linked both by the
+		 * main application and by plugins. A function-local static singleton would
+		 * therefore be duplicated once per module, so samples recorded from plugins
+		 * would not be visible from the PerformanceWidget living in the application.
+		 *
+		 * Store the profiler object pointer on the unique QCoreApplication instance,
+		 * which is shared process-wide through QtCore, and let all modules retrieve
+		 * the same profiler. The object intentionally lives until process shutdown.
+		 */
+		static const char* propertyName = "poca.core.PerformanceProfiler.instance";
+
+		QCoreApplication* app = QCoreApplication::instance();
+		if (app != nullptr) {
+			QVariant value = app->property(propertyName);
+			if (value.isValid()) {
+				PerformanceProfiler* profiler = reinterpret_cast<PerformanceProfiler*>(value.value<quintptr>());
+				if (profiler != nullptr)
+					return *profiler;
+			}
+
+			PerformanceProfiler* profiler = new PerformanceProfiler();
+			app->setProperty(propertyName, QVariant::fromValue<quintptr>(reinterpret_cast<quintptr>(profiler)));
+			return *profiler;
+		}
+
+		static PerformanceProfiler fallbackProfiler;
+		return fallbackProfiler;
 	}
 
 	void PerformanceProfiler::setEnabled(bool _enabled)
