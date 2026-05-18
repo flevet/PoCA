@@ -292,6 +292,25 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 {
 	//executeCommand(_ci);
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
+	if (_ci != nullptr && _ci->nameCommand == "updatePickingBuffer") {
+		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
+			poca::core::BasicComponentInterface* bc = *it;
+			if (isComponentFamilyHandled(_result, bc->getName()))
+				continue;
+			bc->executeCommand(_ci, _context, _result);
+		}
+		if (!m_selectedObjectIndices.empty()) {
+			for (const size_t index : m_selectedObjectIndices) {
+				if (index < m_colors.size() && m_colors[index] != NULL)
+					m_colors[index]->executeGlobalCommand(_ci, _context, _result);
+			}
+		}
+		else {
+			for (poca::core::MyObjectInterface* obj : m_colors)
+				obj->executeGlobalCommand(_ci, _context, _result);
+		}
+		return;
+	}
 	if (!m_selectedObjectIndices.empty()) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)

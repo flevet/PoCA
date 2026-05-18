@@ -216,6 +216,7 @@ namespace poca::opengl {
 		bool clippingPlanesDisplay() const;
 		void setPickingEnabled(const bool);
 		bool pickingEnabled() const;
+		bool interactiveRendering() const { return m_interactiveRendering || m_buttonOn; }
 		void toggleFontDisplay();
 
 		int getWidth() const { return this->width(); }
@@ -412,7 +413,8 @@ namespace poca::opengl {
 		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho, m_cameraDistance;
 		float m_perspectiveFov;
 		float m_translationX, m_translationY, m_translationZ;
-		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid;
+		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid, m_interactiveRendering;
+		uint64_t m_interactiveRenderingSerial;
 		bool m_alreadyInitialized;
 		bool m_openGLContextInitializedNotified;
 		bool m_cullFace, m_fillPolygon;

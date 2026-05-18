@@ -338,6 +338,10 @@ namespace poca::opengl {
 
 	void BasicDisplayCommand::updatePickingFBO(const int _w, const int _h)
 	{
+		if (_w <= 0 || _h <= 0)
+			return;
+		if (m_pickFBO != NULL && m_wImage == _w && m_hImage == _h)
+			return;
 		m_wImage = _w;
 		m_hImage = _h;
 		if (m_pickFBO != NULL)
