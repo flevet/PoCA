@@ -51,9 +51,11 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
+#include <QtGui/QFontMetrics>
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtCore/qmath.h>
 #include <QtCore/QLineF>
+#include <QtCore/QDateTime>
 #include <QtWidgets/QFileDialog>
 #include <CGAL/intersections.h>
 
@@ -527,7 +529,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false), m_interactiveRenderingSerial(0)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_identifyObjectsUntilMsec(0), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false), m_interactiveRenderingSerial(0)
 	{
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
@@ -796,6 +798,7 @@ namespace poca::opengl {
 				drawClippingPlaneHandles();
 			if (objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo))
 				drawTransformGizmos();
+			drawObjectIdentificationLabels();
 		}
 	}
 
@@ -3854,6 +3857,127 @@ namespace poca::opengl {
 			m_object->executeGlobalCommand(&ci);
 		}
 		m_transformGizmoDragPrevious = _pos;
+	}
+
+
+	void Camera::showObjectIdentificationLabels(const int _durationMsec)
+	{
+		m_identifyObjectsUntilMsec = QDateTime::currentMSecsSinceEpoch() + std::max(250, _durationMsec);
+		update();
+		QTimer::singleShot(std::max(250, _durationMsec), this, [this]() { update(); });
+	}
+
+	void Camera::drawObjectIdentificationLabels()
+	{
+		if (m_identifyObjectsUntilMsec <= QDateTime::currentMSecsSinceEpoch())
+			return;
+		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
+		if (multi == NULL || multi->nbColors() == 0 || width() <= 0 || height() <= 0)
+			return;
+
+		glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+		glViewport(0, 0, width(), height());
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SCISSOR_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glUseProgram(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		glBindVertexArray(0);
+		glFlush();
+
+		QPainter painter(this);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+		const int previousSide = std::max(44, height() / 12);
+		const int minimumSide = std::max(18, previousSide / 3);
+		const int maximumSide = previousSide;
+		const glm::mat4 cameraOnlyModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
+		const size_t oldIndex = multi->currentObjectID();
+		for (size_t n = 0; n < multi->nbColors(); ++n) {
+			poca::core::MyObjectInterface* child = multi->getObject(n);
+			if (child == NULL)
+				continue;
+			const poca::core::BoundingBox bbox = localObjectBoundingBox(child);
+			const glm::vec3 center((bbox[0] + bbox[3]) * 0.5f, (bbox[1] + bbox[4]) * 0.5f, (bbox[2] + bbox[5]) * 0.5f);
+			const glm::mat4 model = cameraOnlyModel * child->getModelMatrix();
+			const glm::vec2 sp = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, model, m_viewport, center);
+			const QPointF pos(sp.x, static_cast<float>(height()) - sp.y);
+			if (pos.x() < -100.0 || pos.y() < -100.0 || pos.x() > width() + 100.0 || pos.y() > height() + 100.0)
+				continue;
+
+			QRectF projectedBounds;
+			bool hasProjectedBounds = false;
+			const float xs[2] = { bbox[0], bbox[3] };
+			const float ys[2] = { bbox[1], bbox[4] };
+			const float zs[2] = { bbox[2], bbox[5] };
+			for (int ix = 0; ix < 2; ++ix)
+				for (int iy = 0; iy < 2; ++iy)
+					for (int iz = 0; iz < 2; ++iz) {
+						const glm::vec2 corner = worldToScreenCoordinates(m_matrixProjection, m_stateCamera.m_matrixView, model, m_viewport, glm::vec3(xs[ix], ys[iy], zs[iz]));
+						const QPointF screenCorner(corner.x, static_cast<float>(height()) - corner.y);
+						if (!hasProjectedBounds) {
+							projectedBounds = QRectF(screenCorner, QSizeF(0.0, 0.0));
+							hasProjectedBounds = true;
+						}
+						else
+							projectedBounds = projectedBounds.united(QRectF(screenCorner, QSizeF(0.0, 0.0)));
+					}
+
+			double objectSide = std::min(projectedBounds.width(), projectedBounds.height());
+			if (!std::isfinite(objectSide) || objectSide <= 0.0)
+				objectSide = maximumSide;
+
+			// The label must scale with the projected object size.  Use roughly one
+			// third of the object on screen, keep the old label size only as an upper
+			// bound, and never draw a label larger than the projected object itself.
+			int side = int(std::floor(objectSide / 3.0));
+			if (objectSide >= minimumSide)
+				side = std::max(minimumSide, side);
+			else
+				side = int(std::floor(objectSide));
+			side = std::max(6, std::min(maximumSide, side));
+			side = std::min(side, std::max(6, int(std::floor(objectSide))));
+
+			const QString text = QString::number(n + 1);
+			QFont f = painter.font();
+			f.setBold(true);
+			f.setPixelSize(std::max(6, int(side * 0.58)));
+			painter.setFont(f);
+			QFontMetrics fm(f);
+			while ((fm.horizontalAdvance(text) > side - 6 || fm.height() > side - 4) && f.pixelSize() > 7) {
+				f.setPixelSize(f.pixelSize() - 1);
+				painter.setFont(f);
+				fm = QFontMetrics(f);
+			}
+
+			QRectF box(pos.x() - side * 0.5, pos.y() - side * 0.5, side, side);
+			painter.save();
+			painter.resetTransform();
+			painter.setRenderHint(QPainter::TextAntialiasing, true);
+			painter.setRenderHint(QPainter::Antialiasing, true);
+			painter.setPen(QPen(Qt::white, std::max(1.0, side / 18.0)));
+			painter.setBrush(QColor(0, 120, 255, 230));
+			painter.drawRoundedRect(box, std::max(3.0, side / 8.0), std::max(3.0, side / 8.0));
+			QPainterPath textPath;
+			const QRect textRect = fm.boundingRect(text);
+			const QPointF textPos(box.center().x() - textRect.width() * 0.5,
+				box.center().y() + textRect.height() * 0.35);
+			textPath.addText(textPos, f, text);
+			painter.setPen(QPen(Qt::black, std::max(1.0, side / 24.0)));
+			painter.setBrush(Qt::black);
+			painter.drawPath(textPath);
+			painter.restore();
+		}
+		multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
+		painter.end();
+		if (m_identifyObjectsUntilMsec > QDateTime::currentMSecsSinceEpoch())
+			QTimer::singleShot(80, this, [this]() { update(); });
 	}
 
 

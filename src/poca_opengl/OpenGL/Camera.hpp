@@ -198,6 +198,8 @@ namespace poca::opengl {
 		virtual void drawElementsOnscreen() { drawElements(); }
 		virtual void drawElementsOffscreen() { drawElements(m_offscreenFBO); }
 
+		void showObjectIdentificationLabels(const int = 2500);
+
 		const poca::core::BoundingBox& getCurrentCrop() const { return m_currentCrop; }
 		void setCurrentCrop(const poca::core::BoundingBox& _crop) { m_currentCrop = _crop; }
 
@@ -369,6 +371,7 @@ namespace poca::opengl {
 		float worldUnitsPerScreenPixel(const glm::vec3&) const;
 
 		void drawTransformGizmos();
+		void drawObjectIdentificationLabels();
 		void drawClippingPlaneHandles();
 		int hitTestClippingPlaneHandle(const QPointF&) const;
 		void applyClippingPlaneDrag(const QPointF&);
@@ -501,6 +504,7 @@ namespace poca::opengl {
 		glm::vec3 m_transformGizmoWorldCenter;
 		bool m_displayTransformGizmo;
 		bool m_displayClippingPlanes;
+		qint64 m_identifyObjectsUntilMsec;
 		bool m_pickingEnabled;
 		int m_hoveredClippingPlane;
 		int m_activeClippingPlane;
