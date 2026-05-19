@@ -45,9 +45,12 @@ class QTableWidget;
 class QTextEdit;
 class QLineEdit;
 class QCheckBox;
+class QLabel;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QProgressBar;
+class QSpinBox;
+class QComboBox;
 
 namespace poca::core {
 	class MyObjectInterface;
@@ -63,6 +66,14 @@ public:
 
 	void loadParameters(const nlohmann::json&);
 	void saveParameters(nlohmann::json&) const;
+
+	struct AssembledDatasetInfo {
+		QString rootFolder;
+		QString datasetKey;
+		QString objectName;
+		QStringList hierarchySegments;
+		poca::core::MyObjectInterface* object{ nullptr };
+	};
 
 signals:
 	void transferNewObjectCreated(poca::core::MyObjectInterface*);
@@ -114,14 +125,6 @@ private:
 		bool hasGpuBytes{ false };
 	};
 
-	struct AssembledDatasetInfo {
-		QString rootFolder;
-		QString datasetKey;
-		QString objectName;
-		QStringList hierarchySegments;
-		poca::core::MyObjectInterface* object{ nullptr };
-	};
-
 	void appendLog(const QString&);
 	std::vector<DatasetRule> rulesFromTable() const;
 	void setRulesToTable(const std::vector<DatasetRule>&);
@@ -158,6 +161,7 @@ private:
 	QTextEdit* m_logEdit{ nullptr };
 	QLineEdit* m_nameSeparatorEdit{ nullptr };
 	QCheckBox* m_prefixRootNameCBox{ nullptr };
+	QPushButton* m_choosePlacementButton{ nullptr };
 	QProgressBar* m_loadingProgressBar{ nullptr };
 	QString m_lastRootPath;
 };

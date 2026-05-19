@@ -162,6 +162,7 @@ private slots:
 
 	void onGridReleased();
 	void onToggleGridCentered(bool);
+	void onIdentifyObjects();
 	void onExportAllObjects();
 	void openDatasetAssembler();
 	void openPythonWidget();

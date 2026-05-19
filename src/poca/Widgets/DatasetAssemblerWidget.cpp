@@ -32,6 +32,8 @@
 
 #include <algorithm>
 #include <fstream>
+#include <cmath>
+#include <map>
 #include <limits>
 #include <set>
 #include <utility>
@@ -48,6 +50,8 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
@@ -66,11 +70,18 @@
 #include <QtCore/QSet>
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QColor>
+#include <QtGui/QPainter>
+#include <QtGui/QPen>
+#include <QtGui/QBrush>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 
 #include <General/Engine.hpp>
+#include <General/Misc.h>
+#include <General/stb_rect_pack.h>
 #include <Interfaces/MyObjectInterface.hpp>
+#include <Interfaces/BasicComponentInterface.hpp>
 #include <Objects/MyMultipleObject.hpp>
 #include <tinytiffreader.h>
 
@@ -133,6 +144,422 @@ namespace {
 			return std::numeric_limits<uint64_t>::max();
 		return a * b;
 	}
+
+
+	struct PlacementPreviewItem {
+		QRectF rect;
+		int group{ -1 };
+	};
+
+	struct PlacementPreviewGroup {
+		QPointF center;
+		float radius{ 0.f };
+		QString label;
+	};
+
+	class PlacementPreviewWidget : public QWidget {
+	public:
+		PlacementPreviewWidget(QWidget* _parent = nullptr) : QWidget(_parent) { setMinimumSize(520, 360); }
+		void setPreview(const std::vector<PlacementPreviewItem>& _items, const std::vector<PlacementPreviewGroup>& _groups) {
+			m_items = _items; m_groups = _groups; m_dragItem = -1; m_dragGroup = -1; updateTransform(); update();
+		}
+		const std::vector<PlacementPreviewItem>& items() const { return m_items; }
+		const std::vector<PlacementPreviewGroup>& groups() const { return m_groups; }
+	protected:
+		void resizeEvent(QResizeEvent*) override { updateTransform(); }
+		void paintEvent(QPaintEvent*) override {
+			QPainter painter(this);
+			painter.fillRect(rect(), palette().base());
+			if (m_items.empty() && m_groups.empty()) {
+				painter.drawText(rect(), Qt::AlignCenter, QObject::tr("Press Preview to compute a placement."));
+				return;
+			}
+			updateTransform();
+			QPen groupPen(Qt::DashLine);
+			groupPen.setWidth(2);
+			painter.setPen(groupPen);
+			painter.setBrush(Qt::NoBrush);
+			for (const auto& group : m_groups) {
+				const QPointF c = mapPoint(group.center);
+				const double r = group.radius * m_scale;
+				painter.drawEllipse(c, r, r);
+				painter.drawText(c + QPointF(4, -4), group.label);
+			}
+			for (size_t i = 0; i < m_items.size(); ++i) {
+				QColor color = QColor::fromHsv(int((i * 47) % 360), 170, 220, 110);
+				painter.setPen(QPen(color.darker(160), 1));
+				painter.setBrush(QBrush(color));
+				painter.drawRect(mapRect(m_items[i].rect));
+			}
+		}
+		void mousePressEvent(QMouseEvent* _event) override {
+			m_lastWorld = unmapPoint(_event->pos());
+			m_dragItem = -1; m_dragGroup = -1;
+			for (int i = int(m_items.size()) - 1; i >= 0; --i)
+				if (m_items[i].rect.contains(m_lastWorld)) { m_dragItem = i; return; }
+			for (int g = int(m_groups.size()) - 1; g >= 0; --g) {
+				const double dx = m_lastWorld.x() - m_groups[g].center.x();
+				const double dy = m_lastWorld.y() - m_groups[g].center.y();
+				if (std::sqrt(dx * dx + dy * dy) <= m_groups[g].radius) { m_dragGroup = g; return; }
+			}
+		}
+		void mouseMoveEvent(QMouseEvent* _event) override {
+			if (m_dragItem < 0 && m_dragGroup < 0) return;
+			const QPointF world = unmapPoint(_event->pos());
+			const QPointF delta = world - m_lastWorld;
+			m_lastWorld = world;
+			if (m_dragGroup >= 0) {
+				m_groups[m_dragGroup].center += delta;
+				for (auto& item : m_items)
+					if (item.group == m_dragGroup) item.rect.translate(delta);
+			}
+			else if (m_dragItem >= 0) { m_items[m_dragItem].rect.translate(delta); updateGroupCircle(m_items[m_dragItem].group); }
+			updateTransform(); update();
+		}
+		void mouseReleaseEvent(QMouseEvent*) override { m_dragItem = -1; m_dragGroup = -1; }
+	private:
+		QRectF bounds() const {
+			QRectF b; bool has = false;
+			for (const auto& item : m_items) { b = has ? b.united(item.rect) : item.rect; has = true; }
+			for (const auto& group : m_groups) { QRectF c(group.center.x() - group.radius, group.center.y() - group.radius, group.radius * 2.f, group.radius * 2.f); b = has ? b.united(c) : c; has = true; }
+			if (!has || b.width() <= 0.0 || b.height() <= 0.0) return QRectF(0, 0, 1, 1);
+			return b.adjusted(-1, -1, 1, 1);
+		}
+		void updateTransform() {
+			m_bounds = bounds(); const float margin = 20.f;
+			m_scale = std::min((width() - 2.0 * margin) / m_bounds.width(), (height() - 2.0 * margin) / m_bounds.height());
+			if (!std::isfinite(m_scale) || m_scale <= 0.0) m_scale = 1.0;
+		}
+		QRectF mapRect(const QRectF& r) const { return QRectF(20.0 + (r.left() - m_bounds.left()) * m_scale, height() - 20.0 - (r.bottom() - m_bounds.top()) * m_scale, r.width() * m_scale, r.height() * m_scale).normalized(); }
+		QPointF mapPoint(const QPointF& p) const { return QPointF(20.0 + (p.x() - m_bounds.left()) * m_scale, height() - 20.0 - (p.y() - m_bounds.top()) * m_scale); }
+		QPointF unmapPoint(const QPointF& p) const { return QPointF((p.x() - 20.0) / m_scale + m_bounds.left(), (height() - 20.0 - p.y()) / m_scale + m_bounds.top()); }
+		void updateGroupCircle(const int _group) {
+			if (_group < 0 || _group >= int(m_groups.size())) return;
+			QPointF center(0.0, 0.0); int count = 0;
+			for (const auto& item : m_items) if (item.group == _group) { center += item.rect.center(); ++count; }
+			if (count == 0) return;
+			center /= double(count);
+			double radius = 1.0;
+			for (const auto& item : m_items) if (item.group == _group) {
+				const QPointF corners[4] = { item.rect.topLeft(), item.rect.topRight(), item.rect.bottomLeft(), item.rect.bottomRight() };
+				for (const QPointF& corner : corners) { const double dx = corner.x() - center.x(), dy = corner.y() - center.y(); radius = std::max(radius, std::sqrt(dx * dx + dy * dy) + 2.0); }
+			}
+			m_groups[_group].center = center; m_groups[_group].radius = float(radius);
+		}
+		std::vector<PlacementPreviewItem> m_items;
+		std::vector<PlacementPreviewGroup> m_groups;
+		QRectF m_bounds;
+		double m_scale{ 1.0 };
+		QPointF m_lastWorld;
+		int m_dragItem{ -1 }, m_dragGroup{ -1 };
+	};
+
+
+	poca::core::BoundingBox localObjectBBox(poca::core::MyObjectInterface* _object)
+	{
+		if (_object == nullptr) {
+			poca::core::BoundingBox empty;
+			empty.set(0.f, 0.f, 0.f, 1.f, 1.f, 1.f);
+			return empty;
+		}
+
+		poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+		bool hasBBox = false;
+		for (poca::core::BasicComponentInterface* component : _object->getComponents()) {
+			if (component == nullptr)
+				continue;
+			const poca::core::BoundingBox& componentBBox = component->boundingBox();
+			for (int ix = 0; ix < 2; ++ix)
+				for (int iy = 0; iy < 2; ++iy)
+					for (int iz = 0; iz < 2; ++iz) {
+						const float x = ix == 0 ? componentBBox[0] : componentBBox[3];
+						const float y = iy == 0 ? componentBBox[1] : componentBBox[4];
+						const float z = iz == 0 ? componentBBox[2] : componentBBox[5];
+						if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+							continue;
+						bbox.addPointBBox(x, y, z);
+						hasBBox = true;
+					}
+		}
+
+		if (!hasBBox)
+			bbox = _object->boundingBox();
+		if (!std::isfinite(bbox.realWidth()) || bbox.realWidth() <= 0.f || !std::isfinite(bbox.realHeight()) || bbox.realHeight() <= 0.f)
+			bbox.set(0.f, 0.f, 0.f, 1.f, 1.f, 1.f);
+		return bbox;
+	}
+
+	std::vector<poca::core::BoundingBox> basePlacementBBoxes(MyMultipleObject* _object)
+	{
+		std::vector<poca::core::BoundingBox> result;
+		if (_object == nullptr)
+			return result;
+		const auto& gridBBoxes = _object->getGridBBoxes();
+		for (size_t i = 0; i < _object->nbColors(); ++i) {
+			poca::core::BoundingBox bbox = localObjectBBox(_object->getObject(i));
+			if (i < gridBBoxes.size()) {
+				const auto& gb = gridBBoxes[i];
+				bbox.set(gb.x(), gb.y(), gb.z(), gb.x() + std::max(1.f, bbox.realWidth()), gb.y() + std::max(1.f, bbox.realHeight()), gb.z() + bbox.realThick());
+			}
+			else
+				bbox.set(0.f, 0.f, 0.f, std::max(1.f, bbox.realWidth()), std::max(1.f, bbox.realHeight()), bbox.realThick());
+			result.push_back(bbox);
+		}
+		return result;
+	}
+
+	std::vector<poca::core::BoundingBox> computeRegularGridPlacement(const std::vector<poca::core::BoundingBox>& _base, int _columns, int _rows)
+	{
+		std::vector<poca::core::BoundingBox> result = _base;
+		if (_base.empty()) return result;
+		_columns = std::max(1, _columns);
+		_rows = std::max(1, _rows);
+		float cellSide = 1.f;
+		for (const auto& b : _base)
+			cellSide = std::max(cellSide, std::max(b.realWidth(), b.realHeight()));
+		for (size_t i = 0; i < result.size(); ++i) {
+			const int col = int(i % _columns);
+			const int row = int(i / _columns);
+			const float x = col * cellSide + (cellSide - _base[i].realWidth()) * 0.5f;
+			const float y = row * cellSide + (cellSide - _base[i].realHeight()) * 0.5f;
+			result[i].set(x, y, 0.f, x + _base[i].realWidth(), y + _base[i].realHeight(), _base[i].realThick());
+		}
+		return result;
+	}
+
+	std::vector<poca::core::BoundingBox> computePackPlacement(const std::vector<poca::core::BoundingBox>& _base, double _initialMultiplier)
+	{
+		std::vector<poca::core::BoundingBox> result = _base;
+		if (_base.empty()) return result;
+		size_t total = 0, maxD = 1;
+		std::vector<stbrp_rect> rects;
+		for (size_t i = 0; i < _base.size(); ++i) {
+			const int w = std::max(1, int(std::ceil(_base[i].realWidth())));
+			const int h = std::max(1, int(std::ceil(_base[i].realHeight())));
+			rects.push_back({ int(i), w, h, 0, 0, 0 });
+			const size_t d = size_t(std::max(w, h));
+			total += d;
+			maxD = std::max(maxD, d);
+		}
+		Bin bin{ std::max(1, int(maxD * std::max(1.0, _initialMultiplier))), std::max(1, int(maxD * std::max(1.0, _initialMultiplier))) };
+		const int maxW = std::max(bin.w, int(std::max<size_t>(total, maxD)));
+		const int maxH = std::max(bin.h, int(std::max<size_t>(total, maxD)));
+		while (true) {
+			auto work = rects;
+			if (try_pack(bin, work)) {
+				for (const auto& r : work)
+					result[r.id].set(float(r.x), float(r.y), 0.f, float(r.x) + _base[r.id].realWidth(), float(r.y) + _base[r.id].realHeight(), _base[r.id].realThick());
+				break;
+			}
+			Bin next = grow(bin, maxW, maxH, 1.25f);
+			if (next.w == bin.w && next.h == bin.h)
+				break;
+			bin = next;
+		}
+		return result;
+	}
+
+	std::vector<poca::core::BoundingBox> computeCirclePlacement(const std::vector<poca::core::BoundingBox>& _base, const std::vector<std::vector<size_t>>& _groups, const QStringList& _groupLabels, std::vector<PlacementPreviewGroup>* _previewGroups = nullptr)
+	{
+		std::vector<poca::core::BoundingBox> result = _base;
+		if (_base.empty()) return result;
+		const float padding = 8.f;
+		std::vector<std::vector<poca::geometry::PackingCircle>> circlesGroups;
+		for (const auto& group : _groups) {
+			if (group.empty()) continue;
+			circlesGroups.push_back({});
+			auto& circles = circlesGroups.back();
+			for (size_t id : group) {
+				if (id >= _base.size()) continue;
+				const float radius = 0.5f * std::sqrt(_base[id].realWidth() * _base[id].realWidth() + _base[id].realHeight() * _base[id].realHeight()) + padding;
+				circles.push_back({ radius, radius, std::max(1.f, radius), int(id) });
+			}
+			poca::geometry::packCirclesFast(circles, 800, 0.0015f, 0.75f);
+		}
+		std::vector<poca::geometry::PackingCircle> groupCircles;
+		std::vector<poca::core::BoundingBox> groupBounds;
+		for (size_t g = 0; g < circlesGroups.size(); ++g) {
+			poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+			for (const auto& c : circlesGroups[g]) {
+				const size_t id = size_t(c.id); if (id >= _base.size()) continue;
+				const float x = c.x - _base[id].realWidth() * 0.5f, y = c.y - _base[id].realHeight() * 0.5f;
+				bbox.addPointBBox(x, y, 0.f); bbox.addPointBBox(x + _base[id].realWidth(), y + _base[id].realHeight(), 0.f);
+			}
+			groupBounds.push_back(bbox);
+			const float radius = 0.5f * std::sqrt(bbox.realWidth() * bbox.realWidth() + bbox.realHeight() * bbox.realHeight()) + padding;
+			groupCircles.push_back({ radius, radius, std::max(1.f, radius), int(g) });
+		}
+		poca::geometry::packCirclesFast(groupCircles, 800, 0.0015f, 0.75f);
+		if (_previewGroups) _previewGroups->clear();
+		for (const auto& cg : groupCircles) {
+			const int g = cg.id;
+			if (g < 0 || g >= int(circlesGroups.size())) continue;
+			const auto& circles = circlesGroups[g];
+			const auto& bbox = groupBounds[g];
+			const float gx = cg.x - (bbox.x() + bbox.realWidth() * 0.5f);
+			const float gy = cg.y - (bbox.y() + bbox.realHeight() * 0.5f);
+			if (_previewGroups) _previewGroups->push_back({ QPointF(cg.x, cg.y), cg.r, g >= 0 && g < _groupLabels.size() ? _groupLabels[g] : QString("Group %1").arg(g + 1) });
+			for (const auto& c : circles) {
+				const size_t id = size_t(c.id); if (id >= _base.size()) continue;
+				const float x = c.x - _base[id].realWidth() * 0.5f + gx;
+				const float y = c.y - _base[id].realHeight() * 0.5f + gy;
+				result[id].set(x, y, 0.f, x + _base[id].realWidth(), y + _base[id].realHeight(), _base[id].realThick());
+			}
+		}
+		return result;
+	}
+
+	std::vector<poca::core::BoundingBox> computeOriginalPlacement(const std::vector<poca::core::BoundingBox>& _base, const bool _centered)
+	{
+		std::vector<poca::core::BoundingBox> result = _base;
+		if (!_centered || result.empty()) return result;
+		poca::core::BoundingBox englobing = poca::core::BoundingBox::initBBox();
+		for (const auto& b : _base) { englobing.addPointBBox(b[0], b[1], b[2]); englobing.addPointBBox(b[3], b[4], b[5]); }
+		const float cx = englobing[0] + englobing.realWidth() * 0.5f;
+		const float cy = englobing[1] + englobing.realHeight() * 0.5f;
+		for (auto& b : result) {
+			const float w = b.realWidth(), h = b.realHeight(), t = b.realThick();
+			b.set(cx - w * 0.5f, cy - h * 0.5f, b.z(), cx + w * 0.5f, cy + h * 0.5f, b.z() + t);
+		}
+		return result;
+	}
+
+
+	void buildPreviewItems(const std::vector<poca::core::BoundingBox>& _bboxes, std::vector<PlacementPreviewItem>& _items)
+	{
+		_items.clear();
+		for (const auto& b : _bboxes)
+			_items.push_back({ QRectF(b.x(), b.y(), b.realWidth(), b.realHeight()), -1 });
+	}
+
+	class DatasetPlacementDialog : public QDialog {
+	public:
+		DatasetPlacementDialog(MyMultipleObject* _object, const std::vector<DatasetAssemblerWidget::AssembledDatasetInfo>& _infos, QWidget* _parent = nullptr)
+			: QDialog(_parent), m_object(_object), m_infos(_infos), m_baseBBoxes(basePlacementBBoxes(_object)) {
+			setWindowTitle(QObject::tr("Dataset placement"));
+			m_methodCombo = new QComboBox(this);
+			m_methodCombo->addItem(QObject::tr("Grid"));
+			m_methodCombo->addItem(QObject::tr("Pack"));
+			m_methodCombo->addItem(QObject::tr("Circle groups"));
+			m_methodCombo->addItem(QObject::tr("Original"));
+			m_columnsSpin = new QSpinBox(this); m_columnsSpin->setRange(1, std::max(1, int(m_baseBBoxes.size()))); m_columnsSpin->setValue(std::max(1, int(std::ceil(std::sqrt(double(std::max<size_t>(1, m_baseBBoxes.size())))))));
+			m_rowsSpin = new QSpinBox(this); m_rowsSpin->setRange(1, std::max(1, int(m_baseBBoxes.size()))); m_rowsSpin->setValue(std::max(1, int(std::ceil(double(std::max<size_t>(1, m_baseBBoxes.size())) / double(m_columnsSpin->value())))));
+			m_packMultiplierSpin = new QDoubleSpinBox(this); m_packMultiplierSpin->setRange(1.0, 20.0); m_packMultiplierSpin->setSingleStep(0.5); m_packMultiplierSpin->setValue(6.0);
+			m_levelSpin = new QSpinBox(this); m_levelSpin->setRange(0, maxHierarchyDepth()); m_levelSpin->setValue(std::min(1, maxHierarchyDepth()));
+			m_originalCenteredCheck = new QCheckBox(QObject::tr("Centered"), this);
+			m_originalCenteredCheck->setChecked(false);
+			m_preview = new PlacementPreviewWidget(this);
+			m_columnsLabel = new QLabel(QObject::tr("Columns"), this);
+			m_rowsLabel = new QLabel(QObject::tr("Rows"), this);
+			m_packMultiplierLabel = new QLabel(QObject::tr("Initial pack multiplier"), this);
+			m_levelLabel = new QLabel(QObject::tr("Circle hierarchy level (0 = root)"), this);
+			QGridLayout* controls = new QGridLayout;
+			controls->addWidget(new QLabel(QObject::tr("Method"), this), 0, 0); controls->addWidget(m_methodCombo, 0, 1);
+			controls->addWidget(m_columnsLabel, 1, 0); controls->addWidget(m_columnsSpin, 1, 1);
+			controls->addWidget(m_rowsLabel, 1, 2); controls->addWidget(m_rowsSpin, 1, 3);
+			controls->addWidget(m_packMultiplierLabel, 2, 0); controls->addWidget(m_packMultiplierSpin, 2, 1);
+			controls->addWidget(m_levelLabel, 2, 2); controls->addWidget(m_levelSpin, 2, 3);
+			controls->addWidget(m_originalCenteredCheck, 3, 0, 1, 4, Qt::AlignCenter);
+			QPushButton* previewButton = new QPushButton(QObject::tr("Preview"), this);
+			QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+			QHBoxLayout* bottom = new QHBoxLayout; bottom->addWidget(previewButton); bottom->addStretch(1); bottom->addWidget(buttons);
+			QVBoxLayout* layout = new QVBoxLayout; layout->addLayout(controls); layout->addWidget(m_preview); layout->addLayout(bottom); setLayout(layout);
+			connect(previewButton, &QPushButton::released, this, &DatasetPlacementDialog::updatePreview);
+			connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { updateControlsEnabled(); updatePreview(); });
+			connect(m_originalCenteredCheck, &QCheckBox::toggled, this, [this](bool) { updatePreview(); });
+			connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+			connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+			updateControlsEnabled();
+			updatePreview();
+		}
+		std::vector<poca::core::BoundingBox> selectedPlacement() {
+			std::vector<poca::core::BoundingBox> result = m_baseBBoxes;
+			const auto& items = m_preview->items();
+			for (size_t i = 0; i < result.size() && i < items.size(); ++i)
+				result[i].set(float(items[i].rect.left()), float(items[i].rect.top()), result[i].z(), float(items[i].rect.right()), float(items[i].rect.bottom()), result[i].z() + result[i].realThick());
+			return result;
+		}
+	private:
+		int maxHierarchyDepth() const {
+			int maxDepth = 1;
+			for (const auto& info : m_infos) maxDepth = std::max(maxDepth, int(info.hierarchySegments.size()) + 1);
+			return maxDepth;
+		}
+		std::vector<std::vector<size_t>> groupsForLevel(int _level, QStringList* _labels = nullptr) const {
+			std::map<QString, std::vector<size_t>> groups;
+			for (size_t i = 0; i < m_infos.size(); ++i) {
+				QString key;
+				if (_level <= 1)
+					key = !m_infos[i].hierarchySegments.empty() ? m_infos[i].hierarchySegments.front() : (m_object != nullptr ? QString::fromStdString(m_object->getName()) : QStringLiteral("Objects"));
+				else
+					key = m_infos[i].hierarchySegments.size() >= (_level - 1) ? m_infos[i].hierarchySegments[_level - 2] : m_infos[i].datasetKey;
+				if (key.isEmpty())
+					key = m_infos[i].objectName;
+				groups[key].push_back(i);
+			}
+			std::vector<std::vector<size_t>> result;
+			if (_labels != nullptr)
+				_labels->clear();
+			for (const auto& kv : groups) {
+				result.push_back(kv.second);
+				if (_labels != nullptr)
+					*_labels << kv.first;
+			}
+			return result;
+		}
+		void updateControlsEnabled() {
+			const int method = m_methodCombo->currentIndex();
+			m_columnsLabel->setEnabled(method == 0);
+			m_columnsSpin->setEnabled(method == 0);
+			m_rowsLabel->setEnabled(method == 0);
+			m_rowsSpin->setEnabled(method == 0);
+			m_packMultiplierLabel->setEnabled(method == 1);
+			m_packMultiplierSpin->setEnabled(method == 1);
+			m_levelLabel->setEnabled(method == 2);
+			m_levelSpin->setEnabled(method == 2);
+			m_originalCenteredCheck->setEnabled(method == 3);
+		}
+		std::vector<poca::core::BoundingBox> computeSelectedPlacement(std::vector<PlacementPreviewGroup>* _groups) const {
+			if (m_methodCombo->currentIndex() == 0)
+				return computeRegularGridPlacement(m_baseBBoxes, m_columnsSpin->value(), m_rowsSpin->value());
+			if (m_methodCombo->currentIndex() == 1)
+				return computePackPlacement(m_baseBBoxes, m_packMultiplierSpin->value());
+			if (m_methodCombo->currentIndex() == 3)
+				return computeOriginalPlacement(m_baseBBoxes, m_originalCenteredCheck->isChecked());
+			QStringList labels;
+			return computeCirclePlacement(m_baseBBoxes, groupsForLevel(m_levelSpin->value(), &labels), labels, _groups);
+		}
+		void updatePreview() {
+			std::vector<PlacementPreviewGroup> groups;
+			const auto bboxes = computeSelectedPlacement(&groups);
+			std::vector<PlacementPreviewItem> items;
+			buildPreviewItems(bboxes, items);
+			for (auto& item : items) {
+				for (int g = 0; g < int(groups.size()); ++g) {
+					const QPointF c = item.rect.center();
+					const double dx = c.x() - groups[g].center.x();
+					const double dy = c.y() - groups[g].center.y();
+					if (std::sqrt(dx * dx + dy * dy) <= groups[g].radius) { item.group = g; break; }
+				}
+			}
+			m_preview->setPreview(items, groups);
+		}
+		MyMultipleObject* m_object{ nullptr };
+		std::vector<DatasetAssemblerWidget::AssembledDatasetInfo> m_infos;
+		std::vector<poca::core::BoundingBox> m_baseBBoxes;
+		QComboBox* m_methodCombo{ nullptr };
+		QSpinBox* m_columnsSpin{ nullptr };
+		QSpinBox* m_rowsSpin{ nullptr };
+		QDoubleSpinBox* m_packMultiplierSpin{ nullptr };
+		QSpinBox* m_levelSpin{ nullptr };
+		QLabel* m_columnsLabel{ nullptr };
+		QLabel* m_rowsLabel{ nullptr };
+		QLabel* m_packMultiplierLabel{ nullptr };
+		QLabel* m_levelLabel{ nullptr };
+		QCheckBox* m_originalCenteredCheck{ nullptr };
+		PlacementPreviewWidget* m_preview{ nullptr };
+	};
+
 }
 
 DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
@@ -190,6 +617,10 @@ DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
 	QGroupBox* namingGroup = new QGroupBox("Naming", this);
 	m_prefixRootNameCBox = new QCheckBox("Prefix dataset names with root folder name", this);
 	m_prefixRootNameCBox->setChecked(true);
+	m_choosePlacementButton = new QPushButton("Choose placement", this);
+	m_choosePlacementButton->setCheckable(true);
+	m_choosePlacementButton->setChecked(false);
+	m_choosePlacementButton->setToolTip(tr("Open the dataset placement dialog before applying the multiple-object grid."));
 	QLabel* separatorLabel = new QLabel("Separator", this);
 	m_nameSeparatorEdit = new QLineEdit("_", this);
 	m_nameSeparatorEdit->setMaximumWidth(60);
@@ -232,6 +663,7 @@ DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
 
 	QHBoxLayout* actionsLayout = new QHBoxLayout;
 	actionsLayout->addStretch(1);
+	actionsLayout->addWidget(m_choosePlacementButton);
 	actionsLayout->addWidget(m_previewButton);
 	actionsLayout->addWidget(m_assembleButton);
 
@@ -276,6 +708,10 @@ void DatasetAssemblerWidget::loadParameters(const nlohmann::json& _json)
 		try { m_prefixRootNameCBox->setChecked(json["prefixRootName"].get<bool>()); }
 		catch (nlohmann::json::exception&) {}
 	}
+	if (json.contains("choosePlacement")) {
+		try { m_choosePlacementButton->setChecked(json["choosePlacement"].get<bool>()); }
+		catch (nlohmann::json::exception&) {}
+	}
 	if (json.contains("nameSeparator")) {
 		try { m_nameSeparatorEdit->setText(json["nameSeparator"].get<std::string>().c_str()); }
 		catch (nlohmann::json::exception&) {}
@@ -308,6 +744,7 @@ void DatasetAssemblerWidget::saveParameters(nlohmann::json& _json) const
 	json["lastRootPath"] = m_lastRootPath.toStdString();
 	json["prefixRootName"] = m_prefixRootNameCBox->isChecked();
 	json["nameSeparator"] = m_nameSeparatorEdit->text().toStdString();
+	json["choosePlacement"] = m_choosePlacementButton->isChecked();
 
 	std::vector<std::string> roots;
 	for (int row = 0; row < m_rootsList->count(); ++row)
@@ -660,8 +1097,21 @@ void DatasetAssemblerWidget::onAssemble()
 	}
 
 	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(createdObject);
-	if (multipleObject != nullptr)
+	if (multipleObject != nullptr) {
 		populateHierarchy(multipleObject, assembledInfos);
+		if (m_choosePlacementButton != nullptr && m_choosePlacementButton->isChecked()) {
+			finishLoadingProgress();
+			DatasetPlacementDialog dialog(multipleObject, assembledInfos, this);
+			if (dialog.exec() == QDialog::Accepted) {
+				multipleObject->setGridBBoxes(dialog.selectedPlacement());
+				multipleObject->resetModelMatrices(true);
+				appendLog(tr("Custom dataset placement applied."));
+			}
+			else {
+				appendLog(tr("Custom placement canceled; keeping default packing."));
+			}
+		}
+	}
 
 	finishLoadingProgress();
 	appendLog(QString("Created %1 object(s).").arg(objects.size()));
@@ -1228,27 +1678,26 @@ void DatasetAssemblerWidget::populateHierarchy(MyMultipleObject* _multipleObject
 			continue;
 
 		const QString rootLabel = QFileInfo(info.rootFolder).fileName().isEmpty() ? info.rootFolder : QFileInfo(info.rootFolder).fileName();
-		std::string pathKey = rootLabel.toStdString();
-		size_t parentIndex;
-		auto rootIt = nodeByKey.find(pathKey);
-		if (rootIt == nodeByKey.end()) {
-			parentIndex = _multipleObject->addHierarchyNode(rootLabel.toStdString(), "Root", -1);
-			nodeByKey[pathKey] = parentIndex;
-		}
-		else {
-			parentIndex = rootIt->second;
-		}
+		QStringList hierarchyPath;
+		hierarchyPath << rootLabel;
+		for (const QString& segment : info.hierarchySegments)
+			hierarchyPath << segment;
 
-		for (int segmentIndex = 0; segmentIndex < info.hierarchySegments.size(); ++segmentIndex) {
-			const QString segment = info.hierarchySegments[segmentIndex];
-			pathKey += "/" + segment.toStdString();
+		std::string pathKey;
+		int parentIndex = -1;
+		for (int segmentIndex = 0; segmentIndex < hierarchyPath.size(); ++segmentIndex) {
+			const QString segment = hierarchyPath[segmentIndex];
+			if (!pathKey.empty())
+				pathKey += "/";
+			pathKey += segment.toStdString();
 			auto nodeIt = nodeByKey.find(pathKey);
 			if (nodeIt == nodeByKey.end()) {
-				parentIndex = _multipleObject->addHierarchyNode(segment.toStdString(), QString("Level %1").arg(segmentIndex + 1).toStdString(), (int)parentIndex);
-				nodeByKey[pathKey] = parentIndex;
+				const size_t newIndex = _multipleObject->addHierarchyNode(segment.toStdString(), QString("Level %1").arg(segmentIndex + 1).toStdString(), parentIndex);
+				nodeByKey[pathKey] = newIndex;
+				parentIndex = (int)newIndex;
 			}
 			else {
-				parentIndex = nodeIt->second;
+				parentIndex = (int)nodeIt->second;
 			}
 		}
 
