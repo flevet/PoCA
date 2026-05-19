@@ -13,6 +13,10 @@ uniform int nbImages;
 uniform int currentFrame;
 uniform float gamma;
 
+uniform bool cropped;
+uniform vec3 top_crop;
+uniform vec3 bottom_crop;
+
 struct ImageDescriptor {
     vec4 bottom;
     vec4 top;
@@ -61,6 +65,10 @@ bool sampleFeatureValue(int imageIndex, vec3 parentRayOrigin, vec3 parentRayDire
 
     vec3 imagePosition = localOrigin + t * localDirection;
     if (any(lessThan(imagePosition, desc.bottom.xyz)) || any(greaterThan(imagePosition, desc.top.xyz)))
+        return false;
+
+    vec3 parentPosition = parentRayOrigin + t * parentRayDirection;
+    if (cropped && (any(lessThan(parentPosition, bottom_crop)) || any(greaterThan(parentPosition, top_crop))))
         return false;
 
     vec3 sizeImage = desc.top.xyz - desc.bottom.xyz;
