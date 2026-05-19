@@ -373,12 +373,12 @@ void MdiChild::actionNeeded(bool _val)
 	if (sender == m_3DButton) {
 		m_tSlider->setEnabled(!_val);
 		cam->fixPlane(poca::opengl::Camera::Plane_XY, false);
+		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)-1));
 		cam->zoomToBoundingBox(cam->getObject()->boundingBox(), false);
 		m_playButton->hide();
 		m_tLabel->hide();
 		m_tSlider->hide();
 		m_emptyForSliderW->show();
-		cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)-1));
 	}
 	else if (sender == m_2DtButton) {
 		m_tSlider->setEnabled(_val);
@@ -509,9 +509,9 @@ void MdiChild::applyFramePlane(int32_t _plane)
 	poca::core::BoundingBox bbox = cam->getCurrentCrop();
 	bbox[2] = (float)_plane + m_frameLowerOffset;
 	bbox[5] = (float)_plane + m_frameUpperOffset;
-	cam->zoomToBoundingBox(bbox, false);
-	m_tLabel->setText(QString::number(_plane).rightJustified(5, '0'));
 	cam->getObject()->executeGlobalCommand(&poca::core::CommandInfo(false, "setCurrentFrame", "frame", (int)_plane));
+	m_tLabel->setText(QString::number(_plane).rightJustified(5, '0'));
+	cam->zoomToBoundingBox(bbox, false);
 }
 
 void MdiChild::setFrame(int _val)
@@ -620,4 +620,3 @@ void MdiChild::showEvent(QShowEvent* event)
 		}
 		});
 }
-
