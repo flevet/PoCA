@@ -38,6 +38,28 @@
 #include "CGAL_helpers.hpp"
 
 namespace poca::geometry {
+    namespace {
+        bool meshHasPointInsideOrOnBoundary(const CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel>& _inside, const Surface_mesh_3_double& _mesh)
+        {
+            for (const auto& vertex : _mesh.vertices()) {
+                const auto& point = _mesh.point(vertex);
+                const CGAL::Bounded_side side = _inside(point);
+                if (side == CGAL::ON_BOUNDED_SIDE || side == CGAL::ON_BOUNDARY)
+                    return true;
+            }
+            return false;
+        }
+
+        bool meshContainsPointOfMesh(const Surface_mesh_3_double& _container, const Surface_mesh_3_double& _contained)
+        {
+            if (!CGAL::is_closed(_container))
+                return false;
+
+            CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel> inside(_container);
+            return meshHasPointInsideOrOnBoundary(inside, _contained);
+        }
+    }
+
     void laplacian_smooth(Surface_mesh_3_double& mesh, int iterations, double lambda)
     {
         // Temporary storage for updated positions
@@ -108,17 +130,22 @@ namespace poca::geometry {
     void meshesInsideMeshWithCutting(const Surface_mesh_3_double& _mesh, std::vector <Surface_mesh_3_double>& _meshes, std::vector <Surface_mesh_3_double>& _resultingMeshes)
     {
         _resultingMeshes.clear();
+        CGAL::Side_of_triangle_mesh<Surface_mesh_3_double, Kernel> inside(_mesh);
         std::vector <bool> intersected;
         meshesIntersectingMesh(_mesh, _meshes, intersected);
         for (auto n = 0; n < intersected.size(); n++) {
-            if(!intersected[n])
-                _resultingMeshes.push_back(_meshes[n]);
+            if(!intersected[n]) {
+                if (meshHasPointInsideOrOnBoundary(inside, _meshes[n]))
+                    _resultingMeshes.push_back(_meshes[n]);
+                else if (meshContainsPointOfMesh(_meshes[n], _mesh))
+                    _resultingMeshes.push_back(_mesh);
+            }
             else {
                 Surface_mesh_3_double out, mesh = _mesh;
                 bool ok = CGAL::Polygon_mesh_processing::corefine_and_compute_intersection(mesh, _meshes[n], out);
                 if (ok)
                     _resultingMeshes.push_back(out);
-                else
+                else if (meshHasPointInsideOrOnBoundary(inside, _meshes[n]))
                     _resultingMeshes.push_back(_meshes[n]);
             }
         }

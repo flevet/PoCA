@@ -376,11 +376,14 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
 		std::vector <float> volumes;
+		std::vector <Surface_mesh_3_double> validMeshes;
+		validMeshes.reserve(m_meshes.size());
 		for (auto& mesh : m_meshes) {
 			bool res = processSurfaceMesh(mesh, triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
-			if (!res)
-				m_meshes.pop_back();
+			if (res)
+				validMeshes.push_back(mesh);
 		}
+		m_meshes.swap(validMeshes);
 
 		clock_t t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
