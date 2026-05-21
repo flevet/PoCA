@@ -62,6 +62,73 @@ namespace {
 			_values.push_back(_value);
 	}
 
+	bool shouldForwardToAllChildren(poca::core::CommandInfo* _ci)
+	{
+		if (_ci == nullptr)
+			return false;
+		return _ci->nameCommand == "display" || _ci->nameCommand == "updatePickingBuffer";
+	}
+
+	void executeChildCommand(poca::core::MyObjectInterface* _object, poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
+	{
+		if (_object == nullptr)
+			return;
+
+		poca::opengl::Camera* camera = nullptr;
+		glm::mat4 modelBefore(1.f);
+		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		if (restoreCameraModel) {
+			camera = _context.get<poca::opengl::ActiveCamera>().camera;
+			if (camera != nullptr)
+				modelBefore = camera->getModelMatrix();
+		}
+
+		_object->executeCommand(_ci, _context, _result);
+
+		if (restoreCameraModel && camera != nullptr)
+			camera->setModelMatrix(modelBefore);
+	}
+
+	void executeChildSpecificComponent(poca::core::MyObjectInterface* _object, const std::string& _nameComponent, poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
+	{
+		if (_object == nullptr)
+			return;
+
+		poca::opengl::Camera* camera = nullptr;
+		glm::mat4 modelBefore(1.f);
+		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		if (restoreCameraModel) {
+			camera = _context.get<poca::opengl::ActiveCamera>().camera;
+			if (camera != nullptr)
+				modelBefore = camera->getModelMatrix();
+		}
+
+		_object->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+
+		if (restoreCameraModel && camera != nullptr)
+			camera->setModelMatrix(modelBefore);
+	}
+
+	void executeChildGlobalCommand(poca::core::MyObjectInterface* _object, poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
+	{
+		if (_object == nullptr)
+			return;
+
+		poca::opengl::Camera* camera = nullptr;
+		glm::mat4 modelBefore(1.f);
+		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		if (restoreCameraModel) {
+			camera = _context.get<poca::opengl::ActiveCamera>().camera;
+			if (camera != nullptr)
+				modelBefore = camera->getModelMatrix();
+		}
+
+		_object->executeGlobalCommand(_ci, _context, _result);
+
+		if (restoreCameraModel && camera != nullptr)
+			camera->setModelMatrix(modelBefore);
+	}
+
 	poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
 	{
 		if (_object == nullptr)
@@ -91,7 +158,7 @@ namespace {
 
 }
 
-MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors) :MyObject(), m_colors(_colors), m_currentColor(0)
+MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors, const bool _batchComponentRendering) :MyObject(), m_colors(_colors), m_currentColor(0), m_batchComponentRendering(_batchComponentRendering)
 {
 	m_internalId = poca::core::NbObjects++;
 
@@ -196,16 +263,15 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
-	if (!m_selectedObjectIndices.empty()) {
+	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)
-				m_colors[index]->executeCommand(_ci, _context, _result);
+				executeChildCommand(m_colors[index], _ci, _context, _result);
 		}
 	}
 	else {
-		for (poca::core::MyObjectInterface* obj : m_colors) {
-			obj->executeCommand(_ci, _context, _result);
-		}
+		for (poca::core::MyObjectInterface* obj : m_colors)
+			executeChildCommand(obj, _ci, _context, _result);
 	}
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	poca::core::CommandableObject::executeCommand(_ci, _context, _result);
@@ -264,15 +330,15 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 		bci->executeCommand(_ci, _context, _result);
 	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
 		return;
-	if (!m_selectedObjectIndices.empty()) {
+	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)
-				m_colors[index]->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+				executeChildSpecificComponent(m_colors[index], _nameComponent, _ci, _context, _result);
 		}
 	}
 	else {
 		for (poca::core::MyObjectInterface* obj : m_colors)
-			obj->executeCommandOnSpecificComponent(_nameComponent, _ci, _context, _result);
+			executeChildSpecificComponent(obj, _nameComponent, _ci, _context, _result);
 	}
 }
 
@@ -299,27 +365,27 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 				continue;
 			bc->executeCommand(_ci, _context, _result);
 		}
-		if (!m_selectedObjectIndices.empty()) {
+		if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 			for (const size_t index : m_selectedObjectIndices) {
 				if (index < m_colors.size() && m_colors[index] != NULL)
-					m_colors[index]->executeGlobalCommand(_ci, _context, _result);
+					executeChildGlobalCommand(m_colors[index], _ci, _context, _result);
 			}
 		}
 		else {
 			for (poca::core::MyObjectInterface* obj : m_colors)
-				obj->executeGlobalCommand(_ci, _context, _result);
+				executeChildGlobalCommand(obj, _ci, _context, _result);
 		}
 		return;
 	}
-	if (!m_selectedObjectIndices.empty()) {
+	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)
-				m_colors[index]->executeGlobalCommand(_ci, _context, _result);
+				executeChildGlobalCommand(m_colors[index], _ci, _context, _result);
 		}
 	}
 	else {
 		for (poca::core::MyObjectInterface* obj : m_colors)
-			obj->executeGlobalCommand(_ci, _context, _result);
+			executeChildGlobalCommand(obj, _ci, _context, _result);
 	}
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;

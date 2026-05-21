@@ -49,6 +49,9 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 	QPushButton* transferButton = new QPushButton("Transfer Selected");
 	m_cboxGrid = new QCheckBox("Grid");
 	m_cboxGrid->setChecked(true);
+	m_cboxBatchComponentRendering = new QCheckBox("Batch component rendering");
+	m_cboxBatchComponentRendering->setChecked(false);
+	m_cboxBatchComponentRendering->setToolTip("Faster for many compatible components, but component display settings are shared across the batch.");
 
 	// Fill left list with some example data
 	for (int i = 0; i < (int)m_datasets.size(); ++i) {
@@ -75,6 +78,7 @@ MergeDatasetsChoiceDialog::MergeDatasetsChoiceDialog(const std::vector < std::pa
 	leftLayout->addWidget(m_allDatasetsList);
 	leftLayout->addWidget(transferButton);
 	leftLayout->addWidget(m_cboxGrid);
+	leftLayout->addWidget(m_cboxBatchComponentRendering);
 	rightLayout->addWidget(m_datasetsToMergeList);
 
 	hLayout->addLayout(leftLayout);

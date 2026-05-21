@@ -200,7 +200,7 @@ poca::core::MyObjectInterface* VoronoiDiagramPlugin::actionTriggered(QObject* _s
 void VoronoiDiagramPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
 	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
-	if (multipleObject)
+	if (multipleObject && multipleObject->batchComponentRendering())
 		multipleObject->addCommand(new VoronoiMultiObjectDisplayCommand(multipleObject));
 
 	poca::geometry::VoronoiDiagram* voro = dynamic_cast <poca::geometry::VoronoiDiagram*>(_bc);

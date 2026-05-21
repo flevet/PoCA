@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Software:  PoCA: Point Cloud Analyst
 *
 * File:      ColorButtonGridWidget.cpp
@@ -49,8 +49,8 @@ ParametersDialog::ParametersDialog(QWidget* parent)
     setModal(false);                       // modeless
     setWindowModality(Qt::NonModal);       // explicit
 
-    m_gridBtn = new QPushButton("Placement", this);
-    m_centeredBtn = new QPushButton("Identify", this);
+    m_gridBtn = new QPushButton("Recompute grid", this);
+    m_centeredBtn = new QPushButton("Toggle grid/centered", this);
     m_exportAllObjectsBtn = new QPushButton("Export objects", this);
 
     // Non-exclusive: do NOT make them checkable, just react on released

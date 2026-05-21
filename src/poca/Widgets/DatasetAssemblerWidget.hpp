@@ -161,6 +161,7 @@ private:
 	QTextEdit* m_logEdit{ nullptr };
 	QLineEdit* m_nameSeparatorEdit{ nullptr };
 	QCheckBox* m_prefixRootNameCBox{ nullptr };
+	QCheckBox* m_batchComponentRenderingCBox{ nullptr };
 	QPushButton* m_choosePlacementButton{ nullptr };
 	QProgressBar* m_loadingProgressBar{ nullptr };
 	QString m_lastRootPath;

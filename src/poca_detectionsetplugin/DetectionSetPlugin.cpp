@@ -86,7 +86,7 @@ poca::core::MyObjectInterface* DetectionSetPlugin::actionTriggered(QObject* _sen
 void DetectionSetPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
 	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
-	if (multipleObject)
+	if (multipleObject && multipleObject->batchComponentRendering())
 		multipleObject->addCommand(new DetectionSetMultiObjectDisplayCommand(multipleObject));
 
 	poca::geometry::DetectionSet* dset = dynamic_cast <poca::geometry::DetectionSet*>(_bc);

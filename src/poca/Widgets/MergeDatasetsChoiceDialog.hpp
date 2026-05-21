@@ -51,13 +51,14 @@ public:
 
 	std::vector < MdiChild*> getObjects() const;
 	inline const bool gridSelected() const { return m_cboxGrid->isChecked(); }
+	inline const bool batchComponentRendering() const { return m_cboxBatchComponentRendering->isChecked(); }
 
 protected slots:
 
 protected:
 	QListWidget* m_allDatasetsList, * m_datasetsToMergeList;
 	const std::vector < std::pair < QString, MdiChild* > > & m_datasets;
-	QCheckBox* m_cboxGrid;
+	QCheckBox* m_cboxGrid, * m_cboxBatchComponentRendering;
 };
 
 #endif // MergeDatasetsChoiceDialog_h__

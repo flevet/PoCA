@@ -195,7 +195,7 @@ poca::core::MyObjectInterface* DelaunayTriangulationPlugin::actionTriggered(QObj
 void DelaunayTriangulationPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
 	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
-	if (multipleObject)
+	if (multipleObject && multipleObject->batchComponentRendering())
 		multipleObject->addCommand(new DelaunayTriangulationMultiObjectDisplayCommand(multipleObject));
 
 	poca::geometry::DelaunayTriangulationInterface* delau = dynamic_cast <poca::geometry::DelaunayTriangulationInterface*>(_bc);

@@ -56,7 +56,7 @@ public:
 		std::map<std::string, std::string> metadata;
 	};
 
-	MyMultipleObject(std::vector<poca::core::MyObjectInterface*>);
+	MyMultipleObject(std::vector<poca::core::MyObjectInterface*>, const bool = false);
 	~MyMultipleObject();
 
 	float getX() const;
@@ -107,6 +107,8 @@ public:
 	void setSelectedObjectIndices(const std::vector<size_t>&);
 	const std::vector<size_t>& selectedObjectIndices() const { return m_selectedObjectIndices; }
 	bool hasSelectedObjectIndices() const { return !m_selectedObjectIndices.empty(); }
+	void setBatchComponentRendering(const bool _batch) { m_batchComponentRendering = _batch; }
+	bool batchComponentRendering() const { return m_batchComponentRendering; }
 
 protected:
 	std::vector <poca::core::MyObjectInterface*> m_colors;
@@ -114,6 +116,7 @@ protected:
 
 	std::vector <poca::core::BoundingBox> m_gridBBoxes;
 	bool m_gridSelected{ true };
+	bool m_batchComponentRendering{ false };
 	std::vector <HierarchyNode> m_hierarchy;
 	std::vector<size_t> m_selectedObjectIndices;
 };

@@ -111,7 +111,7 @@ protected:
 
 	void computeColocalization(const int, const int);
 	void computeColocalization(const std::vector < std::string>&);
-	void computeColocalization(const std::vector < MdiChild*>&);
+	void computeColocalization(const std::vector < MdiChild*>&, const bool = false);
 
 	void openFile(const QString &, poca::core::CommandInfo*);
 
@@ -162,7 +162,6 @@ private slots:
 
 	void onGridReleased();
 	void onToggleGridCentered(bool);
-	void onIdentifyObjects();
 	void onExportAllObjects();
 	void openDatasetAssembler();
 	void openPythonWidget();
