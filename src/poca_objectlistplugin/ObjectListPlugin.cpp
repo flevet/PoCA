@@ -150,7 +150,7 @@ poca::core::MyObjectInterface* ObjectListPlugin::actionTriggered(QObject* _sende
 void ObjectListPlugin::addCommands(poca::core::CommandableObject* _bc)
 {
 	MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(_bc);
-	if (multipleObject)
+	if (multipleObject && multipleObject->batchComponentRendering())
 		multipleObject->addCommand(new ObjectListMultiObjectDisplayCommand(multipleObject));
 
 	poca::geometry::ObjectListInterface* objs = dynamic_cast <poca::geometry::ObjectListInterface*>(_bc);
