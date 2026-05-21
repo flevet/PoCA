@@ -96,7 +96,7 @@ namespace poca::core {
 		bool addComponentToComponentList(BasicComponentList*, BasicComponent*);
 		void addCommands(BasicComponentInterface*);
 		BasicComponentInterface* loadData(const QString&, CommandInfo* = NULL, MyObjectInterface* = NULL);
-		MyObjectInterface* generateMultipleObject(const std::vector <MyObjectInterface*>&);
+		MyObjectInterface* generateMultipleObject(const std::vector <MyObjectInterface*>&, const bool = false);
 
 		BasicComponentList* mergeComponentLists(BasicComponentInterface*, BasicComponentInterface*);
 

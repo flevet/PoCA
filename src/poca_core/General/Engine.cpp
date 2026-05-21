@@ -550,7 +550,7 @@ namespace poca::core {
 			return NULL;
 	}
 
-	MyObjectInterface* Engine::generateMultipleObject(const std::vector <MyObjectInterface*>& _objs)
+	MyObjectInterface* Engine::generateMultipleObject(const std::vector <MyObjectInterface*>& _objs, const bool _batchComponentRendering)
 	{
 		for (poca::core::MyObjectInterface* obj : _objs)
 			if (obj == NULL) return NULL;
@@ -570,7 +570,7 @@ namespace poca::core {
 			removeDatasetFromList(obj);
 		}
 
-		MyMultipleObject* wobj = new MyMultipleObject(_objs);
+		MyMultipleObject* wobj = new MyMultipleObject(_objs, _batchComponentRendering);
 		wobj->setDir(_objs[0]->getDir());
 		QString name("Colocalization_[");
 		for (poca::core::MyObjectInterface* obj : _objs)
