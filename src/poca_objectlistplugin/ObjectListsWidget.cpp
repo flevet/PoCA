@@ -31,6 +31,7 @@
 */
 
 #include <QtWidgets/QDockWidget>
+#include <QtWidgets/QScrollArea>
 #include <QtWidgets/QVBoxLayout>
 #include <iostream>
 #include <fstream>
@@ -580,8 +581,12 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	//m_allActionsTab->setMaximumHeight(300);
 
 	m_delaunayTriangulationFilteringWidget = new QWidget;
-	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	m_delaunayTriangulationFilteringWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QScrollArea* scroll = new QScrollArea;
+	scroll->setWidgetResizable(true);
+	scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 	scroll->setWidget(m_delaunayTriangulationFilteringWidget);
 	//m_tableObjects = new QTableWidget;
 	m_tableObjects = new QTableView;
@@ -600,7 +605,7 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	layout->setSpacing(1);
 	layout->addWidget(listW);
 	layout->addWidget(m_allActionsTab);
-	layout->addWidget(m_delaunayTriangulationFilteringWidget);
+	layout->addWidget(scroll, 1);
 	layout->addWidget(m_tableObjects);
 	this->setLayout(layout);
 }
@@ -1070,11 +1075,8 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 				layout->addWidget(m_histWidgets[n]);
 			}
 		}
-		else if (nameData.size() < m_histWidgets.size()) {
-			//Here, wee have less feature to display than hist widgets available, we hide the ones that are unecessary
-			for (size_t n = 0; n < m_histWidgets.size(); n++)
-				m_histWidgets[n]->setVisible(n < nameData.size());
-		}
+		for (size_t n = 0; n < m_histWidgets.size(); n++)
+			m_histWidgets[n]->setVisible(n < nameData.size());
 
 		int cpt = 0;
 		std::vector <float> ts, bins;
