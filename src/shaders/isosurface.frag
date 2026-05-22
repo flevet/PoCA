@@ -36,6 +36,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -105,6 +109,17 @@ void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
     t = min(t_max.xx, t_max.yz);
     float t_1 = min(t.x, t.y);
 	intersected = t_1 >= t_0;
+}
+
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
 }
 
 void main()

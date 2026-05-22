@@ -38,6 +38,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -83,6 +87,8 @@ struct AABB {
     vec3 top;
     vec3 bottom;
 };
+
+bool clippedByPlane(vec3 worldPos);
 
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
@@ -144,6 +150,9 @@ void raycast_normal(vec3 ray_start, vec3 ray_step)
 	// Ray march until reaching the end of the volume
     for(int n = 0; n < nb_steps; n++){
 		position = position + ray_step;
+        vec3 sampleWorldPos = position * (top - bottom) + bottom;
+        if (clippedByPlane(sampleWorldPos))
+            continue;
 		for(int curImage = 0; curImage < nbImages; curImage++){
 			float intensity;
 			if(isFloat[curImage])
@@ -230,6 +239,9 @@ void raycast_test(vec3 ray_start, vec3 ray_step)
 	// Ray march until reaching the end of the volume
     for(int n = 0; n < nb_steps; n++){
 		position = position + ray_step;
+        vec3 sampleWorldPos = position * (top - bottom) + bottom;
+        if (clippedByPlane(sampleWorldPos))
+            continue;
 		for(int curImage = 0; curImage < nbImages; curImage++){
 			float intensity;
 			if(isFloat[curImage]){
@@ -273,6 +285,17 @@ void raycast_test(vec3 ray_start, vec3 ray_step)
 	//	discard;
 	float val = maximum_intensity[0];// / 255;
 	a_colour = vec4(val, 0, 0, 1);
+}
+
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
 }
 
 void main()

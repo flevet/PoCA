@@ -15,6 +15,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -143,6 +147,17 @@ vec4 computeImageColor(ImageDescriptor desc, float value)
     colour.a = 1.0;
     colour.rgb = pow(colour.rgb, vec3(1.0 / gamma));
     return colour;
+}
+
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
 }
 
 void main()

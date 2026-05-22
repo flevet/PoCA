@@ -39,6 +39,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -132,6 +136,17 @@ vec4 colour_transfer(float intensity)
     return vec4(intensity * high + (1.0 - intensity) * low, alpha);
 }
 
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
+}
+
 void main()
 {
 	vec4 ndcPos;
@@ -185,6 +200,9 @@ void main()
 
 	for(int n = 0; n < nb_steps && !found; n++){
 		position = position + ray_step;
+        vec3 sampleWorldPos = position * (top - bottom) + bottom;
+        if (clippedByPlane(sampleWorldPos))
+            continue;
 		for(int curImage = 0; curImage < nbImages; curImage++){
 			//if(!found[curImage]){
 				float intensityTex;
@@ -208,6 +226,8 @@ void main()
 					intensity[curImage] = texture(featureTexture[curImage], vec2(x, y)).r;
 
 					vec3 worldPos = position * (top - bottom) + bottom;
+                    if (clippedByPlane(worldPos))
+                        continue;
 					// Compute depth at this sample position
 					vec4 clipSpacePos = ModelViewProjectionMatrix * vec4(worldPos, 1.0);
 					float ndcDepth = clipSpacePos.z / clipSpacePos.w;

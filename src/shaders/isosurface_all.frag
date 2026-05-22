@@ -16,6 +16,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -137,6 +141,17 @@ vec3 gradientAt(int imageIndex, vec3 position)
     return normalize(-vec3(dx, dy, dz));
 }
 
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
+}
+
 void main()
 {
     vec4 ndcPos;
@@ -180,6 +195,9 @@ void main()
 
     for (int step = 0; step < nb_steps && !found; ++step) {
         position += ray_step;
+        vec3 sampleWorldPos = position * (top - bottom) + bottom;
+        if (clippedByPlane(sampleWorldPos))
+            continue;
         for (int curImage = 0; curImage < nbImages && !found; ++curImage) {
             float featureValue;
             if (!sampleFeatureValue(curImage, position, featureValue))

@@ -16,6 +16,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 uniform vec3 material_colour;
 uniform vec3 light_position;
@@ -135,6 +139,17 @@ vec3 gradientAt(ImageDescriptor desc, vec3 imagePosition)
     vec3 localNormal = normalize(-vec3(dx, dy, dz));
     mat3 normalMatrix = transpose(mat3(desc.invModel));
     return normalize(normalMatrix * localNormal);
+}
+
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
 }
 
 void main()

@@ -35,6 +35,10 @@ uniform bool cropped;
 uniform vec3 top_crop;
 uniform vec3 bottom_crop;
 
+const int MAX_CLIPPING_PLANES = 6;
+uniform vec4 clipPlanes[MAX_CLIPPING_PLANES];
+uniform bool clip;
+
 uniform vec3 background_colour;
 
 uniform int nb_steps;
@@ -148,6 +152,17 @@ vec4 computeSampleColor(float featureValue)
     return vec4(rgb, alpha);
 }
 
+bool clippedByPlane(vec3 worldPos)
+{
+    if (!clip)
+        return false;
+    vec4 pos = vec4(worldPos, 1.0);
+    for (int n = 0; n < MAX_CLIPPING_PLANES; ++n)
+        if (dot(pos, clipPlanes[n]) < 0.0)
+            return true;
+    return false;
+}
+
 void main()
 {
     vec4 ndcPos;
@@ -184,6 +199,9 @@ void main()
 
     for (int step = 0; step < nb_steps && accum.a < 0.999; ++step) {
         position += ray_step;
+        vec3 worldPos = position * (top - bottom) + bottom;
+        if (clippedByPlane(worldPos))
+            continue;
         float featureValue;
         if (!sampleFeatureValue(position, featureValue))
             continue;
