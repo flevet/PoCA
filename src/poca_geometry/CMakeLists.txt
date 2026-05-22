@@ -61,6 +61,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/StraightLine.hpp
   Geometry/Skeleton.hpp
   Geometry/VoronoiDiagram.hpp
+  Geometry/Voronoi3DCellFeatures.hpp
   Geometry/CGAL_includes.hpp
   Geometry/CGAL_helpers.hpp
   Geometry/delaunator.hpp
@@ -83,6 +84,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/StraightLine.cpp  
   Geometry/Skeleton.cpp
   Geometry/VoronoiDiagram.cpp
+  Geometry/Voronoi3DCellFeatures.cpp
   Geometry/CGAL_helpers.cpp
   Geometry/delaunator.cpp  
   Geometry/voronator.cpp

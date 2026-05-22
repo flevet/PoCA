@@ -37,6 +37,7 @@
 #include <General/Misc.h>
 
 #include "VoronoiDiagram.hpp"
+#include "Voronoi3DCellFeatures.hpp"
 #include "DelaunayTriangulation.hpp"
 #include "BasicComputation.hpp"
 #include "delaunator.hpp"
@@ -368,6 +369,11 @@ namespace poca::geometry {
 
 		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
 		m_data["density"] = poca::core::generateDataWithLog(densities);
+
+		Voronoi3DCellFeatures::FeatureSet featureSet = Voronoi3DCellFeatures::compute(m_polyhedrons, _volumes, m_xs, m_ys, m_zs, m_neighbors, m_borderLocs);
+		for (const auto& feature : featureSet.values)
+			m_data[feature.first] = poca::core::generateDataWithLog(feature.second);
+
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
 		m_data["id"] = poca::core::generateDataWithLog(ids);
