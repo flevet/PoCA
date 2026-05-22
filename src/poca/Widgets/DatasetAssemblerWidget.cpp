@@ -1151,6 +1151,22 @@ DatasetAssemblerWidget::ScanResult DatasetAssemblerWidget::scanRootFolder(const 
 	const QStringList datasetFolders = discoverDatasetFolders(_rootFolder, _rules);
 	result.messages << QString("Discovered %1 dataset folder(s) under root [%2].").arg(datasetFolders.size()).arg(_rootFolder);
 
+	QDir rootDir(_rootFolder);
+	const QFileInfoList rootChildren = rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+	for (const QFileInfo& childInfo : rootChildren) {
+		const QString childPath = QDir::cleanPath(childInfo.absoluteFilePath());
+		bool containsDataset = false;
+		for (const QString& datasetFolder : datasetFolders) {
+			const QString datasetPath = QDir::cleanPath(QFileInfo(datasetFolder).absoluteFilePath());
+			if (datasetPath == childPath || datasetPath.startsWith(childPath + "/")) {
+				containsDataset = true;
+				break;
+			}
+		}
+		if (!containsDataset)
+			result.messages << QString("Ignored folder [%1]: no dataset content matched enabled rules.").arg(childInfo.fileName());
+	}
+
 	for (const QString& datasetFolder : datasetFolders) {
 		const QString datasetFolderName = QFileInfo(datasetFolder).fileName().isEmpty() ? datasetFolder : QFileInfo(datasetFolder).fileName();
 		for (int ruleIndex = 0; ruleIndex < (int)_rules.size(); ++ruleIndex) {
