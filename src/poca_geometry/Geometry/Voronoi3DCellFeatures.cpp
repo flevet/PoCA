@@ -287,7 +287,8 @@ namespace poca::geometry {
 				"normalAnisotropy", "normalPlanarity", "normalTensorEigenValue1", "normalTensorEigenValue2", "normalTensorEigenValue3",
 				"minkowskiVolumeAnisotropy", "minkowskiSurfaceAnisotropy", "minkowskiSurfacePlanarity",
 				"logVol", "offsetNorm", "sphericity", "anisotropy", "area", "isBorder", "cellBorderDistance", "cellBorderDistanceEqRadius",
-				"localLogVolumeCV", "cvLogVol", "localLogVolumeZScore", "localAnisotropyVectorAlignment", "localPrincipalAxisAlignment", "anisotropyVectorDivergence", "voidScore"
+				"localLogVolumeCV", "cvLogVol", "localLogVolumeZScore", "localAnisotropyVectorAlignment", "localPrincipalAxisAlignment", "anisotropyVectorDivergence",
+				"anisotropyVectorConvergence", "cavityRimScore", "voidScore"
 			};
 			for (const auto& name : names) add(out.values, name, n);
 
@@ -387,7 +388,31 @@ namespace poca::geometry {
 					out.values["localAnisotropyVectorAlignment"][i] = cptAlignVec > 0 ? finiteFloat(alignVec / static_cast<double>(cptAlignVec)) : 0.f;
 					out.values["localPrincipalAxisAlignment"][i] = cptAlignAxis > 0 ? finiteFloat(alignAxis / static_cast<double>(cptAlignAxis)) : 0.f;
 					out.values["anisotropyVectorDivergence"][i] = cptDiv > 0 ? finiteFloat(div / static_cast<double>(cptDiv)) : 0.f;
+					out.values["anisotropyVectorConvergence"][i] = cptDiv > 0 ? finiteFloat(-div / static_cast<double>(cptDiv)) : 0.f;
 				}
+			}
+
+			RunningStats stVoidScore, stLocalLogVolZ, stConvergence;
+			for (size_t i = 0; i < n; ++i) {
+				const bool isBorder = i < borderLocs.size() && borderLocs[i];
+				if (isBorder) continue;
+				stVoidScore.add(out.values["voidScore"][i]);
+				stLocalLogVolZ.add(out.values["localLogVolumeZScore"][i]);
+				stConvergence.add(out.values["anisotropyVectorConvergence"][i]);
+			}
+			const double meanVoidScore = stVoidScore.mean(), sdVoidScore = stVoidScore.sd();
+			const double meanLocalLogVolZ = stLocalLogVolZ.mean(), sdLocalLogVolZ = stLocalLogVolZ.sd();
+			const double meanConvergence = stConvergence.mean(), sdConvergence = stConvergence.sd();
+			for (size_t i = 0; i < n; ++i) {
+				const bool isBorder = i < borderLocs.size() && borderLocs[i];
+				if (isBorder) {
+					out.values["cavityRimScore"][i] = 0.f;
+					continue;
+				}
+				out.values["cavityRimScore"][i] = finiteFloat(
+					zscore(out.values["voidScore"][i], meanVoidScore, sdVoidScore) +
+					zscore(out.values["localLogVolumeZScore"][i], meanLocalLogVolZ, sdLocalLogVolZ) +
+					zscore(out.values["anisotropyVectorConvergence"][i], meanConvergence, sdConvergence));
 			}
 			return out;
 		}
