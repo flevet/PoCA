@@ -116,7 +116,11 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const 
 		if (_infos->hasParameter("regenerateFeatureBuffer"))
 			generateFeatureBuffer();
 	}
-	if (_infos->nameCommand == "pick") {
+	if (_infos->nameCommand == "getObjectPickedID") {
+		if (m_idSelection != -1)
+			_result.set(poca::opengl::PickedObjectIdResult{ m_idSelection, true });
+	}
+	else if (_infos->nameCommand == "pick") {
 		if (!m_dset->isSelected()) return;
 		QString infos = getInfosLocalization(m_idSelection);
 		if (infos.isEmpty()) return;
