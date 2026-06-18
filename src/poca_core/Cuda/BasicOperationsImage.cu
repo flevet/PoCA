@@ -433,6 +433,16 @@ void computeFeaturesLabelImage(poca::core::ImageInterface* _image)
         count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
     }
     break;
+    case poca::core::FLOAT:
+    {
+        poca::core::Image<float>* casted = static_cast <poca::core::Image<float>*>(_image);
+        if (computeFeaturesLabelImageStreaming(casted, _image))
+            return;
+        auto d_f = upload_to_device<float>(casted->pixels()); // no thrust cross-system copy
+        auto d_pixels = to_u32<float>(d_f);
+        count_occurences_label_kernel_gpu<uint32_t>(d_pixels, d_labels, d_counts);
+    }
+    break;
     default:
         break;
     }

@@ -32,6 +32,9 @@
 
 #include "CustomizedSlider.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 namespace poca::plot {
 	CustomizedSlider::CustomizedSlider(float _min, float _max, int nbSteps, bool _enableLineEdit, QWidget* parent)
 		: QWidget(parent),
@@ -78,6 +81,23 @@ namespace poca::plot {
 	float CustomizedSlider::value() const
 	{
 		return m_minVal + (m_maxVal - m_minVal) * (float(m_slider->value()) / m_sliderSteps);
+	}
+
+	void CustomizedSlider::setValue(float _val, bool _emitSignal)
+	{
+		const float range = m_maxVal - m_minVal;
+		int sliderValue = 0;
+		if (range > 0.f) {
+			float normalized = (_val - m_minVal) / range;
+			normalized = std::max(0.f, std::min(1.f, normalized));
+			sliderValue = (int)std::round(normalized * (float)m_sliderSteps);
+		}
+		m_value = m_minVal + range * (float(sliderValue) / m_sliderSteps);
+		if (!_emitSignal)
+			m_slider->blockSignals(true);
+		m_slider->setValue(sliderValue);
+		if (!_emitSignal)
+			m_slider->blockSignals(false);
 	}
 
 	void CustomizedSlider::setMaxValue(float _val)

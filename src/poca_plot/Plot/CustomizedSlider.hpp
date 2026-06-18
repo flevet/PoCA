@@ -49,6 +49,7 @@ namespace poca::plot {
 		explicit CustomizedSlider(float _min, float _max, int nbSteps, bool = true, QWidget* parent = nullptr);
 
 		float value() const;
+		void setValue(float, bool = false);
 		void setMaxValue(float);
 
 		void modifyMinMax();
