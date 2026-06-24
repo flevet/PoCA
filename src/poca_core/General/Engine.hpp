@@ -42,6 +42,7 @@
 #include <map>
 #include <string>
 #include <any>
+#include <utility>
 
 #include <General/json.hpp>
 #include <General/Palette.hpp>
@@ -58,6 +59,7 @@ namespace poca::core {
 	class MyObjectInterface;
 	class BasicComponentList;
 	class BasicComponent;
+	class ImageInterface;
 	class CommandExecutionContext;
 	class CommandExecutionResult;
 }
@@ -91,6 +93,7 @@ namespace poca::core {
 		MyObjectInterface* loadDataAndCreateObject(const QString&, poca::core::CommandInfo* = NULL);
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);
 		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
+		MyObjectInterface* createObjectFromImages(const std::string&, const std::string&, const std::vector<std::pair<ImageInterface*, std::string>>&);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);
 		bool addComponentToComponentList(MyObjectInterface*, const std::string&, BasicComponentInterface*);
 		bool addComponentToComponentList(BasicComponentList*, BasicComponent*);

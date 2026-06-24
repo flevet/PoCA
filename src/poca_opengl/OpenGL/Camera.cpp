@@ -2853,7 +2853,7 @@ namespace poca::opengl {
 		
 		//if the crop is reset we expand a little more the clip plane to be sure to not cut part of the models
 		float smallest = m_currentCrop.smallestSide();
-		float expansion = smallest;
+		float expansion = 0;// smallest;
 		const poca::core::BoundingBox expandedBBox(
 			m_currentCrop[0] - expansion, m_currentCrop[1] - expansion, m_currentCrop[2] - expansion,
 			m_currentCrop[3] + expansion, m_currentCrop[4] + expansion, m_currentCrop[5] + expansion);

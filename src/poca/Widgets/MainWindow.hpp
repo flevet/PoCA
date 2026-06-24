@@ -172,6 +172,8 @@ private slots:
 	void togglePerformanceWidget(bool);
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
+	void createFaceConnectedComponent2DTest();
+	void createFaceConnectedComponent3DTest();
 
 public slots:
 	void setPermanentStatusText(const QString &);
@@ -208,6 +210,7 @@ private:
 	QAction* m_pythonWidgetAct{ nullptr };
 	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
 	QAction* m_performanceWidgetAct{ nullptr };
+	QAction* m_faceConnectedComponent2DTestAct{ nullptr }, * m_faceConnectedComponent3DTestAct{ nullptr };
 	QTabWidget * m_tabWidget;
 	QDockWidget* m_designDock{ nullptr };
 	QTreeWidget* m_objectsTree{ nullptr };

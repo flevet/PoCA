@@ -49,6 +49,10 @@
 #include <General/Image.hpp>
 #include "BasicOperationsImage.h"
 
+namespace poca::core {
+	class MyObjectInterface;
+}
+
 #ifndef NO_CUDA
 static __device__ int NEIGHBOR_OFFSET_2D_X[4] = {
      0, -1, 1,  0
@@ -73,6 +77,8 @@ static __device__ int NEIGHBOR_OFFSET_3D_Z[6] = {
 void connectedComponnets2DLabelingBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, uint32_t* _labels);
 void connectedComponnets2DLabelingStackBinary(uint8_t* const _pixels, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
 void connectedComponnets3DLabelingBinary(uint8_t* const _pixels, const size_t _nbValues, const uint32_t W, const uint32_t H, const uint32_t D, uint32_t* _labels);
+poca::core::MyObjectInterface* createFaceConnectedComponentTestDataset2D();
+poca::core::MyObjectInterface* createFaceConnectedComponentTestDataset3D();
 template <class T>
 poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, const T _thresholdMin, const T _thresholdMax, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template <class T>

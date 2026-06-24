@@ -969,4 +969,19 @@ namespace poca::core {
 			co->executeCommand(_com, _context, _result);
 		}
 	}
+	
+	MyObjectInterface* Engine::createObjectFromImages(
+		const std::string& _dir,
+		const std::string& _name,
+		const std::vector<std::pair<ImageInterface*, std::string>>& _images)
+	{
+		if (_images.empty())
+			return nullptr;
+
+		ImagesList* images = new ImagesList(_images.front().first, _images.front().second);
+		for (size_t n = 1; n < _images.size(); n++)
+			images->addImage(_images[n].first, _images[n].second);
+
+		return createObject(_dir, _name, images);
+	}
 }

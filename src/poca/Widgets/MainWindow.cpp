@@ -120,6 +120,7 @@
 #include <Geometry/ObjectListMesh.hpp>
 #include <General/ImagesList.hpp>
 #include <Cuda/BasicOperationsImage.h>
+#include <Cuda/ConnectedComponents.h>
 #include <Geometry/CGAL_helpers.hpp>
 #include <General/stb_rect_pack.h>
 #include <Objects/MyMultipleObject.hpp>
@@ -449,6 +450,14 @@ void MainWindow::createActions()
 	m_performanceWidgetAct->setStatusTip(tr("Show performance monitor"));
 	QObject::connect(m_performanceWidgetAct, SIGNAL(toggled(bool)), this, SLOT(togglePerformanceWidget(bool)));
 
+	m_faceConnectedComponent2DTestAct = new QAction(tr("2D image"), this);
+	m_faceConnectedComponent2DTestAct->setStatusTip(tr("Create a 2D face connected components test dataset"));
+	QObject::connect(m_faceConnectedComponent2DTestAct, SIGNAL(triggered()), this, SLOT(createFaceConnectedComponent2DTest()));
+
+	m_faceConnectedComponent3DTestAct = new QAction(tr("3D image"), this);
+	m_faceConnectedComponent3DTestAct->setStatusTip(tr("Create a 3D face connected components test dataset"));
+	QObject::connect(m_faceConnectedComponent3DTestAct, SIGNAL(triggered()), this, SLOT(createFaceConnectedComponent3DTest()));
+
 	m_debugPyramidalRenderingAct = new QAction(tr("debugPyramidalRendering"), this);
 	m_debugPyramidalRenderingAct->setCheckable(true);
 	m_debugPyramidalRenderingAct->setChecked(engine->hasVerboseType("debugPyramidalRendering"));
@@ -591,6 +600,10 @@ void MainWindow::createMenus()
 	verboseMenu->addAction(m_clearVerboseTypesAct);
 	preferencesMenu->addAction(m_performanceWidgetAct);
 	preferencesMenu->addAction(m_palettesAct);
+	QMenu* testsMenu = preferencesMenu->addMenu("Tests");
+	QMenu* faceConnectedComponentsMenu = testsMenu->addMenu("face connected components");
+	faceConnectedComponentsMenu->addAction(m_faceConnectedComponent2DTestAct);
+	faceConnectedComponentsMenu->addAction(m_faceConnectedComponent3DTestAct);
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
@@ -720,6 +733,44 @@ void MainWindow::toggleDebugGizmo(bool _enabled)
 		engine->addVerboseType("debugGizmo");
 	else
 		engine->removeVerboseType("debugGizmo");
+}
+
+void MainWindow::createFaceConnectedComponent2DTest()
+{
+#ifndef NO_CUDA
+	poca::core::MyObjectInterface* obj = createFaceConnectedComponentTestDataset2D();
+	if (obj == NULL)
+		return;
+	poca::opengl::CameraInterface* cam = createWindows(obj);
+	poca::core::Engine::instance()->addCameraToObject(obj, cam);
+	if (cam != NULL)
+		cam->makeCurrent();
+	poca::core::CommandInfo ci(false, "createDisplay");
+	obj->executeGlobalCommand(&ci);
+	obj->notify("LoadObjCharacteristicsAllWidgets");
+	obj->notifyAll("updateDisplay");
+#else
+	QMessageBox::warning(this, tr("CUDA unavailable"), tr("Face connected components tests require CUDA."));
+#endif
+}
+
+void MainWindow::createFaceConnectedComponent3DTest()
+{
+#ifndef NO_CUDA
+	poca::core::MyObjectInterface* obj = createFaceConnectedComponentTestDataset3D();
+	if (obj == NULL)
+		return;
+	poca::opengl::CameraInterface* cam = createWindows(obj);
+	poca::core::Engine::instance()->addCameraToObject(obj, cam);
+	if (cam != NULL)
+		cam->makeCurrent();
+	poca::core::CommandInfo ci(false, "createDisplay");
+	obj->executeGlobalCommand(&ci);
+	obj->notify("LoadObjCharacteristicsAllWidgets");
+	obj->notifyAll("updateDisplay");
+#else
+	QMessageBox::warning(this, tr("CUDA unavailable"), tr("Face connected components tests require CUDA."));
+#endif
 }
 
 void MainWindow::createToolBars()

@@ -154,6 +154,7 @@ set(cuda_list
   Cuda/BasicOperationsImage.cu
   Cuda/ConnectedComponents.cu
   Cuda/FaceConnectedComponents.cu
+  Cuda/FaceConnectedComponentTests.cpp
   Cuda/FillHoles.cu
   )
   
