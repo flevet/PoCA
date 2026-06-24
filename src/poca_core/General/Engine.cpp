@@ -56,6 +56,7 @@
 #include "../Objects/MyObjectDisplayCommand.hpp"
 #include "../General/BasicComponentList.hpp"
 #include "../General/Engine.hpp"
+#include "../General/ImagesList.hpp"
 
 #ifndef NO_PYTHON
 #include "PythonInterpreter.hpp"
