@@ -222,6 +222,7 @@ namespace poca::core {
 		m_mediator = poca::core::MediatorWObjectFWidget::instance();
 		loadPlugin();
 		initializeAllSingletons();
+		m_tests.clear();
 		for (auto loader : m_loadersFile)
 			loader->setSingletons(this);
 		m_plugins->setSingletons(this);
@@ -321,6 +322,7 @@ namespace poca::core {
 		m_singletons["PythonInterpreter"] = python;
 #endif
 	}
+
 
 	void Engine::initializePalettes()
 	{

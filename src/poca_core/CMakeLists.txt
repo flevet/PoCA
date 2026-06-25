@@ -84,6 +84,7 @@ set(GENERAL_HEADER_FILES
   General/Region3D.hpp
   General/ranker.h
   General/Scatterplot.hpp
+  General/TestRegistry.hpp
   General/TiffImageIO.hpp
   General/Vec2.hpp
   General/Vec3.hpp
@@ -106,6 +107,7 @@ set(GENERAL_HEADER_FILES
   General/PluginList.cpp
   General/PythonInterpreter.cpp
   General/Scatterplot.cpp
+  General/TestRegistry.cpp
 )
 
 set(INTERFACES_HEADER_FILES

@@ -33,6 +33,8 @@
 #ifndef MainWindow_h__
 #define MainWindow_h__
 
+#include <map>
+#include <string>
 #include <Windows.h>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QLabel>
@@ -55,6 +57,7 @@ class QDockWidget;
 class QTableWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QMenu;
 
 class MdiChild;
 class MainFilterWidget;
@@ -74,6 +77,7 @@ class ColorButtonGridWidget;
 namespace poca::core {
 	class PluginList;
 	class BasicComponent;
+	struct TestActionDescriptor;
 }
 
 namespace poca::geometry {
@@ -172,8 +176,6 @@ private slots:
 	void togglePerformanceWidget(bool);
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
-	void createFaceConnectedComponent2DTest();
-	void createFaceConnectedComponent3DTest();
 
 public slots:
 	void setPermanentStatusText(const QString &);
@@ -196,6 +198,10 @@ private:
 	void addHierarchyNodeToTree(MyMultipleObject*, size_t, QTreeWidgetItem*);
 	void updateObjectsTreeSelectionCue(MyMultipleObject*);
 	void refreshObjectControls();
+	void registerTests();
+	void createTestsMenu(QMenu*);
+	QMenu* createTestMenu(QMenu*, std::map<std::string, QMenu*>&, const std::string&);
+	void createTestObject(const poca::core::TestActionDescriptor&);
 
 	QMdiArea * m_mdiArea;
 	QSignalMapper * m_windowMapper;
@@ -210,7 +216,6 @@ private:
 	QAction* m_pythonWidgetAct{ nullptr };
 	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
 	QAction* m_performanceWidgetAct{ nullptr };
-	QAction* m_faceConnectedComponent2DTestAct{ nullptr }, * m_faceConnectedComponent3DTestAct{ nullptr };
 	QTabWidget * m_tabWidget;
 	QDockWidget* m_designDock{ nullptr };
 	QTreeWidget* m_objectsTree{ nullptr };

@@ -46,6 +46,7 @@
 
 #include <General/json.hpp>
 #include <General/Palette.hpp>
+#include <General/TestRegistry.hpp>
 
 class LoaderInterface;
 class GuiInterface;
@@ -150,6 +151,8 @@ namespace poca::core {
 		inline MediatorWObjectFWidget* getMediator() { return m_mediator; }
 		inline const std::vector < LoaderInterface* >& getLoaders() const { return m_loadersFile; }
 		inline PluginList* getPlugins() { return m_plugins; }
+		inline TestRegistry& tests() { return m_tests; }
+		inline const TestRegistry& tests() const { return m_tests; }
 
 		inline void setStateParameters(const nlohmann::json& _param) { m_stateParameters = _param; }
 		inline nlohmann::json getStateParameters() const { return m_stateParameters; }
@@ -257,6 +260,7 @@ namespace poca::core {
 		bool m_verbose{ false }, m_globalCommands{ false };
 		std::vector<std::string> m_verboseTypes;
 		std::map<std::string, poca::core::Palette> m_palettes;
+		TestRegistry m_tests;
 
 
 		static inline const char* verboseEnabledPropertyName() { return "poca.core.Engine.verboseEnabled"; }

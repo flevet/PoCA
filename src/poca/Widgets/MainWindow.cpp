@@ -450,14 +450,6 @@ void MainWindow::createActions()
 	m_performanceWidgetAct->setStatusTip(tr("Show performance monitor"));
 	QObject::connect(m_performanceWidgetAct, SIGNAL(toggled(bool)), this, SLOT(togglePerformanceWidget(bool)));
 
-	m_faceConnectedComponent2DTestAct = new QAction(tr("2D image"), this);
-	m_faceConnectedComponent2DTestAct->setStatusTip(tr("Create a 2D face connected components test dataset"));
-	QObject::connect(m_faceConnectedComponent2DTestAct, SIGNAL(triggered()), this, SLOT(createFaceConnectedComponent2DTest()));
-
-	m_faceConnectedComponent3DTestAct = new QAction(tr("3D image"), this);
-	m_faceConnectedComponent3DTestAct->setStatusTip(tr("Create a 3D face connected components test dataset"));
-	QObject::connect(m_faceConnectedComponent3DTestAct, SIGNAL(triggered()), this, SLOT(createFaceConnectedComponent3DTest()));
-
 	m_debugPyramidalRenderingAct = new QAction(tr("debugPyramidalRendering"), this);
 	m_debugPyramidalRenderingAct->setCheckable(true);
 	m_debugPyramidalRenderingAct->setChecked(engine->hasVerboseType("debugPyramidalRendering"));
@@ -600,10 +592,9 @@ void MainWindow::createMenus()
 	verboseMenu->addAction(m_clearVerboseTypesAct);
 	preferencesMenu->addAction(m_performanceWidgetAct);
 	preferencesMenu->addAction(m_palettesAct);
+	registerTests();
 	QMenu* testsMenu = preferencesMenu->addMenu("Tests");
-	QMenu* faceConnectedComponentsMenu = testsMenu->addMenu("face connected components");
-	faceConnectedComponentsMenu->addAction(m_faceConnectedComponent2DTestAct);
-	faceConnectedComponentsMenu->addAction(m_faceConnectedComponent3DTestAct);
+	createTestsMenu(testsMenu);
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
@@ -735,29 +726,49 @@ void MainWindow::toggleDebugGizmo(bool _enabled)
 		engine->removeVerboseType("debugGizmo");
 }
 
-void MainWindow::createFaceConnectedComponent2DTest()
+void MainWindow::registerTests()
 {
 #ifndef NO_CUDA
-	poca::core::MyObjectInterface* obj = createFaceConnectedComponentTestDataset2D();
-	if (obj == NULL)
-		return;
-	poca::opengl::CameraInterface* cam = createWindows(obj);
-	poca::core::Engine::instance()->addCameraToObject(obj, cam);
-	if (cam != NULL)
-		cam->makeCurrent();
-	poca::core::CommandInfo ci(false, "createDisplay");
-	obj->executeGlobalCommand(&ci);
-	obj->notify("LoadObjCharacteristicsAllWidgets");
-	obj->notifyAll("updateDisplay");
-#else
-	QMessageBox::warning(this, tr("CUDA unavailable"), tr("Face connected components tests require CUDA."));
+	registerFaceConnectedComponentTests(poca::core::Engine::instance()->tests());
 #endif
 }
 
-void MainWindow::createFaceConnectedComponent3DTest()
+void MainWindow::createTestsMenu(QMenu* _testsMenu)
 {
-#ifndef NO_CUDA
-	poca::core::MyObjectInterface* obj = createFaceConnectedComponentTestDataset3D();
+	std::map<std::string, QMenu*> menus;
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	for (const poca::core::TestActionDescriptor& test : engine->tests().descriptors()) {
+		QMenu* menu = createTestMenu(_testsMenu, menus, test.menuPath);
+		QAction* action = new QAction(QString::fromStdString(test.label), this);
+		action->setStatusTip(QString::fromStdString(test.statusTip));
+		QObject::connect(action, &QAction::triggered, this, [this, test]() {
+			createTestObject(test);
+		});
+		menu->addAction(action);
+	}
+}
+
+QMenu* MainWindow::createTestMenu(QMenu* _testsMenu, std::map<std::string, QMenu*>& _menus, const std::string& _menuPath)
+{
+	if (_menuPath.empty())
+		return _testsMenu;
+	auto it = _menus.find(_menuPath);
+	if (it != _menus.end())
+		return it->second;
+	QMenu* menu = _testsMenu->addMenu(QString::fromStdString(_menuPath));
+	_menus[_menuPath] = menu;
+	return menu;
+}
+
+void MainWindow::createTestObject(const poca::core::TestActionDescriptor& _test)
+{
+#ifdef NO_CUDA
+	if (_test.requiresCuda) {
+		QMessageBox::warning(this, tr("CUDA unavailable"), tr("This test requires CUDA."));
+		return;
+	}
+#endif
+	poca::core::MyObjectInterface* obj = _test.createObject();
 	if (obj == NULL)
 		return;
 	poca::opengl::CameraInterface* cam = createWindows(obj);
@@ -768,9 +779,6 @@ void MainWindow::createFaceConnectedComponent3DTest()
 	obj->executeGlobalCommand(&ci);
 	obj->notify("LoadObjCharacteristicsAllWidgets");
 	obj->notifyAll("updateDisplay");
-#else
-	QMessageBox::warning(this, tr("CUDA unavailable"), tr("Face connected components tests require CUDA."));
-#endif
 }
 
 void MainWindow::createToolBars()
