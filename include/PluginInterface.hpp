@@ -51,6 +51,7 @@ namespace poca::core{
     class CommandExecutionResult;
     class CommandableObject;
     class Engine;
+    class TestRegistry;
 }
 
 /*namespace nlohmann {
@@ -68,6 +69,7 @@ public:
     virtual void setPlugins(poca::core::PluginList*) = 0;
     virtual void setSingletons(poca::core::Engine*) = 0;
     virtual QString name() const = 0;
+    virtual void registerTests(poca::core::TestRegistry&) {}
     virtual void execute(poca::core::CommandInfo*) = 0;
     virtual void execute(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext&) {
         execute(_ci);

@@ -728,9 +728,13 @@ void MainWindow::toggleDebugGizmo(bool _enabled)
 
 void MainWindow::registerTests()
 {
+	poca::core::Engine* engine = poca::core::Engine::instance();
 #ifndef NO_CUDA
-	registerFaceConnectedComponentTests(poca::core::Engine::instance()->tests());
+	registerFaceConnectedComponentTests(engine->tests());
 #endif
+	const std::vector <PluginInterface*>& plugins = engine->getPlugins()->getPlugins();
+	for (PluginInterface* plugin : plugins)
+		plugin->registerTests(engine->tests());
 }
 
 void MainWindow::createTestsMenu(QMenu* _testsMenu)
