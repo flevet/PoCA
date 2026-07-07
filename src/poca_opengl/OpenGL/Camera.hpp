@@ -349,6 +349,7 @@ namespace poca::opengl {
 		const bool testWhichFaceFrontCamera();
 		void recomputeFrame(const poca::core::BoundingBox&);
 		glm::vec2 worldToScreenCoordinates(const glm::mat4&, const glm::mat4&, const glm::mat4&, const glm::uvec4&, const glm::vec3&) const;
+		bool dispatchCameraMouseEvent(const std::string&, QMouseEvent*, const bool);
 
 	protected:
 		float getCameraDistance() const;

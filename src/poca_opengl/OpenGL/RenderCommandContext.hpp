@@ -71,6 +71,10 @@ namespace poca::opengl {
 		int id = -1;
 		bool valid = false;
 	};
+
+	struct CameraMouseEventHandled {
+		bool handled = false;
+	};
 }
 
 #endif

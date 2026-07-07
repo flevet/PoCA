@@ -1862,6 +1862,14 @@ namespace poca::opengl {
 				return;
 			}
 		}
+		if (m_currentInteractionMode == poca::opengl::Camera::None && _event->button() == Qt::LeftButton && dispatchCameraMouseEvent("press", _event, true)) {
+			m_buttonOn = true;
+			m_leftButtonOn = true;
+			doneCurrent();
+			update();
+			return;
+		}
+
 		m_tmp = glm::vec2(_event->pos().x(), this->height() - _event->pos().y());
 		m_cropPointBegin.set(_event->pos().x(), this->height() - _event->pos().y(), 0.f);
 		m_cropPointEnd = m_cropPointBegin;
@@ -1992,6 +2000,15 @@ namespace poca::opengl {
 				update();
 			}
 		}
+		if (m_currentInteractionMode == poca::opengl::Camera::None) {
+			const bool leftDown = (_event->buttons() & Qt::LeftButton) == Qt::LeftButton;
+			if (dispatchCameraMouseEvent(leftDown ? "drag" : "move", _event, leftDown)) {
+				doneCurrent();
+				update();
+				return;
+			}
+		}
+
 		m_cropPointEnd.set(_event->pos().x(), this->height() - _event->pos().y(), 0.f);
 
 		glm::vec3 wrldCoords = getWorldCoordinates(glm::vec2(x, this->height() - y));
@@ -2189,6 +2206,13 @@ namespace poca::opengl {
 			update();
 			return;
 		}
+		if (m_currentInteractionMode == poca::opengl::Camera::None && _event->button() == Qt::LeftButton && dispatchCameraMouseEvent("release", _event, false)) {
+			m_scaling = m_buttonOn = m_leftButtonOn = m_middleButtonOn = m_rightButtonOn = false;
+			doneCurrent();
+			update();
+			return;
+		}
+
 		poca::core::MyObjectInterface* objectToOpen = nullptr;
 		switch (_event->button())
 		{
@@ -3198,6 +3222,23 @@ namespace poca::opengl {
 		return windowSpacePos;
 	}
 
+	bool Camera::dispatchCameraMouseEvent(const std::string& _phase, QMouseEvent* _event, const bool _leftButtonDown)
+	{
+		if (m_object == nullptr || _event == nullptr)
+			return false;
+		poca::core::CommandInfo ci(false, "cameraMouseEvent",
+			"phase", _phase,
+			"x", _event->pos().x(),
+			"y", _event->pos().y(),
+			"leftButton", _leftButtonDown,
+			"button", static_cast<int>(_event->button()),
+			"buttons", static_cast<int>(_event->buttons()));
+		poca::core::CommandExecutionContext runtimeContext;
+		poca::core::CommandExecutionResult runtimeResult;
+		runtimeContext.set(poca::opengl::ActiveCamera{ this });
+		m_object->executeGlobalCommand(&ci, runtimeContext, runtimeResult);
+		return runtimeResult.has<poca::opengl::CameraMouseEventHandled>() && runtimeResult.get<poca::opengl::CameraMouseEventHandled>().handled;
+	}
 	glm::vec2 Camera::worldToScreenCoordinates(const glm::mat4& _proj, const glm::mat4& _view, const glm::mat4& _model, const glm::uvec4& _viewport, const glm::vec3& _wpos) const
 	{
 		glm::vec4 clipSpacePos = (_proj * _view * _model) * glm::vec4(_wpos, 1.f);
