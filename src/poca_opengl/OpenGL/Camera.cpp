@@ -1862,9 +1862,10 @@ namespace poca::opengl {
 				return;
 			}
 		}
-		if (m_currentInteractionMode == poca::opengl::Camera::None && _event->button() == Qt::LeftButton && dispatchCameraMouseEvent("press", _event, true)) {
+		if (m_currentInteractionMode == poca::opengl::Camera::None && (_event->button() == Qt::LeftButton || _event->button() == Qt::RightButton) && dispatchCameraMouseEvent("press", _event, _event->button() == Qt::LeftButton)) {
 			m_buttonOn = true;
-			m_leftButtonOn = true;
+			m_leftButtonOn = _event->button() == Qt::LeftButton;
+			m_rightButtonOn = _event->button() == Qt::RightButton;
 			doneCurrent();
 			update();
 			return;
@@ -2002,7 +2003,8 @@ namespace poca::opengl {
 		}
 		if (m_currentInteractionMode == poca::opengl::Camera::None) {
 			const bool leftDown = (_event->buttons() & Qt::LeftButton) == Qt::LeftButton;
-			if (dispatchCameraMouseEvent(leftDown ? "drag" : "move", _event, leftDown)) {
+			const bool rightDown = (_event->buttons() & Qt::RightButton) == Qt::RightButton;
+			if (dispatchCameraMouseEvent((leftDown || rightDown) ? "drag" : "move", _event, leftDown)) {
 				doneCurrent();
 				update();
 				return;
@@ -2206,7 +2208,7 @@ namespace poca::opengl {
 			update();
 			return;
 		}
-		if (m_currentInteractionMode == poca::opengl::Camera::None && _event->button() == Qt::LeftButton && dispatchCameraMouseEvent("release", _event, false)) {
+		if (m_currentInteractionMode == poca::opengl::Camera::None && (_event->button() == Qt::LeftButton || _event->button() == Qt::RightButton) && dispatchCameraMouseEvent("release", _event, false)) {
 			m_scaling = m_buttonOn = m_leftButtonOn = m_middleButtonOn = m_rightButtonOn = false;
 			doneCurrent();
 			update();
@@ -3231,6 +3233,7 @@ namespace poca::opengl {
 			"x", _event->pos().x(),
 			"y", _event->pos().y(),
 			"leftButton", _leftButtonDown,
+			"rightButton", (_event->button() == Qt::RightButton) || ((_event->buttons() & Qt::RightButton) == Qt::RightButton),
 			"button", static_cast<int>(_event->button()),
 			"buttons", static_cast<int>(_event->buttons()));
 		poca::core::CommandExecutionContext runtimeContext;
