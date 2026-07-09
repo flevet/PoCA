@@ -57,7 +57,7 @@ namespace poca::geometry {
 		ObjectListInterface* exportSelectedObjects(const std::set<int>&) const;
 
 		void remesh(const float, const uint32_t);
-		void subdivide(const uint32_t);
+		void subdivide(const uint32_t,const bool = false);
 
 		virtual void generateLocs(std::vector <poca::core::Vec3mf>&);
 		virtual void generateNormalLocs(std::vector <poca::core::Vec3mf>&);

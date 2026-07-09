@@ -1072,10 +1072,26 @@ namespace poca::geometry {
 			PMP::isotropic_remeshing(faces(mesh), _target_edge_length, mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 
-	void ObjectListMesh::subdivide(const uint32_t _nb_iter)
+	void ObjectListMesh::subdivide(const uint32_t _nb_iter, const bool _repair)
 	{
-		for (auto& mesh : m_meshes)
-			CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+		for (auto& mesh : m_meshes) {
+			if(!_repair)
+				CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+			else {
+				CGAL::Polygon_mesh_processing::orient(mesh);
+				CGAL::Polygon_mesh_processing::stitch_borders(mesh);
+				CGAL::Polygon_mesh_processing::remove_isolated_vertices(mesh);
+				CGAL::Polygon_mesh_processing::remove_degenerate_faces(mesh);
+				CGAL::Polygon_mesh_processing::triangulate_faces(mesh);
+
+				// If still open, prefer Loop; if closed, Sqrt3:
+				bool closed = true; for (auto e : edges(mesh)) if (is_border(e, mesh)) { closed = false; break; }
+				if (closed)
+					CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+				else
+					CGAL::Subdivision_method_3::Loop_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
+			}
+		}
 	}
 
 	poca::geometry::ObjectListInterface* ObjectListMesh::exportSelectedObjects(const std::set<int>& _selection) const
