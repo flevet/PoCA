@@ -2537,8 +2537,11 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 			if (json.empty()) continue;
 
 			const auto nameComp = json.begin().key();
-			if (nameComp == "MainWindow")
+			if (nameComp == "MainWindow") {
 				runMacro(json[nameComp]);
+				if (currentMdi == NULL && m_currentMdi != NULL)
+					currentMdi = m_currentMdi;
+			}
 			else if (nameComp == "PythonWidget") {
 				nlohmann::json jsonCommand = json[nameComp];
 				for (auto& [nameCommand, value] : jsonCommand.items()) {
