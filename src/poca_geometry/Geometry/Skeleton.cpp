@@ -30,6 +30,10 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <algorithm>
+#include <fstream>
+#include <stdexcept>
+
 #include <General/MyData.hpp>
 #include <General/Misc.h>
 #include <Fit/lmcurve.h>
@@ -43,8 +47,35 @@ namespace poca::geometry {
 
 	float Skeleton::MERGE_DISTANCE = 0.001f;
 
-	Skeleton::Skeleton(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points) :poca::core::BasicComponent("Skeleton"), m_segments(_points, _firsts)
+	Skeleton::Skeleton(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points) :poca::core::BasicComponent("Skeleton")
 	{
+		initializeSegments(_firsts, _points);
+	}
+
+	void Skeleton::resetSegments(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points)
+	{
+		for (auto& val : m_data)
+			delete val.second;
+		m_data.clear();
+		m_selection.clear();
+		m_segmentToSkeleton.clear();
+		m_skeletons.clear();
+		m_bboxSegments.clear();
+		m_bboxSkeletons.clear();
+		m_currentHistogram.clear();
+		m_nbSelection = 0;
+		initializeSegments(_firsts, _points);
+	}
+
+	void Skeleton::initializeSegments(const std::vector <uint32_t>& _firsts, const std::vector <poca::core::Vec3mf>& _points)
+	{
+		if (_firsts.size() < 2 || _points.empty() || _firsts.front() != 0 || _firsts.back() != _points.size())
+			throw std::runtime_error("Skeleton requires valid segment indices and points.");
+		for (size_t n = 0; n + 1 < _firsts.size(); n++)
+			if (_firsts[n] >= _firsts[n + 1] || _firsts[n + 1] > _points.size())
+				throw std::runtime_error("Skeleton requires non-empty, ordered segment ranges.");
+
+		m_segments.initialize(_points, _firsts);
 		float firstZ = _points[0].z();
 		bool allSames = std::all_of(_points.begin(), _points.end(), [firstZ](poca::core::Vec3mf p) { return p.z() == firstZ; });
 		m_dimension = allSames ? 2 : 3;
@@ -61,7 +92,6 @@ namespace poca::geometry {
 			lengthes[n] = l;
 			nbLocs[n] = _firsts[n + 1] - _firsts[n];
 			ids[n] = n + 1;
-
 		}
 
 		mergeSegmentsToSkeletons();
@@ -75,7 +105,6 @@ namespace poca::geometry {
 		setCurrentHistogramType("skeletonIds");
 		forceRegenerateSelection();
 	}
-
 	Skeleton::~Skeleton()
 	{
 
