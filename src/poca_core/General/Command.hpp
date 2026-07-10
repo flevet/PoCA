@@ -243,23 +243,37 @@ namespace poca::core {
 
 		const bool hasParameter(const std::string& _nameParameter) const {
 			if (json.empty()) return false;
-			if (nameCommand == _nameParameter)
-				return true;
 			const nlohmann::json& params = parameters();
+			if (nameCommand == _nameParameter) {
+				// Legacy single-value commands store the value directly under the
+				// command name, while schema-created commands store it in an object
+				// using the parameter name. Support both representations.
+				if (params.is_object() && !isTypedCommandParameterJson(params))
+					return params.contains(_nameParameter);
+				return true;
+			}
 			return params.is_object() && params.contains(_nameParameter);
 		}
 
 		template<typename T>
 		T getParameter(const std::string& _nameParameter) const {
-			if(nameCommand == _nameParameter)
-				return commandParameterJsonValue(parameters()).template get<T>();
-			return commandParameterJsonValue(parameters()[_nameParameter]).template get<T>();
+			const nlohmann::json& params = parameters();
+			if (nameCommand == _nameParameter) {
+				if (params.is_object() && !isTypedCommandParameterJson(params) && params.contains(_nameParameter))
+					return commandParameterJsonValue(params.at(_nameParameter)).template get<T>();
+				return commandParameterJsonValue(params).template get<T>();
+			}
+			return commandParameterJsonValue(params.at(_nameParameter)).template get<T>();
 		}
 
 		const nlohmann::json& getParameterJson(const std::string& _nameParameter) const {
-			if (nameCommand == _nameParameter)
-				return commandParameterJsonValue(parameters());
-			return commandParameterJsonValue(parameters()[_nameParameter]);
+			const nlohmann::json& params = parameters();
+			if (nameCommand == _nameParameter) {
+				if (params.is_object() && !isTypedCommandParameterJson(params) && params.contains(_nameParameter))
+					return commandParameterJsonValue(params.at(_nameParameter));
+				return commandParameterJsonValue(params);
+			}
+			return commandParameterJsonValue(params.at(_nameParameter));
 		}
 
 		template<typename T>
