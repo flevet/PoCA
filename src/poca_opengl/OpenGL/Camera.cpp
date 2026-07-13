@@ -416,6 +416,38 @@ namespace poca::opengl {
 				_bbox[3] + _translation.x, _bbox[4] + _translation.y, _bbox[5] + _translation.z);
 		}
 
+		void translateClippingPlanes(std::vector<glm::vec4>& _planes, const glm::vec3& _translation)
+		{
+			if (glm::dot(_translation, _translation) < 1e-12f)
+				return;
+
+			for (glm::vec4& plane : _planes)
+				plane.w -= glm::dot(glm::vec3(plane), _translation);
+		}
+
+		poca::core::BoundingBox clippingPlanesBoundingBox(const poca::core::BoundingBox& _fallback, const std::vector<glm::vec4>& _planes)
+		{
+			poca::core::BoundingBox bbox = _fallback;
+			const size_t count = std::min<size_t>(6, _planes.size());
+			for (size_t i = 0; i < count; ++i) {
+				const glm::vec3 normal(_planes[i]);
+				int axis = 0;
+				if (std::abs(normal.y) > std::abs(normal[axis])) axis = 1;
+				if (std::abs(normal.z) > std::abs(normal[axis])) axis = 2;
+				if (std::abs(normal[axis]) < 1e-6f)
+					continue;
+
+				const int axis1 = (axis + 1) % 3;
+				const int axis2 = (axis + 2) % 3;
+				if (std::abs(normal[axis1]) > 1e-6f || std::abs(normal[axis2]) > 1e-6f)
+					continue;
+
+				const float coordinate = -_planes[i].w / normal[axis];
+				bbox[normal[axis] > 0.f ? axis : axis + 3] = coordinate;
+			}
+			return bbox;
+		}
+
 		glm::vec3 toGlm(const poca::core::Vec3mf& _v)
 		{
 			return glm::vec3(_v[0], _v[1], _v[2]);
@@ -2165,13 +2197,18 @@ namespace poca::opengl {
 					if (_event->modifiers() == Qt::ControlModifier) {
 						poca::core::MyObjectInterface* currentObject = m_object->currentObject();
 						if (currentObject != NULL) {
-							if (m_object->translateCurrentObjectBy(rightVector + upVector))
+							const glm::vec3 objectTranslation = rightVector + upVector;
+							if (m_object->translateCurrentObjectBy(objectTranslation)) {
+								translateClippingPlanes(m_clip, -objectTranslation);
 								m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updateTransform"));
+							}
 						}
 					}
 					else {
+						const glm::vec3 previousTranslation = m_stateCamera.m_translationModel;
 						m_translation = m_translation + rightVector + upVector;
 						m_stateCamera.m_translationModel = glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z);
+						translateClippingPlanes(m_clip, m_stateCamera.m_translationModel - previousTranslation);
 					}
 				}
 			}
@@ -3624,6 +3661,20 @@ namespace poca::opengl {
 	void Camera::displayArrowsFrame()
 	{
 		//if (m_dimension == 2) return;
+		// Scene display commands are free to change OpenGL state. The orientation
+		// frame is an overlay and must not inherit clipping, culling, stencil or
+		// write masks from the last displayed component.
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+		glDisable(GL_SAMPLE_COVERAGE);
+		glDisable(GL_BLEND);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		for (size_t n = 0; n < 4; n++)
@@ -3639,8 +3690,11 @@ namespace poca::opengl {
 		const glm::mat4& proj = m_matrixProjectionThumbnailFrame, & view = getViewMatrix();
 		shader->use();
 		shader->setMat4("MVP", proj * view);
+		shader->setMat4("model", glm::mat4(1.f));
 		shader->setVec4("singleColor", colorBack[0], colorBack[1], colorBack[2], colorBack[3]);
-		shader->setBool("clip", clip());
+		shader->setInt("nbClipPlanes", 0);
+		shader->setBool("clip", false);
+		shader->setBool("activatedCulling", false);
 		glEnableVertexAttribArray(0);
 		m_vertexArrowBuffer.bindBuffer(0, 0);
 		glDrawArrays(m_vertexArrowBuffer.getMode(), 0, m_vertexArrowBuffer.getSizeBuffers()[0]); // Starting from vertex 0; 3 vertices total -> 1 triangle
@@ -3894,6 +3948,7 @@ namespace poca::opengl {
 			delta = delta - glm::dot(delta, n) * n;
 		}
 		if (glm::length(delta) > 0.f && m_object->translateCurrentObjectBy(-delta)) {
+			translateClippingPlanes(m_clip, delta);
 			// MyObject stores translation with the opposite sign in its model matrix.
 			// Keep the gizmo visually under the cursor while sending the inverse delta to the object.
 			m_transformGizmoWorldCenter += delta;
@@ -4059,7 +4114,8 @@ namespace poca::opengl {
 		const QColor activeColor = QColor(0, 120, 255, 245);
 		const QColor handleColor = QColor(0, 120, 255, 235);
 
-		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		const poca::core::BoundingBox translatedBBox = clippingPlanesBoundingBox(
+			translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel), m_clip);
 		const float mn[3] = { translatedBBox[0], translatedBBox[1], translatedBBox[2] };
 		const float mx[3] = { translatedBBox[3], translatedBBox[4], translatedBBox[5] };
 
@@ -4103,7 +4159,8 @@ namespace poca::opengl {
 	{
 		if (!m_displayClippingPlanes || m_clip.empty())
 			return -1;
-		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		const poca::core::BoundingBox translatedBBox = clippingPlanesBoundingBox(
+			translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel), m_clip);
 		const float mn[3] = { translatedBBox[0], translatedBBox[1], translatedBBox[2] };
 		const float mx[3] = { translatedBBox[3], translatedBBox[4], translatedBBox[5] };
 		int best = -1;
@@ -4131,7 +4188,8 @@ namespace poca::opengl {
 			return;
 		n = glm::normalize(n);
 
-		const poca::core::BoundingBox translatedBBox = translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel);
+		const poca::core::BoundingBox translatedBBox = clippingPlanesBoundingBox(
+			translatedBoundingBox(m_currentCrop, m_stateCamera.m_translationModel), m_clip);
 		glm::vec3 c((translatedBBox[0] + translatedBBox[3]) * 0.5f, (translatedBBox[1] + translatedBBox[4]) * 0.5f, (translatedBBox[2] + translatedBBox[5]) * 0.5f);
 		int axis = std::abs(n.x) > 0.5f ? 0 : (std::abs(n.y) > 0.5f ? 1 : 2);
 		c[axis] = -m_clip[m_activeClippingPlane].w / (std::abs(n[axis]) < 1e-6f ? 1.f : n[axis]);
