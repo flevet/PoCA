@@ -448,6 +448,13 @@ namespace poca::opengl {
 			return bbox;
 		}
 
+		glm::mat4 orientationFrameViewMatrix(const glm::mat4& _viewMatrix)
+		{
+			// The corner frame represents orientation only. Scene camera distance can
+			// be much larger than the thumbnail projection depth range.
+			return glm::mat4(glm::mat3(_viewMatrix));
+		}
+
 		glm::vec3 toGlm(const poca::core::Vec3mf& _v)
 		{
 			return glm::vec3(_v[0], _v[1], _v[2]);
@@ -3646,7 +3653,9 @@ namespace poca::opengl {
 
 	void Camera::recomputeLegendThumbnailFrame()
 	{
-		const glm::mat4& proj = m_matrixProjectionThumbnailFrame, & view = getViewMatrix(), & model = glm::mat4(1.f);
+		const glm::mat4& proj = m_matrixProjectionThumbnailFrame;
+		const glm::mat4 view = orientationFrameViewMatrix(getViewMatrix());
+		const glm::mat4 model(1.f);
 		float value = 0.5f;
 		glm::vec2 coordX = worldToScreenCoordinates(proj, view, model, m_viewportThumbnailFrame, glm::vec3(value, 0.f, 0.f));
 		glm::vec2 coordY = worldToScreenCoordinates(proj, view, model, m_viewportThumbnailFrame, glm::vec3(0.f, value, 0.f));
@@ -3687,7 +3696,8 @@ namespace poca::opengl {
 		else
 			colorBack.set(1.f, 1.f, 1.f, 1); // dark colors - white font
 		poca::opengl::Shader* shader = getShader("uniformColorShader");
-		const glm::mat4& proj = m_matrixProjectionThumbnailFrame, & view = getViewMatrix();
+		const glm::mat4& proj = m_matrixProjectionThumbnailFrame;
+		const glm::mat4 view = orientationFrameViewMatrix(getViewMatrix());
 		shader->use();
 		shader->setMat4("MVP", proj * view);
 		shader->setMat4("model", glm::mat4(1.f));
