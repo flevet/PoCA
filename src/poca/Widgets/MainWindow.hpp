@@ -177,6 +177,8 @@ private slots:
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
 
+	void reloadCurrentDataset();
+
 public slots:
 	void setPermanentStatusText(const QString &);
 	void runMacro(std::vector<nlohmann::json>, bool);
@@ -215,6 +217,7 @@ private:
 	QAction* m_datasetAssemblerAct;
 	QAction* m_pythonWidgetAct{ nullptr };
 	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
+	QAction* m_reloadDatasetAct;
 	QAction* m_performanceWidgetAct{ nullptr };
 	QTabWidget * m_tabWidget;
 	QDockWidget* m_designDock{ nullptr };

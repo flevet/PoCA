@@ -417,6 +417,10 @@ void MainWindow::createActions()
 	m_cascadeWindowsAct->setStatusTip(tr("Cascade Windows"));
 	QObject::connect(m_cascadeWindowsAct, SIGNAL(triggered()), this, SLOT(cascadeWindows()));
 
+	m_reloadDatasetAct = new QAction(QIcon(QPixmap(poca::plot::invertIcon)), tr("Reload dataset"), this);//
+	m_reloadDatasetAct->setStatusTip(tr("Reload dataset"));
+	QObject::connect(m_reloadDatasetAct, SIGNAL(triggered()), this, SLOT(reloadCurrentDataset()));
+
 	m_aboutAct = new QAction(QIcon("./images/about.png"), tr("About..."), this);
 	m_aboutAct->setStatusTip(tr("About..."));
 	QObject::connect(m_aboutAct, SIGNAL(triggered()), this, SLOT(aboutDialog()));
@@ -796,6 +800,7 @@ void MainWindow::createToolBars()
 	m_fileToolBar->addAction(m_pythonWidgetAct);
 #endif
 	m_fileToolBar->addAction(m_duplicateAct);
+	m_fileToolBar->addAction(m_reloadDatasetAct);
 	m_fileToolBar->addSeparator();
 	m_lastActionQuantifToolbar = m_fileToolBar->addSeparator();
 	m_fileToolBar->addAction(m_line2DROIAct);
@@ -3864,4 +3869,10 @@ void MainWindow::onExportAllObjects()
 		return;
 	poca::opengl::CameraInterface* cam = createWindows(obj);
 	engine->addCameraToObject(obj, cam);
+}
+
+void MainWindow::reloadCurrentDataset()
+{
+	if (m_currentMdi == NULL) return;
+	m_currentMdi->getWidget()->getObject()->notify("LoadObjCharacteristicsAllWidgets");
 }
