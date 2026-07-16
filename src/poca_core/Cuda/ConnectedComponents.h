@@ -84,6 +84,7 @@ template <class T>
 poca::core::ImageInterface* connectedComponnetsLabelingGPU(const T* _pixels, const T _thresholdMin, const T _thresholdMax, const uint32_t _w, const uint32_t _h, const uint32_t _d);
 template <class T>
 void run_face_connected_component_pipeline(T* binary, uint32_t* output_labels, int width, int height, int depth);
+void run_face_connected_component_by_value_pipeline(const uint32_t* values, uint32_t* output_labels, int width, int height, int depth);
 
 template <class T>
 __global__ void face_cc_kernel_2d_iteration(T* cclabels, uint32_t* changed, int width, int height);

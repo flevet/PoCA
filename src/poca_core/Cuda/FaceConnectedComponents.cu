@@ -6,6 +6,9 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 #include <Cuda/ConnectedComponents.h>
 
@@ -199,6 +202,36 @@ namespace {
 			return;
 		_labels[idx] = compressRoot(_labels, _labels[idx]);
 	}
+	__device__ void unionIfSameValue(const uint32_t* _values, uint32_t* _labels, const uint32_t _idx, const uint32_t _neighbor)
+	{
+		if (_values[_idx] == 0 || _values[_idx] != _values[_neighbor])
+			return;
+		unionRoots(_labels, _idx + 1, _neighbor + 1);
+	}
+
+	__global__ void initFaceLabelsByValue(const uint32_t* _values, uint32_t* _labels, const uint32_t _size)
+	{
+		const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+		if (idx >= _size)
+			return;
+		_labels[idx] = _values[idx] == 0 ? 0 : idx + 1;
+	}
+
+	__global__ void mergeFaceByValue3D(const uint32_t* _values, uint32_t* _labels, const int _width, const int _height, const int _depth)
+	{
+		const int x = blockIdx.x * blockDim.x + threadIdx.x;
+		const int y = blockIdx.y * blockDim.y + threadIdx.y;
+		const int z = blockIdx.z * blockDim.z + threadIdx.z;
+		if (x >= _width || y >= _height || z >= _depth)
+			return;
+		const uint32_t idx = IDX3(x, y, z, _width, _height);
+		if (x > 0)
+			unionIfSameValue(_values, _labels, idx, idx - 1);
+		if (y > 0)
+			unionIfSameValue(_values, _labels, idx, idx - static_cast<uint32_t>(_width));
+		if (z > 0)
+			unionIfSameValue(_values, _labels, idx, idx - static_cast<uint32_t>(_width) * static_cast<uint32_t>(_height));
+	}
 }
 
 void face_connected_component(thrust::device_vector<uint8_t>& d_binary, thrust::device_vector<uint32_t>& d_labels, int width, int height, int depth)
@@ -267,3 +300,36 @@ template __global__ void face_cc_kernel_3d_iteration(uint8_t* cclabels, uint32_t
 template __global__ void face_cc_kernel_3d_iteration(uint16_t* cclabels, uint32_t* changed, int width, int height, int depth);
 template __global__ void face_cc_kernel_3d_iteration(uint32_t* cclabels, uint32_t* changed, int width, int height, int depth);
 template __global__ void face_cc_kernel_3d_iteration(float* cclabels, uint32_t* changed, int width, int height, int depth);
+
+void run_face_connected_component_by_value_pipeline(const uint32_t* values, uint32_t* output_labels, const int width, const int height, const int depth)
+{
+	if (values == nullptr || output_labels == nullptr)
+		throw std::runtime_error("CUDA face-connected components by value received a null buffer.");
+	if (width <= 0 || height <= 0 || depth <= 0)
+		throw std::runtime_error("CUDA face-connected components by value requires positive dimensions.");
+	const size_t voxelCount = static_cast<size_t>(width) * static_cast<size_t>(height) * static_cast<size_t>(depth);
+	if (voxelCount > static_cast<size_t>(std::numeric_limits<uint32_t>::max()))
+		throw std::runtime_error("CUDA face-connected components by value exceeds uint32 indexing.");
+
+	thrust::device_vector<uint32_t> deviceValues(values, values + voxelCount);
+	thrust::device_vector<uint32_t> deviceLabels(voxelCount);
+	const dim3 initBlock(256);
+	const dim3 initGrid(static_cast<uint32_t>((voxelCount + initBlock.x - 1) / initBlock.x));
+	initFaceLabelsByValue<<<initGrid, initBlock>>>(thrust::raw_pointer_cast(deviceValues.data()), thrust::raw_pointer_cast(deviceLabels.data()), static_cast<uint32_t>(voxelCount));
+	const dim3 block(FACE_CC_BLOCK_X, FACE_CC_BLOCK_Y, FACE_CC_BLOCK_Z);
+	const dim3 grid(
+		(width + block.x - 1) / block.x,
+		(height + block.y - 1) / block.y,
+		(depth + block.z - 1) / block.z);
+	mergeFaceByValue3D<<<grid, block>>>(thrust::raw_pointer_cast(deviceValues.data()), thrust::raw_pointer_cast(deviceLabels.data()), width, height, depth);
+	compressFaceLabels<<<initGrid, initBlock>>>(thrust::raw_pointer_cast(deviceLabels.data()), static_cast<uint32_t>(voxelCount));
+	cudaError_t error = cudaGetLastError();
+	if (error != cudaSuccess)
+		throw std::runtime_error(std::string("CUDA face-connected components by value kernel launch failed: ") + cudaGetErrorString(error));
+	error = cudaDeviceSynchronize();
+	if (error != cudaSuccess)
+		throw std::runtime_error(std::string("CUDA face-connected components by value execution failed: ") + cudaGetErrorString(error));
+	error = cudaMemcpy(output_labels, thrust::raw_pointer_cast(deviceLabels.data()), voxelCount * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	if (error != cudaSuccess)
+		throw std::runtime_error(std::string("CUDA face-connected components by value result copy failed: ") + cudaGetErrorString(error));
+}
