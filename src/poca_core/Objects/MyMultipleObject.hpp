@@ -73,6 +73,7 @@ public:
 	void executeCommand(poca::core::CommandInfo*);
 	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
 	void executeCommand(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&);
+	poca::core::CommandInfo createCommand(const std::string&, const nlohmann::json&) override;
 
 	const poca::core::BoundingBox boundingBox() const;
 

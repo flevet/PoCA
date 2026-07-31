@@ -277,6 +277,14 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 	poca::core::CommandableObject::executeCommand(_ci, _context, _result);
 }
 
+poca::core::CommandInfo MyMultipleObject::createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters)
+{
+	poca::core::CommandInfo command = poca::core::MyObject::createCommand(_nameCommand, _parameters);
+	if (!command.empty())
+		return command;
+	return poca::core::CommandableObject::createCommand(_nameCommand, _parameters);
+}
+
 const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 {
 	poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
