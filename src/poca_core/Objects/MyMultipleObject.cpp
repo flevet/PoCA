@@ -515,6 +515,13 @@ void MyMultipleObject::attachObjectToHierarchyNode(const size_t _nodeIndex, cons
 	appendUnique(m_hierarchy[_nodeIndex].objectIndices, _objectIndex);
 }
 
+void MyMultipleObject::setHierarchyNodeMetadata(const size_t _nodeIndex, const std::map<std::string, std::string>& _metadata)
+{
+	if (_nodeIndex >= m_hierarchy.size())
+		throw std::out_of_range("Invalid hierarchy node index");
+	m_hierarchy[_nodeIndex].metadata = _metadata;
+}
+
 std::vector<size_t> MyMultipleObject::collectObjectIndicesForHierarchyNode(const size_t _nodeIndex, const bool _includeDescendants) const
 {
 	if (_nodeIndex >= m_hierarchy.size())

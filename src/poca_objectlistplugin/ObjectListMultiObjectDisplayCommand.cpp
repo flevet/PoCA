@@ -536,7 +536,10 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 	else if (_infos->nameCommand == "changeLUT") {
 		freeGPUMemory();
 	}
-	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
+	else if (_infos->nameCommand == "ellipsoidRendering") {
+		rebuild();
+	}
+	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature" || _infos->nameCommand == "selected") {
 		if (!updateFeatureBuffers())
 			freeGPUMemory();
 	}
@@ -593,7 +596,18 @@ bool ObjectListMultiObjectDisplayCommand::canBatch() const
 
 ObjectListDisplayCommand* ObjectListMultiObjectDisplayCommand::referenceDisplayCommand() const
 {
-	if (m_object == nullptr) return nullptr;
+	if (m_object == nullptr)
+		return nullptr;
+	poca::core::MyObjectInterface* child = m_object->currentObject();
+	poca::geometry::ObjectLists* lists = child != nullptr ?
+		dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
+	poca::geometry::ObjectListInterface* current = lists != nullptr ? lists->currentObjectList() : nullptr;
+	if (current != nullptr) {
+		ObjectListDisplayCommand* command = current->getCommand<ObjectListDisplayCommand>();
+		if (command != nullptr)
+			return command;
+	}
+
 	ObjectListDisplayCommand* reference = nullptr;
 	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
 		if (reference == nullptr)
@@ -743,7 +757,10 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 			}
 		}
 
-		if (objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
+		ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
+		const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
+			localDisplay->getParameter<bool>("ellipsoidRendering");
+		if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
 			m_hasEllipsoids = true;
 			const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
 			const std::vector<float>& major = objs->getMyData("major")->getData<float>();
@@ -792,11 +809,16 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	}
 	m_actualValueFeature = m_maxOriginalFeature;
 
-	poca::geometry::ObjectListInterface* reference = nullptr;
-	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
-		if (reference == nullptr)
-			reference = objs;
-	});
+	poca::core::MyObjectInterface* currentChild = m_object->currentObject();
+	poca::geometry::ObjectLists* currentLists = currentChild != nullptr ?
+		dynamic_cast<poca::geometry::ObjectLists*>(currentChild->getBasicComponent("ObjectLists")) : nullptr;
+	poca::geometry::ObjectListInterface* reference = currentLists != nullptr ? currentLists->currentObjectList() : nullptr;
+	if (reference == nullptr) {
+		forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
+			if (reference == nullptr)
+				reference = objs;
+		});
+	}
 	if (reference == nullptr)
 		return false;
 
@@ -1219,8 +1241,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
 	}
 
-	const bool ellipsoidRendering = _referenceCommand->getParameter<bool>("ellipsoidRendering");
-	if (ellipsoidRendering && !m_ellipsoidTransformBuffer.empty()) {
+	if (!m_ellipsoidTransformBuffer.empty()) {
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
 		glDisable(GL_CULL_FACE);
@@ -1437,7 +1458,10 @@ bool ObjectListMultiObjectDisplayCommand::updateFeatureBuffers()
 			lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
 		}
 
-		if (objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
+		ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
+		const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
+			localDisplay->getParameter<bool>("ellipsoidRendering");
+		if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
 			std::vector<float> localEllipsoidFeatures(objs->nbElements());
 			if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();

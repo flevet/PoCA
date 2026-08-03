@@ -35,6 +35,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 #include <Interfaces/MyObjectInterface.hpp>
 #include <Interfaces/CommandableObjectInterface.hpp>
@@ -50,6 +51,7 @@
 #include <Plot/Misc.h>
 #include <General/Engine.hpp>
 #include <OpenGL/RenderCommandContext.hpp>
+#include <Objects/MyMultipleObject.hpp>
 
 #include "ObjectListsWidget.hpp"
 #include "ObjectListDisplayCommand.hpp"
@@ -999,11 +1001,15 @@ void ObjectListsWidget::performAction(poca::core::MyObjectInterface* _obj, poca:
 void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poca::core::CommandInfo& _aspect)
 {
 	poca::core::MyObjectInterface* obj = dynamic_cast <poca::core::MyObjectInterface*> (_subject);
+	if (obj == nullptr)
+		return;
 	poca::core::MyObjectInterface* objOneColor = obj->currentObject();
 	m_object = obj;
 
+	if (objOneColor == nullptr)
+		return;
 	poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(objOneColor->getBasicComponent("ObjectLists"));
-	bool visible = (objOneColor != NULL && objOneColor->hasBasicComponent("ObjectLists") && bci->nbComponents() > 0);
+	bool visible = bci != nullptr && bci->nbComponents() > 0;
 	QTabWidget * tab = m_parentTab->findChild <QTabWidget*>("ObjectLists");
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
 	auto index = m_parentTab->currentIndex();
@@ -1017,6 +1023,22 @@ void ObjectListsWidget::update(poca::core::SubjectInterface* _subject, const poc
 		int maxSize = 20;
 		QHBoxLayout* layoutList = NULL;
 		size_t nbObjectList = bci->nbComponents();
+		MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(obj);
+		if (multipleObject != nullptr) {
+			std::vector<size_t> indices = multipleObject->selectedObjectIndices();
+			if (indices.empty()) {
+				indices.resize(multipleObject->nbColors());
+				for (size_t index = 0; index < indices.size(); index++)
+					indices[index] = index;
+			}
+			for (const size_t index : indices) {
+				poca::core::MyObjectInterface* child = index < multipleObject->nbColors() ? multipleObject->getObject(index) : nullptr;
+				poca::geometry::ObjectLists* childLists = child != nullptr ?
+					dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
+				if (childLists != nullptr)
+					nbObjectList = std::max(nbObjectList, childLists->nbComponents());
+			}
+		}
 		if (m_listButtons.empty()) {
 			layoutList = new QHBoxLayout;
 			layoutList->setContentsMargins(0, 0, 0, 0);
@@ -1232,17 +1254,60 @@ void ObjectListsWidget::changeListObject(QAbstractButton* _button)
 	int index = m_listButtonsGroup->id(_button);
 	if (m_object->nbColors() == 1 || (m_object->nbColors() > 1 && !engine->globalCommands())) {
 		poca::core::MyObjectInterface* objOneColor = m_object->currentObject();
-		poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(objOneColor->getBasicComponent("ObjectLists"));
-		if (!bci) return;
-		bci->setCurrentComponentIndex(index);
+		poca::geometry::ObjectLists* bci = objOneColor != nullptr ?
+			dynamic_cast<poca::geometry::ObjectLists*>(objOneColor->getBasicComponent("ObjectLists")) : nullptr;
+		if (bci != nullptr && index >= 0 && static_cast<size_t>(index) < bci->nbComponents())
+			bci->setCurrentComponentIndex(index);
+		else {
+			MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(m_object);
+			if (multipleObject == nullptr || !multipleObject->batchComponentRendering())
+				return;
+			std::vector<size_t> indices = multipleObject->selectedObjectIndices();
+			if (indices.empty()) {
+				indices.resize(multipleObject->nbColors());
+				for (size_t n = 0; n < indices.size(); n++)
+					indices[n] = n;
+			}
+			size_t firstEligible = multipleObject->nbColors();
+			for (const size_t n : indices) {
+				if (n >= multipleObject->nbColors())
+					continue;
+				poca::core::MyObjectInterface* child = multipleObject->getObject(n);
+				poca::geometry::ObjectLists* childLists = child != nullptr ?
+					dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
+				if (childLists != nullptr && index >= 0 && static_cast<size_t>(index) < childLists->nbComponents()) {
+					childLists->setCurrentComponentIndex(index);
+					firstEligible = n;
+					break;
+				}
+			}
+			if (firstEligible == multipleObject->nbColors())
+				return;
+			multipleObject->setCurrentObject(firstEligible);
+		}
 	}
 	else {
-		for (auto n = 0; n < m_object->nbColors(); n++) {
+		MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(m_object);
+		std::vector<size_t> indices = multipleObject != nullptr ? multipleObject->selectedObjectIndices() : std::vector<size_t>();
+		if (indices.empty()) {
+			indices.resize(m_object->nbColors());
+			for (size_t n = 0; n < indices.size(); n++)
+				indices[n] = n;
+		}
+		size_t firstEligible = m_object->nbColors();
+		for (const size_t n : indices) {
+			if (n >= m_object->nbColors())
+				continue;
 			auto obj = m_object->getObject(n);
 			poca::geometry::ObjectLists* bci = dynamic_cast<poca::geometry::ObjectLists*>(obj->getBasicComponent("ObjectLists"));
-			if (!bci) continue;
+			if (!bci || index < 0 || static_cast<size_t>(index) >= bci->nbComponents()) continue;
 			bci->setCurrentComponentIndex(index);
+			if (firstEligible == m_object->nbColors())
+				firstEligible = n;
 		}
+		if (firstEligible == m_object->nbColors())
+			return;
+		m_object->setCurrentObject(firstEligible);
 	}
 	m_object->notify("LoadObjCharacteristicsObjectListsWidget");
 	m_object->notifyAll("updateDisplay");

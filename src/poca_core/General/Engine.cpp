@@ -936,6 +936,11 @@ namespace poca::core {
 			return;
 
 		auto object = getTopObject(_bci);
+		const bool refreshBatchRenderer = _com->nameCommand == "changeLUT" ||
+			_com->nameCommand == "ellipsoidRendering" || _com->nameCommand == "histogram" ||
+			_com->nameCommand == "updateFeature" || _com->nameCommand == "selected" ||
+			_com->nameCommand == "updateTransform" || _com->nameCommand == "useVertexNormals" ||
+			_com->nameCommand == "freeGPU" || _com->nameCommand == "rebuildDisplay";
 		if (_com != nullptr && _com->nameCommand == "histogram" && _com->hasParameter("action")) {
 			const std::string action = _com->getParameter<std::string>("action");
 			if (action == "save" && !_com->hasParameter("dir") && object != NULL)
@@ -946,6 +951,8 @@ namespace poca::core {
 			if (object->nbColors() > 1) {
 				std::vector<size_t> indices;
 				MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);
+				BasicComponentList* sourceList = dynamic_cast<BasicComponentList*>(_bci);
+				const uint32_t sourceListIndex = sourceList != NULL ? sourceList->currentComponentIndex() : 0;
 				if (multipleObject != NULL && multipleObject->hasSelectedObjectIndices())
 					indices = multipleObject->selectedObjectIndices();
 				else {
@@ -959,10 +966,17 @@ namespace poca::core {
 					auto obj = object->getObject(n);
 					if (obj->hasBasicComponent(_bci->getName())) {
 						auto bc = obj->getBasicComponent(_bci->getName());
+						BasicComponentList* targetList = dynamic_cast<BasicComponentList*>(bc);
+						if (sourceList != NULL && (targetList == NULL || sourceListIndex >= targetList->nbComponents()))
+							continue;
+						if (targetList != NULL)
+							targetList->setCurrentComponentIndex(sourceListIndex);
 						CommandableObject* co = static_cast <CommandableObject*>(bc);
 						co->executeCommand(_com, _context, _result);
 					}
 				}
+				if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer)
+					multipleObject->poca::core::CommandableObject::executeCommand(_com, _context, _result);
 			}
 		}
 		else {
@@ -970,6 +984,9 @@ namespace poca::core {
 			//if (obj == NULL) return;
 			CommandableObject* co = static_cast <CommandableObject*>(_bci);
 			co->executeCommand(_com, _context, _result);
+			MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);
+			if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer)
+				multipleObject->poca::core::CommandableObject::executeCommand(_com, _context, _result);
 		}
 	}
 	

@@ -91,6 +91,7 @@ public:
 
 	const size_t nbColors() const { return m_colors.size(); }
 	poca::core::MyObjectInterface* getObject(const size_t _index) { return m_colors[_index]; }
+	const poca::core::MyObjectInterface* getObject(const size_t _index) const { return m_colors[_index]; }
 	poca::core::MyObjectInterface* currentObject() { return m_colors[m_currentColor]; }
 	size_t currentObjectID() const { return m_currentColor; }
 	void setCurrentObject(const size_t _idx) { m_currentColor = _idx; }
@@ -103,6 +104,7 @@ public:
 	void clearHierarchy();
 	size_t addHierarchyNode(const std::string&, const std::string& = "", int = -1);
 	void attachObjectToHierarchyNode(const size_t, const size_t);
+	void setHierarchyNodeMetadata(const size_t, const std::map<std::string, std::string>&);
 	const std::vector<HierarchyNode>& hierarchy() const { return m_hierarchy; }
 	std::vector<size_t> collectObjectIndicesForHierarchyNode(const size_t, const bool = true) const;
 	void setSelectedObjectIndices(const std::vector<size_t>&);
