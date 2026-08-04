@@ -464,11 +464,43 @@ namespace {
 			}
 		}
 	}
+
+	uint32_t maximumObjectListCount(MyMultipleObject* _object)
+	{
+		uint32_t count = 0;
+		if (_object == nullptr)
+			return count;
+		for (size_t objectIndex = 0; objectIndex < _object->nbColors(); objectIndex++) {
+			poca::core::MyObjectInterface* child = _object->getObject(objectIndex);
+			poca::geometry::ObjectLists* lists = child != nullptr ?
+				dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
+			if (lists != nullptr)
+				count = std::max(count, (uint32_t)lists->nbComponents());
+		}
+		return count;
+	}
+
+	template<typename F>
+	void forEachObjectListAtIndex(MyMultipleObject* _object, const uint32_t _listIndex, F&& _callback)
+	{
+		if (_object == nullptr)
+			return;
+		for (size_t objectIndex = 0; objectIndex < _object->nbColors(); objectIndex++) {
+			poca::core::MyObjectInterface* child = _object->getObject(objectIndex);
+			poca::geometry::ObjectLists* lists = child != nullptr ?
+				dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
+			if (lists == nullptr || _listIndex >= lists->nbComponents())
+				continue;
+			poca::geometry::ObjectListInterface* objs = dynamic_cast<poca::geometry::ObjectListInterface*>(lists->getObjectList(_listIndex));
+			if (objs != nullptr)
+				_callback(objectIndex, child, objs);
+		}
+	}
 }
 
 ObjectListMultiObjectDisplayCommand::ObjectListMultiObjectDisplayCommand(MyMultipleObject* _object)
 	: poca::opengl::BasicDisplayCommand(nullptr, "ObjectListMultiObjectDisplayCommand"), m_object(_object),
-	m_hasOutlinePoints(false), m_has2DOutlines(false), m_is3D(false), m_textureLutID(0),
+	m_hasOutlinePoints(false), m_has2DOutlines(false), m_is3D(false),
 	m_minOriginalFeature(0.f), m_maxOriginalFeature(1.f), m_actualValueFeature(1.f), m_objectModelTextureID(0)
 {
 	m_hasEllipsoids = false;
@@ -476,7 +508,7 @@ ObjectListMultiObjectDisplayCommand::ObjectListMultiObjectDisplayCommand(MyMulti
 
 ObjectListMultiObjectDisplayCommand::ObjectListMultiObjectDisplayCommand(const ObjectListMultiObjectDisplayCommand& _o)
 	: poca::opengl::BasicDisplayCommand(_o), m_object(_o.m_object), m_hasOutlinePoints(false), m_has2DOutlines(false),
-	m_is3D(false), m_textureLutID(0), m_minOriginalFeature(0.f), m_maxOriginalFeature(1.f), m_actualValueFeature(1.f), m_objectModelTextureID(0)
+	m_is3D(false), m_minOriginalFeature(0.f), m_maxOriginalFeature(1.f), m_actualValueFeature(1.f), m_objectModelTextureID(0)
 {
 	m_hasEllipsoids = false;
 }
@@ -594,28 +626,6 @@ bool ObjectListMultiObjectDisplayCommand::canBatch() const
 	return hasObjectListChild;
 }
 
-ObjectListDisplayCommand* ObjectListMultiObjectDisplayCommand::referenceDisplayCommand() const
-{
-	if (m_object == nullptr)
-		return nullptr;
-	poca::core::MyObjectInterface* child = m_object->currentObject();
-	poca::geometry::ObjectLists* lists = child != nullptr ?
-		dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists")) : nullptr;
-	poca::geometry::ObjectListInterface* current = lists != nullptr ? lists->currentObjectList() : nullptr;
-	if (current != nullptr) {
-		ObjectListDisplayCommand* command = current->getCommand<ObjectListDisplayCommand>();
-		if (command != nullptr)
-			return command;
-	}
-
-	ObjectListDisplayCommand* reference = nullptr;
-	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
-		if (reference == nullptr)
-			reference = objs->getCommand<ObjectListDisplayCommand>();
-	});
-	return reference;
-}
-
 bool ObjectListMultiObjectDisplayCommand::rebuild()
 {
 	freeGPUMemory();
@@ -634,172 +644,213 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	m_is3D = false;
 	m_hasEllipsoids = false;
 
-	forEachObjectList(m_object, [&](size_t objectIndex, poca::core::MyObjectInterface* child, poca::geometry::ObjectListInterface* objs) {
-		poca::core::HistogramInterface* histInterface = objs->getCurrentHistogram();
-		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
-		if (histogram == nullptr)
-			return;
-		const std::vector<float>& values = histogram->getValues();
-		const std::vector<bool>& selection = objs->getSelection();
+	const uint32_t listCount = maximumObjectListCount(m_object);
+	for (uint32_t listIndex = 0; listIndex < listCount; listIndex++) {
+		ListDrawRange range;
+		range.listIndex = listIndex;
+		range.pointFirst = points.size();
+		range.outlinePointFirst = outlinePoints.size();
+		range.triangleFirst = triangles.size();
+		range.lineFirst = lines.size();
+		range.skeletonFirst = skeletons.size();
+		range.linkFirst = links.size();
+		range.ellipsoidFirst = ellipsoidTransforms.size();
+		range.minOriginalFeature = std::numeric_limits<float>::max();
+		range.maxOriginalFeature = std::numeric_limits<float>::lowest();
+		poca::geometry::ObjectListInterface* reference = nullptr;
 
-		m_is3D = objs->dimension() == 3;
-		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
-		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
+		forEachObjectListAtIndex(m_object, listIndex, [&](size_t objectIndex, poca::core::MyObjectInterface* child, poca::geometry::ObjectListInterface* objs) {
+			ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
+			if (reference == nullptr) {
+				reference = objs;
+				range.displayCommand = localDisplay;
+			}
+			poca::core::HistogramInterface* histInterface = objs->getCurrentHistogram();
+			poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
+			if (histogram == nullptr)
+				return;
+			const std::vector<float>& values = histogram->getValues();
+			const std::vector<bool>& selection = objs->getSelection();
 
-		std::vector<poca::core::Vec3mf> localPoints;
-		objs->generateLocs(localPoints);
-		points.insert(points.end(), localPoints.begin(), localPoints.end());
-		pointObjectIndices.insert(pointObjectIndices.end(), localPoints.size(), (float)objectIndex);
-		std::vector<float> localPointFeatures;
-		if (objs->isHiLow()) {
-			float inter = histInterface->getMax() - histInterface->getMin();
-			float selectedValue = histInterface->getMin() + inter / 4.f;
-			float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-			objs->getLocsFeatureInSelectionHiLow(localPointFeatures, selection, selectedValue, notSelectedValue);
-		}
-		else {
-			objs->getLocsFeatureInSelection(localPointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		}
-		if (!objs->isSelected())
-			std::fill(localPointFeatures.begin(), localPointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		pointFeatures.insert(pointFeatures.end(), localPointFeatures.begin(), localPointFeatures.end());
+			range.is3D = objs->dimension() == 3;
+			m_is3D = range.is3D;
+			range.minOriginalFeature = std::min(range.minOriginalFeature, histInterface->getMin());
+			range.maxOriginalFeature = std::max(range.maxOriginalFeature, histInterface->getMax());
+			m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
+			m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
 
-		std::vector<poca::core::Vec3mf> localOutlinePoints;
-		objs->generateOutlineLocs(localOutlinePoints);
-		if (!localOutlinePoints.empty()) {
-			m_hasOutlinePoints = true;
-			outlinePoints.insert(outlinePoints.end(), localOutlinePoints.begin(), localOutlinePoints.end());
-			outlinePointObjectIndices.insert(outlinePointObjectIndices.end(), localOutlinePoints.size(), (float)objectIndex);
-			std::vector<float> localOutlinePointFeatures;
+			std::vector<poca::core::Vec3mf> localPoints;
+			objs->generateLocs(localPoints);
+			points.insert(points.end(), localPoints.begin(), localPoints.end());
+			pointObjectIndices.insert(pointObjectIndices.end(), localPoints.size(), (float)objectIndex);
+			std::vector<float> localPointFeatures;
 			if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-				objs->getOutlineLocsFeatureInSelectionHiLow(localOutlinePointFeatures, selection, selectedValue, notSelectedValue);
+				objs->getLocsFeatureInSelectionHiLow(localPointFeatures, selection, selectedValue, notSelectedValue);
 			}
 			else {
-				objs->getOutlineLocsFeatureInSelection(localOutlinePointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				objs->getLocsFeatureInSelection(localPointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			}
 			if (!objs->isSelected())
-				std::fill(localOutlinePointFeatures.begin(), localOutlinePointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			outlinePointFeatures.insert(outlinePointFeatures.end(), localOutlinePointFeatures.begin(), localOutlinePointFeatures.end());
-		}
+				std::fill(localPointFeatures.begin(), localPointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			pointFeatures.insert(pointFeatures.end(), localPointFeatures.begin(), localPointFeatures.end());
 
-		std::vector<poca::core::Vec3mf> localTriangles;
-		objs->generateTriangles(localTriangles);
-		triangles.insert(triangles.end(), localTriangles.begin(), localTriangles.end());
-		triangleObjectIndices.insert(triangleObjectIndices.end(), localTriangles.size(), (float)objectIndex);
-		std::vector<poca::core::Vec3mf> localNormals;
-		objs->generateNormals(localNormals);
-		triangleNormals.insert(triangleNormals.end(), localNormals.begin(), localNormals.end());
-		std::vector<float> localTriangleFeatures;
-		if (objs->isHiLow()) {
-			float inter = histInterface->getMax() - histInterface->getMin();
-			float selectedValue = histInterface->getMin() + inter / 4.f;
-			float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-			objs->getFeatureInSelectionHiLow(localTriangleFeatures, selection, selectedValue, notSelectedValue);
-		}
-		else {
-			objs->getFeatureInSelection(localTriangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		}
-		if (!objs->isSelected())
-			std::fill(localTriangleFeatures.begin(), localTriangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		triangleFeatures.insert(triangleFeatures.end(), localTriangleFeatures.begin(), localTriangleFeatures.end());
-
-		if (objs->dimension() == 2) {
-			std::vector<poca::core::Vec3mf> localLines;
-			objs->generateOutlines(localLines);
-			if (!localLines.empty()) {
-				m_has2DOutlines = true;
-				lines.insert(lines.end(), localLines.begin(), localLines.end());
-				lineObjectIndices.insert(lineObjectIndices.end(), localLines.size(), (float)objectIndex);
-				std::vector<float> localLineFeatures;
+			std::vector<poca::core::Vec3mf> localOutlinePoints;
+			objs->generateOutlineLocs(localOutlinePoints);
+			if (!localOutlinePoints.empty()) {
+				m_hasOutlinePoints = true;
+				outlinePoints.insert(outlinePoints.end(), localOutlinePoints.begin(), localOutlinePoints.end());
+				outlinePointObjectIndices.insert(outlinePointObjectIndices.end(), localOutlinePoints.size(), (float)objectIndex);
+				std::vector<float> localOutlinePointFeatures;
 				if (objs->isHiLow()) {
 					float inter = histInterface->getMax() - histInterface->getMin();
 					float selectedValue = histInterface->getMin() + inter / 4.f;
 					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-					objs->getOutlinesFeatureInSelectionHiLow(localLineFeatures, selection, selectedValue, notSelectedValue);
+					objs->getOutlineLocsFeatureInSelectionHiLow(localOutlinePointFeatures, selection, selectedValue, notSelectedValue);
 				}
 				else {
-					objs->getOutlinesFeatureInSelection(localLineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+					objs->getOutlineLocsFeatureInSelection(localOutlinePointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 				}
 				if (!objs->isSelected())
-					std::fill(localLineFeatures.begin(), localLineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-				lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
+					std::fill(localOutlinePointFeatures.begin(), localOutlinePointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				outlinePointFeatures.insert(outlinePointFeatures.end(), localOutlinePointFeatures.begin(), localOutlinePointFeatures.end());
 			}
-		}
 
-		if (objs->hasSkeletons()) {
-			poca::geometry::ObjectListMesh* omesh = dynamic_cast<poca::geometry::ObjectListMesh*>(objs);
-			if (omesh != nullptr) {
-				const poca::core::MyArrayVec3mf& localSkeletons = omesh->getSkeletons();
-				const poca::core::MyArrayVec3mf& localLinks = omesh->getLinks();
-				const std::vector<uint32_t>& firstSkeletons = localSkeletons.getFirstElements();
-				const std::vector<uint32_t>& firstLinks = localLinks.getFirstElements();
-				const std::vector<poca::core::Vec3mf>& skeletonData = localSkeletons.getData();
-				const std::vector<poca::core::Vec3mf>& linkData = localLinks.getData();
-				for (size_t idx = 0; idx + 1 < firstSkeletons.size(); idx++) {
-					const poca::core::Color4D color = deterministicColor(objectIndex, idx);
-					for (size_t cur = firstSkeletons[idx]; cur < firstSkeletons[idx + 1]; cur++) {
-						skeletons.push_back(skeletonData[cur]);
-						skeletonObjectIndices.push_back((float)objectIndex);
-						colorSkeletons.push_back(color);
-					}
-				}
-				for (size_t idx = 0; idx + 1 < firstLinks.size(); idx++) {
-					const poca::core::Color4D color = deterministicColor(objectIndex, idx);
-					for (size_t cur = firstLinks[idx]; cur < firstLinks[idx + 1]; cur++) {
-						links.push_back(linkData[cur]);
-						linkObjectIndices.push_back((float)objectIndex);
-						colorLinks.push_back(color);
-					}
-				}
-			}
-		}
-
-		ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
-		const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
-			localDisplay->getParameter<bool>("ellipsoidRendering");
-		if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
-			m_hasEllipsoids = true;
-			const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
-			const std::vector<float>& major = objs->getMyData("major")->getData<float>();
-			const std::vector<float>& minor = objs->getMyData("minor")->getData<float>();
-			const std::vector<float>& minor2 = objs->getMyData("minor2")->getData<float>();
-
-			std::vector<float> localEllipsoidFeatures(objs->nbElements());
+			std::vector<poca::core::Vec3mf> localTriangles;
+			objs->generateTriangles(localTriangles);
+			triangles.insert(triangles.end(), localTriangles.begin(), localTriangles.end());
+			triangleObjectIndices.insert(triangleObjectIndices.end(), localTriangles.size(), (float)objectIndex);
+			std::vector<poca::core::Vec3mf> localNormals;
+			objs->generateNormals(localNormals);
+			triangleNormals.insert(triangleNormals.end(), localNormals.begin(), localNormals.end());
+			std::vector<float> localTriangleFeatures;
 			if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-				for (size_t idx = 0; idx < objs->nbElements(); idx++)
-					localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
+				objs->getFeatureInSelectionHiLow(localTriangleFeatures, selection, selectedValue, notSelectedValue);
 			}
 			else {
-				for (size_t idx = 0; idx < objs->nbElements(); idx++)
-					localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+				objs->getFeatureInSelection(localTriangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			}
 			if (!objs->isSelected())
-				std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
+				std::fill(localTriangleFeatures.begin(), localTriangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			triangleFeatures.insert(triangleFeatures.end(), localTriangleFeatures.begin(), localTriangleFeatures.end());
 
-			for (size_t idx = 0; idx < objs->nbElements(); idx++) {
-				glm::mat4 matrix(1.f);
-				glm::mat3 rotation = glm::mat3(
-					axisPCA[idx][0].x(), axisPCA[idx][0].y(), axisPCA[idx][0].z(),
-					axisPCA[idx][1].x(), axisPCA[idx][1].y(), axisPCA[idx][1].z(),
-					axisPCA[idx][2].x(), axisPCA[idx][2].y(), axisPCA[idx][2].z());
-				poca::core::Vec3mf centroidTmp = objs->computeBarycenterElement((int)idx);
-				const glm::vec3 centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);
-				const glm::vec3 scales = glm::vec3(major[idx] / 2.f, minor[idx] / 2.f, minor2[idx] / 2.f);
-				matrix = glm::translate(matrix, centroid);
-				matrix *= glm::mat4(rotation);
-				matrix = glm::scale(matrix, scales);
-				ellipsoidTransforms.push_back(matrix);
-				ellipsoidObjectIndices.push_back((float)objectIndex);
+			if (objs->dimension() == 2) {
+				std::vector<poca::core::Vec3mf> localLines;
+				objs->generateOutlines(localLines);
+				if (!localLines.empty()) {
+					m_has2DOutlines = true;
+					lines.insert(lines.end(), localLines.begin(), localLines.end());
+					lineObjectIndices.insert(lineObjectIndices.end(), localLines.size(), (float)objectIndex);
+					std::vector<float> localLineFeatures;
+					if (objs->isHiLow()) {
+						float inter = histInterface->getMax() - histInterface->getMin();
+						float selectedValue = histInterface->getMin() + inter / 4.f;
+						float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+						objs->getOutlinesFeatureInSelectionHiLow(localLineFeatures, selection, selectedValue, notSelectedValue);
+					}
+					else {
+						objs->getOutlinesFeatureInSelection(localLineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+					}
+					if (!objs->isSelected())
+						std::fill(localLineFeatures.begin(), localLineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+					lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
+				}
 			}
+
+			if (objs->hasSkeletons()) {
+				poca::geometry::ObjectListMesh* omesh = dynamic_cast<poca::geometry::ObjectListMesh*>(objs);
+				if (omesh != nullptr) {
+					const poca::core::MyArrayVec3mf& localSkeletons = omesh->getSkeletons();
+					const poca::core::MyArrayVec3mf& localLinks = omesh->getLinks();
+					const std::vector<uint32_t>& firstSkeletons = localSkeletons.getFirstElements();
+					const std::vector<uint32_t>& firstLinks = localLinks.getFirstElements();
+					const std::vector<poca::core::Vec3mf>& skeletonData = localSkeletons.getData();
+					const std::vector<poca::core::Vec3mf>& linkData = localLinks.getData();
+					for (size_t idx = 0; idx + 1 < firstSkeletons.size(); idx++) {
+						const poca::core::Color4D color = deterministicColor(objectIndex, idx);
+						for (size_t cur = firstSkeletons[idx]; cur < firstSkeletons[idx + 1]; cur++) {
+							skeletons.push_back(skeletonData[cur]);
+							skeletonObjectIndices.push_back((float)objectIndex);
+							colorSkeletons.push_back(color);
+						}
+					}
+					for (size_t idx = 0; idx + 1 < firstLinks.size(); idx++) {
+						const poca::core::Color4D color = deterministicColor(objectIndex, idx);
+						for (size_t cur = firstLinks[idx]; cur < firstLinks[idx + 1]; cur++) {
+							links.push_back(linkData[cur]);
+							linkObjectIndices.push_back((float)objectIndex);
+							colorLinks.push_back(color);
+						}
+					}
+				}
+			}
+
+			const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
+				localDisplay->getParameter<bool>("ellipsoidRendering");
+			if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
+				m_hasEllipsoids = true;
+				const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
+				const std::vector<float>& major = objs->getMyData("major")->getData<float>();
+				const std::vector<float>& minor = objs->getMyData("minor")->getData<float>();
+				const std::vector<float>& minor2 = objs->getMyData("minor2")->getData<float>();
+
+				std::vector<float> localEllipsoidFeatures(objs->nbElements());
+				if (objs->isHiLow()) {
+					float inter = histInterface->getMax() - histInterface->getMin();
+					float selectedValue = histInterface->getMin() + inter / 4.f;
+					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
+				}
+				else {
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+				}
+				if (!objs->isSelected())
+					std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
+
+				for (size_t idx = 0; idx < objs->nbElements(); idx++) {
+					glm::mat4 matrix(1.f);
+					glm::mat3 rotation = glm::mat3(
+						axisPCA[idx][0].x(), axisPCA[idx][0].y(), axisPCA[idx][0].z(),
+						axisPCA[idx][1].x(), axisPCA[idx][1].y(), axisPCA[idx][1].z(),
+						axisPCA[idx][2].x(), axisPCA[idx][2].y(), axisPCA[idx][2].z());
+					poca::core::Vec3mf centroidTmp = objs->computeBarycenterElement((int)idx);
+					const glm::vec3 centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);
+					const glm::vec3 scales = glm::vec3(major[idx] / 2.f, minor[idx] / 2.f, minor2[idx] / 2.f);
+					matrix = glm::translate(matrix, centroid);
+					matrix *= glm::mat4(rotation);
+					matrix = glm::scale(matrix, scales);
+					ellipsoidTransforms.push_back(matrix);
+					ellipsoidObjectIndices.push_back((float)objectIndex);
+				}
+			}
+		});
+
+		range.pointCount = points.size() - range.pointFirst;
+		range.outlinePointCount = outlinePoints.size() - range.outlinePointFirst;
+		range.triangleCount = triangles.size() - range.triangleFirst;
+		range.lineCount = lines.size() - range.lineFirst;
+		range.skeletonCount = skeletons.size() - range.skeletonFirst;
+		range.linkCount = links.size() - range.linkFirst;
+		range.ellipsoidCount = ellipsoidTransforms.size() - range.ellipsoidFirst;
+		if (range.minOriginalFeature == std::numeric_limits<float>::max()) {
+			range.minOriginalFeature = 0.f;
+			range.maxOriginalFeature = 1.f;
 		}
-	});
+		if (reference != nullptr && range.displayCommand != nullptr &&
+			(range.pointCount != 0 || range.triangleCount != 0 || range.lineCount != 0 ||
+				range.skeletonCount != 0 || range.linkCount != 0 || range.ellipsoidCount != 0)) {
+			range.textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(reference->getPalette());
+			m_listDrawRanges.push_back(range);
+		}
+	}
 
 	if (triangles.empty() && points.empty())
 		return false;
@@ -809,20 +860,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	}
 	m_actualValueFeature = m_maxOriginalFeature;
 
-	poca::core::MyObjectInterface* currentChild = m_object->currentObject();
-	poca::geometry::ObjectLists* currentLists = currentChild != nullptr ?
-		dynamic_cast<poca::geometry::ObjectLists*>(currentChild->getBasicComponent("ObjectLists")) : nullptr;
-	poca::geometry::ObjectListInterface* reference = currentLists != nullptr ? currentLists->currentObjectList() : nullptr;
-	if (reference == nullptr) {
-		forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
-			if (reference == nullptr)
-				reference = objs;
-		});
-	}
-	if (reference == nullptr)
-		return false;
 
-	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(reference->getPalette());
 	if (!points.empty()) {
 		m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
 		m_locsFeatureBuffer.generateBuffer(pointFeatures.size(), 1, GL_FLOAT);
@@ -902,29 +940,49 @@ void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, co
 		if (!rebuild())
 			return;
 	}
-	ObjectListDisplayCommand* referenceCommand = referenceDisplayCommand();
-	if (referenceCommand == nullptr)
+	if (m_listDrawRanges.empty())
 		return;
 
-	drawElements(_cam, _ssao, referenceCommand);
+	drawElements(_cam, _ssao);
 	markComponentFamilyHandled(_result);
 }
 
-void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao, ObjectListDisplayCommand* _referenceCommand)
+void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
-	const bool pointRendering = _referenceCommand->getParameter<bool>("pointRendering");
-	const bool outlinePointRendering = _referenceCommand->getParameter<bool>("outlinePointRendering");
-	const bool shapeRendering = _referenceCommand->getParameter<bool>("shapeRendering");
-	const bool fill = _referenceCommand->getParameter<bool>("fill");
-	const bool displayBboxSelection = _referenceCommand->getParameter<bool>("bboxSelection");
-	const bool skeletonRendering = _referenceCommand->getParameter<bool>("skeletonRendering");
-	const bool linkRendering = _referenceCommand->getParameter<bool>("linkRendering");
-	const bool cullFaceActivated = _cam->cullFaceActivated();
-	const std::string cullFaceType = _referenceCommand->getParameter<std::string>("cullFaceType");
-	const float alpha = _referenceCommand->getParameter<float>("alpha");
-	const bool translucentRendering = _referenceCommand->hasParameter("translucentRendering") ? _referenceCommand->getParameter<bool>("translucentRendering") : false;
-	const bool useTranslucentMeshRendering = translucentRendering && m_is3D;
+	bool displayBboxSelection = false;
+	for (const ListDrawRange& range : m_listDrawRanges) {
+		if (range.displayCommand == nullptr)
+			continue;
+		displayBboxSelection = displayBboxSelection || range.displayCommand->getParameter<bool>("bboxSelection");
+		drawListRange(_cam, _ssao, range);
+	}
 
+	glDisable(GL_BLEND);
+	glDepthMask(GL_TRUE);
+	glDisable(GL_DEPTH_TEST);
+	if (m_idSelection >= 0 && displayBboxSelection && !m_boundingBoxSelection.empty()) {
+		GLfloat bkColor[4];
+		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
+		const poca::core::Color4D color = poca::core::contrastColor(
+			poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
+		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
+	}
+}
+
+void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _cam, const bool _ssao, const ListDrawRange& range)
+{
+	ObjectListDisplayCommand* referenceCommand = range.displayCommand;
+	const bool pointRendering = referenceCommand->getParameter<bool>("pointRendering");
+	const bool outlinePointRendering = referenceCommand->getParameter<bool>("outlinePointRendering");
+	const bool shapeRendering = referenceCommand->getParameter<bool>("shapeRendering");
+	const bool fill = referenceCommand->getParameter<bool>("fill");
+	const bool skeletonRendering = referenceCommand->getParameter<bool>("skeletonRendering");
+	const bool linkRendering = referenceCommand->getParameter<bool>("linkRendering");
+	const bool cullFaceActivated = _cam->cullFaceActivated();
+	const std::string cullFaceType = referenceCommand->getParameter<std::string>("cullFaceType");
+	const float alpha = referenceCommand->getParameter<float>("alpha");
+	const bool translucentRendering = referenceCommand->hasParameter("translucentRendering") ? referenceCommand->getParameter<bool>("translucentRendering") : false;
+	const bool useTranslucentMeshRendering = translucentRendering && range.is3D;
 	if (useTranslucentMeshRendering) {
 		glEnable(GL_DEPTH_TEST);
 		glDepthMask(GL_FALSE);
@@ -952,8 +1010,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		glActiveTexture(GL_TEXTURE0);
 	};
 
-	if (pointRendering && !m_pointBuffer.empty()) {
-		const uint32_t pointSize = _referenceCommand->getParameter<uint32_t>("pointSizeGL");
+	if (pointRendering && range.pointCount != 0) {
+		const uint32_t pointSize = referenceCommand->getParameter<uint32_t>("pointSizeGL");
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
 		glEnable(GL_BLEND);
@@ -963,10 +1021,10 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->setMat4("model", cameraModel);
 		shader->setMat4("projection", proj);
 		shader->setInt("lutTexture", 0);
-		shader->setFloat("minFeatureValue", m_minOriginalFeature);
-		shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
-		shader->setFloat("currentMinFeatureValue", m_minOriginalFeature);
-		shader->setFloat("currentMaxFeatureValue", m_maxOriginalFeature);
+		shader->setFloat("minFeatureValue", range.minOriginalFeature);
+		shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
+		shader->setFloat("currentMinFeatureValue", range.minOriginalFeature);
+		shader->setFloat("currentMaxFeatureValue", range.maxOriginalFeature);
 		shader->setBool("scaleLUT", false);
 		shader->setBool("useSpecialColors", false);
 		shader->setBool("screenRadius", false);
@@ -975,14 +1033,14 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 		shader->setBool("clip", _cam->clip());
-		shader->setFloat("nbPoints", m_pointBuffer.getNbElements());
+		shader->setFloat("nbPoints", (float)range.pointCount);
 		shader->setVec3("light_position", _cam->getEye());
 		shader->setBool("applyUniformColor", false);
 		glm::vec3 orientation = glm::normalize(_cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f));
 		shader->setBool("activatedCulling", false);
 		shader->setVec3("cameraForward", orientation);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+		glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 		bindObjectModels(shader);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(2);
@@ -990,7 +1048,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		m_pointBuffer.bindBuffer(0);
 		m_locsFeatureBuffer.bindBuffer(2);
 		m_pointObjectIndexBuffer.bindBuffer(4);
-		glDrawArrays(m_pointBuffer.getMode(), 0, m_pointBuffer.getNbElements());
+		glDrawArrays(m_pointBuffer.getMode(), (GLint)range.pointFirst, (GLsizei)range.pointCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
 		glDisableVertexAttribArray(4);
@@ -1000,8 +1058,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->release();
 	}
 
-	if (outlinePointRendering && !m_outlinePointBuffer.empty()) {
-		const uint32_t pointSize = _referenceCommand->getParameter<uint32_t>("pointSizeGL");
+	if (outlinePointRendering && range.outlinePointCount != 0) {
+		const uint32_t pointSize = referenceCommand->getParameter<uint32_t>("pointSizeGL");
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
 		glEnable(GL_BLEND);
@@ -1011,10 +1069,10 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->setMat4("model", cameraModel);
 		shader->setMat4("projection", proj);
 		shader->setInt("lutTexture", 0);
-		shader->setFloat("minFeatureValue", m_minOriginalFeature);
-		shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
-		shader->setFloat("currentMinFeatureValue", m_minOriginalFeature);
-		shader->setFloat("currentMaxFeatureValue", m_maxOriginalFeature);
+		shader->setFloat("minFeatureValue", range.minOriginalFeature);
+		shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
+		shader->setFloat("currentMinFeatureValue", range.minOriginalFeature);
+		shader->setFloat("currentMaxFeatureValue", range.maxOriginalFeature);
 		shader->setBool("scaleLUT", false);
 		shader->setBool("useSpecialColors", false);
 		shader->setBool("screenRadius", false);
@@ -1023,14 +1081,14 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 		shader->setBool("clip", _cam->clip());
-		shader->setFloat("nbPoints", m_outlinePointBuffer.getNbElements());
+		shader->setFloat("nbPoints", (float)range.outlinePointCount);
 		shader->setVec3("light_position", _cam->getEye());
 		shader->setBool("applyUniformColor", false);
 		glm::vec3 orientation = glm::normalize(_cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f));
 		shader->setBool("activatedCulling", false);
 		shader->setVec3("cameraForward", orientation);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+		glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 		bindObjectModels(shader);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(2);
@@ -1038,7 +1096,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		m_outlinePointBuffer.bindBuffer(0);
 		m_outlineLocsFeatureBuffer.bindBuffer(2);
 		m_outlinePointObjectIndexBuffer.bindBuffer(4);
-		glDrawArrays(m_outlinePointBuffer.getMode(), 0, m_outlinePointBuffer.getNbElements());
+		glDrawArrays(m_outlinePointBuffer.getMode(), (GLint)range.outlinePointFirst, (GLsizei)range.outlinePointCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
 		glDisableVertexAttribArray(4);
@@ -1051,7 +1109,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	if (cullFaceType == "front") glCullFace(GL_FRONT);
 	else glCullFace(GL_BACK);
 
-	if (skeletonRendering && !m_skeletonBuffer.empty())
+	if (skeletonRendering && range.skeletonCount != 0)
 	{
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSimpleShader");
 		shader->use();
@@ -1071,7 +1129,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		m_skeletonBuffer.bindBuffer(0);
 		m_colorSkeletonBuffer.bindBuffer(3);
 		m_skeletonObjectIndexBuffer.bindBuffer(5);
-		glDrawArrays(m_skeletonBuffer.getMode(), 0, m_skeletonBuffer.getNbElements());
+		glDrawArrays(m_skeletonBuffer.getMode(), (GLint)range.skeletonFirst, (GLsizei)range.skeletonCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
 		glDisableVertexAttribArray(5);
@@ -1080,7 +1138,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->release();
 	}
 
-	if (linkRendering && !m_linksBuffer.empty())
+	if (linkRendering && range.linkCount != 0)
 	{
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSimpleShader");
 		shader->use();
@@ -1100,7 +1158,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		m_linksBuffer.bindBuffer(0);
 		m_colorLinksBuffer.bindBuffer(3);
 		m_linkObjectIndexBuffer.bindBuffer(5);
-		glDrawArrays(m_linksBuffer.getMode(), 0, m_linksBuffer.getNbElements());
+		glDrawArrays(m_linksBuffer.getMode(), (GLint)range.linkFirst, (GLsizei)range.linkCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
 		glDisableVertexAttribArray(5);
@@ -1111,8 +1169,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
 	glEnable(GL_BLEND);
-	if (shapeRendering && !m_triangleBuffer.empty()) {
-		if (m_is3D) {
+	if (shapeRendering && range.triangleCount != 0) {
+		if (range.is3D) {
 			if (useTranslucentMeshRendering)
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			poca::opengl::Shader* shader = useTranslucentMeshRendering ? _cam->getShader("multiObjectObjectRenderingTranslucentShader") : (_ssao ? _cam->getShader("multiObjectObjectRenderingSSAOShader") : _cam->getShader("multiObjectObjectRenderingShader"));
@@ -1124,8 +1182,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			shader->setMat4("view", view);
 			shader->setMat4("projection", proj);
 			shader->setInt("lutTexture", 0);
-			shader->setFloat("minFeatureValue", m_minOriginalFeature);
-			shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+			shader->setFloat("minFeatureValue", range.minOriginalFeature);
+			shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
 			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 			shader->setBool("clip", _cam->clip());
@@ -1137,7 +1195,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			shader->setFloat("alpha", alpha);
 			shader->setBool("applyUniformColor", false);
 			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+			glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 			bindObjectModels(shader);
 			glEnableVertexAttribArray(0);
 			glEnableVertexAttribArray(1);
@@ -1147,7 +1205,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			m_triangleNormalBuffer.bindBuffer(1);
 			m_triangleFeatureBuffer.bindBuffer(2);
 			m_triangleObjectIndexBuffer.bindBuffer(3);
-			glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+			glDrawArrays(m_triangleBuffer.getMode(), (GLint)range.triangleFirst, (GLsizei)range.triangleCount);
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(1);
 			glDisableVertexAttribArray(2);
@@ -1165,14 +1223,14 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			shader->setFloat("alpha", alpha);
 			shader->setBool("useSpecialColors", false);
 			shader->setInt("lutTexture", 0);
-			shader->setFloat("minFeatureValue", m_minOriginalFeature);
-			shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+			shader->setFloat("minFeatureValue", range.minOriginalFeature);
+			shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
 			shader->setBool("clip", _cam->clip());
 			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 			shader->setBool("activatedCulling", false);
 			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+			glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 			bindObjectModels(shader);
 			glEnableVertexAttribArray(0);
 			glEnableVertexAttribArray(2);
@@ -1180,7 +1238,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			m_triangleBuffer.bindBuffer(0);
 			m_triangleFeatureBuffer.bindBuffer(2);
 			m_triangleObjectIndexBuffer.bindBuffer(5);
-			glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+			glDrawArrays(m_triangleBuffer.getMode(), (GLint)range.triangleFirst, (GLsizei)range.triangleCount);
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(2);
 			glDisableVertexAttribArray(5);
@@ -1189,7 +1247,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			releaseObjectModels();
 			shader->release();
 		}
-		else if (!m_lineBuffer.empty()) {
+		else if (range.lineCount != 0) {
 			glDisable(GL_DEPTH_TEST);
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 			poca::opengl::Shader* shader = _cam->getShader("multiObjectLineRenderingShader");
@@ -1203,15 +1261,15 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			shader->setFloat("antialias", 1.f);
 			shader->setBool("useSingleColor", false);
 			shader->setInt("lutTexture", 0);
-			shader->setFloat("minFeatureValue", m_minOriginalFeature);
-			shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+			shader->setFloat("minFeatureValue", range.minOriginalFeature);
+			shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
 			shader->setBool("clip", _cam->clip());
 			shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 			shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 			shader->setBool("activatedCulling", false);
 			shader->setVec3("cameraForward", glm::normalize(_cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f)));
 			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+			glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 			bindObjectModels(shader);
 			glEnableVertexAttribArray(0);
 			glEnableVertexAttribArray(2);
@@ -1219,7 +1277,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			m_lineBuffer.bindBuffer(0);
 			m_lineFeatureBuffer.bindBuffer(2);
 			m_lineObjectIndexBuffer.bindBuffer(3);
-			glDrawArrays(m_lineBuffer.getMode(), 0, m_lineBuffer.getNbElements());
+			glDrawArrays(m_lineBuffer.getMode(), (GLint)range.lineFirst, (GLsizei)range.lineCount);
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(2);
 			glDisableVertexAttribArray(3);
@@ -1233,15 +1291,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
 	glDisable(GL_DEPTH_TEST);
-	if (m_idSelection >= 0 && displayBboxSelection && !m_boundingBoxSelection.empty()) {
-		GLfloat bkColor[4];
-		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
-		const poca::core::Color4D color = poca::core::contrastColor(
-			poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
-		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
-	}
 
-	if (!m_ellipsoidTransformBuffer.empty()) {
+	if (range.ellipsoidCount != 0) {
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
 		glDisable(GL_CULL_FACE);
@@ -1252,8 +1303,8 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		shader->setMat4("model", cameraModel);
 		shader->setBool("useSingleColor", false);
 		shader->setInt("lutTexture", 0);
-		shader->setFloat("minFeatureValue", m_minOriginalFeature);
-		shader->setFloat("maxFeatureValue", m_maxOriginalFeature);
+		shader->setFloat("minFeatureValue", range.minOriginalFeature);
+		shader->setFloat("maxFeatureValue", range.maxOriginalFeature);
 		shader->setVec4v("clipPlanes", _cam->getClipPlanes());
 		shader->setInt("nbClipPlanes", _cam->nbClippingPlanes());
 		shader->setBool("clip", _cam->clip());
@@ -1262,7 +1313,7 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		poca::opengl::QuadSingleGLBuffer<float>& ellipsoidBuffer = helper->getEllipsoidBuffer();
 		poca::opengl::QuadSingleGLBuffer<GLushort>& ellipsoidIndicesBuffer = helper->getEllipsoidIndicesBuffer();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_1D, m_textureLutID);
+		glBindTexture(GL_TEXTURE_1D, range.textureLutID);
 		bindObjectModels(shader);
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -1270,15 +1321,15 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		glEnableVertexAttribArray(10);
 		ellipsoidBuffer.bindBuffer(0);
 		ellipsoidIndicesBuffer.bindBuffer(1);
-		m_ellipsoidFeatureBuffer.bindBuffer(9);
+		m_ellipsoidFeatureBuffer.bindBuffer(9, (void*)(range.ellipsoidFirst * sizeof(float)));
 		glVertexAttribDivisor(9, 1);
-		m_ellipsoidObjectIndexBuffer.bindBuffer(10);
+		m_ellipsoidObjectIndexBuffer.bindBuffer(10, (void*)(range.ellipsoidFirst * sizeof(float)));
 		glVertexAttribDivisor(10, 1);
 		for (int i = 0; i < 4; i++) {
 			glEnableVertexAttribArray(5 + i);
-			m_ellipsoidTransformBuffer.bindBuffer(5 + i, (void*)(4 * sizeof(float) * i));
+			m_ellipsoidTransformBuffer.bindBuffer(5 + i, (void*)(range.ellipsoidFirst * sizeof(glm::mat4) + 4 * sizeof(float) * i));
 		}
-		glDrawElementsInstanced(GL_QUADS, helper->getNbIndicesUnitSphere(), GL_UNSIGNED_SHORT, 0, (GLsizei)m_ellipsoidTransformBuffer.getNbElements());
+		glDrawElementsInstanced(GL_QUADS, helper->getNbIndicesUnitSphere(), GL_UNSIGNED_SHORT, 0, (GLsizei)range.ellipsoidCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(9);
@@ -1336,7 +1387,7 @@ void ObjectListMultiObjectDisplayCommand::freeGPUMemory()
 		glDeleteTextures(1, &m_objectModelTextureID);
 		m_objectModelTextureID = 0;
 	}
-	m_textureLutID = 0;
+	m_listDrawRanges.clear();
 }
 
 bool ObjectListMultiObjectDisplayCommand::updateObjectModelBuffer()
@@ -1385,100 +1436,110 @@ bool ObjectListMultiObjectDisplayCommand::updateFeatureBuffers()
 	m_minOriginalFeature = std::numeric_limits<float>::max();
 	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
 
-	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
-		poca::core::HistogramInterface* histInterface = objs->getCurrentHistogram();
-		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
-		if (histogram == nullptr)
-			return;
+	for (ListDrawRange& range : m_listDrawRanges) {
+		range.minOriginalFeature = std::numeric_limits<float>::max();
+		range.maxOriginalFeature = std::numeric_limits<float>::lowest();
+		forEachObjectListAtIndex(m_object, range.listIndex, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
+			poca::core::HistogramInterface* histInterface = objs->getCurrentHistogram();
+			poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
+			if (histogram == nullptr)
+				return;
 
-		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
-		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
-		const std::vector<float>& values = histogram->getValues();
-		const std::vector<bool>& selection = objs->getSelection();
+			range.minOriginalFeature = std::min(range.minOriginalFeature, histInterface->getMin());
+			range.maxOriginalFeature = std::max(range.maxOriginalFeature, histInterface->getMax());
+			m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
+			m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
+			const std::vector<float>& values = histogram->getValues();
+			const std::vector<bool>& selection = objs->getSelection();
 
-		std::vector<float> localPointFeatures;
-		if (objs->isHiLow()) {
-			float inter = histInterface->getMax() - histInterface->getMin();
-			float selectedValue = histInterface->getMin() + inter / 4.f;
-			float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-			objs->getLocsFeatureInSelectionHiLow(localPointFeatures, selection, selectedValue, notSelectedValue);
-		}
-		else {
-			objs->getLocsFeatureInSelection(localPointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		}
-		if (!objs->isSelected())
-			std::fill(localPointFeatures.begin(), localPointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		pointFeatures.insert(pointFeatures.end(), localPointFeatures.begin(), localPointFeatures.end());
-
-		std::vector<poca::core::Vec3mf> localOutlinePoints;
-		objs->generateOutlineLocs(localOutlinePoints);
-		if (!localOutlinePoints.empty()) {
-			std::vector<float> localOutlinePointFeatures;
+			std::vector<float> localPointFeatures;
 			if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-				objs->getOutlineLocsFeatureInSelectionHiLow(localOutlinePointFeatures, selection, selectedValue, notSelectedValue);
+				objs->getLocsFeatureInSelectionHiLow(localPointFeatures, selection, selectedValue, notSelectedValue);
 			}
 			else {
-				objs->getOutlineLocsFeatureInSelection(localOutlinePointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				objs->getLocsFeatureInSelection(localPointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			}
 			if (!objs->isSelected())
-				std::fill(localOutlinePointFeatures.begin(), localOutlinePointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			outlinePointFeatures.insert(outlinePointFeatures.end(), localOutlinePointFeatures.begin(), localOutlinePointFeatures.end());
-		}
+				std::fill(localPointFeatures.begin(), localPointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			pointFeatures.insert(pointFeatures.end(), localPointFeatures.begin(), localPointFeatures.end());
 
-		std::vector<float> localTriangleFeatures;
-		if (objs->isHiLow()) {
-			float inter = histInterface->getMax() - histInterface->getMin();
-			float selectedValue = histInterface->getMin() + inter / 4.f;
-			float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-			objs->getFeatureInSelectionHiLow(localTriangleFeatures, selection, selectedValue, notSelectedValue);
-		}
-		else {
-			objs->getFeatureInSelection(localTriangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		}
-		if (!objs->isSelected())
-			std::fill(localTriangleFeatures.begin(), localTriangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-		triangleFeatures.insert(triangleFeatures.end(), localTriangleFeatures.begin(), localTriangleFeatures.end());
+			std::vector<poca::core::Vec3mf> localOutlinePoints;
+			objs->generateOutlineLocs(localOutlinePoints);
+			if (!localOutlinePoints.empty()) {
+				std::vector<float> localOutlinePointFeatures;
+				if (objs->isHiLow()) {
+					float inter = histInterface->getMax() - histInterface->getMin();
+					float selectedValue = histInterface->getMin() + inter / 4.f;
+					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+					objs->getOutlineLocsFeatureInSelectionHiLow(localOutlinePointFeatures, selection, selectedValue, notSelectedValue);
+				}
+				else {
+					objs->getOutlineLocsFeatureInSelection(localOutlinePointFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				}
+				if (!objs->isSelected())
+					std::fill(localOutlinePointFeatures.begin(), localOutlinePointFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				outlinePointFeatures.insert(outlinePointFeatures.end(), localOutlinePointFeatures.begin(), localOutlinePointFeatures.end());
+			}
 
-		if (objs->dimension() == 2) {
-			std::vector<float> localLineFeatures;
+			std::vector<float> localTriangleFeatures;
 			if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-				objs->getOutlinesFeatureInSelectionHiLow(localLineFeatures, selection, selectedValue, notSelectedValue);
+				objs->getFeatureInSelectionHiLow(localTriangleFeatures, selection, selectedValue, notSelectedValue);
 			}
 			else {
-				objs->getOutlinesFeatureInSelection(localLineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				objs->getFeatureInSelection(localTriangleFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			}
 			if (!objs->isSelected())
-				std::fill(localLineFeatures.begin(), localLineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
-		}
+				std::fill(localTriangleFeatures.begin(), localTriangleFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			triangleFeatures.insert(triangleFeatures.end(), localTriangleFeatures.begin(), localTriangleFeatures.end());
 
-		ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
-		const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
-			localDisplay->getParameter<bool>("ellipsoidRendering");
-		if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
-			std::vector<float> localEllipsoidFeatures(objs->nbElements());
-			if (objs->isHiLow()) {
-				float inter = histInterface->getMax() - histInterface->getMin();
-				float selectedValue = histInterface->getMin() + inter / 4.f;
-				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-				for (size_t idx = 0; idx < objs->nbElements(); idx++)
-					localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
+			if (objs->dimension() == 2) {
+				std::vector<float> localLineFeatures;
+				if (objs->isHiLow()) {
+					float inter = histInterface->getMax() - histInterface->getMin();
+					float selectedValue = histInterface->getMin() + inter / 4.f;
+					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+					objs->getOutlinesFeatureInSelectionHiLow(localLineFeatures, selection, selectedValue, notSelectedValue);
+				}
+				else {
+					objs->getOutlinesFeatureInSelection(localLineFeatures, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				}
+				if (!objs->isSelected())
+					std::fill(localLineFeatures.begin(), localLineFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				lineFeatures.insert(lineFeatures.end(), localLineFeatures.begin(), localLineFeatures.end());
 			}
-			else {
-				for (size_t idx = 0; idx < objs->nbElements(); idx++)
-					localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+
+			ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
+			const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
+				localDisplay->getParameter<bool>("ellipsoidRendering");
+			if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
+				std::vector<float> localEllipsoidFeatures(objs->nbElements());
+				if (objs->isHiLow()) {
+					float inter = histInterface->getMax() - histInterface->getMin();
+					float selectedValue = histInterface->getMin() + inter / 4.f;
+					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
+				}
+				else {
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+				}
+				if (!objs->isSelected())
+					std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
 			}
-			if (!objs->isSelected())
-				std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
+		});
+		if (range.minOriginalFeature == std::numeric_limits<float>::max()) {
+			range.minOriginalFeature = 0.f;
+			range.maxOriginalFeature = 1.f;
 		}
-	});
+	}
 
 	if (m_minOriginalFeature == std::numeric_limits<float>::max()) {
 		m_minOriginalFeature = 0.f;

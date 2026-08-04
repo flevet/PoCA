@@ -35,21 +35,37 @@ public:
 	void freeGPUMemory();
 
 protected:
+	struct ListDrawRange;
 	bool canBatch() const;
 	bool rebuild();
 	bool updateFeatureBuffers();
 	bool refreshTransformBuffers();
 	bool updateObjectModelBuffer();
-	ObjectListDisplayCommand* referenceDisplayCommand() const;
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
-	void drawElements(poca::opengl::Camera*, const bool, ObjectListDisplayCommand*);
+	void drawElements(poca::opengl::Camera*, const bool);
+	void drawListRange(poca::opengl::Camera*, const bool, const ListDrawRange&);
 	void generateBoundingBoxSelection(const int);
 
 protected:
+	struct ListDrawRange {
+		uint32_t listIndex = 0;
+		ObjectListDisplayCommand* displayCommand = nullptr;
+		GLuint textureLutID = 0;
+		GLfloat minOriginalFeature = 0.f, maxOriginalFeature = 1.f;
+		bool is3D = false;
+		size_t pointFirst = 0, pointCount = 0;
+		size_t outlinePointFirst = 0, outlinePointCount = 0;
+		size_t triangleFirst = 0, triangleCount = 0;
+		size_t lineFirst = 0, lineCount = 0;
+		size_t skeletonFirst = 0, skeletonCount = 0;
+		size_t linkFirst = 0, linkCount = 0;
+		size_t ellipsoidFirst = 0, ellipsoidCount = 0;
+	};
+
 	MyMultipleObject* m_object;
 	bool m_hasOutlinePoints, m_has2DOutlines, m_is3D;
-	GLuint m_textureLutID;
 	GLfloat m_minOriginalFeature, m_maxOriginalFeature, m_actualValueFeature;
+	std::vector<ListDrawRange> m_listDrawRanges;
 
 	poca::opengl::PointSingleGLBuffer<poca::core::Vec3mf> m_pointBuffer, m_outlinePointBuffer;
 	poca::opengl::FeatureSingleGLBuffer<float> m_locsFeatureBuffer, m_outlineLocsFeatureBuffer, m_pointObjectIndexBuffer, m_outlinePointObjectIndexBuffer;
