@@ -35,7 +35,12 @@
 #include <gl/GL.h>
 #include <QtGui/QOpenGLFramebufferObject>
 
+#include <stdexcept>
+
 #include <Geometry/ObjectLists.hpp>
+#include <Geometry/ObjectListDelaunay.hpp>
+#include <Geometry/ObjectListMesh.hpp>
+#include <Geometry/ObjectListPolygon.hpp>
 #include <Geometry/DelaunayTriangulation.hpp>
 #include <OpenGL/Shader.hpp>
 #include <OpenGL/RenderCommandContext.hpp>
@@ -49,6 +54,63 @@
 #include <General/Palette.hpp>
 
 #include "NearestLocsMultiColorCommands.hpp"
+
+namespace {
+	struct SurfaceVertices {
+		uint32_t dimension{ 0 };
+		std::vector <poca::core::Vec3mf> vertices;
+		std::vector <size_t> firstVertices;
+	};
+
+	SurfaceVertices groupedSurfaceVertices(const poca::geometry::ObjectListInterface* _objects, const poca::core::MyArrayVec3mf& _surface, const uint32_t _dimension)
+	{
+		const std::vector <uint32_t>& firsts = _surface.getFirstElements();
+		if (firsts.size() != _objects->nbElements() + 1)
+			throw std::runtime_error("Nearest-neighbor surface groups do not match the object count.");
+
+		SurfaceVertices surface;
+		surface.dimension = _dimension;
+		surface.vertices = _surface.getData();
+		surface.firstVertices.assign(firsts.begin(), firsts.end());
+		return surface;
+	}
+
+	SurfaceVertices surfaceVertices(const poca::geometry::ObjectListInterface* _objects)
+	{
+		if (_objects == nullptr)
+			throw std::invalid_argument("Nearest-neighbor surface extraction requires an object list.");
+
+		if (const auto* polygons = dynamic_cast<const poca::geometry::ObjectListPolygon*>(_objects))
+			return groupedSurfaceVertices(polygons, polygons->getOutlinesObjects(), 2);
+
+		if (const auto* delaunay = dynamic_cast<const poca::geometry::ObjectListDelaunay*>(_objects)) {
+			if (delaunay->dimension() == 2)
+				return groupedSurfaceVertices(delaunay, delaunay->getOutlinesObjects(), 2);
+			if (delaunay->dimension() == 3)
+				return groupedSurfaceVertices(delaunay, delaunay->getTrianglesObjects(), 3);
+			throw std::runtime_error("Nearest-neighbor computation found an ObjectListDelaunay with an unsupported dimension.");
+		}
+
+		if (const auto* meshes = dynamic_cast<const poca::geometry::ObjectListMesh*>(_objects)) {
+			const std::vector <Surface_mesh_3_double>& objectMeshes = meshes->getMeshes();
+			if (objectMeshes.size() != meshes->nbElements())
+				throw std::runtime_error("Nearest-neighbor mesh groups do not match the object count.");
+
+			SurfaceVertices surface;
+			surface.dimension = 3;
+			surface.firstVertices.reserve(objectMeshes.size() + 1);
+			surface.firstVertices.push_back(0);
+			for (const Surface_mesh_3_double& mesh : objectMeshes) {
+				for (const Point_3_double& point : mesh.points())
+					surface.vertices.emplace_back(static_cast<float>(point.x()), static_cast<float>(point.y()), static_cast<float>(point.z()));
+				surface.firstVertices.push_back(surface.vertices.size());
+			}
+			return surface;
+		}
+
+		throw std::runtime_error("Nearest-neighbor computation supports only ObjectListPolygon, ObjectListDelaunay, and ObjectListMesh.");
+	}
+}
 
 NearestLocsMultiColorCommands::NearestLocsMultiColorCommands(poca::core::MyObject* _obj) :poca::core::Command("NearestLocsMultiColorCommands")
 {
@@ -235,13 +297,19 @@ void NearestLocsMultiColorCommands::computeNearestLocMulticolor(const bool _inRO
 		}
 	}
 
-	const std::vector <poca::core::Vec3mf>& outlines = reference->getOutlinesObjects().getData();
+	const SurfaceVertices referenceSurface = surfaceVertices(reference);
+	const SurfaceVertices objectSurfaces = surfaceVertices(objects);
+	if (referenceSurface.dimension != objectSurfaces.dimension)
+		throw std::runtime_error("Nearest-neighbor computation requires both object lists to have the same dimension.");
+	if (referenceSurface.vertices.empty())
+		throw std::runtime_error("Nearest-neighbor reference surface has no vertices.");
+
 	KdPointCloud_3D_D cloud;
-	cloud.m_pts.resize(outlines.size());
-	for (size_t n = 0; n < outlines.size(); n++) {
-		cloud.m_pts[n].m_x = outlines[n].x();
-		cloud.m_pts[n].m_y = outlines[n].y();
-		cloud.m_pts[n].m_z = outlines[n].z();
+	cloud.m_pts.resize(referenceSurface.vertices.size());
+	for (size_t n = 0; n < referenceSurface.vertices.size(); n++) {
+		cloud.m_pts[n].m_x = referenceSurface.vertices[n].x();
+		cloud.m_pts[n].m_y = referenceSurface.vertices[n].y();
+		cloud.m_pts[n].m_z = referenceSurface.vertices[n].z();
 	}
 	KdTree_3D_double kdTree(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
 	kdTree.buildIndex();
@@ -256,8 +324,8 @@ void NearestLocsMultiColorCommands::computeNearestLocMulticolor(const bool _inRO
 
 	std::vector <poca::core::Vec3mf> lineToCentroids, lineToOutlines;
 
-	const std::vector <poca::core::Vec3mf>& outObjects = objects->getOutlinesObjects().getData();
-	const std::vector <uint32_t>& firsts = objects->getOutlinesObjects().getFirstElements();
+	const std::vector <poca::core::Vec3mf>& outObjects = objectSurfaces.vertices;
+	const std::vector <size_t>& firsts = objectSurfaces.firstVertices;
 	for (auto n = 0; n < objects->nbElements(); n++) {
 		if (!m_selectedObjects[n]) continue;
 
