@@ -367,11 +367,11 @@ void NearestLocsMultiColorCommands::computeNearestLocMulticolor(const bool _inRO
 
 	if (m_histogramCentroids != NULL)
 		delete m_histogramCentroids;
-	m_histogramCentroids = new poca::core::Histogram(m_distancesToCentroids, m_distancesToCentroids.size(), false);
+	m_histogramCentroids = new poca::core::Histogram(m_distancesToCentroids, false);
 
 	if (m_histogramOutlines != NULL)
 		delete m_histogramOutlines;
-	m_histogramOutlines = new poca::core::Histogram(m_distancesToOutlines, m_distancesToOutlines.size(), false);
+	m_histogramOutlines = new poca::core::Histogram(m_distancesToOutlines, false);
 
 	createDisplay(lineToCentroids, lineToOutlines);
 
