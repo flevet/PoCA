@@ -71,7 +71,7 @@ protected:
 	poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_pointBuffer;
 	poca::opengl::PointSingleGLBuffer <float> m_selectedPointBuffer;
 
-	poca::core::PaletteInterface* m_palette;
+	poca::core::PaletteInterface* m_palette{ NULL };
 
 	QOpenGLFramebufferObject* m_fbo;
 	int m_wImage, m_hImage;

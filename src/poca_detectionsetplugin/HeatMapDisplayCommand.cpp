@@ -48,7 +48,7 @@
 #include "HeatMapDisplayCommand.hpp"
 #include "DetectionSetDisplayCommand.hpp"
 
-HeatMapDisplayCommand::HeatMapDisplayCommand(poca::geometry::DetectionSet* _ds) :poca::core::Command("HeatMapDisplayCommand"), m_fbo(NULL), m_dc(NULL)
+HeatMapDisplayCommand::HeatMapDisplayCommand(poca::geometry::DetectionSet* _ds) :poca::core::Command("HeatMapDisplayCommand"), m_fbo(NULL), m_dc(NULL), m_palette(NULL)
 {
 	m_dset = _ds;
 
@@ -80,7 +80,8 @@ HeatMapDisplayCommand::HeatMapDisplayCommand(const HeatMapDisplayCommand& _o) : 
 
 HeatMapDisplayCommand::~HeatMapDisplayCommand()
 {
-	delete m_palette;
+	if(m_palette != NULL)
+		delete m_palette;
 }
 
 poca::core::Command* HeatMapDisplayCommand::copy()
