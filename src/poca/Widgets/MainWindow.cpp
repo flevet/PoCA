@@ -2544,7 +2544,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 			const auto nameComp = json.begin().key();
 			if (nameComp == "MainWindow") {
 				runMacro(json[nameComp]);
-				if (currentMdi == NULL && m_currentMdi != NULL)
+				if (m_currentMdi != NULL && (currentMdi == NULL || currentMdi != m_currentMdi) )
 					currentMdi = m_currentMdi;
 			}
 			else if (nameComp == "PythonWidget") {
