@@ -45,6 +45,7 @@ public:
 
 	void execute(poca::core::CommandInfo*);
 	void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&);
+	void execute(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&) override;
 	poca::core::Command* copy();
 	const poca::core::CommandInfos saveParameters() const {
 		return poca::core::CommandInfos();
