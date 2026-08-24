@@ -663,9 +663,6 @@ namespace poca::core {
 		
 		if (engine->verbose())
 			std::cout << __LINE__ << std::endl;
-		if (m_volumes.empty()) return;
-		if (engine->verbose())
-			std::cout << __LINE__ << std::endl;
 		std::vector <float> labels(m_volumes.size());
 		std::iota(std::begin(labels), std::end(labels), 1);
 		addFeature("label", poca::core::generateDataWithLog(labels));
