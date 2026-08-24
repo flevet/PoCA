@@ -31,6 +31,7 @@
 */
 
 #include <algorithm>
+#include <chrono>
 #include <execution>
 #include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/poisson_surface_reconstruction.h>
@@ -61,6 +62,16 @@
 #include "BasicComputation.hpp"
 #include "DelaunayTriangulation.hpp"
 #include "../Interfaces/ObjectFeaturesFactoryInterface.hpp"
+
+namespace {
+	constexpr const char* marchingCubeDebugType = "debugMarchingCube";
+	using MarchingCubeClock = std::chrono::steady_clock;
+
+	long long marchingCubeElapsedMilliseconds(const MarchingCubeClock::time_point& _start)
+	{
+		return std::chrono::duration_cast<std::chrono::milliseconds>(MarchingCubeClock::now() - _start).count();
+	}
+}
 
 namespace PMP = CGAL::Polygon_mesh_processing;
 typedef CGAL::Mean_curvature_flow_skeletonization<Surface_mesh_3_double> Skeletonization;
@@ -149,6 +160,9 @@ namespace poca::geometry {
 		:ObjectListInterface("ObjectListMesh"), m_repair(_repair), m_applyRemeshing(_applyRemeshing), m_targetLength(_target), m_iterations(_it)
 	{
 		poca::core::Engine* engine = poca::core::Engine::instance();
+		const bool debugMarchingCube = engine->verbose(marchingCubeDebugType);
+		const auto debugTotalStart = MarchingCubeClock::now();
+		auto debugStageStart = debugTotalStart;
 		
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
 		std::vector <uint32_t> nbTriPoCA = { 0 }, nbEdges = { 0 }, nbLinks = { 0 };
@@ -188,12 +202,21 @@ namespace poca::geometry {
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC;
 		if (engine->verbose())
 			std::cout << "\r" << std::string(10, '*') << " ; time elapsed for creating all CGAL meshes ->  " << elapsed << " seconds.                                       " << std::endl;
+		if (debugMarchingCube)
+			std::cout << "[debugMarchingCube] ObjectListMesh CGAL mesh construction: " << marchingCubeElapsedMilliseconds(debugStageStart)
+				<< " ms (candidates=" << _allVertices.size() << ", accepted=" << m_meshes.size() << ")" << std::endl;
+
+		debugStageStart = MarchingCubeClock::now();
 		m_edgesSkeleton.initialize(edges, nbEdges);
 		m_linksSkeleton.initialize(links, nbLinks);
 		m_triangles.initialize(triPoCA, nbTriPoCA);
+		if (debugMarchingCube)
+			std::cout << "[debugMarchingCube] ObjectListMesh rendering-array initialization: " << marchingCubeElapsedMilliseconds(debugStageStart)
+				<< " ms (expanded triangle vertices=" << m_triangles.nbData() << ")" << std::endl;
 
 		m_centroids.resize(m_meshes.size());
 
+		debugStageStart = MarchingCubeClock::now();
 		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& mesh : m_meshes) {
@@ -212,12 +235,21 @@ namespace poca::geometry {
 			}
 			nbPts.push_back(m_xs.size());
 		}
+		if (debugMarchingCube)
+			std::cout << "[debugMarchingCube] ObjectListMesh vertex-coordinate and bounding-box extraction: " << marchingCubeElapsedMilliseconds(debugStageStart)
+				<< " ms (mesh vertices=" << m_xs.size() << ")" << std::endl;
+
+		debugStageStart = MarchingCubeClock::now();
 		points.resize(nbPts.back());
 		std::iota(std::begin(points), std::end(points), 0);
 		m_locs.initialize(points, nbPts);
 		m_outlineLocs = m_locs;
+		if (debugMarchingCube)
+			std::cout << "[debugMarchingCube] ObjectListMesh localization-array construction: " << marchingCubeElapsedMilliseconds(debugStageStart)
+				<< " ms (localizations=" << m_locs.nbData() << ")" << std::endl;
 
 		//Create area feature
+		debugStageStart = MarchingCubeClock::now();
 		std::vector <float> nbLocs(m_locs.nbElements(), 0.f);
 		for (size_t i = 0; i < m_triangles.nbElements(); i++)
 			nbLocs[i] = m_locs.nbElementsObject(i);
@@ -240,7 +272,11 @@ namespace poca::geometry {
 				poca::core::Vec3mf(resPCA[12], resPCA[13], resPCA[14]) };
 		}
 		delete factory;
+		if (debugMarchingCube)
+			std::cout << "[debugMarchingCube] ObjectListMesh PCA feature computation: " << marchingCubeElapsedMilliseconds(debugStageStart)
+				<< " ms (objects=" << m_locs.nbElements() << ")" << std::endl;
 
+		debugStageStart = MarchingCubeClock::now();
 		std::vector <float> ids(m_locs.nbElements());
 		std::iota(std::begin(ids), std::end(ids), 1);
 
@@ -262,6 +298,10 @@ namespace poca::geometry {
 		setCurrentHistogramType("volume");
 		forceRegenerateSelection();
 		m_centroid = m_bbox.centroid();
+		if (debugMarchingCube) {
+			std::cout << "[debugMarchingCube] ObjectListMesh histogram/selection construction: " << marchingCubeElapsedMilliseconds(debugStageStart) << " ms" << std::endl;
+			std::cout << "[debugMarchingCube] ObjectListMesh total construction: " << marchingCubeElapsedMilliseconds(debugTotalStart) << " ms" << std::endl;
+		}
 	}
 
 	ObjectListMesh::ObjectListMesh(std::vector <std::vector <Point_3_double>>& _allVertices, std::vector < std::vector <std::vector <std::size_t>>>& _allTriangles, const bool _repair, const bool _applyRemeshing, const double _target, const uint32_t _it)
@@ -1072,26 +1112,10 @@ namespace poca::geometry {
 			PMP::isotropic_remeshing(faces(mesh), _target_edge_length, mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 
-	void ObjectListMesh::subdivide(const uint32_t _nb_iter, const bool _repair)
+	void ObjectListMesh::subdivide(const uint32_t _nb_iter)
 	{
-		for (auto& mesh : m_meshes) {
-			if(!_repair)
-				CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
-			else {
-				CGAL::Polygon_mesh_processing::orient(mesh);
-				CGAL::Polygon_mesh_processing::stitch_borders(mesh);
-				CGAL::Polygon_mesh_processing::remove_isolated_vertices(mesh);
-				CGAL::Polygon_mesh_processing::remove_degenerate_faces(mesh);
-				CGAL::Polygon_mesh_processing::triangulate_faces(mesh);
-
-				// If still open, prefer Loop; if closed, Sqrt3:
-				bool closed = true; for (auto e : edges(mesh)) if (is_border(e, mesh)) { closed = false; break; }
-				if (closed)
-					CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
-				else
-					CGAL::Subdivision_method_3::Loop_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
-			}
-		}
+		for (auto& mesh : m_meshes)
+			CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 
 	poca::geometry::ObjectListInterface* ObjectListMesh::exportSelectedObjects(const std::set<int>& _selection) const

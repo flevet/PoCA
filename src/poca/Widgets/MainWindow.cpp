@@ -466,6 +466,12 @@ void MainWindow::createActions()
 	m_debugGizmoAct->setStatusTip(tr("Print transform gizmo diagnostics"));
 	QObject::connect(m_debugGizmoAct, SIGNAL(toggled(bool)), this, SLOT(toggleDebugGizmo(bool)));
 
+	m_debugMarchingCubeAct = new QAction(tr("debugMarchingCube"), this);
+	m_debugMarchingCubeAct->setCheckable(true);
+	m_debugMarchingCubeAct->setChecked(engine->hasVerboseType("debugMarchingCube"));
+	m_debugMarchingCubeAct->setStatusTip(tr("Print marching-cubes pipeline timing diagnostics"));
+	QObject::connect(m_debugMarchingCubeAct, SIGNAL(toggled(bool)), this, SLOT(toggleDebugMarchingCube(bool)));
+
 	m_cropAct = new QAction(QIcon("./images/crop.png"), tr("&Crop"), this);
 	m_cropAct->setCheckable(true);
 	m_cropAct->setChecked(false);
@@ -592,6 +598,7 @@ void MainWindow::createMenus()
 	verboseMenu->addSeparator();
 	verboseMenu->addAction(m_debugPyramidalRenderingAct);
 	verboseMenu->addAction(m_debugGizmoAct);
+	verboseMenu->addAction(m_debugMarchingCubeAct);
 	verboseMenu->addAction(m_addVerboseTypeAct);
 	verboseMenu->addAction(m_clearVerboseTypesAct);
 	preferencesMenu->addAction(m_performanceWidgetAct);
@@ -703,6 +710,8 @@ void MainWindow::addVerboseType()
 		m_debugPyramidalRenderingAct->setChecked(true);
 	else if (trimmed == "debugGizmo")
 		m_debugGizmoAct->setChecked(true);
+	else if (trimmed == "debugMarchingCube")
+		m_debugMarchingCubeAct->setChecked(true);
 }
 
 void MainWindow::clearVerboseTypes()
@@ -710,6 +719,7 @@ void MainWindow::clearVerboseTypes()
 	poca::core::Engine::instance()->clearVerboseTypes();
 	m_debugPyramidalRenderingAct->setChecked(false);
 	m_debugGizmoAct->setChecked(false);
+	m_debugMarchingCubeAct->setChecked(false);
 }
 
 void MainWindow::toggleDebugPyramidalRendering(bool _enabled)
@@ -728,6 +738,15 @@ void MainWindow::toggleDebugGizmo(bool _enabled)
 		engine->addVerboseType("debugGizmo");
 	else
 		engine->removeVerboseType("debugGizmo");
+}
+
+void MainWindow::toggleDebugMarchingCube(bool _enabled)
+{
+	poca::core::Engine* engine = poca::core::Engine::instance();
+	if (_enabled)
+		engine->addVerboseType("debugMarchingCube");
+	else
+		engine->removeVerboseType("debugMarchingCube");
 }
 
 void MainWindow::registerTests()
@@ -2544,7 +2563,7 @@ void MainWindow::runMacro(std::vector<nlohmann::json> _macro, bool _onAllOpenedF
 			const auto nameComp = json.begin().key();
 			if (nameComp == "MainWindow") {
 				runMacro(json[nameComp]);
-				if (m_currentMdi != NULL && (currentMdi == NULL || currentMdi != m_currentMdi) )
+				if (currentMdi == NULL && m_currentMdi != NULL)
 					currentMdi = m_currentMdi;
 			}
 			else if (nameComp == "PythonWidget") {

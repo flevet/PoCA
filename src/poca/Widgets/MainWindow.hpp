@@ -176,6 +176,7 @@ private slots:
 	void togglePerformanceWidget(bool);
 	void toggleDebugPyramidalRendering(bool);
 	void toggleDebugGizmo(bool);
+	void toggleDebugMarchingCube(bool);
 
 	void reloadCurrentDataset();
 
@@ -216,7 +217,7 @@ private:
 	QAction* m_cropAct, * m_xyAct, * m_xzAct, * m_yzAct;
 	QAction* m_datasetAssemblerAct;
 	QAction* m_pythonWidgetAct{ nullptr };
-	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct;
+	QAction* m_verboseAct, * m_addVerboseTypeAct, * m_clearVerboseTypesAct, * m_palettesAct, * m_debugPyramidalRenderingAct, * m_debugGizmoAct, * m_debugMarchingCubeAct;
 	QAction* m_reloadDatasetAct;
 	QAction* m_performanceWidgetAct{ nullptr };
 	QTabWidget * m_tabWidget;
