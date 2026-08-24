@@ -30,6 +30,10 @@ namespace poca::opengl {
 		poca::opengl::Camera* camera = nullptr;
 	};
 
+	struct DeferImageListOverlays {
+		bool defer = false;
+	};
+
 	struct RenderedComponentFamilies {
 		std::vector<std::string> componentNames;
 	};
