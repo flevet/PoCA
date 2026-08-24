@@ -30,6 +30,10 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/linear_least_squares_fitting_2.h>
 #include <CGAL/linear_least_squares_fitting_3.h>
@@ -45,6 +49,35 @@
 #ifndef M_PI
 #define M_PI       3.14159265358979323846
 #endif
+
+namespace {
+	constexpr bool useStreamingPCAStatistics = true;
+
+	class RunningPopulationStandardDeviation {
+	public:
+		void add(const float _value)
+		{
+			m_count++;
+			const double delta = static_cast<double>(_value) - m_mean;
+			m_mean += delta / static_cast<double>(m_count);
+			const double updatedDelta = static_cast<double>(_value) - m_mean;
+			m_sumSquaredDifferences += delta * updatedDelta;
+		}
+
+		double standardDeviation() const
+		{
+			if (m_count == 0)
+				return 0.;
+			const double variance = m_sumSquaredDifferences / static_cast<double>(m_count);
+			return std::sqrt(std::max(0., variance));
+		}
+
+	private:
+		std::size_t m_count{ 0 };
+		double m_mean{ 0. };
+		double m_sumSquaredDifferences{ 0. };
+	};
+}
 
 namespace poca::geometry {
 	typedef CGAL::Simple_cartesian< double >  Kernel;
@@ -204,23 +237,37 @@ namespace poca::geometry {
 			KernelPlane3D(centroid, thirdLine.point(10), majorAxisLine.point(10)),
 			KernelPlane3D(centroid, perpendicularLine.point(10), majorAxisLine.point(10))
 		};
-		std::vector <float> distanceToPlanes[3] = { std::vector <float>(points.size()),
-			std::vector <float>(points.size()),
-			std::vector <float>(points.size())
-		};
-		for (int n = 0; n < points.size(); n++) {
-			for (unsigned int i = 0; i < 3; i++) {
-				KernelPoint3D proj = planes[i].projection(points[n]);
-				distanceToPlanes[i][n] = sqrt(CGAL::squared_distance(proj, points[n]));
-			}
-		}
-
-		double rapport = 2.35; 
+		double rapport = 2.35;
 		double sizes[3];
-		poca::core::ArrayStatistics stats[3];
-		for (unsigned int i = 0; i < 3; i++) {
-			stats[i] = poca::core::ArrayStatistics::generateArrayStatistics(distanceToPlanes[i], points.size());
-			sizes[i] = rapport * stats[i].getData(poca::core::ArrayStatistics::StdDev);
+		if (useStreamingPCAStatistics) {
+			RunningPopulationStandardDeviation distanceStatistics[3];
+			for (int n = 0; n < points.size(); n++) {
+				for (unsigned int i = 0; i < 3; i++) {
+					KernelPoint3D proj = planes[i].projection(points[n]);
+					const float distance = sqrt(CGAL::squared_distance(proj, points[n]));
+					distanceStatistics[i].add(distance);
+				}
+			}
+			for (unsigned int i = 0; i < 3; i++)
+				sizes[i] = rapport * distanceStatistics[i].standardDeviation();
+		}
+		else {
+			std::vector <float> distanceToPlanes[3] = { std::vector <float>(points.size()),
+				std::vector <float>(points.size()),
+				std::vector <float>(points.size())
+			};
+			for (int n = 0; n < points.size(); n++) {
+				for (unsigned int i = 0; i < 3; i++) {
+					KernelPoint3D proj = planes[i].projection(points[n]);
+					distanceToPlanes[i][n] = sqrt(CGAL::squared_distance(proj, points[n]));
+				}
+			}
+
+			poca::core::ArrayStatistics stats[3];
+			for (unsigned int i = 0; i < 3; i++) {
+				stats[i] = poca::core::ArrayStatistics::generateArrayStatistics(distanceToPlanes[i], points.size());
+				sizes[i] = rapport * stats[i].getData(poca::core::ArrayStatistics::StdDev);
+			}
 		}
 
 		unsigned int idx[3] = { 0, 1, 2 };
