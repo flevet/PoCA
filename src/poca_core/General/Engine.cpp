@@ -415,11 +415,21 @@ namespace poca::core {
 
 	poca::core::MyObjectInterface* Engine::loadDataAndCreateObject(const QString& _filename, poca::core::CommandInfo* _command)
 	{
+		QFileInfo finfo(_filename);
+		if (!finfo.exists())
+			return NULL;
+		for (LoaderInterface* loader : m_loadersFile) {
+			if (!poca::core::utils::isExtensionInList(finfo.suffix(), loader->extensions()))
+				continue;
+			poca::core::MyObjectInterface* object = loader->loadObject(_filename, _command);
+			if (object != NULL)
+				return object;
+		}
+
 		poca::core::BasicComponentInterface* bci = loadData(_filename, _command);
 		if (bci == NULL)
 			return NULL;
 
-		QFileInfo finfo(_filename);
 		poca::core::MyObject* wobj = new poca::core::MyObject();
 		wobj->setDir(finfo.absolutePath().toStdString());
 		wobj->setName(finfo.completeBaseName().toStdString());

@@ -41,6 +41,7 @@ namespace poca {
 	namespace core {
 		class CommandInfo;
 		class BasicComponentInterface;
+		class MyObjectInterface;
 		class Engine;
 	}
 };
@@ -53,6 +54,8 @@ public:
     virtual poca::core::BasicComponentInterface* loadData(const QString&, poca::core::CommandInfo* = NULL) = 0;
 	virtual QStringList extensions() const = 0;
 	virtual void setSingletons(poca::core::Engine*) = 0;
+	// Whole-dataset formats can override this instead of manufacturing a BasicComponent wrapper.
+	virtual poca::core::MyObjectInterface* loadObject(const QString&, poca::core::CommandInfo* = NULL) { return nullptr; }
 };
 
 
