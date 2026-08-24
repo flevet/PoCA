@@ -954,8 +954,17 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		if (range.displayCommand == nullptr)
 			continue;
 		displayBboxSelection = displayBboxSelection || range.displayCommand->getParameter<bool>("bboxSelection");
-		drawListRange(_cam, _ssao, range);
 	}
+	auto drawPass = [this, _cam, _ssao](const bool _transparent) {
+		for (const ListDrawRange& range : m_listDrawRanges) {
+			if (range.displayCommand == nullptr || usesTransparentMeshPass(range) != _transparent)
+				continue;
+			drawListRange(_cam, _ssao, range);
+		}
+	};
+	// Populate the depth buffer with every opaque list before blending any transparent mesh.
+	drawPass(false);
+	drawPass(true);
 
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
@@ -967,6 +976,16 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
 		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
 	}
+}
+
+bool ObjectListMultiObjectDisplayCommand::usesTransparentMeshPass(const ListDrawRange& _range) const
+{
+	if (_range.displayCommand == nullptr || _range.triangleCount == 0 || !_range.displayCommand->getParameter<bool>("shapeRendering"))
+		return false;
+	const float alpha = _range.displayCommand->getParameter<float>("alpha");
+	const bool translucentRendering = _range.displayCommand->hasParameter("translucentRendering") ?
+		_range.displayCommand->getParameter<bool>("translucentRendering") : false;
+	return alpha < 1.f || (translucentRendering && _range.is3D);
 }
 
 void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _cam, const bool _ssao, const ListDrawRange& range)
@@ -983,18 +1002,16 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	const float alpha = referenceCommand->getParameter<float>("alpha");
 	const bool translucentRendering = referenceCommand->hasParameter("translucentRendering") ? referenceCommand->getParameter<bool>("translucentRendering") : false;
 	const bool useTranslucentMeshRendering = translucentRendering && range.is3D;
-	if (useTranslucentMeshRendering) {
-		glEnable(GL_DEPTH_TEST);
-		glDepthMask(GL_FALSE);
+	const bool transparentMeshPass = usesTransparentMeshPass(range);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDepthMask(GL_TRUE);
+	if (useTranslucentMeshRendering)
 		glDisable(GL_CULL_FACE);
-	}
-	else {
-		if (alpha < 1.f) glDisable(GL_DEPTH_TEST);
-		else glEnable(GL_DEPTH_TEST);
-		glDepthMask(GL_TRUE);
-		if (cullFaceActivated) glEnable(GL_CULL_FACE);
-		else glDisable(GL_CULL_FACE);
-	}
+	else if (cullFaceActivated)
+		glEnable(GL_CULL_FACE);
+	else
+		glDisable(GL_CULL_FACE);
 	glDisable(GL_BLEND);
 	glCullFace(GL_BACK);
 
@@ -1015,6 +1032,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
 		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		shader->use();
 		shader->setMat4("MVP", proj * view * cameraModel);
 		shader->setMat4("view", view);
@@ -1056,6 +1074,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		releaseObjectModels();
 		shader->release();
+		glDisable(GL_BLEND);
 	}
 
 	if (outlinePointRendering && range.outlinePointCount != 0) {
@@ -1063,6 +1082,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
 		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		shader->use();
 		shader->setMat4("MVP", proj * view * cameraModel);
 		shader->setMat4("view", view);
@@ -1104,6 +1124,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		releaseObjectModels();
 		shader->release();
+		glDisable(GL_BLEND);
 	}
 
 	if (cullFaceType == "front") glCullFace(GL_FRONT);
@@ -1168,11 +1189,16 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	}
 
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
-	glEnable(GL_BLEND);
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(transparentMeshPass ? GL_FALSE : GL_TRUE);
+	if (transparentMeshPass) {
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	}
+	else
+		glDisable(GL_BLEND);
 	if (shapeRendering && range.triangleCount != 0) {
 		if (range.is3D) {
-			if (useTranslucentMeshRendering)
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			poca::opengl::Shader* shader = useTranslucentMeshRendering ? _cam->getShader("multiObjectObjectRenderingTranslucentShader") : (_ssao ? _cam->getShader("multiObjectObjectRenderingSSAOShader") : _cam->getShader("multiObjectObjectRenderingShader"));
 			glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
 			glm::vec3 pos(orientation + _cam->getCenter());
