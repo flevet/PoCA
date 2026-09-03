@@ -5,11 +5,16 @@
 #include <thrust/transform.h>
 #include <thrust/sort.h>
 #include <thrust/unique.h>
+#include <thrust/extrema.h>
 #include <cuda_runtime.h>
 #include <cuda/std/limits>
 #include <queue>
 #include <vector>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
 
 #include <tinytiffwriter.h>
 
@@ -17,6 +22,159 @@
 #include "ConnectedComponents.h"
 
 #define IDX(x, y, width) ((y) * (width) + (x))
+
+namespace {
+    constexpr uint32_t kHolePadding = 1;
+    constexpr uint32_t kHoleThreads = 256;
+
+    void throwOnFillHolesCudaError(const char* _operation)
+    {
+        const cudaError_t error = cudaGetLastError();
+        if (error != cudaSuccess)
+            throw std::runtime_error(std::string("CUDA image hole filling failed during ") + _operation + ": " + cudaGetErrorString(error));
+    }
+
+    template <class T>
+    __device__ uint32_t encodePositiveFillValue(const T _value)
+    {
+        if constexpr (std::is_same_v<T, float>)
+            return __float_as_uint(_value);
+        else
+            return static_cast<uint32_t>(_value);
+    }
+
+    template <class T>
+    __device__ T decodePositiveFillValue(const uint32_t _value)
+    {
+        if constexpr (std::is_same_v<T, float>)
+            return __uint_as_float(_value);
+        else
+            return static_cast<T>(_value);
+    }
+
+    template <class T>
+    __global__ void createPaddedBackgroundMask(const T* _pixels, uint8_t* _background, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _paddedWidth, const uint32_t _paddedHeight)
+    {
+        const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        const uint32_t size = _width * _height * _depth;
+        if (idx >= size)
+            return;
+
+        const uint32_t plane = _width * _height;
+        const uint32_t z = idx / plane;
+        const uint32_t inPlane = idx - z * plane;
+        const uint32_t y = inPlane / _width;
+        const uint32_t x = inPlane - y * _width;
+        const uint32_t paddedZ = _depth == 1 ? 0 : z + kHolePadding;
+        const uint32_t paddedIndex = (paddedZ * _paddedHeight + y + kHolePadding) * _paddedWidth + x + kHolePadding;
+        _background[paddedIndex] = _pixels[idx] > T(0) ? 0 : 255;
+    }
+
+    __global__ void countHolePixels(const uint32_t* _holeLabels, uint32_t* _counts, const uint32_t _size)
+    {
+        const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= _size)
+            return;
+        const uint32_t label = _holeLabels[idx];
+        if (label != 0)
+            atomicAdd(_counts + label, 1u);
+    }
+
+    template <class T>
+    __global__ void collectHoleBoundaryValues(const T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, uint32_t* _fillValues, uint32_t* _hasFillValue, const uint32_t _maxHoleSize, const uint32_t _width, const uint32_t _height, const uint32_t _depth)
+    {
+        const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        const uint32_t size = _width * _height * _depth;
+        if (idx >= size)
+            return;
+
+        const uint32_t label = _holeLabels[idx];
+        if (label == 0 || _counts[label] >= _maxHoleSize)
+            return;
+
+        const uint32_t plane = _width * _height;
+        const uint32_t z = idx / plane;
+        const uint32_t inPlane = idx - z * plane;
+        const uint32_t y = inPlane / _width;
+        const uint32_t x = inPlane - y * _width;
+
+        const int dx[6] = { -1, 1, 0, 0, 0, 0 };
+        const int dy[6] = { 0, 0, -1, 1, 0, 0 };
+        const int dz[6] = { 0, 0, 0, 0, -1, 1 };
+        const int neighborCount = _depth == 1 ? 4 : 6;
+        for (int n = 0; n < neighborCount; n++) {
+            const int nx = static_cast<int>(x) + dx[n];
+            const int ny = static_cast<int>(y) + dy[n];
+            const int nz = static_cast<int>(z) + dz[n];
+            if (nx < 0 || ny < 0 || nz < 0 || nx >= static_cast<int>(_width) || ny >= static_cast<int>(_height) || nz >= static_cast<int>(_depth))
+                continue;
+            const uint32_t neighborIndex = (static_cast<uint32_t>(nz) * _height + static_cast<uint32_t>(ny)) * _width + static_cast<uint32_t>(nx);
+            const T value = _pixels[neighborIndex];
+            if (value > T(0)) {
+                atomicMin(_fillValues + label, encodePositiveFillValue(value));
+                atomicExch(_hasFillValue + label, 1u);
+            }
+        }
+    }
+
+    template <class T>
+    __global__ void fillSelectedHoles(T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, const uint32_t* _fillValues, const uint32_t* _hasFillValue, const uint32_t _maxHoleSize, const uint32_t _size)
+    {
+        const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= _size)
+            return;
+        const uint32_t label = _holeLabels[idx];
+        if (label != 0 && _counts[label] < _maxHoleSize && _hasFillValue[label] != 0)
+            _pixels[idx] = decodePositiveFillValue<T>(_fillValues[label]);
+    }
+
+    template <class T>
+    void fillImageHolesVolumeGpu(thrust::device_vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize)
+    {
+        if (_width == 0 || _height == 0 || _depth == 0)
+            throw std::runtime_error("GPU image hole filling requires positive image dimensions.");
+        if (_maxHoleSize == 0)
+            return;
+
+        const size_t voxelCount = static_cast<size_t>(_width) * static_cast<size_t>(_height) * static_cast<size_t>(_depth);
+        const uint32_t paddedWidth = _width + 2 * kHolePadding;
+        const uint32_t paddedHeight = _height + 2 * kHolePadding;
+        const uint32_t paddedDepth = _depth == 1 ? 1 : _depth + 2 * kHolePadding;
+        const size_t paddedVoxelCount = static_cast<size_t>(paddedWidth) * static_cast<size_t>(paddedHeight) * static_cast<size_t>(paddedDepth);
+        if (voxelCount > static_cast<size_t>(std::numeric_limits<uint32_t>::max()) || paddedVoxelCount > static_cast<size_t>(std::numeric_limits<uint32_t>::max()))
+            throw std::runtime_error("GPU image hole filling exceeds uint32 indexing.");
+
+        thrust::device_vector<uint8_t> background(paddedVoxelCount, 255);
+        const uint32_t blocks = static_cast<uint32_t>((voxelCount + kHoleThreads - 1) / kHoleThreads);
+        createPaddedBackgroundMask<<<blocks, kHoleThreads>>>(thrust::raw_pointer_cast(_pixels.data()), thrust::raw_pointer_cast(background.data()), _width, _height, _depth, paddedWidth, paddedHeight);
+        throwOnFillHolesCudaError("background-mask creation");
+
+        thrust::device_vector<uint32_t> paddedComponents(paddedVoxelCount);
+        face_connected_component(background, paddedComponents, paddedWidth, paddedHeight, paddedDepth);
+        const uint32_t exteriorLabel = paddedComponents.front();
+        thrust::transform(thrust::device, paddedComponents.begin(), paddedComponents.end(), paddedComponents.begin(), [exteriorLabel] __device__(const uint32_t _label) {
+            return _label == exteriorLabel ? 0u : _label;
+            });
+
+        thrust::device_vector<uint32_t> holeLabels(voxelCount);
+        unpad<uint32_t, uint32_t>(paddedComponents, holeLabels, paddedWidth, paddedHeight, paddedDepth, kHolePadding);
+        const uint32_t maxLabel = *thrust::max_element(holeLabels.begin(), holeLabels.end());
+        if (maxLabel == 0)
+            return;
+
+        thrust::device_vector<uint32_t> counts(static_cast<size_t>(maxLabel) + 1, 0u);
+        countHolePixels<<<blocks, kHoleThreads>>>(thrust::raw_pointer_cast(holeLabels.data()), thrust::raw_pointer_cast(counts.data()), static_cast<uint32_t>(voxelCount));
+        throwOnFillHolesCudaError("hole-size counting");
+
+        thrust::device_vector<uint32_t> fillValues(static_cast<size_t>(maxLabel) + 1, std::numeric_limits<uint32_t>::max());
+        thrust::device_vector<uint32_t> hasFillValue(static_cast<size_t>(maxLabel) + 1, 0u);
+        collectHoleBoundaryValues<<<blocks, kHoleThreads>>>(thrust::raw_pointer_cast(_pixels.data()), thrust::raw_pointer_cast(holeLabels.data()), thrust::raw_pointer_cast(counts.data()), thrust::raw_pointer_cast(fillValues.data()), thrust::raw_pointer_cast(hasFillValue.data()), _maxHoleSize, _width, _height, _depth);
+        throwOnFillHolesCudaError("hole-boundary label collection");
+
+        fillSelectedHoles<<<blocks, kHoleThreads>>>(thrust::raw_pointer_cast(_pixels.data()), thrust::raw_pointer_cast(holeLabels.data()), thrust::raw_pointer_cast(counts.data()), thrust::raw_pointer_cast(fillValues.data()), thrust::raw_pointer_cast(hasFillValue.data()), _maxHoleSize, static_cast<uint32_t>(voxelCount));
+        throwOnFillHolesCudaError("hole filling");
+    }
+}
 
 template <class T>
 __global__ void init_and_invert_mask_kernel(const T* labels, T* mask, uint32_t label, uint32_t size) {
@@ -252,3 +410,39 @@ template void run_fill_holes_2(std::vector<uint8_t>& _pixels, const uint32_t _wi
 template void run_fill_holes_2(std::vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint16_t _threshold);
 template void run_fill_holes_2(std::vector<uint32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _threshold);
 template void run_fill_holes_2(std::vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const float _threshold);
+
+template <class T>
+void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack)
+{
+    const size_t voxelCount = static_cast<size_t>(_width) * static_cast<size_t>(_height) * static_cast<size_t>(_depth);
+    if (_pixels.size() != voxelCount)
+        throw std::runtime_error("GPU image hole filling received pixels inconsistent with the image dimensions.");
+
+    thrust::device_vector<T> image(_pixels);
+    if (_apply2DOnStack && _depth > 1) {
+        const size_t planeSize = static_cast<size_t>(_width) * static_cast<size_t>(_height);
+        thrust::device_vector<T> frame(planeSize);
+        for (uint32_t z = 0; z < _depth; z++) {
+            const size_t offset = static_cast<size_t>(z) * planeSize;
+            thrust::copy(image.begin() + offset, image.begin() + offset + planeSize, frame.begin());
+            fillImageHolesVolumeGpu(frame, _width, _height, 1, _maxHoleSize);
+            thrust::copy(frame.begin(), frame.end(), image.begin() + offset);
+        }
+    }
+    else {
+        fillImageHolesVolumeGpu(image, _width, _height, _depth, _maxHoleSize);
+    }
+
+    const cudaError_t syncError = cudaDeviceSynchronize();
+    if (syncError != cudaSuccess)
+        throw std::runtime_error(std::string("CUDA image hole filling execution failed: ") + cudaGetErrorString(syncError));
+    const cudaError_t copyError = cudaMemcpy(_pixels.data(), thrust::raw_pointer_cast(image.data()), voxelCount * sizeof(T), cudaMemcpyDeviceToHost);
+    if (copyError != cudaSuccess)
+        throw std::runtime_error(std::string("CUDA image hole filling result copy failed: ") + cudaGetErrorString(copyError));
+}
+
+template void run_fill_image_holes_gpu(std::vector<uint8_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<uint32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<int32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
