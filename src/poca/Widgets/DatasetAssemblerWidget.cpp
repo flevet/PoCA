@@ -36,6 +36,7 @@
 #include <map>
 #include <limits>
 #include <set>
+#include <stdexcept>
 #include <utility>
 
 #include <QtWidgets/QAbstractItemView>
@@ -54,6 +55,7 @@
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPlainTextEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QSpinBox>
@@ -103,6 +105,9 @@
 #endif
 
 namespace {
+	constexpr int RuleParametersColumn = 6;
+	constexpr int RuleParametersRole = Qt::UserRole;
+
 	QString buildDatasetName(const QString& rootFolder, const QString& key, const bool prefixRootName, const QString& separator)
 	{
 		const QString rootName = QFileInfo(rootFolder).fileName();
@@ -134,6 +139,64 @@ namespace {
 	{
 		return filename.endsWith(".tif", Qt::CaseInsensitive) || filename.endsWith(".tiff", Qt::CaseInsensitive);
 	}
+
+	poca::core::CommandInfo createRuleLoadCommand(const QString& filename, const nlohmann::json& parameters, const bool outOfCore, const bool pyramidalRendering)
+	{
+		if (!parameters.is_object())
+			throw std::invalid_argument("Assembler rule loader parameters must be a JSON object");
+
+		poca::core::CommandInfo command(false, "open");
+		command.setParameters(parameters);
+		command.addParameter("path", filename.toStdString());
+		if (isTiffFilename(filename))
+			command.addParameters("outOfCore", outOfCore, "pyramidalRendering", pyramidalRendering);
+		return command;
+	}
+
+	class RuleParametersDialog : public QDialog {
+	public:
+		RuleParametersDialog(const QString& ruleLabel, const nlohmann::json& parameters, QWidget* parent = nullptr)
+			: QDialog(parent), m_parameters(parameters) {
+			setWindowTitle(ruleLabel.trimmed().isEmpty() ? QObject::tr("Loader parameters") : QObject::tr("Loader parameters - %1").arg(ruleLabel));
+			setMinimumSize(520, 360);
+
+			QLabel* instructions = new QLabel(QObject::tr("Enter one JSON object. Its members are passed directly to the file loader's open command. The assembler supplies the file path."), this);
+			instructions->setWordWrap(true);
+			m_editor = new QPlainTextEdit(QString::fromStdString(parameters.dump(4)), this);
+			m_editor->setPlaceholderText("{\n    \"separator\": 44,\n    \"x\": 0,\n    \"y\": 1\n}");
+			QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+
+			QVBoxLayout* layout = new QVBoxLayout;
+			layout->addWidget(instructions);
+			layout->addWidget(m_editor);
+			layout->addWidget(buttons);
+			setLayout(layout);
+
+			connect(buttons, &QDialogButtonBox::accepted, this, &RuleParametersDialog::acceptEditedParameters);
+			connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+		}
+
+		const nlohmann::json& parameters() const { return m_parameters; }
+
+	private:
+		void acceptEditedParameters() {
+			try {
+				nlohmann::json parameters = nlohmann::json::parse(m_editor->toPlainText().toStdString());
+				if (!parameters.is_object()) {
+					QMessageBox::warning(this, QObject::tr("Loader parameters"), QObject::tr("The loader parameters must be a JSON object."));
+					return;
+				}
+				m_parameters = std::move(parameters);
+				accept();
+			}
+			catch (const nlohmann::json::exception& e) {
+				QMessageBox::warning(this, QObject::tr("Loader parameters"), QObject::tr("Invalid JSON: %1").arg(e.what()));
+			}
+		}
+
+		nlohmann::json m_parameters;
+		QPlainTextEdit* m_editor{ nullptr };
+	};
 
 	uint64_t safeMul(const uint64_t a, const uint64_t b)
 	{
@@ -500,9 +563,9 @@ DatasetAssemblerWidget::DatasetAssemblerWidget(QWidget* _parent)
 	rootsGroup->setLayout(rootsLayout);
 
 	m_rulesTable = new QTableWidget(this);
-	m_rulesTable->setColumnCount(6);
+	m_rulesTable->setColumnCount(7);
 	QStringList headers;
-	headers << "On" << "Req" << "Label" << "Relative folder" << "Filename regex" << "Key group";
+	headers << "On" << "Req" << "Label" << "Relative folder" << "Filename regex" << "Key group" << "Parameters";
 	m_rulesTable->setHorizontalHeaderLabels(headers);
 	m_rulesTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
 	m_rulesTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
@@ -614,28 +677,28 @@ void DatasetAssemblerWidget::loadParameters(const nlohmann::json& _json)
 			for (const std::string& root : roots)
 				m_rootsList->addItem(root.c_str());
 		}
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 
 	if (json.contains("lastRootPath")) {
 		try { m_lastRootPath = json["lastRootPath"].get<std::string>().c_str(); }
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 	if (json.contains("prefixRootName")) {
 		try { m_prefixRootNameCBox->setChecked(json["prefixRootName"].get<bool>()); }
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 	if (json.contains("choosePlacement")) {
 		try { m_choosePlacementButton->setChecked(json["choosePlacement"].get<bool>()); }
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 	if (json.contains("batchComponentRendering")) {
 		try { m_batchComponentRenderingCBox->setChecked(json["batchComponentRendering"].get<bool>()); }
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 	if (json.contains("nameSeparator")) {
 		try { m_nameSeparatorEdit->setText(json["nameSeparator"].get<std::string>().c_str()); }
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 	}
 	if (json.contains("rules")) {
 		std::vector<DatasetRule> rules;
@@ -648,10 +711,17 @@ void DatasetAssemblerWidget::loadParameters(const nlohmann::json& _json)
 				if (jsonRule.contains("relativeFolder")) rule.relativeFolder = jsonRule["relativeFolder"].get<std::string>().c_str();
 				if (jsonRule.contains("regex")) rule.regex = jsonRule["regex"].get<std::string>().c_str();
 				if (jsonRule.contains("keyCaptureGroup")) rule.keyCaptureGroup = jsonRule["keyCaptureGroup"].get<int>();
+				if (jsonRule.contains("parameters")) {
+					if (!jsonRule["parameters"].is_object()) {
+						appendLog(QString("Rule [%1] was not imported because its parameters value is not a JSON object.").arg(rule.label));
+						return;
+					}
+					rule.parameters = jsonRule["parameters"];
+				}
 				rules.push_back(rule);
 			}
 		}
-		catch (nlohmann::json::exception&) {}
+		catch (const nlohmann::json::exception& e) { appendLog(QString("Ignored invalid assembler setting: %1").arg(e.what())); }
 		if (!rules.empty())
 			setRulesToTable(rules);
 	}
@@ -682,6 +752,7 @@ void DatasetAssemblerWidget::saveParameters(nlohmann::json& _json) const
 		jsonRule["relativeFolder"] = rule.relativeFolder.toStdString();
 		jsonRule["regex"] = rule.regex.toStdString();
 		jsonRule["keyCaptureGroup"] = rule.keyCaptureGroup;
+		jsonRule["parameters"] = rule.parameters;
 		rulesJson.push_back(jsonRule);
 	}
 	json["rules"] = rulesJson;
@@ -715,12 +786,7 @@ void DatasetAssemblerWidget::onAddRule()
 	m_rulesTable->insertRow(row);
 
 	const DatasetRule rule = defaultRule();
-	m_rulesTable->setItem(row, 0, createCheckItem(rule.enabled));
-	m_rulesTable->setItem(row, 1, createCheckItem(rule.required));
-	m_rulesTable->setItem(row, 2, createTextItem(rule.label));
-	m_rulesTable->setItem(row, 3, createTextItem(rule.relativeFolder));
-	m_rulesTable->setItem(row, 4, createTextItem(rule.regex));
-	m_rulesTable->setItem(row, 5, createTextItem(QString::number(rule.keyCaptureGroup)));
+	setRuleToTableRow(row, rule);
 	refreshRulesFeedback();
 }
 
@@ -969,19 +1035,19 @@ void DatasetAssemblerWidget::onAssemble()
 			if (missingRequired || entry.filesByRule.isEmpty())
 				continue;
 
-			poca::core::CommandInfo firstLoadInfo(false, "open", "path", entry.filesByRule.begin().value().toStdString(), "outOfCore", useOutOfCore, "pyramidalRendering", usePyramidalRendering);
-			poca::core::MyObjectInterface* object = engine->loadDataAndCreateObject(entry.filesByRule.begin().value(), &firstLoadInfo);
+			auto fileIt = entry.filesByRule.begin();
+			poca::core::CommandInfo firstLoadInfo = createRuleLoadCommand(fileIt.value(), rules[fileIt.key()].parameters, useOutOfCore, usePyramidalRendering);
+			poca::core::MyObjectInterface* object = engine->loadDataAndCreateObject(fileIt.value(), &firstLoadInfo);
 			advanceLoadingProgress();
 			if (object == nullptr) {
-				appendLog(QString("Failed to create object for dataset [%1] from %2").arg(datasetKey).arg(entry.filesByRule.begin().value()));
+				appendLog(QString("Failed to create object for dataset [%1] from %2").arg(datasetKey).arg(fileIt.value()));
 				continue;
 			}
 
 			bool valid = true;
-			auto fileIt = entry.filesByRule.begin();
 			++fileIt;
 			for (; fileIt != entry.filesByRule.end(); ++fileIt) {
-				poca::core::CommandInfo addInfo(false, "open", "path", fileIt.value().toStdString(), "outOfCore", useOutOfCore, "pyramidalRendering", usePyramidalRendering);
+				poca::core::CommandInfo addInfo = createRuleLoadCommand(fileIt.value(), rules[fileIt.key()].parameters, useOutOfCore, usePyramidalRendering);
 				const bool added = engine->loadDataAndAddToObject(fileIt.value(), object, &addInfo);
 				advanceLoadingProgress();
 				if (!added) {
@@ -1046,6 +1112,33 @@ void DatasetAssemblerWidget::onRulesChanged()
 	refreshRulesFeedback();
 }
 
+void DatasetAssemblerWidget::onEditRuleParameters()
+{
+	QPushButton* button = qobject_cast<QPushButton*>(sender());
+	if (button == nullptr)
+		return;
+
+	int row = -1;
+	for (int candidate = 0; candidate < m_rulesTable->rowCount(); ++candidate) {
+		if (m_rulesTable->cellWidget(candidate, RuleParametersColumn) == button) {
+			row = candidate;
+			break;
+		}
+	}
+	if (row < 0)
+		return;
+
+	const QString ruleLabel = m_rulesTable->item(row, 2) != nullptr ? m_rulesTable->item(row, 2)->text() : QString();
+	RuleParametersDialog dialog(ruleLabel, ruleParametersFromTableRow(row), this);
+	if (dialog.exec() != QDialog::Accepted)
+		return;
+
+	QTableWidgetItem* parametersItem = m_rulesTable->item(row, RuleParametersColumn);
+	parametersItem->setData(RuleParametersRole, QString::fromStdString(dialog.parameters().dump()));
+	updateRuleParametersButton(row);
+	refreshRulesFeedback();
+}
+
 void DatasetAssemblerWidget::appendLog(const QString& _text)
 {
 	m_logEdit->append(_text);
@@ -1068,6 +1161,7 @@ std::vector<DatasetAssemblerWidget::DatasetRule> DatasetAssemblerWidget::rulesFr
 			rule.regex = m_rulesTable->item(row, 4)->text();
 		if (m_rulesTable->item(row, 5) != nullptr)
 			rule.keyCaptureGroup = std::max(0, m_rulesTable->item(row, 5)->text().toInt());
+		rule.parameters = ruleParametersFromTableRow(row);
 		if (!rule.regex.trimmed().isEmpty())
 			rules.push_back(rule);
 	}
@@ -1080,14 +1174,50 @@ void DatasetAssemblerWidget::setRulesToTable(const std::vector<DatasetRule>& _ru
 	for (const DatasetRule& rule : _rules) {
 		const int row = m_rulesTable->rowCount();
 		m_rulesTable->insertRow(row);
-		m_rulesTable->setItem(row, 0, createCheckItem(rule.enabled));
-		m_rulesTable->setItem(row, 1, createCheckItem(rule.required));
-		m_rulesTable->setItem(row, 2, createTextItem(rule.label));
-		m_rulesTable->setItem(row, 3, createTextItem(rule.relativeFolder));
-		m_rulesTable->setItem(row, 4, createTextItem(rule.regex));
-		m_rulesTable->setItem(row, 5, createTextItem(QString::number(rule.keyCaptureGroup)));
+		setRuleToTableRow(row, rule);
 	}
 	refreshRulesFeedback();
+}
+
+void DatasetAssemblerWidget::setRuleToTableRow(const int _row, const DatasetRule& _rule)
+{
+	m_rulesTable->setItem(_row, 0, createCheckItem(_rule.enabled));
+	m_rulesTable->setItem(_row, 1, createCheckItem(_rule.required));
+	m_rulesTable->setItem(_row, 2, createTextItem(_rule.label));
+	m_rulesTable->setItem(_row, 3, createTextItem(_rule.relativeFolder));
+	m_rulesTable->setItem(_row, 4, createTextItem(_rule.regex));
+	m_rulesTable->setItem(_row, 5, createTextItem(QString::number(_rule.keyCaptureGroup)));
+
+	QTableWidgetItem* parametersItem = new QTableWidgetItem;
+	parametersItem->setFlags((parametersItem->flags() | Qt::ItemIsEnabled | Qt::ItemIsSelectable) & ~Qt::ItemIsEditable);
+	parametersItem->setData(RuleParametersRole, QString::fromStdString(_rule.parameters.dump()));
+	m_rulesTable->setItem(_row, RuleParametersColumn, parametersItem);
+
+	QPushButton* parametersButton = new QPushButton(m_rulesTable);
+	m_rulesTable->setCellWidget(_row, RuleParametersColumn, parametersButton);
+	connect(parametersButton, SIGNAL(released()), this, SLOT(onEditRuleParameters()));
+	updateRuleParametersButton(_row);
+}
+
+nlohmann::json DatasetAssemblerWidget::ruleParametersFromTableRow(const int _row) const
+{
+	const QTableWidgetItem* item = m_rulesTable->item(_row, RuleParametersColumn);
+	if (item == nullptr)
+		throw std::runtime_error("Assembler rule parameters table item is missing");
+	const nlohmann::json parameters = nlohmann::json::parse(item->data(RuleParametersRole).toString().toStdString());
+	if (!parameters.is_object())
+		throw std::runtime_error("Assembler rule parameters are not a JSON object");
+	return parameters;
+}
+
+void DatasetAssemblerWidget::updateRuleParametersButton(const int _row)
+{
+	QPushButton* button = qobject_cast<QPushButton*>(m_rulesTable->cellWidget(_row, RuleParametersColumn));
+	if (button == nullptr)
+		throw std::runtime_error("Assembler rule parameters button is missing");
+	const nlohmann::json parameters = ruleParametersFromTableRow(_row);
+	button->setText(parameters.empty() ? tr("Add...") : tr("Edit (%1)...").arg(parameters.size()));
+	button->setToolTip(QString::fromStdString(parameters.dump(2)));
 }
 
 DatasetAssemblerWidget::DatasetRule DatasetAssemblerWidget::defaultRule() const

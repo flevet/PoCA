@@ -88,6 +88,7 @@ private slots:
 	void onPreview();
 	void onAssemble();
 	void onRulesChanged();
+	void onEditRuleParameters();
 
 private:
 	struct DatasetRule {
@@ -97,6 +98,7 @@ private:
 		QString relativeFolder;
 		QString regex;
 		int keyCaptureGroup{ 1 };
+		nlohmann::json parameters = nlohmann::json::object();
 	};
 
 	struct DatasetEntry {
@@ -128,6 +130,9 @@ private:
 	void appendLog(const QString&);
 	std::vector<DatasetRule> rulesFromTable() const;
 	void setRulesToTable(const std::vector<DatasetRule>&);
+	void setRuleToTableRow(int, const DatasetRule&);
+	nlohmann::json ruleParametersFromTableRow(int) const;
+	void updateRuleParametersButton(int);
 	DatasetRule defaultRule() const;
 	bool validateConfiguration(const std::vector<DatasetRule>&, const QStringList&, QStringList&, QStringList&) const;
 	ScanResult scanRootFolder(const QString&, const std::vector<DatasetRule>&) const;
