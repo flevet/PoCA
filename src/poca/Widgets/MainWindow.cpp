@@ -1045,6 +1045,16 @@ void MainWindow::createDesignDock()
 		const QVariant role = _item->data(0, Qt::UserRole);
 		MyMultipleObject* multipleObject = (m_currentMdi != NULL && m_currentMdi->getWidget() != NULL)
 			? dynamic_cast<MyMultipleObject*>(m_currentMdi->getWidget()->getObject()) : NULL;
+		if (role.toString() == QStringLiteral("object") && multipleObject != NULL) {
+			std::vector<size_t> indices(multipleObject->nbColors());
+			for (size_t index = 0; index < indices.size(); ++index)
+				indices[index] = index;
+			multipleObject->setSelectedObjectIndices(indices);
+			if (multipleObject->hasSelectedObjectIndices())
+				changeColorObject((int)multipleObject->selectedObjectIndices().front());
+			updateObjectsTreeSelectionCue(multipleObject);
+			return;
+		}
 		if (role.toString() == QStringLiteral("colorObject")) {
 			bool ok = false;
 			const int index = _item->data(0, Qt::UserRole + 1).toInt(&ok);
@@ -1293,6 +1303,8 @@ void MainWindow::updateObjectsTreeSelectionCue(MyMultipleObject* _object)
 				});
 			}
 		}
+		else if (role == QStringLiteral("object"))
+			isSelected = _object->nbColors() > 0 && selected.size() == _object->nbColors();
 		item->setForeground(0, isSelected ? QBrush(QColor(0, 96, 180)) : QBrush(QColor(32, 33, 36)));
 		QFont font = item->font(0);
 		font.setBold(isSelected);
