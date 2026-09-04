@@ -111,8 +111,9 @@ std::vector<poca::core::CommandSpec> DetectionSetBasicCommands::commandSpecs() c
 			{"path", CommandParameterType::String, false, std::string("")},
 			{"appendToTitle", CommandParameterType::String, false, nullptr},
 			{"appendToDir", CommandParameterType::String, false, nullptr},
-			{"appendToName", CommandParameterType::String, false, nullptr}
-		}),
+			{"appendToName", CommandParameterType::String, false, nullptr},
+			{"extension", CommandParameterType::String, false, nullptr}
+	}),
 		CommandSpec("keepPercentageOfLocalizations", {
 			{"percent", CommandParameterType::Number, true, nullptr}
 		})
@@ -450,13 +451,20 @@ void DetectionSetBasicCommands::execute(poca::core::CommandInfo* _infos, const p
 				else
 					name.append(addToFile.c_str());
 			}
+
+			if (_infos->hasParameter("extension")) {
+				std::string ext = _infos->getParameter<std::string>("extension");
+				name.append(ext.c_str());
+			}
 			filename = dir + name;
 		}
 		else
 			filename = QString(path.c_str());
 
-		QFileInfo fileInfo(filename);
-		filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".csv";
+		std::cout << filename.toStdString() << std::endl;
+		//QFileInfo fileInfo(filename);
+		//filename = fileInfo.path() + "/" + fileInfo.completeBaseName() + ".csv";
+		std::cout << filename.toStdString() << std::endl;
 
 		std::ofstream fs(filename.toStdString().data());
 		if (!fs) {
