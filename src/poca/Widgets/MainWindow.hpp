@@ -131,7 +131,7 @@ protected:
 	void loadPositionCamera();
 	void loadPositionCamera(const std::string&, const bool = false, const bool = true, const bool = true, const bool = true, const bool = true, const bool = true);
 
-	void addComponentToCurrentMdi(const QString&);
+	void addComponentToCurrentMdi(const QString&, const poca::core::CommandInfo* = nullptr);
 
 private slots:
 	void actionNeeded();

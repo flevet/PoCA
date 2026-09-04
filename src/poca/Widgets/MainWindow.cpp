@@ -1609,7 +1609,7 @@ void MainWindow::addComponentToCurrentMdi()
 	execute(&poca::core::CommandInfo(true, "add", "filename", filename.toStdString()));
 }
 
-void MainWindow::addComponentToCurrentMdi(const QString& _filename)
+void MainWindow::addComponentToCurrentMdi(const QString& _filename, const poca::core::CommandInfo* _addCommand)
 {
 	if (m_currentMdi == NULL) return;
 	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
@@ -1618,7 +1618,16 @@ void MainWindow::addComponentToCurrentMdi(const QString& _filename)
 	if (obj == NULL) return;
 	
 	std::cout << "Filename " << _filename.toStdString() << std::endl;
-	poca::core::CommandInfo ci(false, "open", "path", std::string(_filename.toStdString()));
+	poca::core::CommandInfo ci(false, "open");
+	if (_addCommand != nullptr && _addCommand->hasParameter("parameters")) {
+		const nlohmann::json& parameters = _addCommand->getParameterJson("parameters");
+		if (!parameters.is_object()) {
+			std::cerr << "The parameters value of the add command must be a JSON object." << std::endl;
+			return;
+		}
+		ci.setParameters(parameters);
+	}
+	ci.addParameter("path", _filename.toStdString());
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	if (engine->loadDataAndAddToObject(_filename, obj, &ci)) {
@@ -2484,7 +2493,7 @@ void MainWindow::execute(poca::core::CommandInfo* _com)
 			}
 			filename = dir + name;
 		}
-		addComponentToCurrentMdi(filename);
+		addComponentToCurrentMdi(filename, _com);
 	}
 	else if (_com->nameCommand == "close") {
 		QList<QMdiSubWindow*> windows = m_mdiArea->subWindowList();
@@ -2743,6 +2752,8 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			command.addParameter("extension", _json[tmp]["extension"].get<std::string>());
 		if (_json[tmp].contains("replace"))
 			command.addParameter("replace", _json[tmp]["replace"].get< std::vector<std::vector<std::string>>>());
+		if (_json[tmp].contains("parameters"))
+			command.addParameter("parameters", _json[tmp]["parameters"]);
 		execute(&command);
 	}
 	else if (tmp == "close") {
