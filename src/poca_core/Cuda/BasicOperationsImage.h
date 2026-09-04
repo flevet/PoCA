@@ -77,7 +77,7 @@ void fill_holes_gpu(thrust::device_vector<T>& _pixels, const uint32_t _width, co
 template <class T>
 void run_fill_holes_2(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const T _threshold);
 template <class T>
-void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
 
 template <class T, class M>
 void pad(const thrust::device_vector<T>& _source, thrust::device_vector<M>& _output, uint32_t _w, uint32_t _h, uint32_t _d, uint32_t _pad);

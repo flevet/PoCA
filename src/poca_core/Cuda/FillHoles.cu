@@ -81,7 +81,7 @@ namespace {
     }
 
     template <class T>
-    __global__ void collectHoleBoundaryValues(const T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, uint32_t* _fillValues, uint32_t* _hasFillValue, const uint32_t _maxHoleSize, const uint32_t _width, const uint32_t _height, const uint32_t _depth)
+    __global__ void collectHoleBoundaryValues(const T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, uint32_t* _fillValues, uint32_t* _hasFillValue, const uint64_t _maxHoleSize, const uint32_t _width, const uint32_t _height, const uint32_t _depth)
     {
         const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         const uint32_t size = _width * _height * _depth;
@@ -118,7 +118,7 @@ namespace {
     }
 
     template <class T>
-    __global__ void fillSelectedHoles(T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, const uint32_t* _fillValues, const uint32_t* _hasFillValue, const uint32_t _maxHoleSize, const uint32_t _size)
+    __global__ void fillSelectedHoles(T* _pixels, const uint32_t* _holeLabels, const uint32_t* _counts, const uint32_t* _fillValues, const uint32_t* _hasFillValue, const uint64_t _maxHoleSize, const uint32_t _size)
     {
         const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= _size)
@@ -129,7 +129,7 @@ namespace {
     }
 
     template <class T>
-    void fillImageHolesVolumeGpu(thrust::device_vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize)
+    void fillImageHolesVolumeGpu(thrust::device_vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize)
     {
         if (_width == 0 || _height == 0 || _depth == 0)
             throw std::runtime_error("GPU image hole filling requires positive image dimensions.");
@@ -412,7 +412,7 @@ template void run_fill_holes_2(std::vector<uint32_t>& _pixels, const uint32_t _w
 template void run_fill_holes_2(std::vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const float _threshold);
 
 template <class T>
-void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack)
+void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack)
 {
     const size_t voxelCount = static_cast<size_t>(_width) * static_cast<size_t>(_height) * static_cast<size_t>(_depth);
     if (_pixels.size() != voxelCount)
@@ -441,8 +441,8 @@ void run_fill_image_holes_gpu(std::vector<T>& _pixels, const uint32_t _width, co
         throw std::runtime_error(std::string("CUDA image hole filling result copy failed: ") + cudaGetErrorString(copyError));
 }
 
-template void run_fill_image_holes_gpu(std::vector<uint8_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
-template void run_fill_image_holes_gpu(std::vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
-template void run_fill_image_holes_gpu(std::vector<uint32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
-template void run_fill_image_holes_gpu(std::vector<int32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
-template void run_fill_image_holes_gpu(std::vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint32_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<uint8_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<uint16_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<uint32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<int32_t>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
+template void run_fill_image_holes_gpu(std::vector<float>& _pixels, const uint32_t _width, const uint32_t _height, const uint32_t _depth, const uint64_t _maxHoleSize, const bool _apply2DOnStack);
