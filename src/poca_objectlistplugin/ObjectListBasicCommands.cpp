@@ -173,7 +173,8 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 	}
 	else if (_infos->nameCommand == "duplicateCentroids") {
 		poca::core::MyObjectInterface* obj = duplicateCentroids();
-		_result.set<poca::core::CreatedObjectContext>({ obj });
+		if(obj != NULL)
+			_result.set<poca::core::CreatedObjectContext>({ obj });
 	}
 	else if (_infos->nameCommand == "duplicateSelectedObjects") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection")? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
@@ -854,7 +855,8 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateCentroids() con
 
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::MyObjectInterface* obj = engine->getObject(m_objects);
-	const std::string& dir = obj->getDir(), name = obj->getName();
+	engine->addComponentToObject(obj, dset);
+	/*const std::string& dir = obj->getDir(), name = obj->getName();
 	QString newName(name.c_str());
 	int index = newName.lastIndexOf(".");
 	newName.insert(index, "_objectsCentroids");
@@ -865,7 +867,8 @@ poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateCentroids() con
 	wobj->addBasicComponent(dset);
 	wobj->setDimension(dset->dimension());
 
-	return wobj;
+	return wobj;*/
+	return NULL;
 }
 
 poca::core::MyObjectInterface* ObjectListBasicCommands::duplicateSelectedObjects(const std::set<int>& _selectedObjects) const
