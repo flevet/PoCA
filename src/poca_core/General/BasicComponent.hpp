@@ -182,7 +182,7 @@ namespace poca::core {
 	std::vector <T>& BasicComponent::getOriginalData(const std::string& _type)
 	{
 		if (hasData(_type))
-			return m_data.at(_type)->getOriginalHistogram()->getValues();
+			return m_data.at(_type)->getOriginalData<T>();
 		else
 			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
 	}
@@ -191,7 +191,7 @@ namespace poca::core {
 	const std::vector <T>& BasicComponent::getOriginalData(const std::string& _type) const
 	{
 		if (hasData(_type))
-			return m_data.at(_type)->getOriginalHistogram()->getValues();
+			return m_data.at(_type)->getOriginalData<T>();
 		else
 			throw std::runtime_error(std::string("data " + _type + " was not found for compoent " + m_nameComponent));
 	}
@@ -199,13 +199,13 @@ namespace poca::core {
 	template <class T>
 	T* BasicComponent::getOriginalDataPtr(const std::string& _type)
 	{
-		return hasData(_type) ? m_data[_type]->getOriginalData().data() : nullptr;
+		return hasData(_type) ? m_data[_type]->getOriginalData<T>().data() : nullptr;
 	}
 
 	template <class T>
 	const T* BasicComponent::getOriginalDataPtr(const std::string& _type) const
 	{
-		return hasData(_type) ? m_data.at(_type)->getOriginalData().data() : nullptr;
+		return hasData(_type) ? m_data.at(_type)->getOriginalData<T>().data() : nullptr;
 	}
 }
 
