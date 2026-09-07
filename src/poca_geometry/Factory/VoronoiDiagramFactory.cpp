@@ -208,7 +208,7 @@ namespace poca::geometry {
 		return voro;
 	}
 
-	VoronoiDiagram* VoronoiDiagramFactory::createVoronoiDiagram(const std::vector <float>& _xs, const std::vector <float>& _ys, const std::vector <float>& _zs, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau, const bool _noCells)
+	VoronoiDiagram* VoronoiDiagramFactory::createVoronoiDiagram(const std::vector <float>& _xs, const std::vector <float>& _ys, const std::vector <float>& _zs, KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau, const bool _noCells, const bool _computeFeatures)
 	{
 #ifndef NO_CUDA
 		int devCount; // Number of CUDA devices
@@ -392,9 +392,9 @@ namespace poca::geometry {
 
 		poca::geometry::VoronoiDiagram3D* voro = NULL;
 		if(!noConstructionCells)
-			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, polyhedrons, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
+			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, polyhedrons, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau, _computeFeatures);
 		else
-			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau);
+			voro = new poca::geometry::VoronoiDiagram3D(nbCells, neighbors, indexFirstNeighborCell, volumeCUDA, bordersBool, _xs.data(), _ys.data(), _zs.data(), _kdtree, _delau, _computeFeatures);
 		return voro;
 #else
 	QMessageBox msgBox;

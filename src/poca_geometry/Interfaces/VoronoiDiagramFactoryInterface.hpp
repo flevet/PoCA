@@ -54,7 +54,7 @@ namespace poca::geometry {
 		virtual VoronoiDiagram* createVoronoiDiagramOnSphere(poca::core::MyObjectInterface*, bool, poca::core::PluginList*, const bool = true) = 0;
 		
 		virtual VoronoiDiagram* createVoronoiDiagram(const std::vector <float>&, const std::vector <float>&, const poca::core::BoundingBox&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL) = 0;
-		virtual VoronoiDiagram* createVoronoiDiagram(const std::vector <float>&, const std::vector <float>&, const std::vector <float>&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL, const bool = true) = 0;
+		virtual VoronoiDiagram* createVoronoiDiagram(const std::vector <float>&, const std::vector <float>&, const std::vector <float>&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL, const bool = true, const bool = true) = 0;
 		virtual VoronoiDiagram* createVoronoiDiagramOnSphere(const std::vector <float>&, const std::vector <float>&, const std::vector <float>&, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL, const bool = true) = 0;
 	};
 

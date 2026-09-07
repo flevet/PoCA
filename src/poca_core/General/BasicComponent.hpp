@@ -39,6 +39,7 @@
 
 #include "../Interfaces/BasicComponentInterface.hpp"
 #include "../DesignPatterns/Subject.hpp"
+#include "../General/MyData.hpp"
 
 namespace poca::core {
 	class BasicComponent : public BasicComponentInterface {

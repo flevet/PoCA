@@ -376,7 +376,7 @@ namespace poca::core {
 			return poca::core::CommandInfo(false, _nameCommand, "filename", filename);
 		}
 
-		return poca::core::CommandInfo();
+		return poca::core::CommandableObject::createCommand(_nameCommand, _parameters);
 	}
 
 	void MyObject::executeCommandOnSpecificComponent(const std::string& _nameComponent, poca::core::CommandInfo* _ci)

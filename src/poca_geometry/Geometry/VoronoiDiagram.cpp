@@ -289,14 +289,14 @@ namespace poca::geometry {
 		const std::vector <float>& _volumes,
 		const std::vector <bool>& _borders,
 		const float* _xs, const float* _ys, const float* _zs, 
-		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau)
+		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau, const bool _computeFeatures) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau)
 	{
 		double nbPs = nbFaces();
 		unsigned int nbForUpdate = nbPs / 100., cptTimer = 0;
 		if (nbForUpdate == 0) nbForUpdate = 1;
 		std::printf("Computing Voronoi density: %.2f %%", (0. / nbPs * 100.));
 		std::vector <float> densities(nbFaces(), 0.f), meanDistance(nbFaces(), 0.f);
-		for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
+		if (_computeFeatures) for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
 			float sumVol = _volumes[n], nbsTot = 1.f, sumD = 0.f;
 			poca::core::Vec3mf pt(m_xs[n], m_ys[n], m_zs[n]);
 			for (uint32_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
@@ -315,14 +315,14 @@ namespace poca::geometry {
 		}
 		std::cout << std::endl;
 		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
-		m_data["density"] = poca::core::generateDataWithLog(densities);
-		m_data["meanDistance"] = poca::core::generateDataWithLog(meanDistance);
+		if (_computeFeatures) m_data["density"] = poca::core::generateDataWithLog(densities);
+		if (_computeFeatures) m_data["meanDistance"] = poca::core::generateDataWithLog(meanDistance);
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
 		m_data["id"] = poca::core::generateDataWithLog(ids);
 
 		m_selection.resize(_volumes.size());
-		setCurrentHistogramType("density");
+		setCurrentHistogramType(_computeFeatures ? "density" : "volume");
 		forceRegenerateSelection();
 	}
 
@@ -333,7 +333,7 @@ namespace poca::geometry {
 		const std::vector <float>& _volumes,
 		const std::vector <bool>& _borders,
 		const float* _xs, const float* _ys, const float* _zs, 
-		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau), m_polyhedrons(_polyhedrons)
+		KdTree_DetectionPoint* _kdtree, DelaunayTriangulationInterface* _delau, const bool _computeFeatures) : VoronoiDiagram(_xs, _ys, _zs, _nbCells, _neighbors, _firstsNeighbors, _borders, _kdtree, _delau), m_polyhedrons(_polyhedrons)
 	{
 		m_firstCells.resize(m_polyhedrons.size() + 1, 0);
 		uint32_t cptT = 0, curPoly = 0;
@@ -355,7 +355,7 @@ namespace poca::geometry {
 		}
 
 		std::vector <float> densities(nbFaces(), 0.f);
-		for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
+		if (_computeFeatures) for (uint32_t n = 0, cpt = 0; n < nbFaces(); n++) {
 			float sumVol = _volumes[n], nbsTot = 1.f;
 			for (uint32_t index = _firstsNeighbors[n]; index < _firstsNeighbors[n + 1]; index++) {
 				uint32_t neigh = _neighbors[index];
@@ -368,17 +368,19 @@ namespace poca::geometry {
 		}
 
 		m_data["volume"] = poca::core::generateDataWithLog(_volumes);
-		m_data["density"] = poca::core::generateDataWithLog(densities);
+		if (_computeFeatures) m_data["density"] = poca::core::generateDataWithLog(densities);
 
+		if (_computeFeatures) {
 		Voronoi3DCellFeatures::FeatureSet featureSet = Voronoi3DCellFeatures::compute(m_polyhedrons, _volumes, m_xs, m_ys, m_zs, m_neighbors, m_borderLocs);
 		for (const auto& feature : featureSet.values)
 			m_data[feature.first] = poca::core::generateDataWithLog(feature.second);
+		}
 
 		std::vector <float> ids(_volumes.size());
 		std::iota(std::begin(ids), std::end(ids), 1);
 		m_data["id"] = poca::core::generateDataWithLog(ids);
 		m_selection.resize(_volumes.size());
-		setCurrentHistogramType("density");
+		setCurrentHistogramType(_computeFeatures ? "density" : "volume");
 		forceRegenerateSelection();
 	}
 

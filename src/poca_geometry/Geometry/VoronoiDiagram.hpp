@@ -142,8 +142,8 @@ namespace poca::geometry {
 
 	class VoronoiDiagram3D : public VoronoiDiagram {
 	public:
-		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
-		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <Polyhedron_3_inexact>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL);
+		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL, const bool = true);
+		VoronoiDiagram3D(const uint32_t, const std::vector <uint32_t>&, const std::vector <uint32_t>&, const std::vector <Polyhedron_3_inexact>&, const std::vector <float>&, const std::vector <bool>&, const float*, const float*, const float*, KdTree_DetectionPoint* = NULL, DelaunayTriangulationInterface* = NULL, const bool = true);
 		~VoronoiDiagram3D();
 
 		poca::core::BasicComponentInterface* copy();

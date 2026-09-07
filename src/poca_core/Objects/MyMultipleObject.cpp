@@ -263,6 +263,11 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	// Analyses that own their complete sample traversal must execute once at this level.
+	if (_ci && _ci->hasParameter("executeOnObjectOnly") && _ci->getParameter<bool>("executeOnObjectOnly")) {
+		poca::core::CommandableObject::executeCommand(_ci, _context, _result);
+		return;
+	}
 	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)

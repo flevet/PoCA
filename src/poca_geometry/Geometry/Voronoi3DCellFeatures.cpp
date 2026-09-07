@@ -17,6 +17,7 @@
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <unordered_set>
 
 #include <CGAL/Polygon_mesh_processing/measure.h>
@@ -25,6 +26,31 @@
 
 namespace poca::geometry {
 	namespace {
+
+		struct FeatureRequest {
+			const std::set<std::string>* selected;
+			std::set<std::string> needed;
+			explicit FeatureRequest(const std::set<std::string>* selection = nullptr) : selected(selection) {
+				if (selected) needed = *selected;
+				if (has("cavityRimScore")) {
+					needed.insert("voidScore"); needed.insert("localLogVolumeZScore"); needed.insert("anisotropyVectorConvergence");
+				}
+			}
+			bool has(const std::string& name) const { return selected == nullptr || needed.count(name) != 0; }
+			bool any(std::initializer_list<const char*> names) const {
+				for (const auto name : names) if (has(name)) return true;
+				return false;
+			}
+			bool covariance() const { return any({"covAnisotropy", "covLinearity", "covPlanarity", "covSphericity", "covEigenValue1", "covEigenValue2", "covEigenValue3", "principalAxisX", "principalAxisY", "principalAxisZ", "anisotropy", "minkowskiVolumeAnisotropy", "voidScore", "localPrincipalAxisAlignment"}); }
+			bool normals() const { return any({"normalAnisotropy", "normalPlanarity", "normalTensorEigenValue1", "normalTensorEigenValue2", "normalTensorEigenValue3", "minkowskiSurfaceAnisotropy", "minkowskiSurfacePlanarity"}); }
+			bool area() const { return normals() || any({"cellSurfaceArea", "area", "cellSphericity", "sphericity", "cellCompactness", "voidScore"}); }
+			bool localVolume() const { return any({"localLogVolumeCV", "cvLogVol", "localLogVolumeZScore"}); }
+			bool neighbors() const { return localVolume() || any({"localAnisotropyVectorAlignment", "localPrincipalAxisAlignment", "anisotropyVectorDivergence", "anisotropyVectorConvergence"}); }
+			bool offset() const { return any({"anisotropyVectorX", "anisotropyVectorY", "anisotropyVectorZ", "anisotropyVectorNorm", "anisotropyVectorNormEqRadius", "offsetNorm", "voidScore", "localAnisotropyVectorAlignment", "anisotropyVectorDivergence", "anisotropyVectorConvergence"}); }
+			bool centroid() const { return covariance() || offset() || any({"cellCentroidX", "cellCentroidY", "cellCentroidZ"}); }
+			bool volume() const { return centroid() || localVolume() || any({"cellsVolume", "logVol", "cellSphericity", "sphericity", "cellCompactness", "cellBorderDistanceEqRadius", "voidScore"}); }
+		};
+
 		constexpr double PI = 3.141592653589793238462643383279502884;
 
 		inline Eigen::Vector3d toEigen(const Point_3_inexact& p)
@@ -122,39 +148,43 @@ namespace poca::geometry {
 			return std::min(dx, std::min(dy, dz));
 		}
 
-		void finalizeMoments(CellMetrics& out, const double v6Sum, const Eigen::Vector3d& m1, const Eigen::Matrix3d& m2, Eigen::Matrix3d normalTensor, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox)
+		void finalizeMoments(CellMetrics& out, const double v6Sum, const Eigen::Vector3d& m1, const Eigen::Matrix3d& m2, Eigen::Matrix3d normalTensor, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox, const FeatureRequest& request = FeatureRequest())
 		{
 			const double vSigned = v6Sum / 6.0;
 			if (!std::isfinite(vSigned) || std::abs(vSigned) <= std::numeric_limits<double>::epsilon())
 				return;
 
 			out.volume = std::abs(vSigned);
-			out.centroid = m1 / vSigned;
-			out.anisotropyVector = out.centroid - seed;
-			out.seedCentroidDist = out.anisotropyVector.norm();
+			if (request.centroid()) out.centroid = m1 / vSigned;
+			if (request.offset()) {
+				out.anisotropyVector = out.centroid - seed;
+				out.seedCentroidDist = out.anisotropyVector.norm();
 
+			}
 			const double req = std::cbrt(3.0 * out.volume / (4.0 * PI));
 			out.seedCentroidDistNorm = req > 0.0 ? out.seedCentroidDist / req : 0.0;
-			out.sphericity = (out.surfaceArea > 0.0 && out.volume > 0.0) ? std::pow(PI, 1.0 / 3.0) * std::pow(6.0 * out.volume, 2.0 / 3.0) / out.surfaceArea : 0.0;
-			out.compactness = (out.surfaceArea > 0.0) ? (36.0 * PI * out.volume * out.volume) / (out.surfaceArea * out.surfaceArea * out.surfaceArea) : 0.0;
+			if (request.any({"sphericity", "cellSphericity", "voidScore"})) out.sphericity = (out.surfaceArea > 0.0 && out.volume > 0.0) ? std::pow(PI, 1.0 / 3.0) * std::pow(6.0 * out.volume, 2.0 / 3.0) / out.surfaceArea : 0.0;
+			if (request.has("cellCompactness")) out.compactness = (out.surfaceArea > 0.0) ? (36.0 * PI * out.volume * out.volume) / (out.surfaceArea * out.surfaceArea * out.surfaceArea) : 0.0;
 
-			Eigen::Matrix3d cov = (m2 / vSigned) - (out.centroid * out.centroid.transpose());
-			cov = 0.5 * (cov + cov.transpose());
-			Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
-			if (solver.info() == Eigen::Success) {
-				Eigen::Vector3d ev = solver.eigenvalues();
-				std::array<double, 3> e = { std::max(0.0, ev(0)), std::max(0.0, ev(1)), std::max(0.0, ev(2)) };
-				std::sort(e.begin(), e.end(), std::greater<double>());
-				const double l1 = e[0], l2 = e[1], l3 = e[2];
-				out.covEigenvalues = Eigen::Vector3d(l1, l2, l3);
-				out.principalAxis = solver.eigenvectors().col(2).normalized();
-				out.covarianceAnisotropy = (l3 > 0.0) ? std::sqrt(l1 / l3) : 0.0;
-				out.covarianceLinearity = (l1 > 0.0) ? (l1 - l2) / l1 : 0.0;
-				out.covariancePlanarity = (l1 > 0.0) ? (l2 - l3) / l1 : 0.0;
-				out.covarianceSphericity = (l1 > 0.0) ? l3 / l1 : 0.0;
+			if (request.covariance()) {
+				Eigen::Matrix3d cov = (m2 / vSigned) - (out.centroid * out.centroid.transpose());
+				cov = 0.5 * (cov + cov.transpose());
+				Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+				if (solver.info() == Eigen::Success) {
+					Eigen::Vector3d ev = solver.eigenvalues();
+					std::array<double, 3> e = { std::max(0.0, ev(0)), std::max(0.0, ev(1)), std::max(0.0, ev(2)) };
+					std::sort(e.begin(), e.end(), std::greater<double>());
+					const double l1 = e[0], l2 = e[1], l3 = e[2];
+					out.covEigenvalues = Eigen::Vector3d(l1, l2, l3);
+					out.principalAxis = solver.eigenvectors().col(2).normalized();
+					out.covarianceAnisotropy = (l3 > 0.0) ? std::sqrt(l1 / l3) : 0.0;
+					out.covarianceLinearity = (l1 > 0.0) ? (l1 - l2) / l1 : 0.0;
+					out.covariancePlanarity = (l1 > 0.0) ? (l2 - l3) / l1 : 0.0;
+					out.covarianceSphericity = (l1 > 0.0) ? l3 / l1 : 0.0;
+				}
+
 			}
-
-			if (out.surfaceArea > 0.0) {
+			if (request.normals() && out.surfaceArea > 0.0) {
 				normalTensor /= out.surfaceArea;
 				Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solverN(normalTensor);
 				if (solverN.info() == Eigen::Success) {
@@ -167,11 +197,12 @@ namespace poca::geometry {
 				}
 			}
 
-			out.distToBox = distanceToBoxPlanesInside(seed, clipBox);
+			if (request.any({"cellBorderDistance", "cellBorderDistanceEqRadius", "voidScore"}))
+				out.distToBox = distanceToBoxPlanesInside(seed, clipBox);
 			out.distToBoxNorm = req > 0.0 ? out.distToBox / req : 0.0;
 		}
 
-		CellMetrics computePolyhedronMetrics(const Polyhedron_3_inexact& poly, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox)
+		CellMetrics computePolyhedronMetrics(const Polyhedron_3_inexact& poly, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox, const FeatureRequest& request = FeatureRequest())
 		{
 			CellMetrics out;
 			if (poly.empty()) return out;
@@ -199,43 +230,46 @@ namespace poca::geometry {
 					const Eigen::Vector3d cross = (b - a).cross(c - a);
 					const double triArea = 0.5 * cross.norm();
 					out.surfaceArea += triArea;
-					if (triArea > 0.0) normalTensor += triArea * outer(cross.normalized(), cross.normalized());
+					if (request.normals() && triArea > 0.0) normalTensor += triArea * outer(cross.normalized(), cross.normalized());
 					const double v6 = signedTetraVolume6(a, b, c);
 					v6Sum += v6;
 					const double vSigned = v6 / 6.0;
-					m1 += vSigned * (a + b + c) * 0.25;
-					m2 += tetraSecondMomentOrigin(a, b, c, vSigned);
+					if (request.centroid()) m1 += vSigned * (a + b + c) * 0.25;
+					if (request.covariance()) m2 += tetraSecondMomentOrigin(a, b, c, vSigned);
 				}
 			}
 
-			finalizeMoments(out, v6Sum, m1, m2, normalTensor, seed, clipBox);
+			if (request.volume() || request.normals()) finalizeMoments(out, v6Sum, m1, m2, normalTensor, seed, clipBox, request);
+			if (request.has("cellBorderDistance")) out.distToBox = distanceToBoxPlanesInside(seed, clipBox);
 			const double dx = xmax - xmin, dy = ymax - ymin, dz = zmax - zmin;
 			const double minD = std::max(std::numeric_limits<double>::epsilon(), std::min(dx, std::min(dy, dz)));
-			out.bboxAspectRatio = std::max(dx, std::max(dy, dz)) / minD;
+			if (request.has("cellBboxAspectRatio")) out.bboxAspectRatio = std::max(dx, std::max(dy, dz)) / minD;
 			return out;
 		}
 
-		CellMetrics computeMeshMetrics(Surface_mesh_3_double mesh, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox)
+		CellMetrics computeMeshMetrics(Surface_mesh_3_double mesh, const Eigen::Vector3d& seed, const poca::core::BoundingBox* clipBox, const FeatureRequest& request = FeatureRequest())
 		{
 			namespace PMP = CGAL::Polygon_mesh_processing;
 			CellMetrics out;
+			const bool needVolume = request.volume(), needNormals = request.normals();
+			const bool needCentroid = request.centroid(), needCovariance = request.covariance();
 			if (mesh.number_of_vertices() == 0 || mesh.number_of_faces() == 0) return out;
-			try { PMP::orient_to_bound_a_volume(mesh); } catch (...) {}
+			if (needVolume) PMP::orient_to_bound_a_volume(mesh);
 			out.nbFaces = static_cast<uint32_t>(mesh.number_of_faces());
 			out.nbVertices = static_cast<uint32_t>(mesh.number_of_vertices());
-			try { out.surfaceArea = PMP::area(mesh); } catch (...) { out.surfaceArea = 0.0; }
+			if (request.area()) out.surfaceArea = PMP::area(mesh);
 			Eigen::Vector3d m1 = Eigen::Vector3d::Zero();
 			Eigen::Matrix3d m2 = Eigen::Matrix3d::Zero();
 			Eigen::Matrix3d normalTensor = Eigen::Matrix3d::Zero();
 			double v6Sum = 0.0;
 			double xmin = DBL_MAX, ymin = DBL_MAX, zmin = DBL_MAX, xmax = -DBL_MAX, ymax = -DBL_MAX, zmax = -DBL_MAX;
 
-			for (auto v : mesh.vertices()) {
+			if (request.has("cellBboxAspectRatio")) for (auto v : mesh.vertices()) {
 				const Eigen::Vector3d p = toEigen(mesh.point(v));
 				xmin = std::min(xmin, p.x()); ymin = std::min(ymin, p.y()); zmin = std::min(zmin, p.z());
 				xmax = std::max(xmax, p.x()); ymax = std::max(ymax, p.y()); zmax = std::max(zmax, p.z());
 			}
-			for (auto f : mesh.faces()) {
+			if (needVolume || needNormals) for (auto f : mesh.faces()) {
 				std::vector<Eigen::Vector3d> vertices;
 				auto h = mesh.halfedge(f);
 				auto start = h;
@@ -244,28 +278,20 @@ namespace poca::geometry {
 					const Eigen::Vector3d& a = vertices[0]; const Eigen::Vector3d& b = vertices[i]; const Eigen::Vector3d& c = vertices[i + 1];
 					const Eigen::Vector3d cross = (b - a).cross(c - a);
 					const double triArea = 0.5 * cross.norm();
-					if (triArea > 0.0) normalTensor += triArea * outer(cross.normalized(), cross.normalized());
+					if (needNormals && triArea > 0.0) normalTensor += triArea * outer(cross.normalized(), cross.normalized());
 					const double v6 = signedTetraVolume6(a, b, c);
 					v6Sum += v6;
 					const double vSigned = v6 / 6.0;
-					m1 += vSigned * (a + b + c) * 0.25;
-					m2 += tetraSecondMomentOrigin(a, b, c, vSigned);
-				}
-			}
-			if (out.surfaceArea <= 0.0) {
-				// fallback to accumulated triangulation area if PMP::area failed
-				for (auto f : mesh.faces()) {
-					std::vector<Eigen::Vector3d> vertices;
-					auto h = mesh.halfedge(f); auto start = h;
-					do { vertices.push_back(toEigen(mesh.point(mesh.target(h)))); h = mesh.next(h); } while (h != start);
-					for (size_t i = 1; i + 1 < vertices.size(); ++i) out.surfaceArea += 0.5 * (vertices[i] - vertices[0]).cross(vertices[i + 1] - vertices[0]).norm();
+					if (needCentroid) m1 += vSigned * (a + b + c) * 0.25;
+					if (needCovariance) m2 += tetraSecondMomentOrigin(a, b, c, vSigned);
 				}
 			}
 
-			finalizeMoments(out, v6Sum, m1, m2, normalTensor, seed, clipBox);
+			if (needVolume || needNormals) finalizeMoments(out, v6Sum, m1, m2, normalTensor, seed, clipBox, request);
+			if (request.has("cellBorderDistance")) out.distToBox = distanceToBoxPlanesInside(seed, clipBox);
 			const double dx = xmax - xmin, dy = ymax - ymin, dz = zmax - zmin;
 			const double minD = std::max(std::numeric_limits<double>::epsilon(), std::min(dx, std::min(dy, dz)));
-			out.bboxAspectRatio = std::max(dx, std::max(dy, dz)) / minD;
+			if (request.has("cellBboxAspectRatio")) out.bboxAspectRatio = std::max(dx, std::max(dy, dz)) / minD;
 			return out;
 		}
 
@@ -274,7 +300,7 @@ namespace poca::geometry {
 			values[name] = std::vector<float>(n, 0.f);
 		}
 
-		Voronoi3DCellFeatures::FeatureSet fillFeatureSet(const std::vector<CellMetrics>& metrics, const std::vector<double>& inputVolumes, const std::vector<Eigen::Vector3d>& seeds, const poca::core::MyArrayUInt32& neighbors, const std::vector<bool>& borderLocs)
+		Voronoi3DCellFeatures::FeatureSet fillFeatureSet(const std::vector<CellMetrics>& metrics, const std::vector<double>& inputVolumes, const std::vector<Eigen::Vector3d>& seeds, const poca::core::MyArrayUInt32& neighbors, const std::vector<bool>& borderLocs, const FeatureRequest& request = FeatureRequest())
 		{
 			Voronoi3DCellFeatures::FeatureSet out;
 			const size_t n = metrics.size();
@@ -288,12 +314,12 @@ namespace poca::geometry {
 				"minkowskiVolumeAnisotropy", "minkowskiSurfaceAnisotropy", "minkowskiSurfacePlanarity",
 				"logVol", "offsetNorm", "sphericity", "anisotropy", "area", "isBorder", "cellBorderDistance", "cellBorderDistanceEqRadius",
 				"localLogVolumeCV", "cvLogVol", "localLogVolumeZScore", "localAnisotropyVectorAlignment", "localPrincipalAxisAlignment", "anisotropyVectorDivergence",
-				"anisotropyVectorConvergence", "cavityRimScore", "voidScore"
+				"anisotropyVectorConvergence", "cavityRimScore", "voidScore", "cellsVolume"
 			};
-			for (const auto& name : names) add(out.values, name, n);
+			for (const auto& name : names) if (request.has(name)) add(out.values, name, n);
 
 			RunningStats stLogVol, stOffset, stLogAniso, stSphericity, stInvDist;
-			for (size_t i = 0; i < n; ++i) {
+			if (request.has("voidScore")) for (size_t i = 0; i < n; ++i) {
 				const bool isBorder = i < borderLocs.size() && borderLocs[i];
 				if (isBorder) continue;
 				const double vol = inputVolumes[i] > 0.0 ? inputVolumes[i] : metrics[i].volume;
@@ -312,53 +338,54 @@ namespace poca::geometry {
 
 			for (size_t i = 0; i < n; ++i) {
 				const double vol = inputVolumes[i] > 0.0 ? inputVolumes[i] : metrics[i].volume;
-				out.values["cellSurfaceArea"][i] = finiteFloat(metrics[i].surfaceArea);
-				out.values["cellSphericity"][i] = finiteFloat(metrics[i].sphericity);
-				out.values["cellCompactness"][i] = finiteFloat(metrics[i].compactness);
-				out.values["cellNbFaces"][i] = static_cast<float>(metrics[i].nbFaces);
-				out.values["cellNbVertices"][i] = static_cast<float>(metrics[i].nbVertices);
-				out.values["cellBboxAspectRatio"][i] = finiteFloat(metrics[i].bboxAspectRatio);
-				out.values["cellCentroidX"][i] = finiteFloat(metrics[i].centroid.x());
-				out.values["cellCentroidY"][i] = finiteFloat(metrics[i].centroid.y());
-				out.values["cellCentroidZ"][i] = finiteFloat(metrics[i].centroid.z());
-				out.values["anisotropyVectorX"][i] = finiteFloat(metrics[i].anisotropyVector.x());
-				out.values["anisotropyVectorY"][i] = finiteFloat(metrics[i].anisotropyVector.y());
-				out.values["anisotropyVectorZ"][i] = finiteFloat(metrics[i].anisotropyVector.z());
-				out.values["anisotropyVectorNorm"][i] = finiteFloat(metrics[i].seedCentroidDist);
-				out.values["anisotropyVectorNormEqRadius"][i] = finiteFloat(metrics[i].seedCentroidDistNorm);
-				out.values["covAnisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
-				out.values["covLinearity"][i] = finiteFloat(metrics[i].covarianceLinearity);
-				out.values["covPlanarity"][i] = finiteFloat(metrics[i].covariancePlanarity);
-				out.values["covSphericity"][i] = finiteFloat(metrics[i].covarianceSphericity);
-				out.values["covEigenValue1"][i] = finiteFloat(metrics[i].covEigenvalues.x());
-				out.values["covEigenValue2"][i] = finiteFloat(metrics[i].covEigenvalues.y());
-				out.values["covEigenValue3"][i] = finiteFloat(metrics[i].covEigenvalues.z());
-				out.values["principalAxisX"][i] = finiteFloat(metrics[i].principalAxis.x());
-				out.values["principalAxisY"][i] = finiteFloat(metrics[i].principalAxis.y());
-				out.values["principalAxisZ"][i] = finiteFloat(metrics[i].principalAxis.z());
-				out.values["normalAnisotropy"][i] = finiteFloat(metrics[i].normalAnisotropy);
-				out.values["normalPlanarity"][i] = finiteFloat(metrics[i].normalPlanarity);
-				out.values["normalTensorEigenValue1"][i] = finiteFloat(metrics[i].normalEigenvalues.x());
-				out.values["normalTensorEigenValue2"][i] = finiteFloat(metrics[i].normalEigenvalues.y());
-				out.values["normalTensorEigenValue3"][i] = finiteFloat(metrics[i].normalEigenvalues.z());
-				out.values["minkowskiVolumeAnisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
-				out.values["minkowskiSurfaceAnisotropy"][i] = finiteFloat(metrics[i].normalAnisotropy);
-				out.values["minkowskiSurfacePlanarity"][i] = finiteFloat(metrics[i].normalPlanarity);
-				out.values["logVol"][i] = finiteFloat(safeLog(vol));
-				out.values["offsetNorm"][i] = finiteFloat(metrics[i].seedCentroidDistNorm);
-				out.values["sphericity"][i] = finiteFloat(metrics[i].sphericity);
-				out.values["anisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
-				out.values["area"][i] = finiteFloat(metrics[i].surfaceArea);
-				out.values["isBorder"][i] = (i < borderLocs.size() && borderLocs[i]) ? 1.f : 0.f;
-				out.values["cellBorderDistance"][i] = finiteFloat(metrics[i].distToBox);
-				out.values["cellBorderDistanceEqRadius"][i] = finiteFloat(metrics[i].distToBoxNorm);
+				if (request.has("cellsVolume")) out.values["cellsVolume"][i] = finiteFloat(vol);
+				if (request.has("cellSurfaceArea")) out.values["cellSurfaceArea"][i] = finiteFloat(metrics[i].surfaceArea);
+				if (request.has("cellSphericity")) out.values["cellSphericity"][i] = finiteFloat(metrics[i].sphericity);
+				if (request.has("cellCompactness")) out.values["cellCompactness"][i] = finiteFloat(metrics[i].compactness);
+				if (request.has("cellNbFaces")) out.values["cellNbFaces"][i] = static_cast<float>(metrics[i].nbFaces);
+				if (request.has("cellNbVertices")) out.values["cellNbVertices"][i] = static_cast<float>(metrics[i].nbVertices);
+				if (request.has("cellBboxAspectRatio")) out.values["cellBboxAspectRatio"][i] = finiteFloat(metrics[i].bboxAspectRatio);
+				if (request.has("cellCentroidX")) out.values["cellCentroidX"][i] = finiteFloat(metrics[i].centroid.x());
+				if (request.has("cellCentroidY")) out.values["cellCentroidY"][i] = finiteFloat(metrics[i].centroid.y());
+				if (request.has("cellCentroidZ")) out.values["cellCentroidZ"][i] = finiteFloat(metrics[i].centroid.z());
+				if (request.has("anisotropyVectorX")) out.values["anisotropyVectorX"][i] = finiteFloat(metrics[i].anisotropyVector.x());
+				if (request.has("anisotropyVectorY")) out.values["anisotropyVectorY"][i] = finiteFloat(metrics[i].anisotropyVector.y());
+				if (request.has("anisotropyVectorZ")) out.values["anisotropyVectorZ"][i] = finiteFloat(metrics[i].anisotropyVector.z());
+				if (request.has("anisotropyVectorNorm")) out.values["anisotropyVectorNorm"][i] = finiteFloat(metrics[i].seedCentroidDist);
+				if (request.has("anisotropyVectorNormEqRadius")) out.values["anisotropyVectorNormEqRadius"][i] = finiteFloat(metrics[i].seedCentroidDistNorm);
+				if (request.has("covAnisotropy")) out.values["covAnisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
+				if (request.has("covLinearity")) out.values["covLinearity"][i] = finiteFloat(metrics[i].covarianceLinearity);
+				if (request.has("covPlanarity")) out.values["covPlanarity"][i] = finiteFloat(metrics[i].covariancePlanarity);
+				if (request.has("covSphericity")) out.values["covSphericity"][i] = finiteFloat(metrics[i].covarianceSphericity);
+				if (request.has("covEigenValue1")) out.values["covEigenValue1"][i] = finiteFloat(metrics[i].covEigenvalues.x());
+				if (request.has("covEigenValue2")) out.values["covEigenValue2"][i] = finiteFloat(metrics[i].covEigenvalues.y());
+				if (request.has("covEigenValue3")) out.values["covEigenValue3"][i] = finiteFloat(metrics[i].covEigenvalues.z());
+				if (request.has("principalAxisX")) out.values["principalAxisX"][i] = finiteFloat(metrics[i].principalAxis.x());
+				if (request.has("principalAxisY")) out.values["principalAxisY"][i] = finiteFloat(metrics[i].principalAxis.y());
+				if (request.has("principalAxisZ")) out.values["principalAxisZ"][i] = finiteFloat(metrics[i].principalAxis.z());
+				if (request.has("normalAnisotropy")) out.values["normalAnisotropy"][i] = finiteFloat(metrics[i].normalAnisotropy);
+				if (request.has("normalPlanarity")) out.values["normalPlanarity"][i] = finiteFloat(metrics[i].normalPlanarity);
+				if (request.has("normalTensorEigenValue1")) out.values["normalTensorEigenValue1"][i] = finiteFloat(metrics[i].normalEigenvalues.x());
+				if (request.has("normalTensorEigenValue2")) out.values["normalTensorEigenValue2"][i] = finiteFloat(metrics[i].normalEigenvalues.y());
+				if (request.has("normalTensorEigenValue3")) out.values["normalTensorEigenValue3"][i] = finiteFloat(metrics[i].normalEigenvalues.z());
+				if (request.has("minkowskiVolumeAnisotropy")) out.values["minkowskiVolumeAnisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
+				if (request.has("minkowskiSurfaceAnisotropy")) out.values["minkowskiSurfaceAnisotropy"][i] = finiteFloat(metrics[i].normalAnisotropy);
+				if (request.has("minkowskiSurfacePlanarity")) out.values["minkowskiSurfacePlanarity"][i] = finiteFloat(metrics[i].normalPlanarity);
+				if (request.has("logVol")) out.values["logVol"][i] = finiteFloat(safeLog(vol));
+				if (request.has("offsetNorm")) out.values["offsetNorm"][i] = finiteFloat(metrics[i].seedCentroidDistNorm);
+				if (request.has("sphericity")) out.values["sphericity"][i] = finiteFloat(metrics[i].sphericity);
+				if (request.has("anisotropy")) out.values["anisotropy"][i] = finiteFloat(metrics[i].covarianceAnisotropy);
+				if (request.has("area")) out.values["area"][i] = finiteFloat(metrics[i].surfaceArea);
+				if (request.has("isBorder")) out.values["isBorder"][i] = (i < borderLocs.size() && borderLocs[i]) ? 1.f : 0.f;
+				if (request.has("cellBorderDistance")) out.values["cellBorderDistance"][i] = finiteFloat(metrics[i].distToBox);
+				if (request.has("cellBorderDistanceEqRadius")) out.values["cellBorderDistanceEqRadius"][i] = finiteFloat(metrics[i].distToBoxNorm);
 				const double inv = metrics[i].distToBoxNorm > 0.0 ? 1.0 / metrics[i].distToBoxNorm : 0.0;
-				out.values["voidScore"][i] = finiteFloat(zscore(safeLog(vol), meanLogVol, sdLogVol) + zscore(metrics[i].seedCentroidDistNorm, meanOffset, sdOffset) + zscore(safeLog(metrics[i].covarianceAnisotropy), meanLogAniso, sdLogAniso) - zscore(metrics[i].sphericity, meanSph, sdSph) - zscore(inv, meanInvDist, sdInvDist));
+				if (request.has("voidScore")) out.values["voidScore"][i] = finiteFloat(zscore(safeLog(vol), meanLogVol, sdLogVol) + zscore(metrics[i].seedCentroidDistNorm, meanOffset, sdOffset) + zscore(safeLog(metrics[i].covarianceAnisotropy), meanLogAniso, sdLogAniso) - zscore(metrics[i].sphericity, meanSph, sdSph) - zscore(inv, meanInvDist, sdInvDist));
 			}
 
 			const auto& firsts = neighbors.getFirstElements();
 			const auto& neighs = neighbors.getData();
-			if (firsts.size() >= n + 1) {
+			if (request.neighbors() && firsts.size() >= n + 1) {
 				for (size_t i = 0; i < n; ++i) {
 					double sum = safeLog(inputVolumes[i] > 0.0 ? inputVolumes[i] : metrics[i].volume);
 					double sum2 = sum * sum;
@@ -368,51 +395,57 @@ namespace poca::geometry {
 						const uint32_t j = neighs[idx];
 						if (j == std::numeric_limits<uint32_t>::max() || j >= n) continue;
 						const double lj = safeLog(inputVolumes[j] > 0.0 ? inputVolumes[j] : metrics[j].volume);
-						sum += lj; sum2 += lj * lj; ++cpt;
+						if (request.localVolume()) { sum += lj; sum2 += lj * lj; ++cpt; }
 						const double ni = metrics[i].anisotropyVector.norm(), nj = metrics[j].anisotropyVector.norm();
-						if (ni > std::numeric_limits<double>::epsilon() && nj > std::numeric_limits<double>::epsilon()) { alignVec += std::abs(metrics[i].anisotropyVector.dot(metrics[j].anisotropyVector) / (ni * nj)); ++cptAlignVec; }
+						if (request.has("localAnisotropyVectorAlignment") && ni > std::numeric_limits<double>::epsilon() && nj > std::numeric_limits<double>::epsilon()) { alignVec += std::abs(metrics[i].anisotropyVector.dot(metrics[j].anisotropyVector) / (ni * nj)); ++cptAlignVec; }
 						const double ai = metrics[i].principalAxis.norm(), aj = metrics[j].principalAxis.norm();
-						if (ai > std::numeric_limits<double>::epsilon() && aj > std::numeric_limits<double>::epsilon()) { alignAxis += std::abs(metrics[i].principalAxis.dot(metrics[j].principalAxis) / (ai * aj)); ++cptAlignAxis; }
+						if (request.has("localPrincipalAxisAlignment") && ai > std::numeric_limits<double>::epsilon() && aj > std::numeric_limits<double>::epsilon()) { alignAxis += std::abs(metrics[i].principalAxis.dot(metrics[j].principalAxis) / (ai * aj)); ++cptAlignAxis; }
 						Eigen::Vector3d dir = seeds[j] - seeds[i];
 						const double d = dir.norm();
-						if (d > std::numeric_limits<double>::epsilon()) { dir /= d; div += (metrics[j].anisotropyVector - metrics[i].anisotropyVector).dot(dir) / d; ++cptDiv; }
+						if (request.any({"anisotropyVectorDivergence", "anisotropyVectorConvergence"}) && d > std::numeric_limits<double>::epsilon()) { dir /= d; div += (metrics[j].anisotropyVector - metrics[i].anisotropyVector).dot(dir) / d; ++cptDiv; }
 					}
-					if (cpt > 1) {
+					if (request.localVolume() && cpt > 1) {
 						const double mean = sum / static_cast<double>(cpt);
 						const double var = std::max(0.0, sum2 / static_cast<double>(cpt) - mean * mean);
 						const double cv = (std::abs(mean) > std::numeric_limits<double>::epsilon()) ? std::sqrt(var) / std::abs(mean) : 0.0;
-						out.values["localLogVolumeCV"][i] = finiteFloat(cv);
-						out.values["cvLogVol"][i] = finiteFloat(cv);
-						out.values["localLogVolumeZScore"][i] = finiteFloat(zscore(out.values["logVol"][i], mean, std::sqrt(var)));
+						if (request.has("localLogVolumeCV")) out.values["localLogVolumeCV"][i] = finiteFloat(cv);
+						if (request.has("cvLogVol")) out.values["cvLogVol"][i] = finiteFloat(cv);
+						if (request.has("localLogVolumeZScore")) out.values["localLogVolumeZScore"][i] = finiteFloat(zscore(safeLog(inputVolumes[i]), mean, std::sqrt(var)));
 					}
-					out.values["localAnisotropyVectorAlignment"][i] = cptAlignVec > 0 ? finiteFloat(alignVec / static_cast<double>(cptAlignVec)) : 0.f;
-					out.values["localPrincipalAxisAlignment"][i] = cptAlignAxis > 0 ? finiteFloat(alignAxis / static_cast<double>(cptAlignAxis)) : 0.f;
-					out.values["anisotropyVectorDivergence"][i] = cptDiv > 0 ? finiteFloat(div / static_cast<double>(cptDiv)) : 0.f;
-					out.values["anisotropyVectorConvergence"][i] = cptDiv > 0 ? finiteFloat(-div / static_cast<double>(cptDiv)) : 0.f;
+					if (request.has("localAnisotropyVectorAlignment")) out.values["localAnisotropyVectorAlignment"][i] = cptAlignVec > 0 ? finiteFloat(alignVec / static_cast<double>(cptAlignVec)) : 0.f;
+					if (request.has("localPrincipalAxisAlignment")) out.values["localPrincipalAxisAlignment"][i] = cptAlignAxis > 0 ? finiteFloat(alignAxis / static_cast<double>(cptAlignAxis)) : 0.f;
+					if (request.has("anisotropyVectorDivergence")) out.values["anisotropyVectorDivergence"][i] = cptDiv > 0 ? finiteFloat(div / static_cast<double>(cptDiv)) : 0.f;
+					if (request.has("anisotropyVectorConvergence")) out.values["anisotropyVectorConvergence"][i] = cptDiv > 0 ? finiteFloat(-div / static_cast<double>(cptDiv)) : 0.f;
 				}
 			}
 
-			RunningStats stVoidScore, stLocalLogVolZ, stConvergence;
-			for (size_t i = 0; i < n; ++i) {
-				const bool isBorder = i < borderLocs.size() && borderLocs[i];
-				if (isBorder) continue;
-				stVoidScore.add(out.values["voidScore"][i]);
-				stLocalLogVolZ.add(out.values["localLogVolumeZScore"][i]);
-				stConvergence.add(out.values["anisotropyVectorConvergence"][i]);
-			}
-			const double meanVoidScore = stVoidScore.mean(), sdVoidScore = stVoidScore.sd();
-			const double meanLocalLogVolZ = stLocalLogVolZ.mean(), sdLocalLogVolZ = stLocalLogVolZ.sd();
-			const double meanConvergence = stConvergence.mean(), sdConvergence = stConvergence.sd();
-			for (size_t i = 0; i < n; ++i) {
-				const bool isBorder = i < borderLocs.size() && borderLocs[i];
-				if (isBorder) {
-					out.values["cavityRimScore"][i] = 0.f;
-					continue;
+			if (request.has("cavityRimScore")) {
+				RunningStats stVoidScore, stLocalLogVolZ, stConvergence;
+				for (size_t i = 0; i < n; ++i) {
+					const bool isBorder = i < borderLocs.size() && borderLocs[i];
+					if (isBorder) continue;
+					stVoidScore.add(out.values["voidScore"][i]);
+					stLocalLogVolZ.add(out.values["localLogVolumeZScore"][i]);
+					stConvergence.add(out.values["anisotropyVectorConvergence"][i]);
 				}
-				out.values["cavityRimScore"][i] = finiteFloat(
-					zscore(out.values["voidScore"][i], meanVoidScore, sdVoidScore) +
-					zscore(out.values["localLogVolumeZScore"][i], meanLocalLogVolZ, sdLocalLogVolZ) +
-					zscore(out.values["anisotropyVectorConvergence"][i], meanConvergence, sdConvergence));
+				const double meanVoidScore = stVoidScore.mean(), sdVoidScore = stVoidScore.sd();
+				const double meanLocalLogVolZ = stLocalLogVolZ.mean(), sdLocalLogVolZ = stLocalLogVolZ.sd();
+				const double meanConvergence = stConvergence.mean(), sdConvergence = stConvergence.sd();
+				for (size_t i = 0; i < n; ++i) {
+					const bool isBorder = i < borderLocs.size() && borderLocs[i];
+					if (isBorder) {
+						if (request.has("cavityRimScore")) out.values["cavityRimScore"][i] = 0.f;
+						continue;
+					}
+					if (request.has("cavityRimScore")) out.values["cavityRimScore"][i] = finiteFloat(
+						zscore(out.values["voidScore"][i], meanVoidScore, sdVoidScore) +
+						zscore(out.values["localLogVolumeZScore"][i], meanLocalLogVolZ, sdLocalLogVolZ) +
+						zscore(out.values["anisotropyVectorConvergence"][i], meanConvergence, sdConvergence));
+				}
+			}
+			if (request.selected) {
+				for (auto it = out.values.begin(); it != out.values.end();)
+					if (!request.selected->count(it->first)) it = out.values.erase(it); else ++it;
 			}
 			return out;
 		}
@@ -443,8 +476,11 @@ namespace poca::geometry {
 		const std::vector<poca::core::Vec3mf>& seedsIn,
 		const poca::core::MyArrayUInt32& neighbors,
 		const std::vector<bool>& borderLocs,
-		const poca::core::BoundingBox* clipBox)
+		const poca::core::BoundingBox* clipBox, const std::set<std::string>* selected)
 	{
+		if (selected && meshes.size() != seedsIn.size()) throw std::runtime_error("Voronoi feature meshes and seeds must have equal lengths.");
+		if (selected && selected->empty()) return {};
+		const FeatureRequest request(selected);
 		const size_t n = std::min(meshes.size(), seedsIn.size());
 		if (n == 0) return Voronoi3DCellFeatures::FeatureSet();
 		std::vector<CellMetrics> metrics(n);
@@ -452,10 +488,10 @@ namespace poca::geometry {
 		std::vector<double> inputVolumes(n, 0.0);
 		for (size_t i = 0; i < n; ++i) {
 			seeds[i] = toEigen(seedsIn[i]);
-			metrics[i] = computeMeshMetrics(meshes[i], seeds[i], clipBox);
+			metrics[i] = computeMeshMetrics(meshes[i], seeds[i], clipBox, request);
 			inputVolumes[i] = metrics[i].volume;
 		}
-		return fillFeatureSet(metrics, inputVolumes, seeds, neighbors, borderLocs);
+		return fillFeatureSet(metrics, inputVolumes, seeds, neighbors, borderLocs, FeatureRequest(selected));
 	}
 
 	Voronoi3DCellFeatures::FeatureSet Voronoi3DCellFeatures::compute(
@@ -463,11 +499,11 @@ namespace poca::geometry {
 		const std::vector<poca::core::Vec3mf>& seedsIn,
 		const poca::core::MyArrayUInt32& neighbors,
 		const std::vector<uint32_t>& borderIndices,
-		const poca::core::BoundingBox* clipBox)
+		const poca::core::BoundingBox* clipBox, const std::set<std::string>* selected)
 	{
 		std::vector<bool> borderLocs(meshes.size(), false);
 		for (const uint32_t idx : borderIndices)
 			if (idx < borderLocs.size()) borderLocs[idx] = true;
-		return compute(meshes, seedsIn, neighbors, borderLocs, clipBox);
+		return compute(meshes, seedsIn, neighbors, borderLocs, clipBox, selected);
 	}
 }
