@@ -80,11 +80,14 @@ namespace poca::core {
 	void MyData::setLog(const bool _val) {
 		HistogramInterface* current = m_log ? m_logHistogram : m_histogram;
 		HistogramInterface* other = !m_log ? m_logHistogram : m_histogram;
+		if (current == NULL) return;
 		float minV = current->getCurrentMin(), maxV = current->getCurrentMax();
 		float modified_min = (float)(m_log ? pow(10, minV) : log10(minV));
 		float modified_max = (float)(m_log ? pow(10, maxV) : log10(maxV));
-		other->setCurrentMin(modified_min);
-		other->setCurrentMax(modified_max);
+		if (other != NULL) {
+			other->setCurrentMin(modified_min);
+			other->setCurrentMax(modified_max);
+		}
 		m_log = _val;
 	}
 }
