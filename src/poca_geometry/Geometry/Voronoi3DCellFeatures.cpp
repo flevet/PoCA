@@ -478,6 +478,16 @@ namespace poca::geometry {
 		const std::vector<bool>& borderLocs,
 		const poca::core::BoundingBox* clipBox, const std::set<std::string>* selected)
 	{
+		return computeParallel(meshes, seedsIn, neighbors, borderLocs, clipBox, selected, Executor());
+	}
+
+	Voronoi3DCellFeatures::FeatureSet Voronoi3DCellFeatures::computeParallel(
+		const std::vector<Surface_mesh_3_double>& meshes,
+		const std::vector<poca::core::Vec3mf>& seedsIn,
+		const poca::core::MyArrayUInt32& neighbors,
+		const std::vector<bool>& borderLocs,
+		const poca::core::BoundingBox* clipBox, const std::set<std::string>* selected, const Executor& execute)
+	{
 		if (selected && meshes.size() != seedsIn.size()) throw std::runtime_error("Voronoi feature meshes and seeds must have equal lengths.");
 		if (selected && selected->empty()) return {};
 		const FeatureRequest request(selected);
@@ -486,11 +496,12 @@ namespace poca::geometry {
 		std::vector<CellMetrics> metrics(n);
 		std::vector<Eigen::Vector3d> seeds(n);
 		std::vector<double> inputVolumes(n, 0.0);
-		for (size_t i = 0; i < n; ++i) {
+		auto measure = [&](size_t i) {
 			seeds[i] = toEigen(seedsIn[i]);
 			metrics[i] = computeMeshMetrics(meshes[i], seeds[i], clipBox, request);
 			inputVolumes[i] = metrics[i].volume;
-		}
+		};
+		if (execute) execute(n, measure); else for (size_t i = 0; i < n; ++i) measure(i);
 		return fillFeatureSet(metrics, inputVolumes, seeds, neighbors, borderLocs, FeatureRequest(selected));
 	}
 

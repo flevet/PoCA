@@ -12,6 +12,7 @@
 #define Voronoi3DCellFeatures_hpp__
 
 #include <map>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -51,6 +52,12 @@ namespace poca::geometry {
 			const std::vector<uint32_t>&,
 			const poca::core::BoundingBox* = nullptr,
 			const std::set<std::string>* = nullptr);
+
+		// Optional caller-owned executor; existing compute entrypoints retain serial behavior.
+		using Executor = std::function<void(size_t, const std::function<void(size_t)>&)>;
+		static FeatureSet computeParallel(const std::vector<Surface_mesh_3_double>&,
+			const std::vector<poca::core::Vec3mf>&, const poca::core::MyArrayUInt32&,
+			const std::vector<bool>&, const poca::core::BoundingBox*, const std::set<std::string>*, const Executor&);
 
 	private:
 		Voronoi3DCellFeatures() = delete;
