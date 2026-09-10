@@ -16,6 +16,8 @@
 #include <General/Vec3.hpp>
 #include <General/Vec4.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
+#include <vector>
 #include <OpenGL/BasicDisplayCommand.hpp>
 #include <OpenGL/GLBuffer.hpp>
 
@@ -35,6 +37,10 @@ public:
 	void freeGPUMemory();
 
 protected:
+	struct ObjectTriangleRange {
+		size_t objectIndex = 0, first = 0, count = 0;
+		glm::vec3 centroid = glm::vec3(0.f);
+	};
 	struct ListDrawRange;
 	bool canBatch() const;
 	bool rebuild();
@@ -44,6 +50,7 @@ protected:
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, const bool);
 	bool usesTransparentMeshPass(const ListDrawRange&) const;
+	std::vector<ObjectTriangleRange> transparentTriangleOrder(poca::opengl::Camera*, const ListDrawRange&) const;
 	void drawListRange(poca::opengl::Camera*, const bool, const ListDrawRange&);
 	void generateBoundingBoxSelection(const int);
 
@@ -61,6 +68,7 @@ protected:
 		size_t skeletonFirst = 0, skeletonCount = 0;
 		size_t linkFirst = 0, linkCount = 0;
 		size_t ellipsoidFirst = 0, ellipsoidCount = 0;
+		std::vector<ObjectTriangleRange> objectTriangles;
 	};
 
 	MyMultipleObject* m_object;

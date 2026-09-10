@@ -720,7 +720,12 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 
 			std::vector<poca::core::Vec3mf> localTriangles;
 			objs->generateTriangles(localTriangles);
+			const size_t localTriangleFirst = triangles.size();
 			triangles.insert(triangles.end(), localTriangles.begin(), localTriangles.end());
+			if (!localTriangles.empty()) {
+				const poca::core::Vec3mf center = objs->boundingBox().centroid();
+				range.objectTriangles.push_back({ objectIndex, localTriangleFirst, localTriangles.size(), glm::vec3(center.x(), center.y(), center.z()) });
+			}
 			triangleObjectIndices.insert(triangleObjectIndices.end(), localTriangles.size(), (float)objectIndex);
 			std::vector<poca::core::Vec3mf> localNormals;
 			objs->generateNormals(localNormals);
@@ -988,6 +993,24 @@ bool ObjectListMultiObjectDisplayCommand::usesTransparentMeshPass(const ListDraw
 	return alpha < 1.f || (translucentRendering && _range.is3D);
 }
 
+std::vector<ObjectListMultiObjectDisplayCommand::ObjectTriangleRange> ObjectListMultiObjectDisplayCommand::transparentTriangleOrder(poca::opengl::Camera* _cam, const ListDrawRange& range) const
+{
+	std::vector<ObjectTriangleRange> ordered = range.objectTriangles;
+	if (_cam == nullptr || m_object == nullptr || ordered.size() < 2) return ordered;
+	const glm::mat4 parentInverse = glm::inverse(m_object->getModelMatrix());
+	const glm::mat4 parentToView = _cam->getViewMatrix() * _cam->getModelMatrix();
+	auto depth = [&](const ObjectTriangleRange& span) {
+		poca::core::MyObjectInterface* child = span.objectIndex < m_object->nbColors() ? m_object->getObject(span.objectIndex) : nullptr;
+		if (child == nullptr) return 0.f;
+		const glm::mat4 childToParent = parentInverse * child->getModelMatrix();
+		return (parentToView * childToParent * glm::vec4(span.centroid, 1.f)).z;
+	};
+	std::stable_sort(ordered.begin(), ordered.end(), [&](const ObjectTriangleRange& first, const ObjectTriangleRange& second) {
+		return depth(first) < depth(second);
+	});
+	return ordered;
+}
+
 void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _cam, const bool _ssao, const ListDrawRange& range)
 {
 	ObjectListDisplayCommand* referenceCommand = range.displayCommand;
@@ -1231,7 +1254,31 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 			m_triangleNormalBuffer.bindBuffer(1);
 			m_triangleFeatureBuffer.bindBuffer(2);
 			m_triangleObjectIndexBuffer.bindBuffer(3);
-			glDrawArrays(m_triangleBuffer.getMode(), (GLint)range.triangleFirst, (GLsizei)range.triangleCount);
+			auto drawTriangles = [&](size_t first, size_t count) {
+				glDrawArrays(m_triangleBuffer.getMode(), (GLint)first, (GLsizei)count);
+			};
+			if (transparentMeshPass && !range.objectTriangles.empty()) {
+				const auto ordered = transparentTriangleOrder(_cam, range);
+				for (const auto& span : ordered) {
+					if (useTranslucentMeshRendering) {
+						glEnable(GL_CULL_FACE);
+						glCullFace(GL_FRONT);
+						drawTriangles(span.first, span.count);
+						glCullFace(GL_BACK);
+					}
+					drawTriangles(span.first, span.count);
+				}
+			}
+			else {
+				if (useTranslucentMeshRendering) {
+					glEnable(GL_CULL_FACE);
+					glCullFace(GL_FRONT);
+					drawTriangles(range.triangleFirst, range.triangleCount);
+					glCullFace(GL_BACK);
+				}
+				drawTriangles(range.triangleFirst, range.triangleCount);
+			}
+			if (useTranslucentMeshRendering) glDisable(GL_CULL_FACE);
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(1);
 			glDisableVertexAttribArray(2);
