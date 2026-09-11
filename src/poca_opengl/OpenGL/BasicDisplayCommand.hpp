@@ -41,6 +41,7 @@ class QOpenGLFramebufferObject;
 namespace poca::core {
 	class BasicComponent;
 	class MyObjectInterface;
+	class BasicComponentInterface;
 }
 
 namespace poca::opengl {

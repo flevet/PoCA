@@ -21,6 +21,10 @@
 #include <OpenGL/BasicDisplayCommand.hpp>
 #include <OpenGL/GLBuffer.hpp>
 
+namespace poca::opengl {
+	class Camera;
+}
+
 class MyMultipleObject;
 class ObjectListDisplayCommand;
 
