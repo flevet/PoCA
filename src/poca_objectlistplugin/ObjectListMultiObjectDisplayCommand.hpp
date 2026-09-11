@@ -50,7 +50,7 @@ protected:
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, const bool);
 	bool usesTransparentMeshPass(const ListDrawRange&) const;
-	std::vector<ObjectTriangleRange> transparentTriangleOrder(poca::opengl::Camera*, const ListDrawRange&) const;
+	void drawTransparentRanges(poca::opengl::Camera*, bool);
 	void drawListRange(poca::opengl::Camera*, const bool, const ListDrawRange&);
 	void generateBoundingBoxSelection(const int);
 

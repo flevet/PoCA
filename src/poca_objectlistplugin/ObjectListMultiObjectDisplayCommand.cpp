@@ -960,16 +960,16 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			continue;
 		displayBboxSelection = displayBboxSelection || range.displayCommand->getParameter<bool>("bboxSelection");
 	}
-	auto drawPass = [this, _cam, _ssao](const bool _transparent) {
-		for (const ListDrawRange& range : m_listDrawRanges) {
-			if (range.displayCommand == nullptr || usesTransparentMeshPass(range) != _transparent)
-				continue;
-			drawListRange(_cam, _ssao, range);
-		}
-	};
-	// Populate the depth buffer with every opaque list before blending any transparent mesh.
-	drawPass(false);
-	drawPass(true);
+	// Populate depth with opaque geometry and decorations before blending any mesh.
+	for (const ListDrawRange& range : m_listDrawRanges) {
+		if (range.displayCommand == nullptr) continue;
+		if (usesTransparentMeshPass(range)) {
+			auto decorations = range;
+			decorations.triangleCount = 0; decorations.objectTriangles.clear();
+			drawListRange(_cam, _ssao, decorations);
+		} else drawListRange(_cam, _ssao, range);
+	}
+	drawTransparentRanges(_cam, _ssao);
 
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
@@ -991,24 +991,6 @@ bool ObjectListMultiObjectDisplayCommand::usesTransparentMeshPass(const ListDraw
 	const bool translucentRendering = _range.displayCommand->hasParameter("translucentRendering") ?
 		_range.displayCommand->getParameter<bool>("translucentRendering") : false;
 	return alpha < 1.f || (translucentRendering && _range.is3D);
-}
-
-std::vector<ObjectListMultiObjectDisplayCommand::ObjectTriangleRange> ObjectListMultiObjectDisplayCommand::transparentTriangleOrder(poca::opengl::Camera* _cam, const ListDrawRange& range) const
-{
-	std::vector<ObjectTriangleRange> ordered = range.objectTriangles;
-	if (_cam == nullptr || m_object == nullptr || ordered.size() < 2) return ordered;
-	const glm::mat4 parentInverse = glm::inverse(m_object->getModelMatrix());
-	const glm::mat4 parentToView = _cam->getViewMatrix() * _cam->getModelMatrix();
-	auto depth = [&](const ObjectTriangleRange& span) {
-		poca::core::MyObjectInterface* child = span.objectIndex < m_object->nbColors() ? m_object->getObject(span.objectIndex) : nullptr;
-		if (child == nullptr) return 0.f;
-		const glm::mat4 childToParent = parentInverse * child->getModelMatrix();
-		return (parentToView * childToParent * glm::vec4(span.centroid, 1.f)).z;
-	};
-	std::stable_sort(ordered.begin(), ordered.end(), [&](const ObjectTriangleRange& first, const ObjectTriangleRange& second) {
-		return depth(first) < depth(second);
-	});
-	return ordered;
 }
 
 void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _cam, const bool _ssao, const ListDrawRange& range)
@@ -1258,8 +1240,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 				glDrawArrays(m_triangleBuffer.getMode(), (GLint)first, (GLsizei)count);
 			};
 			if (transparentMeshPass && !range.objectTriangles.empty()) {
-				const auto ordered = transparentTriangleOrder(_cam, range);
-				for (const auto& span : ordered) {
+				for (const auto& span : range.objectTriangles) {
 					if (useTranslucentMeshRendering) {
 						glEnable(GL_CULL_FACE);
 						glCullFace(GL_FRONT);

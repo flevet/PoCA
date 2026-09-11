@@ -34,6 +34,7 @@ set(OBJECT_LIST_PLUGIN_SOURCE_HEADER_FILES
   ObjectListPlugin.cpp
   ObjectListDisplayCommand.cpp
   ObjectListMultiObjectDisplayCommand.cpp
+  ObjectListMultiObjectTransparency.cpp
   ObjectListWidget.cpp
   ObjectListsWidget.cpp
   ObjectListParamDialog.cpp

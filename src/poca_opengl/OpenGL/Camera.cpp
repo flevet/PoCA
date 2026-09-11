@@ -49,6 +49,7 @@
 #include <iomanip>
 #include <iostream>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QSurfaceFormat>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QFontMetrics>
@@ -570,6 +571,10 @@ namespace poca::opengl {
 
 	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_identifyObjectsUntilMsec(0), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false), m_interactiveRenderingSerial(0)
 	{
+		// Opaque occlusion requires an actual depth attachment, not only GL_DEPTH_TEST.
+		QSurfaceFormat surface = format();
+		surface.setDepthBufferSize(std::max(24, surface.depthBufferSize()));
+		setFormat(surface);
 		this->setObjectName("Camera");
 		this->setMouseTracking(true);
 		this->addActionToObserve("updateDisplay");
@@ -903,6 +908,11 @@ namespace poca::opengl {
 		else
 			colorFont = { 255, 255, 255, 255 }; // dark colors - white font
 
+		// Previous transparent/overlay draws may leave depth writes disabled.
+		glDepthMask(GL_TRUE);
+		glClearDepth(1.0);
+		glDepthFunc(GL_LESS);
+		glDisable(GL_SCISSOR_TEST);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		GL_CHECK_ERRORS();
 
