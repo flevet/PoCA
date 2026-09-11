@@ -156,6 +156,48 @@ namespace {
 		return hasBBox ? bbox : _object->boundingBox();
 	}
 
+	struct ChildViewDepth {
+		poca::core::MyObjectInterface* object = nullptr;
+		size_t originalIndex = 0;
+		float depth = 0.f;
+		bool validDepth = false;
+	};
+
+	std::vector<poca::core::MyObjectInterface*> objectsOrderedForDisplay(
+		const std::vector<poca::core::MyObjectInterface*>& _objects, poca::opengl::Camera* _camera)
+	{
+		std::vector<ChildViewDepth> depths;
+		depths.reserve(_objects.size());
+		for (size_t index = 0; index < _objects.size(); ++index) {
+			poca::core::MyObjectInterface* object = _objects[index];
+			if (object == nullptr)
+				continue;
+			const poca::core::BoundingBox bbox = localObjectBoundingBox(object);
+			const glm::vec4 center(
+				(bbox[0] + bbox[3]) * .5f,
+				(bbox[1] + bbox[4]) * .5f,
+				(bbox[2] + bbox[5]) * .5f,
+				1.f);
+			const glm::vec4 viewCenter = _camera->getViewMatrix() * _camera->getModelMatrix() * object->getModelMatrix() * center;
+			depths.push_back({ object, index, viewCenter.z, std::isfinite(viewCenter.z) });
+		}
+
+		// glm::lookAt places visible geometry on negative view-space Z, so ascending Z draws far to near.
+		std::stable_sort(depths.begin(), depths.end(), [](const ChildViewDepth& _lhs, const ChildViewDepth& _rhs) {
+			if (_lhs.validDepth != _rhs.validDepth)
+				return _lhs.validDepth;
+			if (_lhs.validDepth && _lhs.depth != _rhs.depth)
+				return _lhs.depth < _rhs.depth;
+			return _lhs.originalIndex < _rhs.originalIndex;
+		});
+
+		std::vector<poca::core::MyObjectInterface*> orderedObjects;
+		orderedObjects.reserve(depths.size());
+		for (const ChildViewDepth& entry : depths)
+			orderedObjects.push_back(entry.object);
+		return orderedObjects;
+	}
+
 }
 
 MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors, const bool _batchComponentRendering) :MyObject(), m_colors(_colors), m_currentColor(0), m_batchComponentRendering(_batchComponentRendering)
@@ -390,7 +432,15 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 		}
 		return;
 	}
-	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
+	if (_ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>()) {
+		poca::opengl::Camera* camera = _context.get<poca::opengl::ActiveCamera>().camera;
+		if (camera != nullptr) {
+			const std::vector<poca::core::MyObjectInterface*> orderedObjects = objectsOrderedForDisplay(m_colors, camera);
+			for (poca::core::MyObjectInterface* obj : orderedObjects)
+				executeChildGlobalCommand(obj, _ci, _context, _result);
+		}
+	}
+	else if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)
 				executeChildGlobalCommand(m_colors[index], _ci, _context, _result);
