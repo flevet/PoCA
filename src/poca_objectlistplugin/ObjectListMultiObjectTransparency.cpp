@@ -2,6 +2,8 @@
 #include <GL/glew.h>
 #include "ObjectListMultiObjectDisplayCommand.hpp"
 #include <Objects/MyMultipleObject.hpp>
+#include <Geometry/ObjectLists.hpp>
+#include <Interfaces/ObjectListInterface.hpp>
 #include <OpenGL/Camera.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <algorithm>
@@ -24,6 +26,14 @@ void ObjectListMultiObjectDisplayCommand::drawTransparentRanges(poca::opengl::Ca
 		for (const auto& span : range.objectTriangles) {
 			auto child = m_object->getObject(span.objectIndex);
 			if (!child) throw std::runtime_error("Transparent ObjectList child is unavailable.");
+			auto lists = dynamic_cast<poca::geometry::ObjectLists*>(child->getBasicComponent("ObjectLists"));
+			if (lists == nullptr || range.listIndex >= lists->nbComponents())
+				throw std::runtime_error("Transparent ObjectList range no longer matches its source component.");
+			auto objects = dynamic_cast<poca::geometry::ObjectListInterface*>(lists->getObjectList(range.listIndex));
+			if (objects == nullptr)
+				throw std::runtime_error("Transparent ObjectList source component is unavailable.");
+			if (!objects->isSelected())
+				continue;
 			// Match the exact shader transform, including parent and child gizmo matrices.
 			const auto position = parentToView*parentInverse*child->getModelMatrix()*glm::vec4(span.centroid, 1.f);
 			if (!std::isfinite(position.z)) throw std::runtime_error("Non-finite transparent ObjectList view depth.");

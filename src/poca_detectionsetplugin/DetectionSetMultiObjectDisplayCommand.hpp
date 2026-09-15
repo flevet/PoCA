@@ -13,8 +13,11 @@
 
 #include <QtCore/QString>
 
+#include <vector>
+
 #include <General/Vec3.hpp>
 #include <General/Vec4.hpp>
+#include <glm/mat4x4.hpp>
 #include <OpenGL/BasicDisplayCommand.hpp>
 #include <OpenGL/GLBuffer.hpp>
 
@@ -34,10 +37,17 @@ public:
 	void freeGPUMemory();
 
 protected:
+	struct ObjectPointRange {
+		size_t objectIndex = 0, first = 0, count = 0;
+	};
 	bool canBatch() const;
 	bool rebuild();
 	bool refreshTransformBuffers();
 	bool updateFeatureBuffer();
+	bool updateFeatureBuffer(const std::vector<size_t>&);
+	bool updateHistogramState();
+	bool refreshLutTexture();
+	bool transformBuffersDirty() const;
 	DetectionSetDisplayCommand* referenceDisplayCommand() const;
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
 	void drawElements(poca::opengl::Camera*, const bool, DetectionSetDisplayCommand*);
@@ -51,6 +61,8 @@ protected:
 	poca::opengl::PointSingleGLBuffer<poca::core::Vec3mf> m_pointBuffer, m_normalBuffer;
 	poca::opengl::FeatureSingleGLBuffer<float> m_featureBuffer;
 	poca::opengl::PointSingleGLBuffer<poca::core::Color4D> m_colorBuffer;
+	std::vector<ObjectPointRange> m_objectPointRanges;
+	std::vector<glm::mat4> m_cachedTransforms;
 };
 
 #endif

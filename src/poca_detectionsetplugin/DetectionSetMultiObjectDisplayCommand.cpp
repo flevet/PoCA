@@ -274,11 +274,32 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 		}
 		markComponentFamilyHandled(_result);
 	}
-	else if (_infos->nameCommand == "changeLUT" || _infos->nameCommand == "regenerateDisplay" || _infos->nameCommand == "selected") {
+	else if (_infos->nameCommand == "changeLUT") {
+		refreshLutTexture();
+		if (_infos->hasParameter("regenerateFeatureBuffer") && _infos->getParameter<bool>("regenerateFeatureBuffer")) {
+			const bool updated = m_object != nullptr && m_object->hasSelectedObjectIndices() &&
+				updateFeatureBuffer(m_object->selectedObjectIndices());
+			if (!updated)
+				updateFeatureBuffer();
+		}
+	}
+	else if (_infos->nameCommand == "regenerateDisplay" || _infos->nameCommand == "selected") {
 		freeGPUMemory();
 	}
 	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
-		if (!updateFeatureBuffer())
+		if (_infos->nameCommand == "histogram" && _infos->hasParameter("action")) {
+			const std::string action = _infos->getParameter<std::string>("action");
+			if (action == "save" || action == "log")
+				return;
+			if (action == "scaleLUT") {
+				if (!updateHistogramState())
+					freeGPUMemory();
+				return;
+			}
+		}
+		const bool updated = m_object != nullptr && m_object->hasSelectedObjectIndices() &&
+			updateFeatureBuffer(m_object->selectedObjectIndices());
+		if (!updated && !updateFeatureBuffer())
 			freeGPUMemory();
 	}
 	else if (_infos->nameCommand == "updateTransform") {
@@ -377,6 +398,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		const std::vector<float>* zs = dset->hasData("z") ? &dset->getMyData("z")->getData<float>() : nullptr;
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = dset->getSelection();
+		const size_t pointFirst = points.size();
 
 		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
 		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
@@ -405,6 +427,8 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 			for (size_t idx = 0; idx < rs.size(); idx++)
 				colors.emplace_back(rs[idx] / 255.f, gs[idx] / 255.f, bs[idx] / 255.f, 1.f);
 		}
+		m_objectPointRanges.push_back({ objectIndex, pointFirst, points.size() - pointFirst });
+		m_cachedTransforms.push_back(model);
 	}
 
 	if (points.empty())
@@ -450,19 +474,28 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 		return true;
 
 	std::vector<poca::core::Vec3mf> points, normals;
+	std::vector<glm::mat4> transforms;
 	const bool updateNormals = !m_normalBuffer.empty();
 	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
 
-	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
-		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
-		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
+	for (const ObjectPointRange& range : m_objectPointRanges) {
+		if (range.objectIndex >= m_object->nbColors())
+			return false;
+		if (range.first != points.size())
+			return false;
+		poca::core::MyObjectInterface* child = m_object->getObject(range.objectIndex);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
 		if (dset == nullptr || !dset->isSelected())
-			continue;
+			return false;
 
 		const glm::mat4 model = parentInvModel * child->getModelMatrix();
+		transforms.push_back(model);
 		const std::vector<float>& xs = dset->getMyData("x")->getData<float>();
 		const std::vector<float>& ys = dset->getMyData("y")->getData<float>();
 		const std::vector<float>* zs = dset->hasData("z") ? &dset->getMyData("z")->getData<float>() : nullptr;
+		if (xs.size() != range.count || ys.size() != range.count || (zs != nullptr && zs->size() != range.count))
+			return false;
 		for (size_t idx = 0; idx < xs.size(); idx++) {
 			const float z = zs != nullptr ? (*zs)[idx] : 0.f;
 			points.push_back(transformPosition(model, poca::core::Vec3mf(xs[idx], ys[idx], z)));
@@ -474,6 +507,8 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 			const std::vector<float>& nxs = dset->getMyData("nx")->getData<float>();
 			const std::vector<float>& nys = dset->getMyData("ny")->getData<float>();
 			const std::vector<float>& nzs = dset->getMyData("nz")->getData<float>();
+			if (nxs.size() != range.count || nys.size() != range.count || nzs.size() != range.count)
+				return false;
 			for (size_t idx = 0; idx < nxs.size(); idx++)
 				normals.push_back(transformDirection(model, poca::core::Vec3mf(nxs[idx], nys[idx], nzs[idx])));
 		}
@@ -488,7 +523,41 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 			return false;
 		m_normalBuffer.updateBuffer(normals);
 	}
+	m_cachedTransforms = transforms;
 	return true;
+}
+
+bool DetectionSetMultiObjectDisplayCommand::transformBuffersDirty() const
+{
+	if (m_object == nullptr || m_objectPointRanges.size() != m_cachedTransforms.size())
+		return true;
+	size_t selectedCount = 0;
+	for (size_t n = 0; n < m_object->nbColors(); n++) {
+		poca::core::MyObjectInterface* child = m_object->getObject(n);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+		if (dset != nullptr && dset->isSelected() && dynamic_cast<poca::core::Histogram<float>*>(dset->getCurrentHistogram()) != nullptr)
+			selectedCount++;
+	}
+	if (selectedCount != m_objectPointRanges.size())
+		return true;
+	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
+	for (size_t n = 0; n < m_objectPointRanges.size(); n++) {
+		const ObjectPointRange& range = m_objectPointRanges[n];
+		if (range.objectIndex >= m_object->nbColors())
+			return true;
+		poca::core::MyObjectInterface* child = m_object->getObject(range.objectIndex);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+		if (dset == nullptr || !dset->isSelected())
+			return true;
+		const glm::mat4 model = parentInvModel * child->getModelMatrix();
+		for (size_t column = 0; column < 4; column++)
+			for (size_t row = 0; row < 4; row++)
+				if (model[column][row] != m_cachedTransforms[n][column][row])
+					return true;
+	}
+	return false;
 }
 
 void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
@@ -499,11 +568,9 @@ void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, 
 		return;
 	if (m_pointBuffer.empty() && !rebuild())
 		return;
-	// Keep batched multi-object vertices synchronized with per-child model matrices.
-	// Gizmo transforms update the child object model; if the command notification is
-	// skipped by a component-specific display path, refreshing here still applies the
-	// current transform before drawing.
-	if (!m_pointBuffer.empty() && !refreshTransformBuffers()) {
+	// Keep batched vertices synchronized even if a transform notification was missed,
+	// without retransformation and upload while the effective child matrices are unchanged.
+	if (!m_pointBuffer.empty() && transformBuffersDirty() && !refreshTransformBuffers()) {
 		freeGPUMemory();
 		if (!rebuild())
 			return;
@@ -523,39 +590,99 @@ void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, 
 
 bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer()
 {
-	if (!canBatch() || m_featureBuffer.empty())
+	if (!canBatch() || m_featureBuffer.empty() || m_objectPointRanges.empty())
 		return false;
 
-	std::vector<float> features;
-	m_minOriginalFeature = std::numeric_limits<float>::max();
-	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
-	m_currentMinOriginalFeature = std::numeric_limits<float>::max();
-	m_currentMaxOriginalFeature = std::numeric_limits<float>::lowest();
-	m_isScaleLUT = false;
-
-	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
-		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+	std::vector<float> features(m_featureBuffer.getNbElements());
+	for (const ObjectPointRange& range : m_objectPointRanges) {
+		if (range.objectIndex >= m_object->nbColors() || range.first + range.count > features.size())
+			return false;
+		poca::core::MyObjectInterface* child = m_object->getObject(range.objectIndex);
+		if (child == nullptr)
+			return false;
 		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
 		if (dset == nullptr || !dset->isSelected())
-			continue;
+			return false;
 
 		poca::core::HistogramInterface* histInterface = dset->getCurrentHistogram();
 		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
 		if (histogram == nullptr)
 			return false;
-
-		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
-		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
-		m_currentMinOriginalFeature = std::min(m_currentMinOriginalFeature, histInterface->getCurrentMin());
-		m_currentMaxOriginalFeature = std::max(m_currentMaxOriginalFeature, histInterface->getCurrentMax());
-		m_isScaleLUT = m_isScaleLUT || histInterface->scaleLUT();
-
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = dset->getSelection();
-		for (size_t idx = 0; idx < values.size(); idx++)
-			features.push_back(selection[idx] ? values[idx] : -10000.f);
+		if (values.size() != range.count || selection.size() != range.count)
+			return false;
+		for (size_t idx = 0; idx < range.count; idx++)
+			features[range.first + idx] = selection[idx] ? values[idx] : -10000.f;
 	}
 
+	if (!updateHistogramState())
+		return false;
+	m_featureBuffer.updateBuffer(features);
+	return true;
+}
+
+bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer(const std::vector<size_t>& _objectIndices)
+{
+	if (!canBatch() || m_featureBuffer.empty() || _objectIndices.empty())
+		return false;
+	for (const size_t objectIndex : _objectIndices) {
+		if (objectIndex >= m_object->nbColors())
+			continue;
+		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+		auto rangeIt = std::find_if(m_objectPointRanges.begin(), m_objectPointRanges.end(),
+			[objectIndex](const ObjectPointRange& _range) { return _range.objectIndex == objectIndex; });
+		if (dset == nullptr || !dset->isSelected()) {
+			if (rangeIt != m_objectPointRanges.end())
+				return false;
+			continue;
+		}
+		if (rangeIt == m_objectPointRanges.end())
+			return false;
+		const ObjectPointRange& range = *rangeIt;
+		if (range.first + range.count > m_featureBuffer.getNbElements())
+			return false;
+		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(dset->getCurrentHistogram());
+		if (histogram == nullptr)
+			return false;
+		const std::vector<float>& values = histogram->getValues();
+		const std::vector<bool>& selection = dset->getSelection();
+		if (values.size() != range.count || selection.size() != range.count)
+			return false;
+		std::vector<float> features(range.count);
+		for (size_t idx = 0; idx < range.count; idx++)
+			features[idx] = selection[idx] ? values[idx] : -10000.f;
+		m_featureBuffer.updateSubBuffer(range.first, features.data(), range.count);
+	}
+	return updateHistogramState();
+}
+
+bool DetectionSetMultiObjectDisplayCommand::updateHistogramState()
+{
+	m_minOriginalFeature = std::numeric_limits<float>::max();
+	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
+	m_currentMinOriginalFeature = std::numeric_limits<float>::max();
+	m_currentMaxOriginalFeature = std::numeric_limits<float>::lowest();
+	m_isScaleLUT = false;
+	for (const ObjectPointRange& range : m_objectPointRanges) {
+		if (range.objectIndex >= m_object->nbColors())
+			return false;
+		poca::core::MyObjectInterface* child = m_object->getObject(range.objectIndex);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+		if (dset == nullptr || !dset->isSelected())
+			return false;
+		poca::core::HistogramInterface* histogram = dset->getCurrentHistogram();
+		if (histogram == nullptr)
+			return false;
+		m_minOriginalFeature = std::min(m_minOriginalFeature, histogram->getMin());
+		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histogram->getMax());
+		m_currentMinOriginalFeature = std::min(m_currentMinOriginalFeature, histogram->getCurrentMin());
+		m_currentMaxOriginalFeature = std::max(m_currentMaxOriginalFeature, histogram->getCurrentMax());
+		m_isScaleLUT = m_isScaleLUT || histogram->scaleLUT();
+	}
 	if (m_minOriginalFeature == std::numeric_limits<float>::max()) {
 		m_minOriginalFeature = 0.f;
 		m_maxOriginalFeature = 1.f;
@@ -563,8 +690,23 @@ bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer()
 		m_currentMaxOriginalFeature = 1.f;
 	}
 	m_actualValueFeature = m_maxOriginalFeature;
-	m_featureBuffer.updateBuffer(features);
 	return true;
+}
+
+bool DetectionSetMultiObjectDisplayCommand::refreshLutTexture()
+{
+	if (m_object == nullptr)
+		return false;
+	for (size_t n = 0; n < m_object->nbColors(); n++) {
+		poca::core::MyObjectInterface* child = m_object->getObject(n);
+		poca::geometry::DetectionSet* dset = child != nullptr ?
+			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+		if (dset == nullptr)
+			continue;
+		m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(dset->getPalette());
+		return true;
+	}
+	return false;
 }
 
 void DetectionSetMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao, DetectionSetDisplayCommand* _referenceCommand)
@@ -594,4 +736,6 @@ void DetectionSetMultiObjectDisplayCommand::freeGPUMemory()
 	m_featureBuffer.freeGPUMemory();
 	m_colorBuffer.freeGPUMemory();
 	m_textureLutID = 0;
+	m_objectPointRanges.clear();
+	m_cachedTransforms.clear();
 }

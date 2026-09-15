@@ -985,8 +985,12 @@ namespace poca::core {
 						co->executeCommand(_com, _context, _result);
 					}
 				}
-				if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer)
-					multipleObject->poca::core::CommandableObject::executeCommand(_com, _context, _result);
+				if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer) {
+					CommandInfo batchCommand(*_com);
+					if (sourceList != NULL)
+						batchCommand.addParameter("__batchListIndex", sourceListIndex);
+					multipleObject->poca::core::CommandableObject::executeCommand(&batchCommand, _context, _result);
+				}
 			}
 		}
 		else {
@@ -995,8 +999,13 @@ namespace poca::core {
 			CommandableObject* co = static_cast <CommandableObject*>(_bci);
 			co->executeCommand(_com, _context, _result);
 			MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);
-			if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer)
-				multipleObject->poca::core::CommandableObject::executeCommand(_com, _context, _result);
+			if (multipleObject != NULL && multipleObject->batchComponentRendering() && refreshBatchRenderer) {
+				CommandInfo batchCommand(*_com);
+				BasicComponentList* sourceList = dynamic_cast<BasicComponentList*>(_bci);
+				if (sourceList != NULL)
+					batchCommand.addParameter("__batchListIndex", sourceList->currentComponentIndex());
+				multipleObject->poca::core::CommandableObject::executeCommand(&batchCommand, _context, _result);
+			}
 		}
 	}
 	

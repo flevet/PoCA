@@ -45,10 +45,20 @@ protected:
 		size_t objectIndex = 0, first = 0, count = 0;
 		glm::vec3 centroid = glm::vec3(0.f);
 	};
+	struct ObjectFeatureRange {
+		size_t objectIndex = 0;
+		size_t pointFirst = 0, pointCount = 0;
+		size_t outlinePointFirst = 0, outlinePointCount = 0;
+		size_t triangleFirst = 0, triangleCount = 0;
+		size_t lineFirst = 0, lineCount = 0;
+		size_t ellipsoidFirst = 0, ellipsoidCount = 0;
+	};
 	struct ListDrawRange;
 	bool canBatch() const;
 	bool rebuild();
 	bool updateFeatureBuffers();
+	bool updateFeatureBuffers(uint32_t, const std::vector<size_t>&, bool);
+	bool refreshLutTextures(const uint32_t*);
 	bool refreshTransformBuffers();
 	bool updateObjectModelBuffer();
 	void display(poca::opengl::Camera*, const bool, const bool, poca::core::CommandExecutionResult&);
@@ -73,6 +83,7 @@ protected:
 		size_t linkFirst = 0, linkCount = 0;
 		size_t ellipsoidFirst = 0, ellipsoidCount = 0;
 		std::vector<ObjectTriangleRange> objectTriangles;
+		std::vector<ObjectFeatureRange> objectFeatures;
 	};
 
 	MyMultipleObject* m_object;

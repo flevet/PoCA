@@ -127,6 +127,7 @@ namespace poca::opengl {
 		void generateBuffer(const size_t, const int, const int, const GLenum = GL_ARRAY_BUFFER);
 		void updateBuffer(const T*);
 		void updateBuffer(const std::vector < T >&);
+		void updateSubBuffer(const size_t, const T*, const size_t);
 		void updateIndices(const std::vector <uint32_t>&);
 		void bindBuffer(uint32_t) const;
 		void bindBuffer(uint32_t, void*) const;
@@ -201,6 +202,15 @@ namespace poca::opengl {
 		if (m_nbElems == 0) return;
 		glBindBuffer(m_target, m_bufferVertex);
 		glBufferData(m_target, m_nbElems * sizeof(T), (void*)(&_data[0]), GL_STATIC_DRAW);
+		glBindBuffer(m_target, 0);
+	}
+
+	template< class T >
+	void SingleGLBuffer<T>::updateSubBuffer(const size_t _first, const T* _data, const size_t _count)
+	{
+		if (_count == 0) return;
+		glBindBuffer(m_target, m_bufferVertex);
+		glBufferSubData(m_target, _first * sizeof(T), _count * sizeof(T), (void*)_data);
 		glBindBuffer(m_target, 0);
 	}
 
