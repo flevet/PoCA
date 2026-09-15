@@ -66,15 +66,15 @@ protected:
 	poca::geometry::DetectionSet* m_dset;
 	float m_minX;
 
-	GLuint m_textureLutID;
+	GLuint m_textureLutID{ 0 };
 	GLfloat m_minOriginalFeature, m_maxOriginalFeature, m_actualValueFeature, m_alphaValue;
 	poca::opengl::PointSingleGLBuffer <poca::core::Vec3mf> m_pointBuffer;
 	poca::opengl::PointSingleGLBuffer <float> m_selectedPointBuffer;
 
 	poca::core::PaletteInterface* m_palette{ NULL };
 
-	QOpenGLFramebufferObject* m_fbo;
-	int m_wImage, m_hImage;
+	QOpenGLFramebufferObject* m_fbo{ nullptr };
+	int m_wImage{ 0 }, m_hImage{ 0 };
 
 	DetectionSetDisplayCommand* m_dc;
 };

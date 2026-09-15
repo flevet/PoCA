@@ -80,6 +80,10 @@ HeatMapDisplayCommand::HeatMapDisplayCommand(const HeatMapDisplayCommand& _o) : 
 
 HeatMapDisplayCommand::~HeatMapDisplayCommand()
 {
+	if (m_fbo != NULL) {
+		delete m_fbo;
+		m_fbo = nullptr;
+	}
 	if(m_palette != NULL)
 		delete m_palette;
 }
@@ -102,7 +106,8 @@ void HeatMapDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca:
 	}
 	else if (_infos->nameCommand == "updatePickingBuffer") {
 		int w = _infos->getParameter<int>("width"), h = _infos->getParameter<int>("height");
-		updateFBO(w, h);
+		if (getParameter<bool>("displayHeatmap"))
+			updateFBO(w, h);
 	}
 	else if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
@@ -116,6 +121,10 @@ void HeatMapDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca:
 	}
 	else if (hasCommand(_infos->nameCommand)) {
 		loadParameters(*_infos);
+		if (_infos->nameCommand == "displayHeatmap" && !getParameter<bool>("displayHeatmap") && m_fbo != NULL) {
+			delete m_fbo;
+			m_fbo = nullptr;
+		}
 	}
 	else if (_infos->nameCommand == "changeLUTHeatmap") {
 		std::string nameLut = _infos->getParameter<std::string>("changeLUTHeatmap");
@@ -235,11 +244,14 @@ void HeatMapDisplayCommand::generateLutTexture(poca::core::PaletteInterface* _pa
 
 void HeatMapDisplayCommand::freeGPUMemory()
 {
-	if (m_textureLutID == 0) return;
 	if (m_textureLutID != 0)
 		glDeleteTextures(1, &m_textureLutID);
 	m_pointBuffer.freeGPUMemory();
 	m_textureLutID = 0;
+	if (m_fbo != NULL) {
+		delete m_fbo;
+		m_fbo = nullptr;
+	}
 }
 
 void HeatMapDisplayCommand::updateFBO(const int _w, const int _h)
@@ -250,7 +262,7 @@ void HeatMapDisplayCommand::updateFBO(const int _w, const int _h)
 		delete m_fbo;
 	m_fbo = new QOpenGLFramebufferObject(m_wImage, m_hImage, QOpenGLFramebufferObject::NoAttachment, GL_TEXTURE_2D, GL_RED);
 	glBindTexture(GL_TEXTURE_2D, m_fbo->texture());
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_wImage, m_hImage, 0, GL_RED, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_wImage, m_hImage, 0, GL_RED, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -265,14 +277,15 @@ void HeatMapDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offs
 	if (m_pointBuffer.empty() && m_dc == NULL)
 		createDisplay();
 
-	if (m_fbo == NULL) return;
-
 	bool displayHeatmap = getParameter<bool>("displayHeatmap");
 	float radiusHeatmap = getParameter<float>("radiusHeatmap");
 	float intensityHeatmap = getParameter<float>("intensityHeatmap");
 	bool screenRadius = getParameter<bool>("radiusHeatmapType", "radiusScreenHeatmap");
 
 	if (!displayHeatmap) return;
+
+	if (m_fbo == NULL)
+		updateFBO(_cam->getWidth(), _cam->getHeight());
 
 	GLfloat bkColor[4];
 	glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);

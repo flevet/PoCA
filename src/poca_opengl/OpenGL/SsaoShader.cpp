@@ -50,7 +50,7 @@ namespace poca::opengl {
 	SsaoShader::SsaoShader() :m_lightPos(0.f, 0.f, 5.f), m_lightColor(1.f, 1.f, 1.f)
 	{
 		m_shaderGeometryPass = m_shaderLightingPass = m_shaderSSAO = m_shaderSSAOBlur = m_shaderSilhouette = m_shaderHalo = NULL;
-		m_fboGeometry = m_fboNoise = m_fboBlur = m_fboHalo = m_fboSilhouette = m_fboSilhouetteBlurred = NULL;
+		m_fboGeometry = m_fboNoise = m_fboBlur = m_fboHalo = m_fboSilhouette = m_fboSilhouetteBlurred = m_fboLighting = NULL;
 		m_noiseTexture = 0;
 	}
 
@@ -96,6 +96,9 @@ namespace poca::opengl {
 			delete m_fboSilhouette;
 		if (m_fboSilhouetteBlurred != NULL)
 			delete m_fboSilhouetteBlurred;
+		if (m_fboLighting != NULL)
+			delete m_fboLighting;
+		m_fboGeometry = m_fboNoise = m_fboBlur = m_fboHalo = m_fboSilhouette = m_fboSilhouetteBlurred = m_fboLighting = NULL;
 	}
 
 	void SsaoShader::deleteShaders()

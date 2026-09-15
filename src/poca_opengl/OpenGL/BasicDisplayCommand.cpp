@@ -348,7 +348,7 @@ namespace poca::opengl {
 			delete m_pickFBO;
 		m_pickFBO = new QOpenGLFramebufferObject(m_wImage, m_hImage, QOpenGLFramebufferObject::Depth, GL_TEXTURE_2D, GL_RED);
 		glBindTexture(GL_TEXTURE_2D, m_pickFBO->texture());
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_wImage, m_hImage, 0, GL_RED, GL_FLOAT, NULL);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, m_wImage, m_hImage, 0, GL_RED, GL_FLOAT, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glBindTexture(GL_TEXTURE_2D, 0);
