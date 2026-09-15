@@ -39,6 +39,8 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
+#include <Cuda/GPUBuffer.hpp>
+
 #include "voronoi.h"
 
 /*#define VORO_BLOCK_SIZE 16
@@ -57,8 +59,6 @@ enum Status {
 	success = 4,
 	needs_exact_predicates = 5
 };
-
-#define cuda_check(x) if (x!=cudaSuccess) exit(1);
 
 #define FOR(I,UPPERBND) for(int I = 0; I<int(UPPERBND); ++I)
 
@@ -429,26 +429,6 @@ struct ConvexCell {
 			cir = boundary_next(cir);
 		} while (cir != first_boundary_);
 	}
-};
-
-//----------------------------------WRAPPER
-template <class T> struct GPUBuffer {
-	void init(T* data) {
-		IF_VERBOSE(std::cerr << "GPU: " << size * sizeof(T) / 1048576 << " Mb used" << std::endl);
-		cpu_data = data;
-		cuda_check(cudaMalloc((void**)& gpu_data, size * sizeof(T)));
-		cpu2gpu();
-	}
-	GPUBuffer(std::vector<T>& v) { size = v.size(); init(v.data()); }
-	GPUBuffer(T * _v, int _size) { size = _size; init(_v); }
-	~GPUBuffer() { cuda_check(cudaFree(gpu_data)); }
-
-	void cpu2gpu() { cuda_check(cudaMemcpy(gpu_data, cpu_data, size * sizeof(T), cudaMemcpyHostToDevice)); }
-	void gpu2cpu() { cuda_check(cudaMemcpy(cpu_data, gpu_data, size * sizeof(T), cudaMemcpyDeviceToHost)); }
-
-	T* cpu_data;
-	T* gpu_data;
-	int size;
 };
 
 char StatusStr[6][128] = {

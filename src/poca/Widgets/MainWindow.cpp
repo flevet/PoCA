@@ -3804,6 +3804,136 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 			delete dset;
 		}
 	}
+	else if (tmp == "exportCurrentObjectListAllMyMultipleObject") {
+		auto datasets = m_currentMdi->getWidget()->getObject();
+
+		for (auto n = 0; n < datasets->nbColors(); n++) {
+			auto dataset = datasets->getObject(n);
+			datasets->setCurrentObject(n);
+
+			const auto& dir = dataset->getDir();
+			const auto& name = dataset->getName();
+
+			std::cout << "Processing " << dir << " - " << name << std::endl;
+			//return;
+
+			QDir qdir(dir.c_str());
+			QDir dirFolders;
+			QString path = dir.c_str() + QString("/../nucleusObjsAssembler");
+			if (!dirFolders.exists(path)) {
+				if (!qdir.mkdir(path)) {
+					std::cout << "Failed to create " << path.toStdString() << std::endl;
+					continue;
+				}
+			}
+			path = dir.c_str() + QString("/../nucleusCentroidsAssembler");
+			if (!dirFolders.exists(path)) {
+				if (!qdir.mkdir(path)) {
+					std::cout << "Failed to create " << path.toStdString() << std::endl;
+					continue;
+				}
+			}
+			path = dir.c_str() + QString("/../voronoiCutAssembler");
+			if (!dirFolders.exists(path)) {
+				if (!qdir.mkdir(path)) {
+					std::cout << "Failed to create " << path.toStdString() << std::endl;
+					continue;
+				}
+			}
+			std::cout << "Folders have been created" << std::endl;
+
+			if (!dataset->hasBasicComponent("ObjectLists")) continue;
+			auto tmp = dataset->getBasicComponent("ObjectLists");
+			auto objs = dynamic_cast <poca::geometry::ObjectLists*>(tmp);
+			if (objs->nbComponents() != 2) continue;
+
+			int idOrga = 1, idNuclei = 0, idSelectedNuclei = 2;
+
+			auto orgaShapeTmp = objs->getComponent(idOrga);
+			auto orgaShape = dynamic_cast <poca::geometry::ObjectListMesh*>(orgaShapeTmp);
+			if (orgaShape == NULL) {
+				std::cout << "For " << name << ": converting orgaShape to ObjectListMesh failed" << std::endl;
+				continue;
+			}
+
+			std::cout << "For " << name << ": selecting nuclei inside organoid shape" << std::endl;
+
+			auto nucleus = objs->getComponent(idNuclei);
+			engine->executeCommand(objs, &poca::core::CommandInfo(false, "selectObjectsInObjectsCentroids", "id1", idOrga, "id2", idNuclei));
+
+			std::cout << "For " << name << ": selecting nuclei inside organoid shape - done" << std::endl;
+			
+			if (objs->nbComponents() != 3) {
+				std::cout << "For " << name << ": identifying nuclei inside the organoid failed" << std::endl;
+				continue;
+			}
+
+			auto selectedNucleiTmp = objs->getComponent(idSelectedNuclei);
+			auto selectedNuclei = dynamic_cast <poca::geometry::ObjectListMesh*>(selectedNucleiTmp);
+			if (selectedNuclei == NULL) {
+				std::cout << "For " << name << ": converting selectedNuclei to ObjectListMesh failed" << std::endl;
+				continue;
+			}
+
+			std::cout << "Creation of the nculei centroids" << std::endl;
+			std::vector <poca::core::Vec3mf> centroids(selectedNuclei->nbElements());
+			for (size_t n = 0; n < selectedNuclei->nbElements(); n++)
+				centroids[n] = selectedNuclei->computeBarycenterElement(n);
+			std::map <std::string, std::vector <float>> features;
+			std::vector <float> xs, ys, zs;
+			for (size_t n = 0; n < centroids.size(); n++) {
+				xs.push_back(centroids[n][0]);
+				ys.push_back(centroids[n][1]);
+				zs.push_back(centroids[n][2]);
+			}
+			features["x"] = xs;
+			features["y"] = ys;
+			features["z"] = zs;
+			std::map <std::string, poca::core::MyData*> featuresObjects = selectedNuclei->getData();
+			for (const auto& feature : featuresObjects) {
+				if (feature.first != "x" && feature.first != "y" && feature.first != "z") {
+					std::vector <float> selectedValues;
+					const std::vector <float>& values = feature.second->getData<float>();
+					for (size_t n = 0; n < centroids.size(); n++) {
+						selectedValues.push_back(values[n]);
+					}
+					features[feature.first] = selectedValues;
+				}
+			}
+			poca::geometry::DetectionSet* dset = new poca::geometry::DetectionSet(features);
+
+			std::cout << "Creation of the 3D Voronoi" << std::endl;
+			poca::geometry::DelaunayTriangulationFactoryInterface* factory = poca::geometry::createDelaunayTriangulationFactory();
+			poca::geometry::DelaunayTriangulationInterface* delaunay = factory->createDelaunayTriangulation(xs, ys, zs);
+			poca::geometry::VoronoiDiagramFactoryInterface* factoryV = poca::geometry::createVoronoiDiagramFactory();
+			poca::geometry::KdTree_DetectionPoint* kdtree = dset->getKdTree();
+			poca::geometry::VoronoiDiagram* voronoi = factoryV->createVoronoiDiagram(xs, ys, zs, kdtree, delaunay, false);
+			poca::geometry::VoronoiDiagram3D* voro3D = static_cast <poca::geometry::VoronoiDiagram3D*>(voronoi);
+			const auto& polyhedrons = voro3D->getPolyhedrons();
+			std::vector < Surface_mesh_3_double> voronoiCells, voronoiCellsCut;
+			std::cout << "Cutting of the 3D Voronoi cells" << std::endl;
+			for (const auto& poly : polyhedrons) {
+				voronoiCells.push_back(Surface_mesh_3_double());
+				CGAL::copy_face_graph(poly, voronoiCells.back());
+				assert(CGAL::is_valid_polygon_mesh(voronoiCells.back()));
+			}
+			
+			std::cout << "Cutting of the 3D Voronoi cells" << std::endl;
+			poca::geometry::meshesInsideMeshWithCutting(orgaShape->getMeshes().front(), voronoiCells, voronoiCellsCut);
+			poca::geometry::ObjectListMesh* voronoiCellsCutMesh = new poca::geometry::ObjectListMesh(voronoiCellsCut);
+
+
+			std::cout << "Saving" << std::endl;
+			selectedNuclei->saveAsOBJ(dir + "/../nucleusObjsAssembler/" + name + ".obj");
+			dset->saveDetections(dir + "/../nucleusCentroidsAssembler/" + name + ".csv");
+			voronoiCellsCutMesh->saveAsOBJ(dir + "/../voronoiCutAssembler/" + name + ".obj");
+
+			delete factoryV;
+			delete factory;
+			delete delaunay;
+			delete voronoi;
+		}
+	}
 }
 
 void MainWindow::onGridReleased()

@@ -33,6 +33,7 @@ set(MISC_HEADER_FILES
   Cuda/CoreMisc.h
   Cuda/BasicOperationsImage.h
   Cuda/ConnectedComponents.h
+  Cuda/GPUBuffer.hpp
   )
 
 set(DESIGN_PATTERNS_HEADER_FILES
