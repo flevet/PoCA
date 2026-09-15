@@ -659,7 +659,9 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 		}
 	}
 	else if (_infos->nameCommand == "ellipsoidRendering") {
-		rebuild();
+		const bool enabled = _infos->hasParameter("ellipsoidRendering") && _infos->getParameter<bool>("ellipsoidRendering");
+		if (enabled && (m_ellipsoidTransformBuffer.empty() || m_ellipsoidFeatureBuffer.empty() || m_ellipsoidObjectIndexBuffer.empty()))
+			rebuildEllipsoidBuffers();
 	}
 	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature" || _infos->nameCommand == "selected") {
 		if (_infos->nameCommand == "histogram" && _infos->hasParameter("action")) {
@@ -724,6 +726,92 @@ bool ObjectListMultiObjectDisplayCommand::canBatch() const
 	return hasObjectListChild;
 }
 
+bool ObjectListMultiObjectDisplayCommand::rebuildEllipsoidBuffers()
+{
+	m_ellipsoidTransformBuffer.freeGPUMemory();
+	m_ellipsoidFeatureBuffer.freeGPUMemory();
+	m_ellipsoidObjectIndexBuffer.freeGPUMemory();
+	m_hasEllipsoids = false;
+	if (!canBatch() || m_listDrawRanges.empty())
+		return false;
+
+	std::vector<glm::mat4> ellipsoidTransforms;
+	std::vector<float> ellipsoidFeatures, ellipsoidObjectIndices;
+	for (ListDrawRange& range : m_listDrawRanges) {
+		range.ellipsoidFirst = ellipsoidTransforms.size();
+		forEachObjectListAtIndex(m_object, range.listIndex, [&](size_t objectIndex, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
+			auto objectRange = std::find_if(range.objectFeatures.begin(), range.objectFeatures.end(), [objectIndex](const ObjectFeatureRange& candidate) {
+				return candidate.objectIndex == objectIndex;
+			});
+			if (objectRange == range.objectFeatures.end())
+				return;
+			objectRange->ellipsoidFirst = ellipsoidFeatures.size();
+			objectRange->ellipsoidCount = 0;
+
+			ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
+			const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
+				localDisplay->getParameter<bool>("ellipsoidRendering");
+			if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
+				m_hasEllipsoids = true;
+				poca::core::HistogramInterface* histInterface = objs->getCurrentHistogram();
+				poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
+				if (histogram == nullptr)
+					return;
+				const std::vector<float>& values = histogram->getValues();
+				const std::vector<bool>& selection = objs->getSelection();
+				const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
+				const std::vector<float>& major = objs->getMyData("major")->getData<float>();
+				const std::vector<float>& minor = objs->getMyData("minor")->getData<float>();
+				const std::vector<float>& minor2 = objs->getMyData("minor2")->getData<float>();
+
+				std::vector<float> localEllipsoidFeatures(objs->nbElements());
+				if (objs->isHiLow()) {
+					float inter = histInterface->getMax() - histInterface->getMin();
+					float selectedValue = histInterface->getMin() + inter / 4.f;
+					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
+				}
+				else {
+					for (size_t idx = 0; idx < objs->nbElements(); idx++)
+						localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+				}
+				if (!objs->isSelected())
+					std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
+
+				for (size_t idx = 0; idx < objs->nbElements(); idx++) {
+					glm::mat4 matrix(1.f);
+					glm::mat3 rotation = glm::mat3(
+						axisPCA[idx][0].x(), axisPCA[idx][0].y(), axisPCA[idx][0].z(),
+						axisPCA[idx][1].x(), axisPCA[idx][1].y(), axisPCA[idx][1].z(),
+						axisPCA[idx][2].x(), axisPCA[idx][2].y(), axisPCA[idx][2].z());
+					poca::core::Vec3mf centroidTmp = objs->computeBarycenterElement((int)idx);
+					const glm::vec3 centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);
+					const glm::vec3 scales = glm::vec3(major[idx] / 2.f, minor[idx] / 2.f, minor2[idx] / 2.f);
+					matrix = glm::translate(matrix, centroid);
+					matrix *= glm::mat4(rotation);
+					matrix = glm::scale(matrix, scales);
+					ellipsoidTransforms.push_back(matrix);
+					ellipsoidObjectIndices.push_back((float)objectIndex);
+				}
+			}
+			objectRange->ellipsoidCount = ellipsoidFeatures.size() - objectRange->ellipsoidFirst;
+		});
+		range.ellipsoidCount = ellipsoidTransforms.size() - range.ellipsoidFirst;
+	}
+
+	if (!ellipsoidTransforms.empty()) {
+		m_ellipsoidTransformBuffer.generateBuffer(ellipsoidTransforms.size(), 4, GL_FLOAT);
+		m_ellipsoidTransformBuffer.updateBuffer(ellipsoidTransforms.data());
+		m_ellipsoidFeatureBuffer.generateBuffer(ellipsoidFeatures.size(), 1, GL_FLOAT);
+		m_ellipsoidFeatureBuffer.updateBuffer(ellipsoidFeatures.data());
+		m_ellipsoidObjectIndexBuffer.generateBuffer(ellipsoidObjectIndices.size(), 1, GL_FLOAT);
+		m_ellipsoidObjectIndexBuffer.updateBuffer(ellipsoidObjectIndices.data());
+	}
+	return true;
+}
+
 bool ObjectListMultiObjectDisplayCommand::rebuild()
 {
 	freeGPUMemory();
@@ -731,10 +819,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		return false;
 
 	std::vector<poca::core::Vec3mf> points, outlinePoints, triangles, triangleNormals, lines, skeletons, links;
-	std::vector<float> pointFeatures, outlinePointFeatures, triangleFeatures, lineFeatures, ellipsoidFeatures;
-	std::vector<float> pointObjectIndices, outlinePointObjectIndices, triangleObjectIndices, lineObjectIndices, skeletonObjectIndices, linkObjectIndices, ellipsoidObjectIndices;
+	std::vector<float> pointFeatures, outlinePointFeatures, triangleFeatures, lineFeatures;
+	std::vector<float> pointObjectIndices, outlinePointObjectIndices, triangleObjectIndices, lineObjectIndices, skeletonObjectIndices, linkObjectIndices;
 	std::vector<poca::core::Color4D> colorSkeletons, colorLinks;
-	std::vector<glm::mat4> ellipsoidTransforms;
 	m_minOriginalFeature = std::numeric_limits<float>::max();
 	m_maxOriginalFeature = std::numeric_limits<float>::lowest();
 	m_hasOutlinePoints = false;
@@ -752,7 +839,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		range.lineFirst = lines.size();
 		range.skeletonFirst = skeletons.size();
 		range.linkFirst = links.size();
-		range.ellipsoidFirst = ellipsoidTransforms.size();
+		range.ellipsoidFirst = 0;
 		range.minOriginalFeature = std::numeric_limits<float>::max();
 		range.maxOriginalFeature = std::numeric_limits<float>::lowest();
 		poca::geometry::ObjectListInterface* reference = nullptr;
@@ -764,7 +851,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 			objectRange.outlinePointFirst = outlinePointFeatures.size();
 			objectRange.triangleFirst = triangleFeatures.size();
 			objectRange.lineFirst = lineFeatures.size();
-			objectRange.ellipsoidFirst = ellipsoidFeatures.size();
+			objectRange.ellipsoidFirst = 0;
 			ObjectListDisplayCommand* localDisplay = objs->getCommand<ObjectListDisplayCommand>();
 			if (reference == nullptr) {
 				reference = objs;
@@ -902,48 +989,6 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 				}
 			}
 
-			const bool ellipsoidRendering = localDisplay != nullptr && localDisplay->hasParameter("ellipsoidRendering") &&
-				localDisplay->getParameter<bool>("ellipsoidRendering");
-			if (ellipsoidRendering && objs->dimension() == 3 && objs->hasData("major") && objs->hasData("minor") && objs->hasData("minor2")) {
-				m_hasEllipsoids = true;
-				const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
-				const std::vector<float>& major = objs->getMyData("major")->getData<float>();
-				const std::vector<float>& minor = objs->getMyData("minor")->getData<float>();
-				const std::vector<float>& minor2 = objs->getMyData("minor2")->getData<float>();
-
-				std::vector<float> localEllipsoidFeatures(objs->nbElements());
-				if (objs->isHiLow()) {
-					float inter = histInterface->getMax() - histInterface->getMin();
-					float selectedValue = histInterface->getMin() + inter / 4.f;
-					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
-					for (size_t idx = 0; idx < objs->nbElements(); idx++)
-						localEllipsoidFeatures[idx] = selection[idx] ? selectedValue : notSelectedValue;
-				}
-				else {
-					for (size_t idx = 0; idx < objs->nbElements(); idx++)
-						localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
-				}
-				if (!objs->isSelected())
-					std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-				ellipsoidFeatures.insert(ellipsoidFeatures.end(), localEllipsoidFeatures.begin(), localEllipsoidFeatures.end());
-
-				for (size_t idx = 0; idx < objs->nbElements(); idx++) {
-					glm::mat4 matrix(1.f);
-					glm::mat3 rotation = glm::mat3(
-						axisPCA[idx][0].x(), axisPCA[idx][0].y(), axisPCA[idx][0].z(),
-						axisPCA[idx][1].x(), axisPCA[idx][1].y(), axisPCA[idx][1].z(),
-						axisPCA[idx][2].x(), axisPCA[idx][2].y(), axisPCA[idx][2].z());
-					poca::core::Vec3mf centroidTmp = objs->computeBarycenterElement((int)idx);
-					const glm::vec3 centroid = glm::vec3(centroidTmp[0], centroidTmp[1], centroidTmp[2]);
-					const glm::vec3 scales = glm::vec3(major[idx] / 2.f, minor[idx] / 2.f, minor2[idx] / 2.f);
-					matrix = glm::translate(matrix, centroid);
-					matrix *= glm::mat4(rotation);
-					matrix = glm::scale(matrix, scales);
-					ellipsoidTransforms.push_back(matrix);
-					ellipsoidObjectIndices.push_back((float)objectIndex);
-				}
-			}
-			objectRange.ellipsoidCount = ellipsoidFeatures.size() - objectRange.ellipsoidFirst;
 			range.objectFeatures.push_back(objectRange);
 		});
 
@@ -953,7 +998,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		range.lineCount = lines.size() - range.lineFirst;
 		range.skeletonCount = skeletons.size() - range.skeletonFirst;
 		range.linkCount = links.size() - range.linkFirst;
-		range.ellipsoidCount = ellipsoidTransforms.size() - range.ellipsoidFirst;
+		range.ellipsoidCount = 0;
 		if (range.minOriginalFeature == std::numeric_limits<float>::max()) {
 			range.minOriginalFeature = 0.f;
 			range.maxOriginalFeature = 1.f;
@@ -1029,14 +1074,8 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 		m_linkObjectIndexBuffer.generateBuffer(linkObjectIndices.size(), 1, GL_FLOAT);
 		m_linkObjectIndexBuffer.updateBuffer(linkObjectIndices.data());
 	}
-	if (!ellipsoidTransforms.empty()) {
-		m_ellipsoidTransformBuffer.generateBuffer(ellipsoidTransforms.size(), 4, GL_FLOAT);
-		m_ellipsoidTransformBuffer.updateBuffer(ellipsoidTransforms.data());
-		m_ellipsoidFeatureBuffer.generateBuffer(ellipsoidFeatures.size(), 1, GL_FLOAT);
-		m_ellipsoidFeatureBuffer.updateBuffer(ellipsoidFeatures.data());
-		m_ellipsoidObjectIndexBuffer.generateBuffer(ellipsoidObjectIndices.size(), 1, GL_FLOAT);
-		m_ellipsoidObjectIndexBuffer.updateBuffer(ellipsoidObjectIndices.data());
-	}
+	if (!rebuildEllipsoidBuffers())
+		return false;
 	return updateObjectModelBuffer();
 }
 
@@ -1111,6 +1150,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	const bool fill = referenceCommand->getParameter<bool>("fill");
 	const bool skeletonRendering = referenceCommand->getParameter<bool>("skeletonRendering");
 	const bool linkRendering = referenceCommand->getParameter<bool>("linkRendering");
+	const bool ellipsoidRendering = referenceCommand->hasParameter("ellipsoidRendering") && referenceCommand->getParameter<bool>("ellipsoidRendering");
 	const bool cullFaceActivated = _cam->cullFaceActivated();
 	const std::string cullFaceType = referenceCommand->getParameter<std::string>("cullFaceType");
 	const float alpha = referenceCommand->getParameter<float>("alpha");
@@ -1485,7 +1525,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	glDepthMask(GL_TRUE);
 	glDisable(GL_DEPTH_TEST);
 
-	if (range.ellipsoidCount != 0) {
+	if (ellipsoidRendering && range.ellipsoidCount != 0) {
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
 		glDisable(GL_CULL_FACE);

@@ -56,6 +56,7 @@ protected:
 	struct ListDrawRange;
 	bool canBatch() const;
 	bool rebuild();
+	bool rebuildEllipsoidBuffers();
 	bool updateFeatureBuffers();
 	bool updateFeatureBuffers(uint32_t, const std::vector<size_t>&, bool);
 	bool refreshLutTextures(const uint32_t*);
