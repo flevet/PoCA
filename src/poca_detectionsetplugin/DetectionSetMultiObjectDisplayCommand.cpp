@@ -274,7 +274,7 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 		}
 		markComponentFamilyHandled(_result);
 	}
-	else if (_infos->nameCommand == "changeLUT" || _infos->nameCommand == "regenerateDisplay") {
+	else if (_infos->nameCommand == "changeLUT" || _infos->nameCommand == "regenerateDisplay" || _infos->nameCommand == "selected") {
 		freeGPUMemory();
 	}
 	else if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
@@ -363,7 +363,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
 		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
-		if (dset == nullptr)
+		if (dset == nullptr || !dset->isSelected())
 			continue;
 
 		poca::core::HistogramInterface* histInterface = dset->getCurrentHistogram();
@@ -387,7 +387,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		for (size_t idx = 0; idx < xs.size(); idx++) {
 			const float z = zs != nullptr ? (*zs)[idx] : 0.f;
 			points.push_back(transformPosition(model, poca::core::Vec3mf(xs[idx], ys[idx], z)));
-			features.push_back(dset->isSelected() && selection[idx] ? values[idx] : -10000.f);
+			features.push_back(selection[idx] ? values[idx] : -10000.f);
 		}
 
 		if (dset->hasData("nx") && dset->hasData("ny") && dset->hasData("nz")) {
@@ -456,7 +456,7 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
 		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
-		if (dset == nullptr)
+		if (dset == nullptr || !dset->isSelected())
 			continue;
 
 		const glm::mat4 model = parentInvModel * child->getModelMatrix();
@@ -536,7 +536,7 @@ bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer()
 	for (size_t objectIndex = 0; objectIndex < m_object->nbColors(); objectIndex++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(objectIndex);
 		poca::geometry::DetectionSet* dset = dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet"));
-		if (dset == nullptr)
+		if (dset == nullptr || !dset->isSelected())
 			continue;
 
 		poca::core::HistogramInterface* histInterface = dset->getCurrentHistogram();
@@ -553,7 +553,7 @@ bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer()
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = dset->getSelection();
 		for (size_t idx = 0; idx < values.size(); idx++)
-			features.push_back(dset->isSelected() && selection[idx] ? values[idx] : -10000.f);
+			features.push_back(selection[idx] ? values[idx] : -10000.f);
 	}
 
 	if (m_minOriginalFeature == std::numeric_limits<float>::max()) {
