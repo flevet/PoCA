@@ -651,7 +651,8 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 			_infos->getParameter<uint32_t>("__batchListIndex") : 0;
 		refreshLutTextures(_infos->hasParameter("__batchListIndex") ? &listIndex : nullptr);
 		if (_infos->hasParameter("regenerateFeatureBuffer") && _infos->getParameter<bool>("regenerateFeatureBuffer")) {
-			const bool updated = _infos->hasParameter("__batchListIndex") && m_object != nullptr && m_object->hasSelectedObjectIndices() &&
+			const bool updateAll = _infos->hasParameter("__batchUpdateAll") && _infos->getParameter<bool>("__batchUpdateAll");
+			const bool updated = !updateAll && _infos->hasParameter("__batchListIndex") && m_object != nullptr && m_object->hasSelectedObjectIndices() &&
 				updateFeatureBuffers(listIndex, m_object->selectedObjectIndices(), true);
 			if (!updated)
 				updateFeatureBuffers();

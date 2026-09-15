@@ -277,7 +277,8 @@ void DetectionSetMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _in
 	else if (_infos->nameCommand == "changeLUT") {
 		refreshLutTexture();
 		if (_infos->hasParameter("regenerateFeatureBuffer") && _infos->getParameter<bool>("regenerateFeatureBuffer")) {
-			const bool updated = m_object != nullptr && m_object->hasSelectedObjectIndices() &&
+			const bool updateAll = _infos->hasParameter("__batchUpdateAll") && _infos->getParameter<bool>("__batchUpdateAll");
+			const bool updated = !updateAll && m_object != nullptr && m_object->hasSelectedObjectIndices() &&
 				updateFeatureBuffer(m_object->selectedObjectIndices());
 			if (!updated)
 				updateFeatureBuffer();
