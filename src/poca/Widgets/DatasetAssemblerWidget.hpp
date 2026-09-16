@@ -103,6 +103,7 @@ private:
 
 	struct DatasetEntry {
 		QString datasetFolder;
+		QString datasetKey;
 		QMap<int, QString> filesByRule;
 	};
 

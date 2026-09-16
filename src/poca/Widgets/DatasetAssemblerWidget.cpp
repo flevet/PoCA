@@ -873,8 +873,8 @@ void DatasetAssemblerWidget::onPreview()
 		appendLog(QString("Matched %1 file(s) across %2 dataset key(s).").arg(scan.matchedFiles).arg(scan.datasets.size()));
 
 		for (auto it = scan.datasets.begin(); it != scan.datasets.end(); ++it) {
-			const QString datasetKey = it.key();
 			const DatasetEntry& entry = it.value();
+			const QString& datasetKey = entry.datasetKey;
 
 			bool missingRequired = false;
 			QStringList matchedLabels, missingLabels;
@@ -1019,8 +1019,8 @@ void DatasetAssemblerWidget::onAssemble()
 			appendLog(message);
 
 		for (auto it = scan.datasets.begin(); it != scan.datasets.end(); ++it) {
-			const QString datasetKey = it.key();
 			const DatasetEntry& entry = it.value();
+			const QString& datasetKey = entry.datasetKey;
 
 			bool missingRequired = false;
 			for (int ruleIndex = 0; ruleIndex < (int)rules.size(); ++ruleIndex) {
@@ -1333,9 +1333,12 @@ DatasetAssemblerWidget::ScanResult DatasetAssemblerWidget::scanRootFolder(const 
 				if (key.isEmpty())
 					key = datasetFolderName;
 
-				DatasetEntry& entry = result.datasets[key];
+				const QString internalKey = QDir::cleanPath(datasetFolder) + "/" + key;
+				DatasetEntry& entry = result.datasets[internalKey];
 				if (entry.datasetFolder.isEmpty())
 					entry.datasetFolder = datasetFolder;
+				if (entry.datasetKey.isEmpty())
+					entry.datasetKey = key;
 				if (entry.filesByRule.contains(ruleIndex)) {
 					result.messages << QString("Duplicate match ignored for dataset [%1], rule [%2]: %3").arg(key).arg(ruleDisplayName(rule, ruleIndex)).arg(absPath);
 					continue;
@@ -1520,8 +1523,8 @@ void DatasetAssemblerWidget::populatePreviewTree(const QStringList& _roots, cons
 		QTreeWidgetItem* rootItem = ensurePreviewNode(nullptr, QString("%1 [%2]").arg(rootName, rootFolder), "Root");
 		const ScanResult scan = scanRootFolder(rootFolder, _rules);
 		for (auto it = scan.datasets.begin(); it != scan.datasets.end(); ++it) {
-			const QString datasetKey = it.key();
 			const DatasetEntry& entry = it.value();
+			const QString& datasetKey = entry.datasetKey;
 			const QString datasetFolder = entry.datasetFolder.isEmpty() ? rootFolder : entry.datasetFolder;
 			const QStringList segments = hierarchySegmentsForDatasetFolder(rootFolder, datasetFolder);
 
