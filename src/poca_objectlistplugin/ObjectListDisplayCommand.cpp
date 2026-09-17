@@ -36,6 +36,7 @@
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QImage>
 #include <glm/gtx/string_cast.hpp>
+#include <cstddef>
 
 #include <General/Engine.hpp>
 #include <General/Palette.hpp>
@@ -1050,7 +1051,7 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 		//Compute a vector of distances of the points to the camera position
 		std::vector <float> distances(locs.size());
 #pragma omp parallel for
-		for (size_t n = 0; n < locs.size(); n++) {
+		for (std::ptrdiff_t n = 0; n < static_cast<std::ptrdiff_t>(locs.size()); ++n) {
 			uint32_t index = locs[n];
 			distances[n] = glm::dot(glm::vec3(xs[index], ys[index], zs[index]) - _cameraPosition, _cameraForwardVec);
 		}

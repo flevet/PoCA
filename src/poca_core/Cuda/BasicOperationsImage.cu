@@ -30,14 +30,14 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <thrust\pair.h>
-#include <thrust\device_vector.h>
-#include <thrust\host_vector.h>
-#include <thrust\extrema.h>
-#include <thrust\sort.h>
-#include <thrust\unique.h>
-#include <thrust\sequence.h>
-#include <thrust\distance.h>
+#include <thrust/pair.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/extrema.h>
+#include <thrust/sort.h>
+#include <thrust/unique.h>
+#include <thrust/sequence.h>
+#include <thrust/distance.h>
 #include <thrust/binary_search.h>
 #include <thrust/transform_reduce.h>
 #include <thrust/functional.h>
@@ -102,7 +102,7 @@ template <class T> struct JustGPUBuffer {
 // this functor converts values of T to M
 // in the actual scenario this method does perform much more useful operations
 template <class T, class M>
-struct Functor : public thrust::unary_function<T, M> {
+struct Functor {
     Functor() {}
 
     __host__ __device__ M operator() (const T& val) const {
@@ -204,7 +204,7 @@ void remove_small_labels_kernel_gpu(thrust::device_vector<T>& d_pixels, T thresh
         d_pixels.begin(),
         d_pixels.end(),
         d_pixels.begin(),
-        [lut = label_lut.data()] __device__(T pixel_label) {
+        [lut = label_lut.data()] __device__(T pixel_label) -> T {
         return (pixel_label < static_cast<T>(thrust::distance(lut, lut + pixel_label + 1)))
             ? lut[pixel_label]
             : static_cast<T>(0);
@@ -750,13 +750,13 @@ float getAutoThreshold(const T* image, uint32_t w, uint32_t h, uint32_t d) {
 
     // Cast image to float for math
     device_vector<float> d_float_image(numel);
-    transform(d_image.begin(), d_image.end(), d_float_image.begin(), thrust::placeholders::_1 * 1.0f);
+    thrust::transform(thrust::device, d_image.begin(), d_image.end(), d_float_image.begin(), [] __device__(T v) -> float { return static_cast<float>(v); });
 
     // Initial threshold = mean
     // Initial mean of values > 0
     float sum_pos = thrust::transform_reduce(
         d_float_image.begin(), d_float_image.end(),
-        [] __device__(float x) {
+        [] __device__(float x) -> float {
         return x > 0.0f ? x : 0.0f;
     },
         0.0f, thrust::plus<float>()
@@ -764,7 +764,7 @@ float getAutoThreshold(const T* image, uint32_t w, uint32_t h, uint32_t d) {
 
     int count_pos = thrust::count_if(
         d_float_image.begin(), d_float_image.end(),
-        [] __device__(float x) {
+        [] __device__(float x) -> bool {
         return x > 0.0f;
     }
     );
@@ -777,53 +777,53 @@ float getAutoThreshold(const T* image, uint32_t w, uint32_t h, uint32_t d) {
     while (fabs(oldThreshold - threshold) > 1e-12f && cpt-- > 0) {
         oldThreshold = threshold;
 
-        auto valid_and_leq_thresh = [threshold] __device__(float x) {
+        auto valid_and_leq_thresh = [threshold] __device__(float x) -> bool {
             return x > 0.0f && x <= threshold;
         };
 
-        auto valid_and_gt_thresh = [threshold] __device__(float x) {
+        auto valid_and_gt_thresh = [threshold] __device__(float x) -> bool {
             return x > threshold;
         };
 
         // Count and mean of values in (0, threshold]
-        int count0 = count_if(d_float_image.begin(), d_float_image.end(), valid_and_leq_thresh);
-        float sum0 = transform_reduce(
+        int count0 = thrust::count_if(d_float_image.begin(), d_float_image.end(), valid_and_leq_thresh);
+        float sum0 = thrust::transform_reduce(
             d_float_image.begin(), d_float_image.end(),
-            [threshold] __device__(float x) {
+            [threshold] __device__(float x) -> float {
             return (x > 0.0f && x <= threshold) ? x : 0.0f;
         },
-            0.0f, plus<float>()
+            0.0f, thrust::plus<float>()
         );
 
         // Count and mean of values > threshold
-        int count1 = count_if(d_float_image.begin(), d_float_image.end(), valid_and_gt_thresh);
-        float sum1 = transform_reduce(
+        int count1 = thrust::count_if(d_float_image.begin(), d_float_image.end(), valid_and_gt_thresh);
+        float sum1 = thrust::transform_reduce(
             d_float_image.begin(), d_float_image.end(),
-            [threshold] __device__(float x) {
+            [threshold] __device__(float x) -> float {
             return (x > threshold) ? x : 0.0f;
         },
-            0.0f, plus<float>()
+            0.0f, thrust::plus<float>()
         );
 
         float m0 = (count0 > 0) ? (sum0 / count0) : 0.0f;
         float m1 = (count1 > 0) ? (sum1 / count1) : 0.0f;
 
         // Variance for <= threshold (only > 0 values)
-        float s0 = transform_reduce(
+        float s0 = thrust::transform_reduce(
             d_float_image.begin(), d_float_image.end(),
-            [threshold, m0] __device__(float x) {
+            [threshold, m0] __device__(float x) -> float {
             return (x > 0.0f && x <= threshold) ? (x - m0) * (x - m0) : 0.0f;
         },
-            0.0f, plus<float>()
+            0.0f, thrust::plus<float>()
         );
 
         // Variance for > threshold
-        float s1 = transform_reduce(
+        float s1 = thrust::transform_reduce(
             d_float_image.begin(), d_float_image.end(),
-            [threshold, m1] __device__(float x) {
+            [threshold, m1] __device__(float x) -> float {
             return (x > threshold) ? (x - m1) * (x - m1) : 0.0f;
         },
-            0.0f, plus<float>()
+            0.0f, thrust::plus<float>()
         );
 
         s0 = sqrtf(s0);

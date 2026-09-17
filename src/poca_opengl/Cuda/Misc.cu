@@ -37,6 +37,15 @@
 #include <thrust/sort.h>
 #include <thrust/copy.h>
 #include <thrust/iterator/discard_iterator.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/permutation_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/functional.h>
+#include <thrust/reduce.h>
+#include <thrust/transform.h>
+#include <thrust/tuple.h>
+#include <cuda/std/functional>
 #include <algorithm>
 #include <cstdlib>
 #include <numeric>
@@ -74,7 +83,7 @@ void sortArrayWRTKeys_GPU(std::vector <float>& _keys, std::vector <uint32_t>& _v
     thrust::copy(d_values.begin(), d_values.end(), _values.begin());
 }
 
-struct dkeygen : public thrust::unary_function<int, int>
+struct dkeygen
 {
     int dim;
     int numd;
@@ -87,7 +96,7 @@ struct dkeygen : public thrust::unary_function<int, int>
 };
 
 typedef thrust::tuple<float, float> mytuple;
-struct my_dist : public thrust::unary_function<mytuple, float>
+struct my_dist
 {
     __host__ __device__ float operator()(const mytuple& my_tuple) const {
         float temp = thrust::get<0>(my_tuple) - thrust::get<1>(my_tuple);
@@ -96,7 +105,7 @@ struct my_dist : public thrust::unary_function<mytuple, float>
 };
 
 
-struct d_idx : public thrust::unary_function<int, int>
+struct d_idx
 {
     int dim;
     int numd;
@@ -108,7 +117,7 @@ struct d_idx : public thrust::unary_function<int, int>
     }
 };
 
-struct c_idx : public thrust::unary_function<int, int>
+struct c_idx
 {
     int dim;
     int numd;
@@ -120,7 +129,7 @@ struct c_idx : public thrust::unary_function<int, int>
     }
 };
 
-struct my_sqrt : public thrust::unary_function<float, float>
+struct my_sqrt
 {
     __host__ __device__ float operator()(const float val) const {
         return sqrtf(val);
@@ -197,7 +206,7 @@ void sortCentroidTrianglesWRTPoint_GPU(const std::vector<float>& _vertices, cons
 
     //Third, sort the vector to the point wrt to the distances
     thrust::device_vector<uint32_t> d_values(_values);
-    thrust::sort_by_key(d_distances.begin(), d_distances.end(), d_values.begin(), thrust::greater<float>());
+    thrust::sort_by_key(d_distances.begin(), d_distances.end(), d_values.begin(), cuda::std::greater<float>());
 
     thrust::device_vector<uint32_t> out(3 * d_values.size());
     const uint32_t* triPtr = thrust::raw_pointer_cast(d_values.data());

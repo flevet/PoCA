@@ -453,7 +453,7 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 						std::cout << __LINE__ << std::endl;
 						spline.setControlPoints(points);
 						std::cout << __LINE__ << std::endl;
-						std::vector<tinyspline::real> knotsAct = spline.chordLengths(points.size()).equidistantKnotSeq(( points.size() / 2) * factor);
+						std::vector<tinyspline::real> knotsAct = spline.equidistantKnotSeq((points.size() / 2) * factor, points.size());
 						std::vector <poca::core::Vec3mf> vtmp;
 						std::cout << __LINE__ << std::endl;
 						for (auto n = 0; n < knotsAct.size(); n++) {

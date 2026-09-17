@@ -229,9 +229,6 @@ MainWindow::MainWindow() :m_firstLoad(true), m_currentDuplicate(1)
 	m_tabWidget->addTab(tabMisc, QObject::tr("Misc."));
 	QObject::connect(m_mfw, SIGNAL(savePosition(QString)), this, SLOT(savePositionCameraSlot(QString)));
 	QObject::connect(m_mfw, SIGNAL(loadPosition(QString)), this, SLOT(loadPositionCameraSlot(QString)));
-	QObject::connect(m_mfw, SIGNAL(pathCamera(QString, QString, float, bool, bool)), this, SLOT(pathCameraSlot(QString, QString, float, bool, bool)));
-	QObject::connect(m_mfw, SIGNAL(pathCamera2(nlohmann::json, nlohmann::json, float, bool, bool)), this, SLOT(pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool)));
-	QObject::connect(m_mfw, SIGNAL(pathCameraAll(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)), this, SLOT(pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool)));
 	QObject::connect(m_mfw, SIGNAL(getCurrentCamera()), this, SLOT(currentCameraForPath()));
 
 	ReorganizeRenderingWidget* rrw = new ReorganizeRenderingWidget(mediator, m_tabWidget);
@@ -1536,7 +1533,6 @@ void MainWindow::createWidget(poca::core::MyObjectInterface* _obj)
 
 	MdiChild* child = new MdiChild(cam);
 	QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
-	QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
 	QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 	m_mdiArea->addSubWindow(child);
 	setActiveMdiChild(child);
@@ -1710,7 +1706,6 @@ poca::opengl::CameraInterface* MainWindow::createWindows(poca::core::MyObjectInt
 
 		MdiChild* child = new MdiChild(cam);
 		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
-		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
 		QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 		m_mdiArea->addSubWindow(child);
 		setActiveMdiChild(child);
@@ -1767,7 +1762,6 @@ poca::core::MyObjectInterface* MainWindow::createWindows(poca::core::BasicCompon
 
 		MdiChild* child = new MdiChild(cam);
 		QObject::connect(child, SIGNAL(setCurrentMdi(MdiChild*)), this, SLOT(setActiveMdiChild(MdiChild*)));
-		QObject::connect(cam, SIGNAL(askForMovieCreation()), this, SLOT(createMovie()));
 		QObject::connect(cam, SIGNAL(objectCreated(poca::core::MyObjectInterface*)), this, SLOT(createWidget(poca::core::MyObjectInterface*)));
 		m_mdiArea->addSubWindow(child);
 		setActiveMdiChild(child);
@@ -2255,91 +2249,6 @@ void MainWindow::loadPositionCameraSlot(QString _filename)
 		execute(&poca::core::CommandInfo(false, "loadPositionCamera"));
 	else
 		execute(&poca::core::CommandInfo(true, "loadPositionCamera", "path", _filename.toStdString()));
-}
-
-void MainWindow::pathCameraSlot(QString _pos1, QString _pos2, float _duration, bool _saveImages, bool _traveling)
-{
-	if (m_currentMdi == NULL) return;
-	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
-	if (cam == NULL) return;
-
-	std::array <QString, 2> names = { _pos1, _pos2 };
-	std::array <poca::opengl::StateCamera, 2> scams;
-	std::array <float, 2> distances;
-
-	for (auto n = 0; n < 2; n++) {
-		nlohmann::json json;
-		std::ifstream fs(names[n].toStdString());
-		if (fs.good())
-			fs >> json;
-		fs.close();
-
-		if (json.contains("stateCamera")) {
-			nlohmann::json tmp = json["stateCamera"];
-			if (tmp.contains("matrixView"))
-				scams[n].m_matrixView = tmp["matrixView"].get<glm::mat4>();
-			if (tmp.contains("rotationSum"))
-				scams[n].m_rotationSum = tmp["rotationSum"].get<glm::quat>();
-			if (tmp.contains("rotation"))
-				scams[n].m_rotation = tmp["rotation"].get<glm::quat>();
-			if (tmp.contains("center"))
-				scams[n].m_center = tmp["center"].get<glm::vec3>();
-			if (tmp.contains("eye"))
-				scams[n].m_eye = tmp["eye"].get<glm::vec3>();
-			if (tmp.contains("up"))
-				scams[n].m_up = tmp["up"].get<glm::vec3>();
-			if (tmp.contains("translationModel"))
-				scams[n].m_translationModel = tmp["translationModel"].get<glm::vec3>();
-		}
-		if (json.contains("distanceOrtho"))
-			distances[n] = json["distanceOrtho"].get<float>();
-	}
-
-	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
-}
-
-void MainWindow::pathCameraSlot2(nlohmann::json _pos1, nlohmann::json _pos2, float _duration, bool _saveImages, bool _traveling)
-{
-	if (m_currentMdi == NULL) return;
-	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
-	if (cam == NULL) return;
-
-	std::array <nlohmann::json, 2> jsons = { _pos1, _pos2 };
-	std::array <poca::opengl::StateCamera, 2> scams;
-	std::array <float, 2> distances;
-
-	for (auto n = 0; n < 2; n++) {
-		const nlohmann::json& json = jsons[n];
-		if (json.contains("stateCamera")) {
-			nlohmann::json tmp = json["stateCamera"];
-			if (tmp.contains("matrixView"))
-				scams[n].m_matrixView = tmp["matrixView"].get<glm::mat4>();
-			if (tmp.contains("rotationSum"))
-				scams[n].m_rotationSum = tmp["rotationSum"].get<glm::quat>();
-			if (tmp.contains("rotation"))
-				scams[n].m_rotation = tmp["rotation"].get<glm::quat>();
-			if (tmp.contains("center"))
-				scams[n].m_center = tmp["center"].get<glm::vec3>();
-			if (tmp.contains("eye"))
-				scams[n].m_eye = tmp["eye"].get<glm::vec3>();
-			if (tmp.contains("up"))
-				scams[n].m_up = tmp["up"].get<glm::vec3>();
-			if (tmp.contains("translationModel"))
-				scams[n].m_translationModel = tmp["translationModel"].get<glm::vec3>();
-		}
-		if (json.contains("distanceOrtho"))
-			distances[n] = json["distanceOrtho"].get<float>();
-	}
-
-	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
-}
-
-void MainWindow::pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>& _iterations, bool _saveImages, bool _traveling)
-{
-	if (m_currentMdi == NULL) return;
-	poca::opengl::Camera* cam = dynamic_cast <poca::opengl::Camera*>(m_currentMdi->getWidget());
-	if (cam == NULL) return;
-	cam->animateCameraPath(_iterations, _saveImages, _traveling);
 }
 
 void MainWindow::loadPositionCamera()

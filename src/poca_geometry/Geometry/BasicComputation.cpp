@@ -226,7 +226,7 @@ namespace poca::geometry {
 				//std::cout << __LINE__ << std::endl;
 				spline.setControlPoints(points);
 				//std::cout << __LINE__ << std::endl;
-				std::vector<tinyspline::real> knotsAct = spline.chordLengths(points.size()).equidistantKnotSeq((points.size() / 2) * _factor);
+				std::vector<tinyspline::real> knotsAct = spline.equidistantKnotSeq((points.size() / 2) * _factor, points.size());
 				//std::cout << __LINE__ << std::endl;
 				for (auto n = 0; n < knotsAct.size(); n++) {
 					try {

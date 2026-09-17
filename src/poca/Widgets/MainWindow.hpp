@@ -158,9 +158,6 @@ private slots:
 	
 	void savePositionCameraSlot(QString);
 	void loadPositionCameraSlot(QString);
-	void pathCameraSlot(QString, QString, float, bool, bool);
-	void pathCameraSlot2(nlohmann::json, nlohmann::json, float, bool, bool);
-	void pathCameraAllSlot(const std::vector <std::tuple<float, glm::vec3, glm::quat>>&, bool, bool);
 
 	void currentCameraForPath();
 

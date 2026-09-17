@@ -37,6 +37,8 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QDialog>
 
+#include "SortableFloatItem.hpp"
+
 #include <Plot/FilterHistogramWidget.hpp>
 #include <DesignPatterns/Observer.hpp>
 #include <General/Command.hpp>
@@ -116,20 +118,6 @@ private:
 	QStringList m_headers;
 };
 
-class SortableFloatItem : public QTableWidgetItem
-{
-public:
-	SortableFloatItem(const QTableWidgetItem& other): QTableWidgetItem(other) {}
-	SortableFloatItem(const QIcon& icon, const QString& text, int type = Type): QTableWidgetItem(icon, text, type) {}
-	SortableFloatItem(const QString& text, int type = Type): QTableWidgetItem(text, type) {}
-	SortableFloatItem(int type = Type): QTableWidgetItem(type) {}
-
-	bool operator< (const QTableWidgetItem& other) const
-	{
-		// TODO: To be safe, check weather conversion to int is possible.
-		return (this->text().toFloat() < other.text().toFloat());
-	}
-};
 
 //! [0]
 class ObjectListsWidget : public QWidget, public poca::core::ObserverForMediator {
