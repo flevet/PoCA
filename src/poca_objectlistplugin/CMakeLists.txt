@@ -20,6 +20,7 @@ link_directories(${CMAKE_ARCHIVE_OUTPUT_DIRECTORY})
 
 set(OBJECT_LIST_PLUGIN_HEADER_FILES
   ObjectListBasicCommands.hpp
+  MeshSelfIntersectionRepair.hpp
   ObjectListPlugin.hpp
   ObjectListDisplayCommand.hpp
   ObjectListMultiObjectDisplayCommand.hpp
@@ -31,6 +32,7 @@ set(OBJECT_LIST_PLUGIN_HEADER_FILES
 
 set(OBJECT_LIST_PLUGIN_SOURCE_HEADER_FILES
   ObjectListBasicCommands.cpp
+  MeshSelfIntersectionRepair.cpp
   ObjectListPlugin.cpp
   ObjectListDisplayCommand.cpp
   ObjectListMultiObjectDisplayCommand.cpp

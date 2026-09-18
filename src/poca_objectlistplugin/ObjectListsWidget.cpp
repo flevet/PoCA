@@ -448,6 +448,11 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_testMeshesButton->setToolTip("Run CGAL mesh-quality diagnostics on the current ObjectListMesh");
 	layoutObjectMesh->addWidget(m_testMeshesButton);
 	QObject::connect(m_testMeshesButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	m_repairSelfIntersectionsButton = new QPushButton("Repair self-intersections");
+	m_repairSelfIntersectionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_repairSelfIntersectionsButton->setToolTip("Create a new ObjectListMesh by exact-kernel autorefinement of self-intersections; the source is never modified");
+	layoutObjectMesh->addWidget(m_repairSelfIntersectionsButton);
+	QObject::connect(m_repairSelfIntersectionsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QWidget* widgetEmptyObjectMEsh = new QWidget;
 	widgetEmptyObjectMEsh->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	layoutObjectMesh->addWidget(widgetEmptyObjectMEsh);
@@ -784,6 +789,11 @@ void ObjectListsWidget::actionNeeded()
 	}
 	else if (sender == m_testMeshesButton) {
 		engine->executeCommand(bc, true, "testMeshes");
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_repairSelfIntersectionsButton) {
+		engine->executeCommand(bc, true, "repairSelfIntersections");
 		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}

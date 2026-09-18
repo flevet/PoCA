@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <cmath>
@@ -82,6 +83,7 @@
 
 #include "ObjectListBasicCommands.hpp"
 #include "ObjectListPlugin.hpp"
+#include "MeshSelfIntersectionRepair.hpp"
 
 
 namespace {
@@ -155,13 +157,13 @@ namespace {
 		}
 	}
 
-	void showMeshDiagnosticReport(const std::string& report)
+	void showMeshReport(const std::string& report, const QString& title, const QString& description)
 	{
 		QDialog dialog;
-		dialog.setWindowTitle("Object mesh quality report");
+		dialog.setWindowTitle(title);
 		dialog.resize(900, 700);
 		auto* layout = new QVBoxLayout(&dialog);
-		auto* label = new QLabel("CGAL mesh diagnostics for the current ObjectListMesh", &dialog);
+		auto* label = new QLabel(description, &dialog);
 		layout->addWidget(label);
 		auto* text = new QPlainTextEdit(QString::fromStdString(report), &dialog);
 		text->setReadOnly(true);
@@ -418,7 +420,46 @@ namespace {
 
 		const std::string text = report.str();
 		std::cout << text << std::endl;
-		showMeshDiagnosticReport(text);
+		showMeshReport(text, "Object mesh quality report", "CGAL mesh diagnostics for the current ObjectListMesh");
+	}
+
+	void repairObjectListMeshSelfIntersections(poca::geometry::ObjectListMesh* objectList, poca::core::MyObjectInterface* owner, const poca::core::CommandInfo& command)
+	{
+		if (!objectList) {
+			QMessageBox::warning(nullptr, "Object mesh repair", "The current ObjectList is not an ObjectListMesh.");
+			return;
+		}
+
+		poca::objectlist::MeshSelfIntersectionRepairResult repair = poca::objectlist::repairSelfIntersections(objectList->getMeshes());
+		if (!repair.meshes.empty() && owner) {
+			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
+			if (lists) {
+				try {
+					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(repair.meshes));
+					if (repaired->nbObjects() != repair.sourceMeshIndices.size()) {
+						repair.report += "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve every validated repair.\n";
+					}
+					else {
+						repaired->addFeature("sourceMeshIndex", poca::core::generateDataWithLogNoInteraction(repair.sourceMeshIndices));
+						ObjectListPlugin::m_plugins->addCommands(repaired.get());
+						lists->addObjectList(repaired.get(), command, "ObjectListPlugin", "Mesh repaired - self intersections");
+						repaired.release();
+						repair.report += "\nCreated ObjectListMesh:\n  Mesh repaired - self intersections\n";
+					}
+				}
+				catch (const std::bad_alloc&) {
+					throw;
+				}
+				catch (const std::exception& exception) {
+					repair.report += std::string("\nNo repaired ObjectListMesh created: output construction failed: ") + exception.what() + "\n";
+				}
+			}
+			else repair.report += "\nNo repaired ObjectListMesh created: the owning ObjectLists component is unavailable.\n";
+		}
+		else repair.report += "\nNo repaired ObjectListMesh created.\n";
+
+		std::cout << repair.report << std::endl;
+		showMeshReport(repair.report, "Object mesh repair report", "CGAL self-intersection repair for the current ObjectListMesh");
 	}
 }
 
@@ -471,6 +512,7 @@ std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() con
 		CommandSpec("duplicateCentroids"),
 		CommandSpec("computeSkeletons"),
 		CommandSpec("testMeshes"),
+		CommandSpec("repairSelfIntersections"),
 		CommandSpec("exportObjectsInROIs"),
 		CommandSpec("exportLocsInObjects"),
 		CommandSpec("duplicateSelectedObjects", {
@@ -536,6 +578,12 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* owner = engine->getObject(m_objects);
 		validateObjectListMeshes(omesh, owner, *_infos);
+	}
+	else if (_infos->nameCommand == "repairSelfIntersections") {
+		poca::geometry::ObjectListMesh* omesh = dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects);
+		poca::core::Engine* engine = poca::core::Engine::instance();
+		poca::core::MyObjectInterface* owner = engine->getObject(m_objects);
+		repairObjectListMeshSelfIntersections(omesh, owner, *_infos);
 	}
 	else if (_infos->nameCommand == "duplicateSelectedObjects") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection")? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
