@@ -37,6 +37,7 @@
 #include <tuple>
 
 #include <General/BasicComponentList.hpp>
+#include <array>
 #include <General/MyArray.hpp>
 #include <General/Vec3.hpp>
 #include <Interfaces/ObjectListInterface.hpp>
@@ -48,6 +49,9 @@ namespace poca::geometry {
 		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const std::vector <poca::core::ROIInterface*>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		ObjectListMesh(const std::vector < Surface_mesh_3_double>&, const bool = false, const float = 0.f, const uint32_t = 0);
+		// Lightweight constructor used by diagnostics: one open triangle per object.
+		// It intentionally bypasses closed-surface volume/repair assumptions.
+		ObjectListMesh(const std::vector < std::array<poca::core::Vec3mf, 3> >&);
 		~ObjectListMesh();
 
 		poca::core::BasicComponentInterface* copy();

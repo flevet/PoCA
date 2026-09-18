@@ -170,7 +170,7 @@ protected:
 	QPushButton* m_displayButton, * m_fillButton, * m_pointRenderButton, * m_outlinePointRenderButton, * m_shapeRenderButton, * m_bboxSelectionButton, 
 		* m_exportButton, * m_exportLocsButton, * m_selectionButton, * m_duplicateCentroidsButton, * m_duplicateSelectedObjectsButton,
 		* m_ellipsoidRenderButton, * m_parametersButton, * m_eraseObjectButton, * m_saveSVGButton, * m_saveOBJButton, * m_cullfaceButton, * m_exportFilteredObjsButton, * m_exportObjsROIsButton;
-	QPushButton* m_computeSkeletonsButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
+	QPushButton* m_computeSkeletonsButton, * m_testMeshesButton, * m_skeletonRenderButton, * m_linkToSkeletonRenderButton;
 	QPushButton* m_vertexNormalsButton, * m_translucentMeshButton;
 	QSpinBox* m_sizePointSpn;
 

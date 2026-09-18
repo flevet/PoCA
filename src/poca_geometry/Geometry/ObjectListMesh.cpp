@@ -502,6 +502,76 @@ namespace poca::geometry {
 		m_centroid = m_bbox.centroid();
 	}
 
+
+	ObjectListMesh::ObjectListMesh(const std::vector < std::array<poca::core::Vec3mf, 3> >& _triangles)
+		:ObjectListInterface("ObjectListMesh"), m_repair(false), m_applyRemeshing(false)
+	{
+		std::vector <poca::core::Vec3mf> triPoCA;
+		std::vector <uint32_t> firstTriangles{ 0 }, firstLocs{ 0 }, locIndices;
+		std::vector <float> ids, nbLocs, areas;
+
+		m_bbox = poca::core::BoundingBox::initBBox();
+		m_meshes.reserve(_triangles.size());
+		m_centroids.reserve(_triangles.size());
+		m_bboxMeshes.reserve(_triangles.size());
+		triPoCA.reserve(_triangles.size() * 3);
+		m_xs.reserve(_triangles.size() * 3);
+		m_ys.reserve(_triangles.size() * 3);
+		m_zs.reserve(_triangles.size() * 3);
+		locIndices.reserve(_triangles.size() * 3);
+
+		for (size_t i = 0; i < _triangles.size(); ++i) {
+			const auto& tri = _triangles[i];
+			Surface_mesh_3_double mesh;
+			std::array<vertex_descriptor, 3> vs;
+			for (size_t k = 0; k < 3; ++k) {
+				const auto& p = tri[k];
+				vs[k] = mesh.add_vertex(Point_3_double(p.x(), p.y(), p.z()));
+				triPoCA.push_back(p);
+				m_xs.push_back(p.x()); m_ys.push_back(p.y()); m_zs.push_back(p.z());
+				locIndices.push_back(static_cast<uint32_t>(locIndices.size()));
+				m_bbox.addPointBBox(p.x(), p.y(), p.z());
+			}
+			const face_descriptor fd = mesh.add_face(vs[0], vs[1], vs[2]);
+
+			// Diagnostic triangles can themselves be degenerate. Keep their display
+			// independent from CGAL normal preconditions by assigning a safe normal.
+			poca::core::Vec3mf displayNormal = (tri[1] - tri[0]).cross(tri[2] - tri[0]);
+			if (displayNormal.length() > 0.f) displayNormal.normalize();
+			else displayNormal.set(0.f, 0.f, 1.f);
+			const Kernel::Vector_3 normal(displayNormal.x(), displayNormal.y(), displayNormal.z());
+			Facet_vector_3_map facetNormals = mesh.add_property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
+			Vertex_vector_3_map vertexNormals = mesh.add_property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
+			if (fd != Surface_mesh_3_double::null_face()) facetNormals[fd] = normal;
+			for (const auto v : vs) vertexNormals[v] = normal;
+			m_meshes.push_back(std::move(mesh));
+
+			firstTriangles.push_back(static_cast<uint32_t>(triPoCA.size()));
+			firstLocs.push_back(static_cast<uint32_t>(locIndices.size()));
+			ids.push_back(static_cast<float>(i + 1));
+			nbLocs.push_back(3.f);
+
+			poca::core::Vec3mf centroid = (tri[0] + tri[1] + tri[2]) / 3.f;
+			m_centroids.push_back(centroid);
+			poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
+			for (const auto& q : tri) bbox.addPointBBox(q.x(), q.y(), q.z());
+			m_bboxMeshes.push_back(bbox);
+			const poca::core::Vec3mf e1 = tri[1] - tri[0], e2 = tri[2] - tri[0];
+			areas.push_back(0.5f * e1.cross(e2).length());
+		}
+
+		m_triangles.initialize(triPoCA, firstTriangles);
+		m_locs.initialize(locIndices, firstLocs);
+		m_outlineLocs = m_locs;
+		m_data["id"] = poca::core::generateDataWithLog(ids);
+		m_data["nbLocs"] = poca::core::generateDataWithLog(nbLocs);
+		m_data["area"] = poca::core::generateDataWithLog(areas);
+		m_selection.resize(_triangles.size());
+		setCurrentHistogramType("id");
+		forceRegenerateSelection();
+		if (!_triangles.empty()) m_centroid = m_bbox.centroid();
+	}
+
 	ObjectListMesh::~ObjectListMesh()
 	{
 	}

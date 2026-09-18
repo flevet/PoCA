@@ -443,6 +443,11 @@ ObjectListsWidget::ObjectListsWidget(poca::core::MediatorWObjectFWidgetInterface
 	m_computeSkeletonsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	layoutObjectMesh->addWidget(m_computeSkeletonsButton);
 	QObject::connect(m_computeSkeletonsButton, SIGNAL(released()), this, SLOT(actionNeeded()));
+	m_testMeshesButton = new QPushButton("Test meshes");
+	m_testMeshesButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	m_testMeshesButton->setToolTip("Run CGAL mesh-quality diagnostics on the current ObjectListMesh");
+	layoutObjectMesh->addWidget(m_testMeshesButton);
+	QObject::connect(m_testMeshesButton, SIGNAL(released()), this, SLOT(actionNeeded()));
 	QWidget* widgetEmptyObjectMEsh = new QWidget;
 	widgetEmptyObjectMEsh->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	layoutObjectMesh->addWidget(widgetEmptyObjectMEsh);
@@ -775,6 +780,11 @@ void ObjectListsWidget::actionNeeded()
 		}
 	else if (sender == m_computeSkeletonsButton) {
 		engine->executeCommand(bc, true, "computeSkeletons");
+		m_object->notifyAll("updateDisplay");
+	}
+	else if (sender == m_testMeshesButton) {
+		engine->executeCommand(bc, true, "testMeshes");
+		m_object->notifyAll("LoadObjCharacteristicsObjectListsWidget");
 		m_object->notifyAll("updateDisplay");
 	}
 	else if (sender == m_exportFilteredObjsButton) {
