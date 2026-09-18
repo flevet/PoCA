@@ -1015,6 +1015,7 @@ void ObjectListDisplayCommand::generateBoundingBoxSelection(const int _idx)
 
 void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPosition, const glm::vec3& _cameraForwardVec)
 {
+	if (dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects) != nullptr && !getParameter<bool>("translucentRendering")) return;
 	if (m_objects->dimension() == 2) return;
 #ifdef NO_CUDA
 	const std::vector <uint32_t>& locs = m_objects->getLocsObjects().getData();

@@ -9,26 +9,26 @@
 #include "MeshSelfIntersectionRepair.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <iomanip>
 #include <iterator>
-#include <map>
 #include <new>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
 
-#include <CGAL/Cartesian_converter.h>
 #include <CGAL/Kernel_traits.h>
-#include <CGAL/Polygon_mesh_processing/autorefinement.h>
+#include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
 #include <CGAL/Polygon_mesh_processing/manifoldness.h>
 #include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/Polygon_mesh_processing/orientation.h>
+#include <CGAL/Polygon_mesh_processing/repair.h>
 #include <CGAL/Polygon_mesh_processing/self_intersections.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
+#include <CGAL/boost/graph/Euler_operations.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/tags.h>
 
@@ -199,7 +199,7 @@ namespace {
 		}
 	}
 
-	std::vector<std::string> strictFailures(const MeshInspection& inspection, const bool requireNormals, const std::string& conversionName)
+	std::vector<std::string> strictFailures(const MeshInspection& inspection, const bool requireNormals)
 	{
 		std::vector<std::string> failures;
 		if (inspection.empty) failures.emplace_back("mesh is empty");
@@ -210,40 +210,48 @@ namespace {
 		if (inspection.borderEdges != 0) failures.emplace_back(std::to_string(inspection.borderEdges) + " border edge(s)");
 		if (inspection.connectedComponents != 1) failures.emplace_back(std::to_string(inspection.connectedComponents) + " connected component(s), expected 1");
 		if (inspection.degenerateTriangles != 0) failures.emplace_back(std::to_string(inspection.degenerateTriangles) + " degenerate triangle(s)");
-		if (!inspection.selfIntersections.empty()) {
-			const std::string prefix = conversionName.empty() ? std::string() : conversionName + " ";
-			failures.emplace_back(prefix + "has " + std::to_string(inspection.selfIntersections.size()) + " true self-intersection pair(s)");
-		}
+		if (!inspection.selfIntersections.empty())
+			failures.emplace_back("has " + std::to_string(inspection.selfIntersections.size()) + " true self-intersection pair(s)");
 		if (inspection.nonManifoldVertices != 0) failures.emplace_back(std::to_string(inspection.nonManifoldVertices) + " non-manifold vertex/vertices");
 		if (requireNormals && (!inspection.normalsChecked || inspection.invalidNormalFaces != 0))
 			failures.emplace_back("face/vertex normals are not all finite");
 		return failures;
 	}
 
-	template <typename SourceMesh, typename TargetMesh, typename Converter>
-	bool convertTriangleMesh(const SourceMesh& source, TargetMesh& target, const Converter& converter, std::string& reason)
+	template <typename MeshType>
+	std::set<FaceDescriptor<MeshType>> facePatch(
+		const MeshType& mesh,
+		const std::set<size_t>& faceIndices)
 	{
-		using SourceVertex = VertexDescriptor<SourceMesh>;
-		using TargetVertex = VertexDescriptor<TargetMesh>;
-		std::map<SourceVertex, TargetVertex> vertices;
-		for (SourceVertex sourceVertex : source.vertices()) {
-			const TargetVertex targetVertex = target.add_vertex(converter(source.point(sourceVertex)));
-			vertices.emplace(sourceVertex, targetVertex);
-		}
+		std::set<FaceDescriptor<MeshType>> patch;
+		for (const auto face : mesh.faces())
+			if (faceIndices.count(static_cast<size_t>(face.idx())) != 0) patch.insert(face);
+		return patch;
+	}
 
-		for (const auto sourceFace : source.faces()) {
-			const auto sourceVertices = faceVertices(source, sourceFace);
-			if (sourceVertices.size() != 3) {
-				reason = "encountered a non-triangle face during conversion";
-				return false;
-			}
-			const auto face = target.add_face(vertices.at(sourceVertices[0]), vertices.at(sourceVertices[1]), vertices.at(sourceVertices[2]));
-			if (face == TargetMesh::null_face()) {
-				reason = "CGAL rejected a face while rebuilding the converted Surface_mesh";
-				return false;
+	template <typename MeshType>
+	void expandFacePatch(const MeshType& mesh, std::set<FaceDescriptor<MeshType>>& patch)
+	{
+		auto expanded = patch;
+		for (const auto patchFace : patch) {
+			for (const auto halfedge : halfedges_around_face(mesh.halfedge(patchFace), mesh)) {
+				const auto neighbor = face(opposite(halfedge, mesh), mesh);
+				if (neighbor != MeshType::null_face()) expanded.insert(neighbor);
 			}
 		}
-		return true;
+		patch.swap(expanded);
+	}
+
+	template <typename MeshType>
+	void removeFacePatch(MeshType& mesh, const std::set<size_t>& faceIndices)
+	{
+		const auto patch = facePatch(mesh, faceIndices);
+		if (patch.size() != faceIndices.size())
+			throw std::runtime_error("could not resolve every source patch face on the fresh mesh copy");
+		for (const auto patchFace : patch)
+			CGAL::Euler::remove_face(mesh.halfedge(patchFace), mesh);
+		PMP::remove_isolated_vertices(mesh);
+		mesh.collect_garbage();
 	}
 
 	void reportPairsAndFaces(std::ostringstream& report, const MeshInspection& inspection)
@@ -261,12 +269,6 @@ namespace {
 		for (const size_t face : faces) report << "  " << face << "\n";
 	}
 
-	void reportFailure(std::ostringstream& report, const std::vector<std::string>& failures)
-	{
-		report << "RESULT: REJECTED\n";
-		report << "Reason:\n";
-		for (const std::string& failure : failures) report << "  " << failure << "\n";
-	}
 }
 
 namespace poca::objectlist {
@@ -276,7 +278,7 @@ namespace poca::objectlist {
 		std::ostringstream report;
 		report << std::setprecision(17);
 		report << "Mesh repair - self intersections\n";
-		report << "CGAL exact-kernel autorefinement is applied only to copies. Source meshes are never modified.\n\n";
+		report << "CGAL local patch removal and hole filling are applied only to copies. Source meshes are never modified.\n\n";
 
 		size_t meshesWithSelfIntersections = 0;
 		size_t repairAttempted = 0;
@@ -325,97 +327,117 @@ namespace poca::objectlist {
 				}
 
 				++repairAttempted;
-				report << "REPAIR\n";
-				Surface_mesh_3_exact exactMesh;
-				std::string conversionFailure;
-				const CGAL::Cartesian_converter<Kernel, K_exact> toExact;
-				if (!convertTriangleMesh(sources[meshIndex], exactMesh, toExact, conversionFailure)) {
-					report << "exact-kernel conversion: FAIL\n";
+				report << "LOCAL PATCH REPAIR\n\n";
+				report << "Original self-intersection pairs: " << before.selfIntersections.size() << "\n";
+				std::set<size_t> offendingFaceIndices;
+				for (const auto& pair : before.selfIntersections) {
+					offendingFaceIndices.insert(pair.first);
+					offendingFaceIndices.insert(pair.second);
+				}
+				report << "Original offending faces: " << offendingFaceIndices.size() << "\n\n";
+
+				auto patch = facePatch(diagnosticCopy, offendingFaceIndices);
+				if (patch.size() != offendingFaceIndices.size())
+					throw std::runtime_error("could not resolve every offending face on the diagnostic copy");
+
+				bool repaired = false;
+				for (size_t ring = 0; ring <= 3; ++ring) {
+					if (ring != 0) expandFacePatch(diagnosticCopy, patch);
+					std::set<size_t> patchIndices;
+					for (const auto patchFace : patch) patchIndices.insert(static_cast<size_t>(patchFace.idx()));
+
+					report << "Attempt ring " << ring << "\n";
+					report << "  faces removed: " << patchIndices.size() << "\n";
+					try {
+						Surface_mesh_3_double candidate = sources[meshIndex];
+						removeFacePatch(candidate, patchIndices);
+						if (!CGAL::is_valid_polygon_mesh(candidate)) {
+							report << "  boundary loops: SKIPPED\n";
+							report << "  result: REJECTED\n";
+							report << "  reason: face removal produced invalid polygon topology\n\n";
+							continue;
+						}
+
+						std::vector<Surface_mesh_3_double::Halfedge_index> boundaryLoops;
+						PMP::extract_boundary_cycles(candidate, std::back_inserter(boundaryLoops));
+						report << "  boundary loops: " << boundaryLoops.size() << "\n";
+						if (boundaryLoops.size() != 1) {
+							report << "  result: REJECTED\n";
+							report << "  reason: local patch did not produce exactly one boundary loop\n\n";
+							continue;
+						}
+
+						std::vector<Surface_mesh_3_double::Face_index> newFaces;
+						PMP::triangulate_hole(candidate, boundaryLoops.front(),
+							CGAL::parameters::face_output_iterator(std::back_inserter(newFaces)));
+						report << "  triangulate_hole: " << (newFaces.empty() ? "FAIL" : "PASS") << "\n";
+						report << "  new faces created: " << newFaces.size() << "\n\n";
+						if (newFaces.empty()) {
+							report << "  result: REJECTED\n";
+							report << "  reason: CGAL did not create a hole-filling patch\n\n";
+							continue;
+						}
+
+						MeshInspection inspection = inspectMesh(candidate, true);
+						report << "  validation:\n";
+						reportInspection(report, inspection, true);
+						std::vector<std::string> failures = strictFailures(inspection, true);
+						bool outward = false;
+						bool boundsVolume = false;
+						double volume = 0.0;
+						bool orientationModified = false;
+						if (failures.empty()) {
+							const bool initiallyOutward = PMP::is_outward_oriented(candidate);
+							if (!initiallyOutward) PMP::orient_to_bound_a_volume(candidate);
+							orientationModified = !initiallyOutward;
+							outward = PMP::is_outward_oriented(candidate);
+							boundsVolume = PMP::does_bound_a_volume(candidate);
+							volume = CGAL::to_double(PMP::volume(candidate));
+							if (!outward) failures.emplace_back("repaired mesh could not be established as outward-oriented");
+							if (!boundsVolume) failures.emplace_back("repaired mesh does not bound a valid volume");
+							if (!std::isfinite(volume) || volume <= 0.0) failures.emplace_back("repaired mesh volume is not finite and positive");
+						}
+						report << "orientation modified: " << (orientationModified ? "yes" : "no") << "\n";
+						report << "orientation: " << (outward ? "PASS" : "FAIL") << "\n";
+						report << "bounds a volume: " << (boundsVolume ? "PASS" : "FAIL") << "\n";
+						report << "volume = " << volume << "\n";
+						if (!failures.empty()) {
+							report << "  result: REJECTED\n";
+							report << "  reason:\n";
+							for (const std::string& failure : failures) report << "    " << failure << "\n";
+							report << "\n";
+							continue;
+						}
+
+						result.meshes.push_back(std::move(candidate));
+						result.sourceMeshIndices.push_back(static_cast<float>(meshIndex));
+						++repairedSuccessfully;
+						repaired = true;
+						report << "  result: SUCCESS\n\n";
+						report << "OrganoGraph organoid-shape preflight: PASS\n";
+						report << "RESULT: SUCCESS\n";
+						report << "selected repair ring: " << ring << "\n\n";
+						break;
+					}
+					catch (const std::bad_alloc&) {
+						throw;
+					}
+					catch (const std::exception& exception) {
+						++repairExceptions;
+						report << "  result: REJECTED\n";
+						report << "  reason: exception: " << exception.what() << "\n\n";
+					}
+					catch (...) {
+						++repairExceptions;
+						report << "  result: REJECTED\n";
+						report << "  reason: unknown exception\n\n";
+					}
+				}
+				if (!repaired) {
 					++rejectedAfterValidation;
-					reportFailure(report, { "exact-kernel conversion failed: " + conversionFailure });
-					report << "\n";
-					continue;
+					report << "RESULT: REJECTED\n";
+					report << "No local patch repair passed validation.\n\n";
 				}
-				report << "exact-kernel conversion: PASS\n";
-
-				PMP::autorefine(exactMesh);
-				report << "autorefinement: PASS\n";
-				report << "vertices after refinement = " << exactMesh.number_of_vertices() << "\n";
-				report << "faces after refinement = " << exactMesh.number_of_faces() << "\n\n";
-
-				MeshInspection exactInspection = inspectMesh(exactMesh, true);
-				report << "EXACT POST-REPAIR VALIDATION\n";
-				reportInspection(report, exactInspection, true);
-				std::vector<std::string> failures = strictFailures(exactInspection, true, std::string());
-				if (!failures.empty()) {
-					report << "orientation modified: no (validation failed before orientation)\n";
-					report << "manifold/volume checks: FAIL\n";
-					++rejectedAfterValidation;
-					reportFailure(report, failures);
-					report << "\n";
-					continue;
-				}
-
-				const bool initiallyOutward = PMP::is_outward_oriented(exactMesh);
-				if (!initiallyOutward) PMP::orient_to_bound_a_volume(exactMesh);
-				const bool orientationModified = !initiallyOutward;
-				const bool exactOutward = PMP::is_outward_oriented(exactMesh);
-				const bool exactBoundsVolume = PMP::does_bound_a_volume(exactMesh);
-				const double exactVolume = CGAL::to_double(PMP::volume(exactMesh));
-				report << "orientation modified: " << (orientationModified ? "yes" : "no") << "\n";
-				report << "orientation: " << (exactOutward ? "PASS" : "FAIL") << "\n";
-				report << "manifold/volume checks: " << (exactBoundsVolume ? "PASS" : "FAIL") << "\n";
-				report << "volume = " << exactVolume << "\n\n";
-				if (!exactOutward) failures.emplace_back("exact repaired mesh could not be established as outward-oriented");
-				if (!exactBoundsVolume) failures.emplace_back("exact repaired mesh does not bound a valid volume");
-				if (!std::isfinite(exactVolume) || exactVolume <= 0.0) failures.emplace_back("exact repaired mesh volume is not finite and positive");
-				if (!failures.empty()) {
-					++rejectedAfterValidation;
-					reportFailure(report, failures);
-					report << "\n";
-					continue;
-				}
-
-				Surface_mesh_3_double doubleMesh;
-				const CGAL::Cartesian_converter<K_exact, Kernel> toDouble;
-				if (!convertTriangleMesh(exactMesh, doubleMesh, toDouble, conversionFailure)) {
-					++rejectedAfterValidation;
-					report << "DOUBLE CONVERSION VALIDATION\nconversion: FAIL\n";
-					reportFailure(report, { "exact-to-double conversion failed: " + conversionFailure });
-					report << "\n";
-					continue;
-				}
-
-				MeshInspection doubleInspection = inspectMesh(doubleMesh, true);
-				report << "DOUBLE CONVERSION VALIDATION\n";
-				reportInspection(report, doubleInspection, true);
-				failures = strictFailures(doubleInspection, true, "exact-to-double conversion");
-				bool doubleOutward = false;
-				bool doubleBoundsVolume = false;
-				double doubleVolume = 0.0;
-				if (failures.empty()) {
-					doubleOutward = PMP::is_outward_oriented(doubleMesh);
-					doubleBoundsVolume = PMP::does_bound_a_volume(doubleMesh);
-					doubleVolume = CGAL::to_double(PMP::volume(doubleMesh));
-					if (!doubleOutward) failures.emplace_back("double mesh is not outward-oriented");
-					if (!doubleBoundsVolume) failures.emplace_back("double mesh does not bound a valid volume");
-					if (!std::isfinite(doubleVolume) || doubleVolume <= 0.0) failures.emplace_back("double mesh volume is not finite and positive");
-				}
-				report << "orientation: " << (doubleOutward ? "PASS" : "FAIL") << "\n";
-				report << "bounds a volume: " << (doubleBoundsVolume ? "PASS" : "FAIL") << "\n";
-				report << "volume = " << doubleVolume << "\n";
-				if (!failures.empty()) {
-					++rejectedAfterValidation;
-					reportFailure(report, failures);
-					report << "\n";
-					continue;
-				}
-
-				result.meshes.push_back(std::move(doubleMesh));
-				result.sourceMeshIndices.push_back(static_cast<float>(meshIndex));
-				++repairedSuccessfully;
-				report << "OrganoGraph organoid-shape preflight: PASS\n";
-				report << "RESULT: SUCCESS\n\n";
 			}
 			catch (const std::bad_alloc&) {
 				throw;
@@ -424,6 +446,11 @@ namespace poca::objectlist {
 				++repairExceptions;
 				report << "RESULT: REJECTED\n";
 				report << "Reason:\n  repair exception for mesh " << meshIndex << ": " << exception.what() << "\n\n";
+			}
+			catch (...) {
+				++repairExceptions;
+				report << "RESULT: REJECTED\n";
+				report << "Reason:\n  unknown repair exception for mesh " << meshIndex << "\n\n";
 			}
 		}
 
