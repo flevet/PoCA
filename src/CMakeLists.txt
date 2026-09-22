@@ -18,6 +18,44 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../bin/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../bin/plugins")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../bin")
 
+# Eigen is kept as a single project-wide dependency so PoCA, CGAL-facing code
+# and optional plugins all compile against the same headers. The directory is
+# the extracted Eigen source tree; no Eigen build/install step is required.
+if(WIN32)
+    set(_POCA_EIGEN5_DEFAULT "C:/Bibliotheques/eigen-5.0.0")
+else()
+    set(_POCA_EIGEN5_DEFAULT "")
+endif()
+set(POCA_EIGEN5_DIR "${_POCA_EIGEN5_DEFAULT}" CACHE PATH "Path to the Eigen 5.0.0 source directory")
+unset(_POCA_EIGEN5_DEFAULT)
+
+if(NOT EXISTS "${POCA_EIGEN5_DIR}/Eigen/Core" OR NOT EXISTS "${POCA_EIGEN5_DIR}/Eigen/Version")
+    message(FATAL_ERROR "Eigen 5.0.0 was not found in '${POCA_EIGEN5_DIR}'. Set POCA_EIGEN5_DIR to the extracted Eigen 5.0.0 directory.")
+endif()
+file(STRINGS "${POCA_EIGEN5_DIR}/Eigen/Version" _POCA_EIGEN_VERSION_LINE REGEX "^#define EIGEN_VERSION_STRING")
+if(NOT _POCA_EIGEN_VERSION_LINE STREQUAL "#define EIGEN_VERSION_STRING \"5.0.0\"")
+    message(FATAL_ERROR "POCA_EIGEN5_DIR must point to Eigen 5.0.0. Found version declaration: ${_POCA_EIGEN_VERSION_LINE}")
+endif()
+unset(_POCA_EIGEN_VERSION_LINE)
+
+message(STATUS "Using Eigen 5.0.0 from ${POCA_EIGEN5_DIR}")
+include_directories(SYSTEM "${POCA_EIGEN5_DIR}")
+
+# Provide the modern imported target as well, without requiring Eigen to be
+# installed as a CMake package. This also gives downstream PoCA targets one
+# unambiguous Eigen include directory.
+if(NOT TARGET Eigen3::Eigen)
+    add_library(Eigen3::Eigen INTERFACE IMPORTED GLOBAL)
+    set_target_properties(Eigen3::Eigen PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${POCA_EIGEN5_DIR}")
+endif()
+set(Eigen3_FOUND TRUE)
+set(EIGEN3_FOUND TRUE)
+set(Eigen3_VERSION "5.0.0")
+set(EIGEN3_VERSION_STRING "5.0.0")
+set(EIGEN3_INCLUDE_DIR "${POCA_EIGEN5_DIR}")
+set(EIGEN3_INCLUDE_DIRS "${POCA_EIGEN5_DIR}")
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 

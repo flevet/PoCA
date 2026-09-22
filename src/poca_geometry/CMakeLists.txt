@@ -50,6 +50,8 @@ set(FACTORY_SOURCE_FILES
 
 set(GEOMETRY_HEADER_FILES
   Geometry/BasicComputation.hpp
+  Geometry/PCA.hpp
+  Geometry/UMAP.hpp
   Geometry/DelaunayTriangulation.hpp
   Geometry/DetectionSet.hpp
   Geometry/GeometryCommandContext.hpp
@@ -75,6 +77,8 @@ set(GEOMETRY_HEADER_FILES
 
 set(GEOMETRY_SOURCE_FILES
   Geometry/BasicComputation.cpp
+  Geometry/PCA.cpp
+  Geometry/UMAP.cpp
   Geometry/DelaunayTriangulation.cpp
   Geometry/DetectionSet.cpp
   Geometry/ObjectLists.cpp
@@ -127,10 +131,44 @@ endforeach()
 
 find_package(CUDA QUIET)
 
-find_package(Eigen3 3.1.0)
-  if (EIGEN3_FOUND)
-  include( ${EIGEN3_USE_FILE} )
+# Eigen 5.0.0 is configured once in the main PoCA CMakeLists.txt.
+
+# UMAP++ and its header-only dependencies. We populate pinned releases but do
+# not add their CMake projects: this prevents the dependency chain from
+# downloading/configuring a second Eigen copy and makes it use POCA_EIGEN5_DIR.
+if(CMAKE_VERSION VERSION_LESS "3.14")
+  message(FATAL_ERROR "UMAP support requires CMake 3.14 or newer (FetchContent_MakeAvailable).")
 endif()
+include(FetchContent)
+
+macro(poca_populate_header_dependency dependency repository tag)
+  FetchContent_Declare(${dependency}
+    GIT_REPOSITORY ${repository}
+    GIT_TAG ${tag}
+    GIT_SHALLOW TRUE
+    # Populate the source tree without executing the dependency's CMakeLists.
+    # In particular, this prevents irlba/umappp from fetching another Eigen.
+    SOURCE_SUBDIR __poca_header_only_no_cmake__
+  )
+  FetchContent_MakeAvailable(${dependency})
+endmacro()
+
+poca_populate_header_dependency(poca_umappp https://github.com/libscran/umappp.git v3.3.2)
+poca_populate_header_dependency(poca_aarand https://github.com/LTLA/aarand.git v1.1.0)
+poca_populate_header_dependency(poca_subpar https://github.com/LTLA/subpar.git v0.5.0)
+poca_populate_header_dependency(poca_sanisizer https://github.com/LTLA/sanisizer.git v0.2.0)
+poca_populate_header_dependency(poca_knncolle https://github.com/knncolle/knncolle.git v3.1.0)
+poca_populate_header_dependency(poca_irlba https://github.com/libscran/irlba.git v3.1.0)
+
+include_directories(SYSTEM
+  ${poca_umappp_SOURCE_DIR}/include
+  ${poca_aarand_SOURCE_DIR}/include
+  ${poca_subpar_SOURCE_DIR}/include
+  ${poca_sanisizer_SOURCE_DIR}/include
+  ${poca_knncolle_SOURCE_DIR}/include
+  ${poca_irlba_SOURCE_DIR}/include
+)
+
 
 find_package(CGAL REQUIRED COMPONENTS Core)
 if(CGAL_FOUND)
@@ -173,6 +211,8 @@ else()
 	add_definitions(-DNO_CUDA)
 	add_library(${targetname} STATIC ${header_list} ${source_list})
 endif()
+
+target_link_libraries(${targetname} Eigen3::Eigen)
 
 if(CGAL_FOUND)
     message("Found CGAL.")
