@@ -406,8 +406,10 @@ namespace {
 
 	void repairObjectListMeshes(poca::geometry::ObjectListMesh* objectList, poca::core::MyObjectInterface* owner, const poca::core::CommandInfo& command)
 	{
+		const bool silent = command.hasParameter("silent") && command.getParameter<bool>("silent");
 		if (!objectList) {
-			QMessageBox::warning(nullptr, "Object mesh repair", "The current ObjectList is not an ObjectListMesh.");
+			if (!silent)
+				QMessageBox::warning(nullptr, "Object mesh repair", "The current ObjectList is not an ObjectListMesh.");
 			return;
 		}
 
@@ -421,18 +423,23 @@ namespace {
 		attemptedRepairMasks.reserve(sources.size());
 
 		std::ostringstream report;
-		report << std::setprecision(17);
-		report << "Mesh repair\n";
-		report << "Every source mesh is inspected. All repairs operate on copies; rejected meshes retain their original geometry.\n\n";
+		if (!silent) {
+			report << std::setprecision(17);
+			report << "Mesh repair\n";
+			report << "Every source mesh is inspected. All repairs operate on copies; rejected meshes retain their original geometry.\n\n";
+		}
 		size_t clean = 0, requiringRepair = 0, repairedCount = 0, rejected = 0;
+		size_t meshesWithWarnings = 0, meshesWithErrors = 0;
 		size_t detectedSelfIntersections = 0, detectedDegenerates = 0, detectedBoundaries = 0;
 		size_t detectedComponents = 0, detectedTriangulation = 0, detectedOrientation = 0, detectedNonManifold = 0;
 		size_t repairedSelfIntersections = 0, repairedDegenerates = 0, repairedBoundaries = 0;
 		size_t repairedComponents = 0, repairedTriangulation = 0, repairedOrientation = 0, repairedNonManifold = 0;
 
 		for (size_t meshIndex = 0; meshIndex < sources.size(); ++meshIndex) {
-			report << "--------------------------------------------------\n";
-			report << "Mesh " << meshIndex << "\n\n";
+			if (!silent) {
+				report << "--------------------------------------------------\n";
+				report << "Mesh " << meshIndex << "\n\n";
+			}
 			poca::geometry::MeshRepairResult result;
 			try {
 				result = poca::geometry::MeshRepair::repair(sources[meshIndex]);
@@ -448,23 +455,27 @@ namespace {
 				result.status = poca::geometry::MeshRepairStatus::Rejected;
 				result.failures.emplace_back("unknown per-mesh repair exception");
 			}
+			std::vector<std::string> initialErrors, initialWarnings;
+			collectDiagnosticMessages(result.before, initialErrors, initialWarnings);
+			if (!initialWarnings.empty()) ++meshesWithWarnings;
+			if (!initialErrors.empty()) ++meshesWithErrors;
 
 			if (result.status == poca::geometry::MeshRepairStatus::Clean) {
 				++clean;
 				outputMeshes.push_back(sources[meshIndex]);
-				report << "Mesh " << meshIndex << ": CLEAN\n\n";
+				if (!silent) report << "Mesh " << meshIndex << ": CLEAN\n\n";
 			}
 			else if (result.status == poca::geometry::MeshRepairStatus::Repaired) {
 				++requiringRepair;
 				++repairedCount;
 				outputMeshes.push_back(std::move(result.repairedMesh));
-				reportRepairDetails(report, result);
+				if (!silent) reportRepairDetails(report, result);
 			}
 			else {
 				++requiringRepair;
 				++rejected;
 				outputMeshes.push_back(sources[meshIndex]);
-				reportRepairDetails(report, result);
+				if (!silent) reportRepairDetails(report, result);
 			}
 
 			sourceMeshIndices.push_back(static_cast<float>(meshIndex));
@@ -489,29 +500,31 @@ namespace {
 			if (acceptedRepairMask & poca::geometry::MeshRepairNonManifoldTopology) ++repairedNonManifold;
 		}
 
-		report << "==================================================\n";
-		report << "Mesh repair summary\n\n";
-		report << "total meshes: " << sources.size() << "\n";
-		report << "clean meshes: " << clean << "\n";
-		report << "meshes requiring repair: " << requiringRepair << "\n";
-		report << "successfully repaired: " << repairedCount << "\n";
-		report << "repair rejected: " << rejected << "\n";
-		report << "detected - self-intersection: " << detectedSelfIntersections << "\n";
-		report << "detected - degenerates: " << detectedDegenerates << "\n";
-		report << "detected - disconnected components: " << detectedComponents << "\n";
-		report << "detected - borders/holes: " << detectedBoundaries << "\n";
-		report << "detected - triangulation required: " << detectedTriangulation << "\n";
-		report << "detected - orientation: " << detectedOrientation << "\n";
-		report << "detected - non-manifold: " << detectedNonManifold << "\n";
-		report << "repairs applied - self-intersection: " << repairedSelfIntersections << "\n";
-		report << "repairs applied - degenerates: " << repairedDegenerates << "\n";
-		report << "repairs applied - disconnected components: " << repairedComponents << "\n";
-		report << "repairs applied - borders/holes: " << repairedBoundaries << "\n";
-		report << "repairs applied - triangulation: " << repairedTriangulation << "\n";
-		report << "repairs applied - orientation: " << repairedOrientation << "\n";
-		report << "repairs applied - non-manifold: " << repairedNonManifold << "\n";
-		report << "repairMask bits: 1=selfIntersection, 2=degenerateFaces, 4=boundaryOrHole, 8=disconnectedComponents, 16=triangulatedFaces, 32=orientation, 64=nonManifoldTopology\n";
-		report << "repairMask contains committed repairs only; attemptedRepairMask records repair types tried, including rejected candidates.\n";
+		if (!silent) {
+			report << "==================================================\n";
+			report << "Mesh repair summary\n\n";
+			report << "total meshes: " << sources.size() << "\n";
+			report << "clean meshes: " << clean << "\n";
+			report << "meshes requiring repair: " << requiringRepair << "\n";
+			report << "successfully repaired: " << repairedCount << "\n";
+			report << "repair rejected: " << rejected << "\n";
+			report << "detected - self-intersection: " << detectedSelfIntersections << "\n";
+			report << "detected - degenerates: " << detectedDegenerates << "\n";
+			report << "detected - disconnected components: " << detectedComponents << "\n";
+			report << "detected - borders/holes: " << detectedBoundaries << "\n";
+			report << "detected - triangulation required: " << detectedTriangulation << "\n";
+			report << "detected - orientation: " << detectedOrientation << "\n";
+			report << "detected - non-manifold: " << detectedNonManifold << "\n";
+			report << "repairs applied - self-intersection: " << repairedSelfIntersections << "\n";
+			report << "repairs applied - degenerates: " << repairedDegenerates << "\n";
+			report << "repairs applied - disconnected components: " << repairedComponents << "\n";
+			report << "repairs applied - borders/holes: " << repairedBoundaries << "\n";
+			report << "repairs applied - triangulation: " << repairedTriangulation << "\n";
+			report << "repairs applied - orientation: " << repairedOrientation << "\n";
+			report << "repairs applied - non-manifold: " << repairedNonManifold << "\n";
+			report << "repairMask bits: 1=selfIntersection, 2=degenerateFaces, 4=boundaryOrHole, 8=disconnectedComponents, 16=triangulatedFaces, 32=orientation, 64=nonManifoldTopology\n";
+			report << "repairMask contains committed repairs only; attemptedRepairMask records repair types tried, including rejected candidates.\n";
+		}
 
 		if (outputMeshes.size() == sources.size() && owner) {
 			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
@@ -519,7 +532,7 @@ namespace {
 				try {
 					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(outputMeshes, false, 0.f, 0, false));
 					if (repaired->nbObjects() != sources.size()) {
-						report << "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve the exact source mesh count.\n";
+						if (!silent) report << "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve the exact source mesh count.\n";
 					}
 					else {
 						repaired->setUseVertexNormals(objectList->useVertexNormals());
@@ -533,24 +546,35 @@ namespace {
 						ObjectListPlugin::m_plugins->addCommands(repaired.get());
 						lists->addObjectList(repaired.get(), command, "ObjectListPlugin", "Mesh repaired");
 						repaired.release();
-						report << "\nCreated ObjectListMesh:\n  Mesh repaired\n";
-						report << "Output mesh count/order exactly matches the source. Features: sourceMeshIndex, repairStatus (0 clean, 1 repaired, 2 rejected), repairMask, attemptedRepairMask.\n";
+						if (!silent) {
+							report << "\nCreated ObjectListMesh:\n  Mesh repaired\n";
+							report << "Output mesh count/order exactly matches the source. Features: sourceMeshIndex, repairStatus (0 clean, 1 repaired, 2 rejected), repairMask, attemptedRepairMask.\n";
+						}
 					}
 				}
 				catch (const std::bad_alloc&) {
 					throw;
 				}
 				catch (const std::exception& exception) {
-					report << "\nNo repaired ObjectListMesh created: output construction failed: " << exception.what() << "\n";
+					if (!silent) report << "\nNo repaired ObjectListMesh created: output construction failed: " << exception.what() << "\n";
 				}
 			}
-			else report << "\nNo repaired ObjectListMesh created: the owning ObjectLists component is unavailable.\n";
+			else if (!silent) report << "\nNo repaired ObjectListMesh created: the owning ObjectLists component is unavailable.\n";
 		}
-		else report << "\nNo repaired ObjectListMesh created: output/source count mismatch or owning object unavailable.\n";
+		else if (!silent) report << "\nNo repaired ObjectListMesh created: output/source count mismatch or owning object unavailable.\n";
 
-		const std::string text = report.str();
-		std::cout << text << std::endl;
-		showMeshReport(text, "Object mesh repair report", "Conservative copy-only CGAL repair for the current ObjectListMesh");
+		if (silent) {
+			std::cout << "Mesh repair: meshes=" << sources.size()
+				<< " warnings=" << meshesWithWarnings
+				<< " errors=" << meshesWithErrors
+				<< " repaired=" << repairedCount
+				<< " unrepaired=" << rejected << std::endl;
+		}
+		else {
+			const std::string text = report.str();
+			std::cout << text << std::endl;
+			showMeshReport(text, "Object mesh repair report", "Conservative copy-only CGAL repair for the current ObjectListMesh");
+		}
 	}
 }
 
@@ -603,7 +627,9 @@ std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() con
 		CommandSpec("duplicateCentroids"),
 		CommandSpec("computeSkeletons"),
 		CommandSpec("testMeshes"),
-		CommandSpec("repairMeshes"),
+		CommandSpec("repairMeshes", {
+			{ "silent", CommandParameterType::Boolean, false, false }
+		}),
 		CommandSpec("repairSelfIntersections"),
 		CommandSpec("exportObjectsInROIs"),
 		CommandSpec("exportLocsInObjects"),
