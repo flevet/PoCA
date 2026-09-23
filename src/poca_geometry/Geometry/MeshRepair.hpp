@@ -112,6 +112,7 @@ namespace poca::geometry {
 		std::size_t filledHoles = 0;
 		std::size_t createdHoleFaces = 0;
 		std::size_t duplicatedNonManifoldVertices = 0;
+		std::size_t repairedSelfIntersectionClusters = 0;
 		std::size_t repairedSelfIntersectionPairs = 0;
 		std::size_t removedSelfIntersectionPatchFaces = 0;
 		std::size_t createdSelfIntersectionPatchFaces = 0;
@@ -124,6 +125,7 @@ namespace poca::geometry {
 		MeshInspection after;
 		Surface_mesh_3_double repairedMesh;
 		std::uint32_t repairMask = MeshRepairNone;
+		std::uint32_t attemptedRepairMask = MeshRepairNone;
 		MeshRepairCounts counts;
 		std::vector<std::string> steps;
 		std::vector<std::string> failures;
@@ -135,5 +137,9 @@ namespace poca::geometry {
 		static MeshRepairResult repair(const Surface_mesh_3_double&);
 		static bool isStrictlyValid(const MeshInspection&);
 		static std::vector<std::string> strictValidationFailures(const MeshInspection&);
+
+	private:
+		static std::vector<std::vector<std::size_t>> clusterIntersectionPairs(
+			const std::vector<std::pair<std::size_t, std::size_t>>&);
 	};
 }

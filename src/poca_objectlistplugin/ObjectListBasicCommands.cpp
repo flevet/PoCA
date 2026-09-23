@@ -380,16 +380,22 @@ namespace {
 			report << "\nREPAIR FAILURES\n";
 			for (const auto& failure : result.failures) report << "  " << failure << "\n";
 		}
-		report << "\nAFTER\n";
+		report << (result.status == poca::geometry::MeshRepairStatus::Rejected
+			? "\nLAST CANDIDATE (REJECTED)\n" : "\nAFTER\n");
 		reportInspection(report, result.after);
 		report << "\nRESULT\n  " << repairStatusName(result.status) << "\n";
-		report << "repairMask=" << result.repairMask << "\n\n";
+		report << "repairMask=" << result.repairMask << "\n";
+		report << "attemptedRepairMask=" << result.attemptedRepairMask << "\n";
+		if (result.status == poca::geometry::MeshRepairStatus::Rejected)
+			report << "Original source mesh preserved in output.\n";
+		report << "\n";
 	}
 
 	void preserveCompatibleObjectFeatures(const poca::geometry::ObjectListMesh* source, poca::geometry::ObjectListMesh* destination)
 	{
 		for (const auto& feature : source->getNameData()) {
-			if (feature == "sourceMeshIndex" || feature == "repairStatus" || feature == "repairMask" || destination->hasData(feature)) continue;
+			if (feature == "sourceMeshIndex" || feature == "repairStatus" || feature == "repairMask"
+				|| feature == "attemptedRepairMask" || destination->hasData(feature)) continue;
 			auto* histogram = dynamic_cast<poca::core::Histogram<float>*>(source->getOriginalHistogram(feature));
 			if (!histogram) continue;
 			const auto& values = histogram->getValues();
@@ -407,11 +413,12 @@ namespace {
 
 		const auto& sources = objectList->getMeshes();
 		std::vector<Mesh> outputMeshes;
-		std::vector<float> sourceMeshIndices, repairStatuses, repairMasks;
+		std::vector<float> sourceMeshIndices, repairStatuses, repairMasks, attemptedRepairMasks;
 		outputMeshes.reserve(sources.size());
 		sourceMeshIndices.reserve(sources.size());
 		repairStatuses.reserve(sources.size());
 		repairMasks.reserve(sources.size());
+		attemptedRepairMasks.reserve(sources.size());
 
 		std::ostringstream report;
 		report << std::setprecision(17);
@@ -472,6 +479,7 @@ namespace {
 			if (result.before.issueMask & poca::geometry::MeshIssueNonManifold) ++detectedNonManifold;
 			const std::uint32_t acceptedRepairMask = result.status == poca::geometry::MeshRepairStatus::Repaired ? result.repairMask : poca::geometry::MeshRepairNone;
 			repairMasks.push_back(static_cast<float>(acceptedRepairMask));
+			attemptedRepairMasks.push_back(static_cast<float>(result.attemptedRepairMask));
 			if (acceptedRepairMask & poca::geometry::MeshRepairSelfIntersection) ++repairedSelfIntersections;
 			if (acceptedRepairMask & poca::geometry::MeshRepairDegenerateFaces) ++repairedDegenerates;
 			if (acceptedRepairMask & poca::geometry::MeshRepairBoundary) ++repairedBoundaries;
@@ -503,6 +511,7 @@ namespace {
 		report << "repairs applied - orientation: " << repairedOrientation << "\n";
 		report << "repairs applied - non-manifold: " << repairedNonManifold << "\n";
 		report << "repairMask bits: 1=selfIntersection, 2=degenerateFaces, 4=boundaryOrHole, 8=disconnectedComponents, 16=triangulatedFaces, 32=orientation, 64=nonManifoldTopology\n";
+		report << "repairMask contains committed repairs only; attemptedRepairMask records repair types tried, including rejected candidates.\n";
 
 		if (outputMeshes.size() == sources.size() && owner) {
 			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
@@ -519,12 +528,13 @@ namespace {
 						repaired->addFeature("sourceMeshIndex", poca::core::generateDataWithLogNoInteraction(sourceMeshIndices));
 						repaired->addFeature("repairStatus", poca::core::generateDataWithLogNoInteraction(repairStatuses));
 						repaired->addFeature("repairMask", poca::core::generateDataWithLogNoInteraction(repairMasks));
+						repaired->addFeature("attemptedRepairMask", poca::core::generateDataWithLogNoInteraction(attemptedRepairMasks));
 						repaired->setCurrentHistogramType("repairStatus");
 						ObjectListPlugin::m_plugins->addCommands(repaired.get());
 						lists->addObjectList(repaired.get(), command, "ObjectListPlugin", "Mesh repaired");
 						repaired.release();
 						report << "\nCreated ObjectListMesh:\n  Mesh repaired\n";
-						report << "Output mesh count/order exactly matches the source. Features: sourceMeshIndex, repairStatus (0 clean, 1 repaired, 2 rejected), repairMask.\n";
+						report << "Output mesh count/order exactly matches the source. Features: sourceMeshIndex, repairStatus (0 clean, 1 repaired, 2 rejected), repairMask, attemptedRepairMask.\n";
 					}
 				}
 				catch (const std::bad_alloc&) {

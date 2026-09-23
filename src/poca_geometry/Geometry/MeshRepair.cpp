@@ -118,7 +118,10 @@ namespace {
 		mesh.collect_garbage();
 	}
 
-	bool structurallyValidBeforeOrientation(const poca::geometry::MeshInspection& inspection, std::vector<std::string>& failures)
+	bool structurallyValidBeforeOrientation(
+		const poca::geometry::MeshInspection& inspection,
+		std::vector<std::string>& failures,
+		const bool requireNoSelfIntersections = true)
 	{
 		failures = inspection.inspectionErrors;
 		if (inspection.empty) failures.emplace_back("mesh is empty");
@@ -129,28 +132,26 @@ namespace {
 		if (!inspection.closed) failures.emplace_back("mesh is open");
 		if (inspection.borderEdgeCount != 0) failures.emplace_back(std::to_string(inspection.borderEdgeCount) + " border edge(s)");
 		if (inspection.connectedComponentCount != 1) failures.emplace_back(std::to_string(inspection.connectedComponentCount) + " connected component(s), expected one");
-		if (!inspection.selfIntersectionPairs.empty()) failures.emplace_back(std::to_string(inspection.selfIntersectionPairs.size()) + " true self-intersection pair(s)");
+		if (requireNoSelfIntersections && !inspection.selfIntersectionPairs.empty()) failures.emplace_back(std::to_string(inspection.selfIntersectionPairs.size()) + " true self-intersection pair(s)");
 		if (inspection.nonManifoldVertexCount != 0) failures.emplace_back(std::to_string(inspection.nonManifoldVertexCount) + " non-manifold vertex/vertices");
 		if (!inspection.normalsChecked || !inspection.finiteFaceNormals || !inspection.finiteVertexNormals) failures.emplace_back("face/vertex normals are not all finite");
 		return failures.empty();
 	}
 
-	bool repairSelfIntersectionsLocally(
+	bool repairSelfIntersectionClusterLocally(
 		const Mesh& source,
-		const poca::geometry::MeshInspection& sourceInspection,
+		const std::set<std::size_t>& offendingFaceIndices,
+		const std::size_t clusterIndex,
+		const std::size_t clusterPairCount,
+		const std::size_t sourcePairCount,
 		Mesh& repaired,
 		poca::geometry::MeshRepairCounts& counts,
 		std::vector<std::string>& steps,
 		std::vector<std::string>& failures)
 	{
-		std::set<std::size_t> offendingFaceIndices;
-		for (const auto& pair : sourceInspection.selfIntersectionPairs) {
-			offendingFaceIndices.insert(pair.first);
-			offendingFaceIndices.insert(pair.second);
-		}
 		auto patch = facePatch(source, offendingFaceIndices);
 		if (patch.size() != offendingFaceIndices.size()) {
-			failures.emplace_back("could not resolve every self-intersecting face on the current-stage mesh");
+			failures.emplace_back("cluster " + std::to_string(clusterIndex) + ": could not resolve every self-intersecting face on the current-stage mesh");
 			return false;
 		}
 
@@ -163,14 +164,14 @@ namespace {
 				Mesh candidate = source;
 				removeFacePatch(candidate, patchIndices);
 				if (!CGAL::is_valid_polygon_mesh(candidate)) {
-					steps.push_back("Self-intersection ring " + std::to_string(ring) + " rejected: face removal produced invalid polygon topology.");
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " ring " + std::to_string(ring) + " rejected: face removal produced invalid polygon topology.");
 					continue;
 				}
 
 				std::vector<Halfedge> boundaryLoops;
 				PMP::extract_boundary_cycles(candidate, std::back_inserter(boundaryLoops));
 				if (boundaryLoops.size() != 1) {
-					steps.push_back("Self-intersection ring " + std::to_string(ring) + " rejected: local patch produced " + std::to_string(boundaryLoops.size()) + " boundary loops instead of one.");
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " ring " + std::to_string(ring) + " rejected: local patch produced " + std::to_string(boundaryLoops.size()) + " boundary loops instead of one.");
 					continue;
 				}
 
@@ -178,26 +179,33 @@ namespace {
 				PMP::triangulate_hole(candidate, boundaryLoops.front(),
 					CGAL::parameters::face_output_iterator(std::back_inserter(createdFaces)));
 				if (createdFaces.empty()) {
-					steps.push_back("Self-intersection ring " + std::to_string(ring) + " rejected: triangulate_hole created no faces.");
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " ring " + std::to_string(ring) + " rejected: triangulate_hole created no faces.");
 					continue;
 				}
 
 				const auto inspection = poca::geometry::MeshRepair::inspect(candidate);
 				std::vector<std::string> candidateFailures;
-				if (!structurallyValidBeforeOrientation(inspection, candidateFailures)) {
+				if (!structurallyValidBeforeOrientation(inspection, candidateFailures, false)) {
 					std::ostringstream reason;
-					reason << "Self-intersection ring " << ring << " rejected after validation";
+					reason << "Cluster " << clusterIndex << " ring " << ring << " rejected after validation";
 					if (!candidateFailures.empty()) reason << ": " << candidateFailures.front();
 					steps.push_back(reason.str());
 					continue;
 				}
+				const std::size_t maximumRemainingPairCount = sourcePairCount - clusterPairCount;
+				if (inspection.selfIntersectionPairs.size() > maximumRemainingPairCount) {
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " ring " + std::to_string(ring)
+						+ " rejected: it did not eliminate the selected cluster's pair count without introducing replacements.");
+					continue;
+				}
 
 				repaired = std::move(candidate);
-				counts.repairedSelfIntersectionPairs = sourceInspection.selfIntersectionPairs.size();
-				counts.removedSelfIntersectionPatchFaces = patchIndices.size();
-				counts.createdSelfIntersectionPatchFaces = createdFaces.size();
+				++counts.repairedSelfIntersectionClusters;
+				counts.repairedSelfIntersectionPairs += sourcePairCount - inspection.selfIntersectionPairs.size();
+				counts.removedSelfIntersectionPatchFaces += patchIndices.size();
+				counts.createdSelfIntersectionPatchFaces += createdFaces.size();
 				counts.selectedSelfIntersectionRing = ring;
-				steps.push_back("Repaired self-intersections with local ring " + std::to_string(ring)
+				steps.push_back("Cluster " + std::to_string(clusterIndex) + " repaired with local ring " + std::to_string(ring)
 					+ ": removed " + std::to_string(patchIndices.size()) + " faces and created "
 					+ std::to_string(createdFaces.size()) + " hole-fill faces.");
 				return true;
@@ -206,16 +214,51 @@ namespace {
 				throw;
 			}
 			catch (const std::exception& exception) {
-				steps.push_back("Self-intersection ring " + std::to_string(ring) + " rejected by exception: " + exception.what());
+				steps.push_back("Cluster " + std::to_string(clusterIndex) + " ring " + std::to_string(ring) + " rejected by exception: " + exception.what());
 			}
 		}
 
-		failures.emplace_back("no local self-intersection patch in rings 0..3 passed validation");
+		failures.emplace_back("cluster " + std::to_string(clusterIndex) + ": no local self-intersection patch in rings 0..3 passed validation");
 		return false;
 	}
 }
 
 namespace poca::geometry {
+	std::vector<std::vector<std::size_t>> MeshRepair::clusterIntersectionPairs(
+		const std::vector<std::pair<std::size_t, std::size_t>>& pairs)
+	{
+		std::map<std::size_t, std::set<std::size_t>> adjacency;
+		for (const auto& pair : pairs) {
+			adjacency[pair.first].insert(pair.second);
+			adjacency[pair.second].insert(pair.first);
+		}
+
+		std::set<std::size_t> remaining;
+		for (const auto& entry : adjacency) remaining.insert(entry.first);
+		std::vector<std::vector<std::size_t>> clusters;
+		while (!remaining.empty()) {
+			std::vector<std::size_t> pending{ *remaining.begin() };
+			remaining.erase(remaining.begin());
+			std::vector<std::size_t> cluster;
+			while (!pending.empty()) {
+				const auto faceIndex = pending.back();
+				pending.pop_back();
+				cluster.push_back(faceIndex);
+				for (const auto neighbor : adjacency.at(faceIndex)) {
+					const auto found = remaining.find(neighbor);
+					if (found == remaining.end()) continue;
+					pending.push_back(neighbor);
+					remaining.erase(found);
+				}
+			}
+			std::sort(cluster.begin(), cluster.end());
+			clusters.push_back(std::move(cluster));
+		}
+		std::sort(clusters.begin(), clusters.end(), [](const auto& left, const auto& right) {
+			return left.front() < right.front();
+			});
+		return clusters;
+	}
 
 	MeshInspection MeshRepair::inspect(const Surface_mesh_3_double& source)
 	{
@@ -492,8 +535,10 @@ namespace poca::geometry {
 
 			Mesh candidate = source;
 			MeshInspection current = result.before;
+			std::uint32_t candidateRepairMask = MeshRepairNone;
 
 			if (!current.triangleMesh) {
+				result.attemptedRepairMask |= MeshRepairTriangulatedFaces;
 				const std::size_t facesBefore = candidate.number_of_faces();
 				PMP::triangulate_faces(candidate);
 				current = inspect(candidate);
@@ -502,7 +547,7 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
-				result.repairMask |= MeshRepairTriangulatedFaces;
+				candidateRepairMask |= MeshRepairTriangulatedFaces;
 				result.counts.triangulatedFaces = result.before.nonTriangleFaceCount;
 				result.steps.push_back("Triangulated " + std::to_string(result.before.nonTriangleFaceCount)
 					+ " non-triangular face(s); face count changed from " + std::to_string(facesBefore)
@@ -510,6 +555,7 @@ namespace poca::geometry {
 			}
 
 			if (current.degenerateTriangleCount != 0) {
+				result.attemptedRepairMask |= MeshRepairDegenerateFaces;
 				const std::size_t degeneratesBefore = current.degenerateTriangleCount;
 				PMP::remove_degenerate_faces(candidate);
 				PMP::remove_isolated_vertices(candidate);
@@ -520,12 +566,13 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
-				result.repairMask |= MeshRepairDegenerateFaces;
+				candidateRepairMask |= MeshRepairDegenerateFaces;
 				result.counts.removedDegenerateFaces = degeneratesBefore - current.degenerateTriangleCount;
 				result.steps.push_back("Removed " + std::to_string(result.counts.removedDegenerateFaces) + " degenerate face(s) and isolated vertices.");
 			}
 
 			if (current.connectedComponentCount > 1) {
+				result.attemptedRepairMask |= MeshRepairDisconnectedComponents;
 				const std::size_t componentsBefore = current.connectedComponentCount;
 				const std::size_t facesBefore = candidate.number_of_faces();
 				PMP::keep_largest_connected_components(candidate, 1);
@@ -537,7 +584,7 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
-				result.repairMask |= MeshRepairDisconnectedComponents;
+				candidateRepairMask |= MeshRepairDisconnectedComponents;
 				result.counts.removedComponents = componentsBefore - 1;
 				result.counts.removedComponentFaces = facesBefore - candidate.number_of_faces();
 				result.steps.push_back("Kept the largest face-connected component; removed "
@@ -551,6 +598,7 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
+				result.attemptedRepairMask |= MeshRepairBoundary;
 				const std::size_t bordersBefore = current.borderEdgeCount;
 				result.counts.stitchedBorderPairs = PMP::stitch_borders(candidate);
 				current = inspect(candidate);
@@ -583,7 +631,7 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
-				result.repairMask |= MeshRepairBoundary;
+				candidateRepairMask |= MeshRepairBoundary;
 				result.steps.push_back("Repaired " + std::to_string(bordersBefore) + " initial border edge(s): stitched "
 					+ std::to_string(result.counts.stitchedBorderPairs) + " border pair(s), filled "
 					+ std::to_string(result.counts.filledHoles) + " hole(s), and created "
@@ -591,6 +639,7 @@ namespace poca::geometry {
 			}
 
 			if (current.nonManifoldVertexCount != 0) {
+				result.attemptedRepairMask |= MeshRepairNonManifoldTopology;
 				const std::size_t nonManifoldBefore = current.nonManifoldVertexCount;
 				result.counts.duplicatedNonManifoldVertices = PMP::duplicate_non_manifold_vertices(candidate);
 				current = inspect(candidate);
@@ -604,7 +653,7 @@ namespace poca::geometry {
 					result.after = current;
 					return result;
 				}
-				result.repairMask |= MeshRepairNonManifoldTopology;
+				candidateRepairMask |= MeshRepairNonManifoldTopology;
 				result.steps.push_back("Resolved " + std::to_string(nonManifoldBefore)
 					+ " non-manifold vertex/vertices by duplicating "
 					+ std::to_string(result.counts.duplicatedNonManifoldVertices) + " vertex occurrence group(s).");
@@ -613,14 +662,57 @@ namespace poca::geometry {
 			// Topology-changing stages invalidate old face descriptors. The current
 			// inspection above is therefore the only source of self-intersection faces.
 			if (!current.selfIntersectionPairs.empty()) {
-				Mesh locallyRepaired;
-				if (!repairSelfIntersectionsLocally(candidate, current, locallyRepaired, result.counts, result.steps, result.failures)) {
-					result.after = current;
-					return result;
+				result.attemptedRepairMask |= MeshRepairSelfIntersection;
+				std::size_t clusterIndex = 0;
+				while (!current.selfIntersectionPairs.empty()) {
+					const auto clusters = clusterIntersectionPairs(current.selfIntersectionPairs);
+					if (clusters.empty()) {
+						result.failures.emplace_back("self-intersection pairs were present but no face cluster could be formed");
+						result.after = current;
+						return result;
+					}
+
+					std::vector<std::size_t> clusterPairCounts;
+					clusterPairCounts.reserve(clusters.size());
+					std::ostringstream clusterSummary;
+					clusterSummary << "Self-intersection clusters detected: " << clusters.size() << " [faces/pairs: ";
+					for (std::size_t currentCluster = 0; currentCluster < clusters.size(); ++currentCluster) {
+						const auto& cluster = clusters[currentCluster];
+						const std::size_t pairCount = static_cast<std::size_t>(std::count_if(
+							current.selfIntersectionPairs.begin(), current.selfIntersectionPairs.end(),
+							[&cluster](const auto& pair) {
+								return std::binary_search(cluster.begin(), cluster.end(), pair.first)
+									&& std::binary_search(cluster.begin(), cluster.end(), pair.second);
+							}));
+						clusterPairCounts.push_back(pairCount);
+						if (currentCluster != 0) clusterSummary << ", ";
+						clusterSummary << cluster.size() << "/" << pairCount;
+					}
+					clusterSummary << "].";
+					result.steps.push_back(clusterSummary.str());
+
+					const std::set<std::size_t> clusterFaces(clusters.front().begin(), clusters.front().end());
+					const std::size_t clusterPairCount = clusterPairCounts.front();
+					result.steps.push_back("Cluster " + std::to_string(clusterIndex) + ": "
+						+ std::to_string(clusterFaces.size()) + " face(s), "
+						+ std::to_string(clusterPairCount) + " pair(s); trying local rings 0..3.");
+
+					Mesh locallyRepaired;
+					if (!repairSelfIntersectionClusterLocally(candidate, clusterFaces, clusterIndex,
+						clusterPairCount, current.selfIntersectionPairs.size(), locallyRepaired,
+						result.counts, result.steps, result.failures)) {
+						result.after = current;
+						return result;
+					}
+					candidate = std::move(locallyRepaired);
+					current = inspect(candidate);
+					const auto remainingClusters = clusterIntersectionPairs(current.selfIntersectionPairs);
+					result.steps.push_back("Recomputed self-intersections after cluster " + std::to_string(clusterIndex)
+						+ ": " + std::to_string(current.selfIntersectionPairs.size()) + " pair(s) in "
+						+ std::to_string(remainingClusters.size()) + " cluster(s) remain.");
+					++clusterIndex;
 				}
-				candidate = std::move(locallyRepaired);
-				result.repairMask |= MeshRepairSelfIntersection;
-				current = inspect(candidate);
+				candidateRepairMask |= MeshRepairSelfIntersection;
 			}
 
 			std::vector<std::string> structuralFailures;
@@ -631,8 +723,9 @@ namespace poca::geometry {
 			}
 
 			if (!current.outwardOriented || !current.boundsVolume || !current.finiteVolume || current.volume <= 0.0) {
+				result.attemptedRepairMask |= MeshRepairOrientation;
 				PMP::orient_to_bound_a_volume(candidate);
-				result.repairMask |= MeshRepairOrientation;
+				candidateRepairMask |= MeshRepairOrientation;
 				result.steps.emplace_back("Oriented the repaired topology to bound a positive outward volume.");
 			}
 
@@ -642,12 +735,13 @@ namespace poca::geometry {
 				result.failures.insert(result.failures.end(), finalFailures.begin(), finalFailures.end());
 				return result;
 			}
-			if (result.repairMask == MeshRepairNone) {
+			if (candidateRepairMask == MeshRepairNone) {
 				result.failures.emplace_back("the source was not clean but no conservative repair operation was applicable");
 				return result;
 			}
 
 			result.repairedMesh = std::move(candidate);
+			result.repairMask = candidateRepairMask;
 			result.status = MeshRepairStatus::Repaired;
 			return result;
 		}
