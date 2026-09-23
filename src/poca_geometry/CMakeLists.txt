@@ -55,6 +55,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/DelaunayTriangulation.hpp
   Geometry/DetectionSet.hpp
   Geometry/GeometryCommandContext.hpp
+  Geometry/MeshRepair.hpp
   Geometry/nanoflann.hpp
   Geometry/ObjectLists.hpp
   Geometry/ObjectListDelaunay.hpp
@@ -81,6 +82,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/UMAP.cpp
   Geometry/DelaunayTriangulation.cpp
   Geometry/DetectionSet.cpp
+  Geometry/MeshRepair.cpp
   Geometry/ObjectLists.cpp
   Geometry/ObjectListDelaunay.cpp
   Geometry/ObjectListMesh.cpp

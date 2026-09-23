@@ -410,7 +410,7 @@ namespace poca::geometry {
 		m_centroid = m_bbox.centroid();
 }
 
-	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(true), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
+	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations, const bool _repair) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(_repair), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
 	{
 		clock_t t1 = clock();
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;

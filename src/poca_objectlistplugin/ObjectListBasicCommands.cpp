@@ -36,6 +36,7 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <new>
 #include <set>
 #include <sstream>
 #include <cmath>
@@ -47,13 +48,8 @@
 #include <CGAL/Polygon_mesh_processing/orientation.h>
 #include <CGAL/Polygon_mesh_processing/repair.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_faces.h>
-#include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/stitch_borders.h>
-#include <CGAL/Polygon_mesh_processing/self_intersections.h>
-#include <CGAL/Polygon_mesh_processing/connected_components.h>
-#include <CGAL/Polygon_mesh_processing/measure.h>
 #include <CGAL/boost/graph/helpers.h>
-#include <CGAL/tags.h>
 
 #include <QtCore/QString>
 #include <QtCore/QFileInfo>
@@ -79,28 +75,17 @@
 #include <Geometry/BasicComputation.hpp>
 #include <Geometry/CGAL_helpers.hpp>
 #include <Geometry/GeometryCommandContext.hpp>
+#include <Geometry/MeshRepair.hpp>
 #include <Objects/ObjectCommandContext.hpp>
 
 #include "ObjectListBasicCommands.hpp"
 #include "ObjectListPlugin.hpp"
-#include "MeshSelfIntersectionRepair.hpp"
 
 
 namespace {
-	namespace PMP = CGAL::Polygon_mesh_processing;
 	using Mesh = Surface_mesh_3_double;
 	using Face = boost::graph_traits<Mesh>::face_descriptor;
 	using Vertex = boost::graph_traits<Mesh>::vertex_descriptor;
-
-	enum MeshIssue : unsigned int {
-		IssueSelfIntersection = 1u << 0,
-		IssueDegenerate = 1u << 1,
-		IssueBoundary = 1u << 2,
-		IssueNonFinite = 1u << 3,
-		IssueNonTriangle = 1u << 4,
-		IssueDisconnected = 1u << 5,
-		IssueNonFiniteNormal = 1u << 6
-	};
 
 	struct DiagnosticTriangle {
 		std::array<poca::core::Vec3mf, 3> triangle;
@@ -109,51 +94,44 @@ namespace {
 		float issueMask = 0.f;
 	};
 
-	bool finitePoint(const Point_3_double& p)
+	bool finitePoint(const Point_3_double& point)
 	{
-		return std::isfinite(CGAL::to_double(p.x())) && std::isfinite(CGAL::to_double(p.y())) && std::isfinite(CGAL::to_double(p.z()));
+		return std::isfinite(CGAL::to_double(point.x()))
+			&& std::isfinite(CGAL::to_double(point.y()))
+			&& std::isfinite(CGAL::to_double(point.z()));
 	}
 
-	bool finiteVector(const Kernel::Vector_3& v)
-	{
-		return std::isfinite(CGAL::to_double(v.x())) && std::isfinite(CGAL::to_double(v.y())) && std::isfinite(CGAL::to_double(v.z()));
-	}
-
-	std::vector<Vertex> faceVertices(const Mesh& mesh, Face f)
+	std::vector<Vertex> faceVertices(const Mesh& mesh, const Face face)
 	{
 		std::vector<Vertex> vertices;
-		auto h = mesh.halfedge(f);
-		if (h == Mesh::null_halfedge()) return vertices;
+		const auto halfedge = mesh.halfedge(face);
+		if (halfedge == Mesh::null_halfedge()) return vertices;
 		CGAL::Vertex_around_face_iterator<Mesh> begin, end;
-		for (boost::tie(begin, end) = vertices_around_face(h, mesh); begin != end; ++begin) vertices.push_back(*begin);
+		for (boost::tie(begin, end) = vertices_around_face(halfedge, mesh); begin != end; ++begin)
+			vertices.push_back(*begin);
 		return vertices;
 	}
 
-	void addFaceIssue(std::map<size_t, unsigned int>& issues, Face f, unsigned int issue)
+	void appendDiagnosticFace(const Mesh& mesh, const Face face, const size_t meshIndex, const unsigned int issueMask, std::vector<DiagnosticTriangle>& out)
 	{
-		issues[static_cast<size_t>(f.idx())] |= issue;
-	}
-
-	void appendDiagnosticFace(const Mesh& mesh, Face f, size_t meshIndex, unsigned int issueMask, std::vector<DiagnosticTriangle>& out)
-	{
-		const auto vertices = faceVertices(mesh, f);
+		const auto vertices = faceVertices(mesh, face);
 		if (vertices.size() < 3) return;
 		const Point_3_double p0 = mesh.point(vertices[0]);
 		if (!finitePoint(p0)) return;
-		for (size_t k = 1; k + 1 < vertices.size(); ++k) {
-			const Point_3_double p1 = mesh.point(vertices[k]);
-			const Point_3_double p2 = mesh.point(vertices[k + 1]);
+		for (size_t index = 1; index + 1 < vertices.size(); ++index) {
+			const Point_3_double p1 = mesh.point(vertices[index]);
+			const Point_3_double p2 = mesh.point(vertices[index + 1]);
 			if (!finitePoint(p1) || !finitePoint(p2)) continue;
-			DiagnosticTriangle d;
-			d.triangle = {
+			DiagnosticTriangle diagnostic;
+			diagnostic.triangle = {
 				poca::core::Vec3mf(static_cast<float>(CGAL::to_double(p0.x())), static_cast<float>(CGAL::to_double(p0.y())), static_cast<float>(CGAL::to_double(p0.z()))),
 				poca::core::Vec3mf(static_cast<float>(CGAL::to_double(p1.x())), static_cast<float>(CGAL::to_double(p1.y())), static_cast<float>(CGAL::to_double(p1.z()))),
 				poca::core::Vec3mf(static_cast<float>(CGAL::to_double(p2.x())), static_cast<float>(CGAL::to_double(p2.y())), static_cast<float>(CGAL::to_double(p2.z())))
 			};
-			d.sourceMesh = static_cast<float>(meshIndex);
-			d.sourceFace = static_cast<float>(f.idx());
-			d.issueMask = static_cast<float>(issueMask);
-			out.push_back(d);
+			diagnostic.sourceMesh = static_cast<float>(meshIndex);
+			diagnostic.sourceFace = static_cast<float>(face.idx());
+			diagnostic.issueMask = static_cast<float>(issueMask);
+			out.push_back(diagnostic);
 		}
 	}
 
@@ -176,6 +154,73 @@ namespace {
 		dialog.exec();
 	}
 
+	void reportInspection(std::ostringstream& report, const poca::geometry::MeshInspection& inspection)
+	{
+		report << "vertices=" << inspection.vertexCount << ", edges=" << inspection.edgeCount << ", faces=" << inspection.faceCount << "\n";
+		report << "empty: " << (inspection.empty ? "FAIL" : "PASS") << "\n";
+		report << "finite coordinates: " << (inspection.finiteCoordinates ? "PASS" : "FAIL") << "\n";
+		report << "valid polygon mesh: " << (inspection.validPolygonMesh ? "PASS" : "FAIL") << "\n";
+		report << "triangle mesh: " << (inspection.triangleMesh ? "PASS" : "FAIL")
+			<< ", non-triangular faces=" << inspection.nonTriangleFaceCount << "\n";
+		report << "degenerate triangles: " << inspection.degenerateTriangleCount << "\n";
+		report << "closed: " << (inspection.closed ? "PASS" : "FAIL")
+			<< ", border edges=" << inspection.borderEdgeCount << ", border faces=" << inspection.borderFaceCount << "\n";
+		report << "connected components: " << inspection.connectedComponentCount;
+		if (!inspection.connectedComponentFaceCounts.empty()) {
+			report << " [faces:";
+			for (size_t index = 0; index < inspection.connectedComponentFaceCounts.size(); ++index)
+				report << (index ? "," : " ") << inspection.connectedComponentFaceCounts[index];
+			report << "]";
+		}
+		report << "\n";
+		report << "non-manifold vertices: " << inspection.nonManifoldVertexCount << "\n";
+		report << "self intersections: " << inspection.selfIntersectionPairs.size() << "\n";
+		if (!inspection.selfIntersectionPairs.empty()) {
+			report << "  first face pairs: ";
+			for (size_t index = 0; index < std::min<size_t>(10, inspection.selfIntersectionPairs.size()); ++index)
+				report << (index ? ", " : "") << "(" << inspection.selfIntersectionPairs[index].first << "," << inspection.selfIntersectionPairs[index].second << ")";
+			report << "\n";
+		}
+		report << "finite CGAL face normals: " << (inspection.normalsChecked ? (inspection.finiteFaceNormals ? "PASS" : "FAIL") : "SKIPPED")
+			<< ", non-finite=" << inspection.nonFiniteFaceNormalCount << "\n";
+		report << "finite CGAL vertex normals: " << (inspection.normalsChecked ? (inspection.finiteVertexNormals ? "PASS" : "FAIL") : "SKIPPED")
+			<< ", non-finite=" << inspection.nonFiniteVertexNormalCount << "\n";
+		report << "outward oriented: " << (inspection.orientationChecked ? (inspection.outwardOriented ? "PASS" : "FAIL") : "SKIPPED") << "\n";
+		report << "bounds a volume: " << (inspection.boundsVolumeChecked ? (inspection.boundsVolume ? "PASS" : "FAIL") : "SKIPPED") << "\n";
+		report << "volume: ";
+		if (inspection.volumeChecked) report << inspection.volume << (inspection.finiteVolume ? "" : " (non-finite)");
+		else report << "SKIPPED";
+		report << "\n";
+		for (const auto& error : inspection.inspectionErrors) report << "inspection exception: " << error << "\n";
+	}
+
+	void collectDiagnosticMessages(const poca::geometry::MeshInspection& inspection, std::vector<std::string>& errors, std::vector<std::string>& warnings)
+	{
+		for (const auto& exception : inspection.inspectionErrors) errors.push_back("Inspection failed: " + exception);
+		if (inspection.empty) errors.emplace_back("Mesh is empty.");
+		if (!inspection.finiteCoordinates) errors.emplace_back("Mesh has non-finite coordinates.");
+		if (!inspection.validPolygonMesh) errors.emplace_back("CGAL::is_valid_polygon_mesh = false.");
+		if (inspection.validPolygonMesh && !inspection.triangleMesh) errors.emplace_back("CGAL::is_triangle_mesh = false.");
+		if (inspection.validPolygonMesh && !inspection.closed)
+			errors.push_back("Mesh is open (" + std::to_string(inspection.borderEdgeCount) + " border edge(s)).");
+		if (inspection.degenerateTriangleCount != 0)
+			warnings.push_back(std::to_string(inspection.degenerateTriangleCount) + " degenerate/collinear triangle(s).");
+		if (inspection.connectedComponentCount > 1)
+			warnings.push_back(std::to_string(inspection.connectedComponentCount) + " connected components in one mesh.");
+		if (inspection.nonManifoldVertexCount != 0)
+			warnings.push_back(std::to_string(inspection.nonManifoldVertexCount) + " non-manifold vertex/vertices.");
+		if (!inspection.selfIntersectionPairs.empty())
+			errors.push_back(std::to_string(inspection.selfIntersectionPairs.size()) + " self-intersecting face pair(s).");
+		if (inspection.normalsChecked && (!inspection.finiteFaceNormals || !inspection.finiteVertexNormals))
+			warnings.push_back(std::to_string(inspection.facesWithNonFiniteNormals) + " face(s) have non-finite face/vertex normals.");
+		if (inspection.orientationChecked && !inspection.outwardOriented)
+			warnings.emplace_back("Closed mesh is inward oriented; Repair meshes can orient a copy.");
+		if (inspection.boundsVolumeChecked && !inspection.boundsVolume)
+			errors.emplace_back("Mesh does not bound a volume.");
+		if (inspection.volumeChecked && (!inspection.finiteVolume || (inspection.outwardOriented && inspection.volume <= 0.0)))
+			errors.emplace_back("Outward mesh volume is not finite and positive.");
+	}
+
 	void validateObjectListMeshes(poca::geometry::ObjectListMesh* objectList, poca::core::MyObjectInterface* owner, const poca::core::CommandInfo& command)
 	{
 		if (!objectList) {
@@ -184,188 +229,66 @@ namespace {
 		}
 
 		std::ostringstream report;
+		report << std::setprecision(17);
 		const auto& meshes = objectList->getMeshes();
 		report << "Object: " << (owner ? owner->getName() : std::string("<unknown>")) << "\n";
 		if (owner) report << "Folder: " << owner->getDir() << "\n";
 		report << "Meshes: " << meshes.size() << "\n\n";
-		report << "Checks mirror the CGAL operations used by PoCA/poca_extra on meshes: valid polygon mesh, triangle mesh, closedness/borders, connected components, self-intersections, orientation/volume, and face/vertex normals.\n";
-		report << "Repair/remeshing/clipping algorithms are NOT applied to the source meshes by this test.\n\n";
+		report << "All geometric checks below come from poca::geometry::MeshRepair::inspect().\n";
+		report << "The source ObjectListMesh is never modified.\n\n";
 
 		std::vector<DiagnosticTriangle> diagnosticTriangles;
 		size_t meshesWithErrors = 0, meshesWithWarnings = 0, cleanMeshes = 0;
 		size_t totalSelfPairs = 0, totalDegenerate = 0, totalBoundaryFaces = 0, totalDisconnectedFaces = 0;
 
 		for (size_t meshIndex = 0; meshIndex < meshes.size(); ++meshIndex) {
-			const Mesh& source = meshes[meshIndex];
-			Mesh mesh = source; // all potentially mutating CGAL checks run on a copy
-			std::map<size_t, unsigned int> faceIssues;
-			std::vector<std::string> errors, warnings;
-
 			report << "--------------------------------------------------\n";
 			report << "Mesh " << meshIndex << "\n";
-			report << "vertices=" << mesh.number_of_vertices() << ", edges=" << mesh.number_of_edges() << ", faces=" << mesh.number_of_faces() << "\n";
+			try {
+				const auto inspection = poca::geometry::MeshRepair::inspect(meshes[meshIndex]);
+				reportInspection(report, inspection);
+				std::vector<std::string> errors, warnings;
+				collectDiagnosticMessages(inspection, errors, warnings);
 
-			if (mesh.is_empty()) errors.push_back("Mesh is empty.");
-			const bool valid = !mesh.is_empty() && CGAL::is_valid_polygon_mesh(mesh);
-			if (!valid) errors.push_back("CGAL::is_valid_polygon_mesh = false.");
-			report << "valid polygon mesh: " << (valid ? "PASS" : "FAIL") << "\n";
-
-			bool finite = true;
-			for (Face f : mesh.faces()) {
-				const auto vs = faceVertices(mesh, f);
-				for (Vertex v : vs) if (!finitePoint(mesh.point(v))) {
-					finite = false;
-					addFaceIssue(faceIssues, f, IssueNonFinite);
-					break;
+				std::map<size_t, unsigned int> faceIssues;
+				for (const auto& faceIssue : inspection.problemFaces) faceIssues[faceIssue.faceIndex] |= faceIssue.issueMask;
+				for (const auto face : meshes[meshIndex].faces()) {
+					const auto found = faceIssues.find(static_cast<size_t>(face.idx()));
+					if (found != faceIssues.end() && found->second != 0)
+						appendDiagnosticFace(meshes[meshIndex], face, meshIndex, found->second, diagnosticTriangles);
 				}
-			}
-			if (!finite) errors.push_back("Mesh has non-finite coordinates.");
-			report << "finite coordinates: " << (finite ? "PASS" : "FAIL") << "\n";
 
-			bool triangle = valid && CGAL::is_triangle_mesh(mesh);
-			if (valid && !triangle) {
-				errors.push_back("CGAL::is_triangle_mesh = false.");
-				for (Face f : mesh.faces()) if (faceVertices(mesh, f).size() != 3) addFaceIssue(faceIssues, f, IssueNonTriangle);
-			}
-			report << "triangle mesh: " << (triangle ? "PASS" : "FAIL") << "\n";
-
-			size_t degenerateCount = 0;
-			if (valid) {
-				for (Face f : mesh.faces()) {
-					const auto vs = faceVertices(mesh, f);
-					if (vs.size() != 3) continue;
-					const auto& a = mesh.point(vs[0]); const auto& b = mesh.point(vs[1]); const auto& c = mesh.point(vs[2]);
-					if (finitePoint(a) && finitePoint(b) && finitePoint(c) && CGAL::collinear(a, b, c)) {
-						++degenerateCount; addFaceIssue(faceIssues, f, IssueDegenerate);
-					}
+				totalSelfPairs += inspection.selfIntersectionPairs.size();
+				totalDegenerate += inspection.degenerateTriangleCount;
+				totalBoundaryFaces += inspection.borderFaceCount;
+				totalDisconnectedFaces += inspection.facesOutsideLargestComponent;
+				if (!errors.empty()) {
+					++meshesWithErrors;
+					report << "RESULT: ERROR\n";
+					for (const auto& error : errors) report << "  ERROR: " << error << "\n";
 				}
-			}
-			if (degenerateCount) warnings.push_back(std::to_string(degenerateCount) + " degenerate/collinear triangle(s).");
-			report << "degenerate triangles: " << degenerateCount << (degenerateCount ? " (WARNING)" : " (PASS)") << "\n";
-			totalDegenerate += degenerateCount;
-
-			size_t boundaryEdges = 0;
-			std::set<size_t> boundaryFaces;
-			if (valid) {
-				for (auto e : mesh.edges()) if (is_border(e, mesh)) {
-					++boundaryEdges;
-					auto h = mesh.halfedge(e);
-					if (is_border(h, mesh)) h = mesh.opposite(h);
-					const auto f = mesh.face(h);
-					if (f != Mesh::null_face()) { boundaryFaces.insert(static_cast<size_t>(f.idx())); addFaceIssue(faceIssues, f, IssueBoundary); }
+				else if (!warnings.empty()) {
+					++meshesWithWarnings;
+					report << "RESULT: WARNING\n";
 				}
-			}
-			const bool closed = valid && CGAL::is_closed(mesh);
-			if (valid && !closed) errors.push_back("Mesh is open (CGAL::is_closed = false; " + std::to_string(boundaryEdges) + " border edge(s)).");
-			report << "closed: " << (closed ? "PASS" : "FAIL") << ", border edges=" << boundaryEdges << ", border faces=" << boundaryFaces.size() << "\n";
-			totalBoundaryFaces += boundaryFaces.size();
-
-			size_t componentCount = 0;
-			std::vector<size_t> componentSizes;
-			if (valid && mesh.number_of_faces() > 0) {
-				auto cc = mesh.add_property_map<Face, std::size_t>("f:poca_mesh_test_cc", 0).first;
-				componentCount = PMP::connected_components(mesh, cc);
-				componentSizes.assign(componentCount, 0);
-				for (Face f : mesh.faces()) if (cc[f] < componentSizes.size()) ++componentSizes[cc[f]];
-				if (componentCount > 1) {
-					warnings.push_back(std::to_string(componentCount) + " connected components in one mesh.");
-					const auto largest = static_cast<size_t>(std::distance(componentSizes.begin(), std::max_element(componentSizes.begin(), componentSizes.end())));
-					for (Face f : mesh.faces()) if (cc[f] != largest) addFaceIssue(faceIssues, f, IssueDisconnected);
+				else {
+					++cleanMeshes;
+					report << "RESULT: PASS\n";
 				}
+				for (const auto& warning : warnings) report << "  WARNING: " << warning << "\n";
+				report << "diagnostic problem faces exported from this mesh: " << faceIssues.size() << "\n\n";
 			}
-			report << "connected components: " << componentCount;
-			if (!componentSizes.empty()) { report << " [faces:"; for (size_t i = 0; i < componentSizes.size(); ++i) report << (i ? "," : " ") << componentSizes[i]; report << "]"; }
-			report << (componentCount <= 1 ? " (PASS)" : " (WARNING)") << "\n";
-			if (componentCount > 1) for (Face f : mesh.faces()) {
-				const auto it = faceIssues.find(static_cast<size_t>(f.idx()));
-				if (it != faceIssues.end() && (it->second & IssueDisconnected) != 0) ++totalDisconnectedFaces;
+			catch (const std::bad_alloc&) {
+				throw;
 			}
-
-			std::vector<std::pair<Face, Face>> selfPairs;
-			if (valid && triangle && finite) {
-				try {
-					std::vector<std::pair<Face, Face>> rawPairs;
-					PMP::self_intersections<CGAL::Sequential_tag>(faces(mesh), mesh, std::back_inserter(rawPairs));
-					for (const auto& pair : rawPairs) {
-						// CGAL reports a degenerate face as (f,f); keep that in the
-						// degenerate diagnostic rather than calling it a self-intersection.
-						if (pair.first == pair.second) { addFaceIssue(faceIssues, pair.first, IssueDegenerate); continue; }
-						selfPairs.push_back(pair);
-						addFaceIssue(faceIssues, pair.first, IssueSelfIntersection);
-						addFaceIssue(faceIssues, pair.second, IssueSelfIntersection);
-					}
-				} catch (const std::exception& e) {
-					errors.push_back(std::string("Self-intersection test threw: ") + e.what());
-				}
-			}
-			if (!selfPairs.empty()) errors.push_back(std::to_string(selfPairs.size()) + " self-intersecting face pair(s).");
-			report << "self intersections: " << selfPairs.size() << (selfPairs.empty() ? " (PASS)" : " (FAIL)") << "\n";
-			if (!selfPairs.empty()) {
-				report << "  first face pairs: ";
-				for (size_t i = 0; i < std::min<size_t>(10, selfPairs.size()); ++i)
-					report << (i ? ", " : "") << "(" << selfPairs[i].first.idx() << "," << selfPairs[i].second.idx() << ")";
-				report << "\n";
-			}
-			totalSelfPairs += selfPairs.size();
-
-			if (valid && triangle) {
-				try {
-					auto fn = mesh.add_property_map<Face, Kernel::Vector_3>("f:poca_mesh_test_normal", CGAL::NULL_VECTOR).first;
-					auto vn = mesh.add_property_map<Vertex, Kernel::Vector_3>("v:poca_mesh_test_normal", CGAL::NULL_VECTOR).first;
-					PMP::compute_face_normals(mesh, fn);
-					PMP::compute_vertex_normals(mesh, vn);
-					std::set<size_t> badVertices;
-					for (Vertex v : mesh.vertices()) if (!finiteVector(vn[v])) badVertices.insert(static_cast<size_t>(v.idx()));
-					size_t badFaceNormals = 0;
-					for (Face f : mesh.faces()) {
-						bool bad = !finiteVector(fn[f]);
-						if (!bad) for (Vertex v : faceVertices(mesh, f)) if (badVertices.count(static_cast<size_t>(v.idx()))) { bad = true; break; }
-						if (bad) { ++badFaceNormals; addFaceIssue(faceIssues, f, IssueNonFiniteNormal); }
-					}
-					if (badFaceNormals) warnings.push_back(std::to_string(badFaceNormals) + " face(s) have non-finite face/vertex normals.");
-					report << "finite CGAL face/vertex normals: " << (badFaceNormals ? "FAIL/WARNING" : "PASS") << " (affected faces=" << badFaceNormals << ")\n";
-				} catch (const std::exception& e) {
-					warnings.push_back(std::string("Normal computation threw: ") + e.what());
-					report << "CGAL normal computation: EXCEPTION: " << e.what() << "\n";
-				}
-			}
-
-			if (valid && triangle && closed && finite && selfPairs.empty()) {
-				try {
-					const bool outward = PMP::is_outward_oriented(mesh);
-					report << "outward oriented: " << (outward ? "yes" : "no (repairable by orient_to_bound_a_volume)") << "\n";
-					if (!outward) warnings.push_back("Closed mesh is inward oriented; PoCA operations that call orient_to_bound_a_volume can repair this on a copy.");
-					Mesh oriented = mesh;
-					PMP::orient_to_bound_a_volume(oriented);
-					const double volume = CGAL::to_double(PMP::volume(oriented));
-					report << "orient_to_bound_a_volume + volume: " << ((std::isfinite(volume) && volume > 0.0) ? "PASS" : "FAIL") << ", volume=" << volume << "\n";
-					if (!std::isfinite(volume) || volume <= 0.0) errors.push_back("Oriented mesh volume is not finite and positive.");
-				} catch (const std::exception& e) {
-					errors.push_back(std::string("Orientation/volume test threw: ") + e.what());
-					report << "orientation/volume: EXCEPTION: " << e.what() << "\n";
-				}
-			} else {
-				report << "orientation/volume: SKIPPED (requires finite, valid, closed, non-self-intersecting triangle mesh)\n";
-			}
-
-			for (Face f : source.faces()) {
-				const auto it = faceIssues.find(static_cast<size_t>(f.idx()));
-				if (it != faceIssues.end() && it->second != 0) appendDiagnosticFace(source, f, meshIndex, it->second, diagnosticTriangles);
-			}
-
-			if (!errors.empty()) {
+			catch (const std::exception& exception) {
 				++meshesWithErrors;
-				report << "RESULT: ERROR\n";
-				for (const auto& e : errors) report << "  ERROR: " << e << "\n";
-			} else if (!warnings.empty()) {
-				++meshesWithWarnings;
-				report << "RESULT: WARNING\n";
-			} else {
-				++cleanMeshes;
-				report << "RESULT: PASS\n";
+				report << "RESULT: ERROR\n  ERROR: inspection exception: " << exception.what() << "\n\n";
 			}
-			for (const auto& w : warnings) report << "  WARNING: " << w << "\n";
-			report << "diagnostic problem faces exported from this mesh: " << faceIssues.size() << "\n\n";
+			catch (...) {
+				++meshesWithErrors;
+				report << "RESULT: ERROR\n  ERROR: unknown inspection exception\n\n";
+			}
 		}
 
 		report << "==================================================\n";
@@ -378,21 +301,26 @@ namespace {
 		report << "boundary faces: " << totalBoundaryFaces << "\n";
 		report << "faces outside the largest connected component: " << totalDisconnectedFaces << "\n";
 		report << "diagnostic triangle objects: " << diagnosticTriangles.size() << "\n";
-		report << "issueMask bits: 1=selfIntersection, 2=degenerate, 4=boundary, 8=nonFinite, 16=nonTriangle, 32=disconnected, 64=nonFiniteNormal\n";
+		report << "issueMask bits: 1=selfIntersection, 2=degenerate, 4=boundary, 8=nonFinite, 16=nonTriangle, 32=disconnected, 64=nonFiniteNormal, 128=nonManifold, 256=invalidPolygonMesh, 512=orientation, 1024=volume, 2048=empty\n";
 
 		if (!diagnosticTriangles.empty() && owner) {
-			std::vector<std::array<poca::core::Vec3mf, 3>> triangles; triangles.reserve(diagnosticTriangles.size());
-			std::vector<float> sourceMesh, sourceFace, issueMask, selfIntersection, degenerate, boundary, nonFinite, nonTriangle, disconnected, nonFiniteNormal;
-			for (const auto& d : diagnosticTriangles) {
-				triangles.push_back(d.triangle); sourceMesh.push_back(d.sourceMesh); sourceFace.push_back(d.sourceFace); issueMask.push_back(d.issueMask);
-				const unsigned int mask = static_cast<unsigned int>(d.issueMask);
-				selfIntersection.push_back(mask & IssueSelfIntersection ? 1.f : 0.f);
-				degenerate.push_back(mask & IssueDegenerate ? 1.f : 0.f);
-				boundary.push_back(mask & IssueBoundary ? 1.f : 0.f);
-				nonFinite.push_back(mask & IssueNonFinite ? 1.f : 0.f);
-				nonTriangle.push_back(mask & IssueNonTriangle ? 1.f : 0.f);
-				disconnected.push_back(mask & IssueDisconnected ? 1.f : 0.f);
-				nonFiniteNormal.push_back(mask & IssueNonFiniteNormal ? 1.f : 0.f);
+			std::vector<std::array<poca::core::Vec3mf, 3>> triangles;
+			std::vector<float> sourceMesh, sourceFace, issueMask, selfIntersection, degenerate, boundary, nonFinite, nonTriangle, disconnected, nonFiniteNormal, nonManifold;
+			triangles.reserve(diagnosticTriangles.size());
+			for (const auto& diagnostic : diagnosticTriangles) {
+				triangles.push_back(diagnostic.triangle);
+				sourceMesh.push_back(diagnostic.sourceMesh);
+				sourceFace.push_back(diagnostic.sourceFace);
+				issueMask.push_back(diagnostic.issueMask);
+				const unsigned int mask = static_cast<unsigned int>(diagnostic.issueMask);
+				selfIntersection.push_back(mask & poca::geometry::MeshIssueSelfIntersection ? 1.f : 0.f);
+				degenerate.push_back(mask & poca::geometry::MeshIssueDegenerate ? 1.f : 0.f);
+				boundary.push_back(mask & poca::geometry::MeshIssueBoundary ? 1.f : 0.f);
+				nonFinite.push_back(mask & poca::geometry::MeshIssueNonFinite ? 1.f : 0.f);
+				nonTriangle.push_back(mask & poca::geometry::MeshIssueNonTriangle ? 1.f : 0.f);
+				disconnected.push_back(mask & poca::geometry::MeshIssueDisconnected ? 1.f : 0.f);
+				nonFiniteNormal.push_back(mask & poca::geometry::MeshIssueNonFiniteNormal ? 1.f : 0.f);
+				nonManifold.push_back(mask & poca::geometry::MeshIssueNonManifold ? 1.f : 0.f);
 			}
 			auto* debug = new poca::geometry::ObjectListMesh(triangles);
 			debug->addFeature("sourceMeshIndex", poca::core::generateDataWithLogNoInteraction(sourceMesh));
@@ -405,6 +333,7 @@ namespace {
 			debug->addFeature("nonTriangle", poca::core::generateDataWithLogNoInteraction(nonTriangle));
 			debug->addFeature("disconnected", poca::core::generateDataWithLogNoInteraction(disconnected));
 			debug->addFeature("nonFiniteNormal", poca::core::generateDataWithLogNoInteraction(nonFiniteNormal));
+			debug->addFeature("nonManifold", poca::core::generateDataWithLogNoInteraction(nonManifold));
 			debug->setCurrentHistogramType("issueMask");
 			ObjectListPlugin::m_plugins->addCommands(debug);
 			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
@@ -412,7 +341,7 @@ namespace {
 				lists->addObjectList(debug, command, "ObjectListPlugin", "Mesh diagnostics - problem triangles");
 				report << "Created ObjectList: Mesh diagnostics - problem triangles\n";
 				report << "Each object is one offending source face (fan-triangulated only for display if the source face was non-triangular).\n";
-				report << "Features: sourceMeshIndex, sourceFaceIndex, issueMask, selfIntersection, degenerate, boundary, nonFinite, nonTriangle, disconnected, nonFiniteNormal.\n";
+				report << "Features: sourceMeshIndex, sourceFaceIndex, issueMask, selfIntersection, degenerate, boundary, nonFinite, nonTriangle, disconnected, nonFiniteNormal, nonManifold.\n";
 			}
 			else delete debug;
 		}
@@ -423,43 +352,195 @@ namespace {
 		showMeshReport(text, "Object mesh quality report", "CGAL mesh diagnostics for the current ObjectListMesh");
 	}
 
-	void repairObjectListMeshSelfIntersections(poca::geometry::ObjectListMesh* objectList, poca::core::MyObjectInterface* owner, const poca::core::CommandInfo& command)
+	const char* repairStatusName(const poca::geometry::MeshRepairStatus status)
+	{
+		switch (status) {
+		case poca::geometry::MeshRepairStatus::Clean: return "CLEAN - NO REPAIR REQUIRED";
+		case poca::geometry::MeshRepairStatus::Repaired: return "REPAIRED";
+		default: return "REPAIR REJECTED";
+		}
+	}
+
+	void reportRepairDetails(std::ostringstream& report, const poca::geometry::MeshRepairResult& result)
+	{
+		report << "BEFORE\n";
+		reportInspection(report, result.before);
+		report << "\nDETECTED ISSUES\n";
+		std::vector<std::string> detectedErrors, detectedWarnings;
+		collectDiagnosticMessages(result.before, detectedErrors, detectedWarnings);
+		if (detectedErrors.empty() && detectedWarnings.empty()) report << "  none\n";
+		else {
+			for (const auto& issue : detectedErrors) report << "  ERROR: " << issue << "\n";
+			for (const auto& issue : detectedWarnings) report << "  WARNING: " << issue << "\n";
+		}
+		report << "\nREPAIR STEPS\n";
+		if (result.steps.empty()) report << "  none\n";
+		else for (const auto& step : result.steps) report << "  " << step << "\n";
+		if (!result.failures.empty()) {
+			report << "\nREPAIR FAILURES\n";
+			for (const auto& failure : result.failures) report << "  " << failure << "\n";
+		}
+		report << "\nAFTER\n";
+		reportInspection(report, result.after);
+		report << "\nRESULT\n  " << repairStatusName(result.status) << "\n";
+		report << "repairMask=" << result.repairMask << "\n\n";
+	}
+
+	void preserveCompatibleObjectFeatures(const poca::geometry::ObjectListMesh* source, poca::geometry::ObjectListMesh* destination)
+	{
+		for (const auto& feature : source->getNameData()) {
+			if (feature == "sourceMeshIndex" || feature == "repairStatus" || feature == "repairMask" || destination->hasData(feature)) continue;
+			auto* histogram = dynamic_cast<poca::core::Histogram<float>*>(source->getOriginalHistogram(feature));
+			if (!histogram) continue;
+			const auto& values = histogram->getValues();
+			if (values.size() != source->nbObjects()) continue;
+			destination->addFeature(feature, poca::core::generateDataWithLogNoInteraction(values));
+		}
+	}
+
+	void repairObjectListMeshes(poca::geometry::ObjectListMesh* objectList, poca::core::MyObjectInterface* owner, const poca::core::CommandInfo& command)
 	{
 		if (!objectList) {
 			QMessageBox::warning(nullptr, "Object mesh repair", "The current ObjectList is not an ObjectListMesh.");
 			return;
 		}
 
-		poca::objectlist::MeshSelfIntersectionRepairResult repair = poca::objectlist::repairSelfIntersections(objectList->getMeshes());
-		if (!repair.meshes.empty() && owner) {
+		const auto& sources = objectList->getMeshes();
+		std::vector<Mesh> outputMeshes;
+		std::vector<float> sourceMeshIndices, repairStatuses, repairMasks;
+		outputMeshes.reserve(sources.size());
+		sourceMeshIndices.reserve(sources.size());
+		repairStatuses.reserve(sources.size());
+		repairMasks.reserve(sources.size());
+
+		std::ostringstream report;
+		report << std::setprecision(17);
+		report << "Mesh repair\n";
+		report << "Every source mesh is inspected. All repairs operate on copies; rejected meshes retain their original geometry.\n\n";
+		size_t clean = 0, requiringRepair = 0, repairedCount = 0, rejected = 0;
+		size_t detectedSelfIntersections = 0, detectedDegenerates = 0, detectedBoundaries = 0;
+		size_t detectedComponents = 0, detectedTriangulation = 0, detectedOrientation = 0, detectedNonManifold = 0;
+		size_t repairedSelfIntersections = 0, repairedDegenerates = 0, repairedBoundaries = 0;
+		size_t repairedComponents = 0, repairedTriangulation = 0, repairedOrientation = 0, repairedNonManifold = 0;
+
+		for (size_t meshIndex = 0; meshIndex < sources.size(); ++meshIndex) {
+			report << "--------------------------------------------------\n";
+			report << "Mesh " << meshIndex << "\n\n";
+			poca::geometry::MeshRepairResult result;
+			try {
+				result = poca::geometry::MeshRepair::repair(sources[meshIndex]);
+			}
+			catch (const std::bad_alloc&) {
+				throw;
+			}
+			catch (const std::exception& exception) {
+				result.status = poca::geometry::MeshRepairStatus::Rejected;
+				result.failures.push_back(std::string("per-mesh repair exception: ") + exception.what());
+			}
+			catch (...) {
+				result.status = poca::geometry::MeshRepairStatus::Rejected;
+				result.failures.emplace_back("unknown per-mesh repair exception");
+			}
+
+			if (result.status == poca::geometry::MeshRepairStatus::Clean) {
+				++clean;
+				outputMeshes.push_back(sources[meshIndex]);
+				report << "Mesh " << meshIndex << ": CLEAN\n\n";
+			}
+			else if (result.status == poca::geometry::MeshRepairStatus::Repaired) {
+				++requiringRepair;
+				++repairedCount;
+				outputMeshes.push_back(std::move(result.repairedMesh));
+				reportRepairDetails(report, result);
+			}
+			else {
+				++requiringRepair;
+				++rejected;
+				outputMeshes.push_back(sources[meshIndex]);
+				reportRepairDetails(report, result);
+			}
+
+			sourceMeshIndices.push_back(static_cast<float>(meshIndex));
+			repairStatuses.push_back(result.status == poca::geometry::MeshRepairStatus::Clean ? 0.f
+				: result.status == poca::geometry::MeshRepairStatus::Repaired ? 1.f : 2.f);
+			if (result.before.issueMask & poca::geometry::MeshIssueSelfIntersection) ++detectedSelfIntersections;
+			if (result.before.issueMask & poca::geometry::MeshIssueDegenerate) ++detectedDegenerates;
+			if (result.before.issueMask & poca::geometry::MeshIssueBoundary) ++detectedBoundaries;
+			if (result.before.issueMask & poca::geometry::MeshIssueDisconnected) ++detectedComponents;
+			if (result.before.issueMask & poca::geometry::MeshIssueNonTriangle) ++detectedTriangulation;
+			if (result.before.issueMask & poca::geometry::MeshIssueOrientation) ++detectedOrientation;
+			if (result.before.issueMask & poca::geometry::MeshIssueNonManifold) ++detectedNonManifold;
+			const std::uint32_t acceptedRepairMask = result.status == poca::geometry::MeshRepairStatus::Repaired ? result.repairMask : poca::geometry::MeshRepairNone;
+			repairMasks.push_back(static_cast<float>(acceptedRepairMask));
+			if (acceptedRepairMask & poca::geometry::MeshRepairSelfIntersection) ++repairedSelfIntersections;
+			if (acceptedRepairMask & poca::geometry::MeshRepairDegenerateFaces) ++repairedDegenerates;
+			if (acceptedRepairMask & poca::geometry::MeshRepairBoundary) ++repairedBoundaries;
+			if (acceptedRepairMask & poca::geometry::MeshRepairDisconnectedComponents) ++repairedComponents;
+			if (acceptedRepairMask & poca::geometry::MeshRepairTriangulatedFaces) ++repairedTriangulation;
+			if (acceptedRepairMask & poca::geometry::MeshRepairOrientation) ++repairedOrientation;
+			if (acceptedRepairMask & poca::geometry::MeshRepairNonManifoldTopology) ++repairedNonManifold;
+		}
+
+		report << "==================================================\n";
+		report << "Mesh repair summary\n\n";
+		report << "total meshes: " << sources.size() << "\n";
+		report << "clean meshes: " << clean << "\n";
+		report << "meshes requiring repair: " << requiringRepair << "\n";
+		report << "successfully repaired: " << repairedCount << "\n";
+		report << "repair rejected: " << rejected << "\n";
+		report << "detected - self-intersection: " << detectedSelfIntersections << "\n";
+		report << "detected - degenerates: " << detectedDegenerates << "\n";
+		report << "detected - disconnected components: " << detectedComponents << "\n";
+		report << "detected - borders/holes: " << detectedBoundaries << "\n";
+		report << "detected - triangulation required: " << detectedTriangulation << "\n";
+		report << "detected - orientation: " << detectedOrientation << "\n";
+		report << "detected - non-manifold: " << detectedNonManifold << "\n";
+		report << "repairs applied - self-intersection: " << repairedSelfIntersections << "\n";
+		report << "repairs applied - degenerates: " << repairedDegenerates << "\n";
+		report << "repairs applied - disconnected components: " << repairedComponents << "\n";
+		report << "repairs applied - borders/holes: " << repairedBoundaries << "\n";
+		report << "repairs applied - triangulation: " << repairedTriangulation << "\n";
+		report << "repairs applied - orientation: " << repairedOrientation << "\n";
+		report << "repairs applied - non-manifold: " << repairedNonManifold << "\n";
+		report << "repairMask bits: 1=selfIntersection, 2=degenerateFaces, 4=boundaryOrHole, 8=disconnectedComponents, 16=triangulatedFaces, 32=orientation, 64=nonManifoldTopology\n";
+
+		if (outputMeshes.size() == sources.size() && owner) {
 			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
 			if (lists) {
 				try {
-					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(repair.meshes));
-					if (repaired->nbObjects() != repair.sourceMeshIndices.size()) {
-						repair.report += "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve every validated repair.\n";
+					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(outputMeshes, false, 0.f, 0, false));
+					if (repaired->nbObjects() != sources.size()) {
+						report << "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve the exact source mesh count.\n";
 					}
 					else {
-						repaired->addFeature("sourceMeshIndex", poca::core::generateDataWithLogNoInteraction(repair.sourceMeshIndices));
+						repaired->setUseVertexNormals(objectList->useVertexNormals());
+						repaired->setSelection(objectList->getSelection());
+						preserveCompatibleObjectFeatures(objectList, repaired.get());
+						repaired->addFeature("sourceMeshIndex", poca::core::generateDataWithLogNoInteraction(sourceMeshIndices));
+						repaired->addFeature("repairStatus", poca::core::generateDataWithLogNoInteraction(repairStatuses));
+						repaired->addFeature("repairMask", poca::core::generateDataWithLogNoInteraction(repairMasks));
+						repaired->setCurrentHistogramType("repairStatus");
 						ObjectListPlugin::m_plugins->addCommands(repaired.get());
-						lists->addObjectList(repaired.get(), command, "ObjectListPlugin", "Mesh repaired - self intersections");
+						lists->addObjectList(repaired.get(), command, "ObjectListPlugin", "Mesh repaired");
 						repaired.release();
-						repair.report += "\nCreated ObjectListMesh:\n  Mesh repaired - self intersections\n";
+						report << "\nCreated ObjectListMesh:\n  Mesh repaired\n";
+						report << "Output mesh count/order exactly matches the source. Features: sourceMeshIndex, repairStatus (0 clean, 1 repaired, 2 rejected), repairMask.\n";
 					}
 				}
 				catch (const std::bad_alloc&) {
 					throw;
 				}
 				catch (const std::exception& exception) {
-					repair.report += std::string("\nNo repaired ObjectListMesh created: output construction failed: ") + exception.what() + "\n";
+					report << "\nNo repaired ObjectListMesh created: output construction failed: " << exception.what() << "\n";
 				}
 			}
-			else repair.report += "\nNo repaired ObjectListMesh created: the owning ObjectLists component is unavailable.\n";
+			else report << "\nNo repaired ObjectListMesh created: the owning ObjectLists component is unavailable.\n";
 		}
-		else repair.report += "\nNo repaired ObjectListMesh created.\n";
+		else report << "\nNo repaired ObjectListMesh created: output/source count mismatch or owning object unavailable.\n";
 
-		std::cout << repair.report << std::endl;
-		showMeshReport(repair.report, "Object mesh repair report", "CGAL self-intersection repair for the current ObjectListMesh");
+		const std::string text = report.str();
+		std::cout << text << std::endl;
+		showMeshReport(text, "Object mesh repair report", "Conservative copy-only CGAL repair for the current ObjectListMesh");
 	}
 }
 
@@ -512,6 +593,7 @@ std::vector<poca::core::CommandSpec> ObjectListBasicCommands::commandSpecs() con
 		CommandSpec("duplicateCentroids"),
 		CommandSpec("computeSkeletons"),
 		CommandSpec("testMeshes"),
+		CommandSpec("repairMeshes"),
 		CommandSpec("repairSelfIntersections"),
 		CommandSpec("exportObjectsInROIs"),
 		CommandSpec("exportLocsInObjects"),
@@ -579,11 +661,11 @@ void ObjectListBasicCommands::execute(poca::core::CommandInfo* _infos, const poc
 		poca::core::MyObjectInterface* owner = engine->getObject(m_objects);
 		validateObjectListMeshes(omesh, owner, *_infos);
 	}
-	else if (_infos->nameCommand == "repairSelfIntersections") {
+	else if (_infos->nameCommand == "repairMeshes" || _infos->nameCommand == "repairSelfIntersections") {
 		poca::geometry::ObjectListMesh* omesh = dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects);
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		poca::core::MyObjectInterface* owner = engine->getObject(m_objects);
-		repairObjectListMeshSelfIntersections(omesh, owner, *_infos);
+		repairObjectListMeshes(omesh, owner, *_infos);
 	}
 	else if (_infos->nameCommand == "duplicateSelectedObjects") {
 		std::set <int> selectedObjects = _infos->hasParameter("selection")? _infos->getParameter<std::set <int>>("selection") : std::set<int>();
