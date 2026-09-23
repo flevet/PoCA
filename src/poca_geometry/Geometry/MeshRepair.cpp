@@ -138,6 +138,144 @@ namespace {
 		return failures.empty();
 	}
 
+	std::vector<std::vector<std::size_t>> connectedFaceComponents(
+		const std::map<std::size_t, std::set<std::size_t>>& adjacency)
+	{
+		std::set<std::size_t> remaining;
+		for (const auto& entry : adjacency) remaining.insert(entry.first);
+		std::vector<std::vector<std::size_t>> clusters;
+		while (!remaining.empty()) {
+			std::vector<std::size_t> pending{ *remaining.begin() };
+			remaining.erase(remaining.begin());
+			std::vector<std::size_t> cluster;
+			while (!pending.empty()) {
+				const auto faceIndex = pending.back();
+				pending.pop_back();
+				cluster.push_back(faceIndex);
+				for (const auto neighbor : adjacency.at(faceIndex)) {
+					const auto found = remaining.find(neighbor);
+					if (found == remaining.end()) continue;
+					pending.push_back(neighbor);
+					remaining.erase(found);
+				}
+			}
+			std::sort(cluster.begin(), cluster.end());
+			clusters.push_back(std::move(cluster));
+		}
+		std::sort(clusters.begin(), clusters.end(), [](const auto& left, const auto& right) {
+			return left.front() < right.front();
+			});
+		return clusters;
+	}
+
+	std::vector<std::vector<std::size_t>> buildIntersectionClusters(
+		const std::vector<std::pair<std::size_t, std::size_t>>& pairs)
+	{
+		std::map<std::size_t, std::set<std::size_t>> adjacency;
+		for (const auto& pair : pairs) {
+			adjacency[pair.first].insert(pair.second);
+			adjacency[pair.second].insert(pair.first);
+		}
+		return connectedFaceComponents(adjacency);
+	}
+
+	std::vector<std::vector<std::size_t>> buildSurfaceSubpatches(
+		const Mesh& mesh,
+		const std::set<std::size_t>& clusterFaceIndices)
+	{
+		std::map<std::size_t, std::set<std::size_t>> adjacency;
+		for (const auto surfaceFace : mesh.faces()) {
+			const auto faceIndex = static_cast<std::size_t>(surfaceFace.idx());
+			if (clusterFaceIndices.count(faceIndex) == 0) continue;
+			adjacency[faceIndex];
+			for (const auto halfedge : halfedges_around_face(mesh.halfedge(surfaceFace), mesh)) {
+				const auto neighbor = face(opposite(halfedge, mesh), mesh);
+				if (neighbor == Mesh::null_face()) continue;
+				const auto neighborIndex = static_cast<std::size_t>(neighbor.idx());
+				if (clusterFaceIndices.count(neighborIndex) == 0) continue;
+				adjacency[faceIndex].insert(neighborIndex);
+				adjacency[neighborIndex].insert(faceIndex);
+			}
+		}
+
+		return connectedFaceComponents(adjacency);
+	}
+
+	using SourceFaceMap = Mesh::Property_map<Face, std::size_t>;
+
+	bool introducesUnrelatedIntersectionCluster(
+		const Mesh& candidate,
+		const poca::geometry::MeshInspection& inspection,
+		const SourceFaceMap& sourceFaceMap,
+		const std::vector<std::pair<std::size_t, std::size_t>>& sourcePairs,
+		const std::set<std::size_t>& selectedClusterFaces)
+	{
+		const auto invalidFaceIndex = (std::numeric_limits<std::size_t>::max)();
+		std::map<std::size_t, Face> candidateFaces;
+		for (const auto face : candidate.faces())
+			candidateFaces.emplace(static_cast<std::size_t>(face.idx()), face);
+
+		std::set<std::pair<std::size_t, std::size_t>> originalPairs;
+		for (const auto& pair : sourcePairs)
+			originalPairs.emplace((std::min)(pair.first, pair.second), (std::max)(pair.first, pair.second));
+
+		for (const auto& cluster : buildIntersectionClusters(inspection.selfIntersectionPairs)) {
+			bool touchesSelectedCluster = false;
+			bool containsCreatedFace = false;
+			for (const auto candidateFaceIndex : cluster) {
+				const auto found = candidateFaces.find(candidateFaceIndex);
+				if (found == candidateFaces.end()) return true;
+				const auto sourceFaceIndex = sourceFaceMap[found->second];
+				if (sourceFaceIndex == invalidFaceIndex) containsCreatedFace = true;
+				else if (selectedClusterFaces.count(sourceFaceIndex) != 0) touchesSelectedCluster = true;
+			}
+			if (containsCreatedFace && !touchesSelectedCluster) return true;
+
+			for (const auto& pair : inspection.selfIntersectionPairs) {
+				if (!std::binary_search(cluster.begin(), cluster.end(), pair.first)
+					|| !std::binary_search(cluster.begin(), cluster.end(), pair.second)) continue;
+				const auto firstFace = candidateFaces.find(pair.first);
+				const auto secondFace = candidateFaces.find(pair.second);
+				if (firstFace == candidateFaces.end() || secondFace == candidateFaces.end()) return true;
+				const auto firstSource = sourceFaceMap[firstFace->second];
+				const auto secondSource = sourceFaceMap[secondFace->second];
+				if (firstSource == invalidFaceIndex || secondSource == invalidFaceIndex) {
+					if (!touchesSelectedCluster) return true;
+					continue;
+				}
+				const auto sourcePair = std::make_pair((std::min)(firstSource, secondSource), (std::max)(firstSource, secondSource));
+				if (originalPairs.count(sourcePair) != 0) continue;
+				if (selectedClusterFaces.count(firstSource) == 0 && selectedClusterFaces.count(secondSource) == 0)
+					return true;
+			}
+		}
+		return false;
+	}
+
+	struct SurfaceSubpatchCandidate {
+		Mesh mesh;
+		std::size_t subpatchIndex = 0;
+		std::size_t smallestFaceIndex = 0;
+		std::size_t ring = 0;
+		std::size_t removedFaceCount = 0;
+		std::size_t createdFaceCount = 0;
+		std::size_t remainingPairCount = 0;
+	};
+
+	bool isBetterSurfaceSubpatchCandidate(
+		const SurfaceSubpatchCandidate& candidate,
+		const SurfaceSubpatchCandidate& currentBest)
+	{
+		if (candidate.remainingPairCount != currentBest.remainingPairCount)
+			return candidate.remainingPairCount < currentBest.remainingPairCount;
+		if (candidate.ring != currentBest.ring) return candidate.ring < currentBest.ring;
+		if (candidate.removedFaceCount != currentBest.removedFaceCount)
+			return candidate.removedFaceCount < currentBest.removedFaceCount;
+		if (candidate.smallestFaceIndex != currentBest.smallestFaceIndex)
+			return candidate.smallestFaceIndex < currentBest.smallestFaceIndex;
+		return candidate.subpatchIndex < currentBest.subpatchIndex;
+	}
+
 	bool repairSelfIntersectionClusterLocally(
 		const Mesh& source,
 		const std::set<std::size_t>& offendingFaceIndices,
@@ -221,43 +359,159 @@ namespace {
 		failures.emplace_back("cluster " + std::to_string(clusterIndex) + ": no local self-intersection patch in rings 0..3 passed validation");
 		return false;
 	}
+
+	bool repairSurfaceSubpatchLocally(
+		const Mesh& source,
+		const std::set<std::size_t>& clusterFaceIndices,
+		const std::vector<std::pair<std::size_t, std::size_t>>& sourcePairs,
+		const std::size_t clusterIndex,
+		Mesh& repaired,
+		poca::geometry::MeshRepairCounts& counts,
+		std::vector<std::string>& steps,
+		std::vector<std::string>& failures)
+	{
+		const auto subpatches = buildSurfaceSubpatches(source, clusterFaceIndices);
+		if (subpatches.size() <= 1) {
+			failures.emplace_back("cluster " + std::to_string(clusterIndex)
+				+ ": whole-cluster repair failed and the faces form only one surface-adjacency subpatch");
+			return false;
+		}
+
+		std::ostringstream summary;
+		summary << "Cluster " << clusterIndex << " surface-adjacency subpatches detected: " << subpatches.size() << " [faces: ";
+		for (std::size_t subpatchIndex = 0; subpatchIndex < subpatches.size(); ++subpatchIndex) {
+			if (subpatchIndex != 0) summary << ", ";
+			summary << subpatches[subpatchIndex].size();
+		}
+		summary << "]. Trying each subpatch independently.";
+		steps.push_back(summary.str());
+
+		bool hasBestCandidate = false;
+		SurfaceSubpatchCandidate bestCandidate;
+		const auto invalidFaceIndex = (std::numeric_limits<std::size_t>::max)();
+
+		for (std::size_t subpatchIndex = 0; subpatchIndex < subpatches.size(); ++subpatchIndex) {
+			const auto& subpatch = subpatches[subpatchIndex];
+			const std::set<std::size_t> subpatchFaceIndices(subpatch.begin(), subpatch.end());
+			auto patch = facePatch(source, subpatchFaceIndices);
+			if (patch.size() != subpatchFaceIndices.size()) {
+				steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+					+ " rejected: could not resolve every face on the current-stage mesh.");
+				continue;
+			}
+
+			for (std::size_t ring = 0; ring <= 3; ++ring) {
+				if (ring != 0) expandFacePatch(source, patch);
+				std::set<std::size_t> patchIndices;
+				for (const auto patchFace : patch) patchIndices.insert(static_cast<std::size_t>(patchFace.idx()));
+
+				try {
+					Mesh candidate = source;
+					auto sourceFaceMap = candidate.add_property_map<Face, std::size_t>(
+						"f:poca_mesh_repair_source_face", invalidFaceIndex).first;
+					for (const auto candidateFace : candidate.faces())
+						sourceFaceMap[candidateFace] = static_cast<std::size_t>(candidateFace.idx());
+
+					removeFacePatch(candidate, patchIndices);
+					if (!CGAL::is_valid_polygon_mesh(candidate)) {
+						steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+							+ " ring " + std::to_string(ring) + " rejected: face removal produced invalid polygon topology.");
+						continue;
+					}
+
+					std::vector<Halfedge> boundaryLoops;
+					PMP::extract_boundary_cycles(candidate, std::back_inserter(boundaryLoops));
+					if (boundaryLoops.size() != 1) {
+						steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+							+ " ring " + std::to_string(ring) + " rejected: local patch produced "
+							+ std::to_string(boundaryLoops.size()) + " boundary loops instead of one.");
+						continue;
+					}
+
+					std::vector<Face> createdFaces;
+					PMP::triangulate_hole(candidate, boundaryLoops.front(),
+						CGAL::parameters::face_output_iterator(std::back_inserter(createdFaces)));
+					if (createdFaces.empty()) {
+						steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+							+ " ring " + std::to_string(ring) + " rejected: triangulate_hole created no faces.");
+						continue;
+					}
+
+					const auto inspection = poca::geometry::MeshRepair::inspect(candidate);
+					std::vector<std::string> candidateFailures;
+					if (!structurallyValidBeforeOrientation(inspection, candidateFailures, false)) {
+						std::ostringstream reason;
+						reason << "Cluster " << clusterIndex << " subpatch " << subpatchIndex << " ring " << ring
+							<< " rejected after validation";
+						if (!candidateFailures.empty()) reason << ": " << candidateFailures.front();
+						steps.push_back(reason.str());
+						continue;
+					}
+					if (inspection.selfIntersectionPairs.size() >= sourcePairs.size()) {
+						steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+							+ " ring " + std::to_string(ring) + " rejected: self-intersection pair count did not strictly decrease.");
+						continue;
+					}
+					if (introducesUnrelatedIntersectionCluster(candidate, inspection, sourceFaceMap, sourcePairs, clusterFaceIndices)) {
+						steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+							+ " ring " + std::to_string(ring) + " rejected: it introduced an unrelated self-intersection cluster.");
+						continue;
+					}
+
+					candidate.remove_property_map(sourceFaceMap);
+					SurfaceSubpatchCandidate validCandidate;
+					validCandidate.mesh = std::move(candidate);
+					validCandidate.subpatchIndex = subpatchIndex;
+					validCandidate.smallestFaceIndex = subpatch.front();
+					validCandidate.ring = ring;
+					validCandidate.removedFaceCount = patchIndices.size();
+					validCandidate.createdFaceCount = createdFaces.size();
+					validCandidate.remainingPairCount = inspection.selfIntersectionPairs.size();
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+						+ " ring " + std::to_string(ring) + " is a valid candidate: "
+						+ std::to_string(validCandidate.remainingPairCount) + " self-intersection pair(s) remain.");
+					if (!hasBestCandidate || isBetterSurfaceSubpatchCandidate(validCandidate, bestCandidate)) {
+						bestCandidate = std::move(validCandidate);
+						hasBestCandidate = true;
+					}
+				}
+				catch (const std::bad_alloc&) {
+					throw;
+				}
+				catch (const std::exception& exception) {
+					steps.push_back("Cluster " + std::to_string(clusterIndex) + " subpatch " + std::to_string(subpatchIndex)
+						+ " ring " + std::to_string(ring) + " rejected by exception: " + exception.what());
+				}
+			}
+		}
+
+		if (!hasBestCandidate) {
+			failures.emplace_back("cluster " + std::to_string(clusterIndex)
+				+ ": no surface-adjacency subpatch in rings 0..3 safely reduced the self-intersection pair count");
+			return false;
+		}
+
+		repaired = std::move(bestCandidate.mesh);
+		++counts.repairedSelfIntersectionClusters;
+		counts.repairedSelfIntersectionPairs += sourcePairs.size() - bestCandidate.remainingPairCount;
+		counts.removedSelfIntersectionPatchFaces += bestCandidate.removedFaceCount;
+		counts.createdSelfIntersectionPatchFaces += bestCandidate.createdFaceCount;
+		counts.selectedSelfIntersectionRing = bestCandidate.ring;
+		steps.push_back("Selected cluster " + std::to_string(clusterIndex) + " surface subpatch "
+			+ std::to_string(bestCandidate.subpatchIndex) + " (smallest face "
+			+ std::to_string(bestCandidate.smallestFaceIndex) + "), ring " + std::to_string(bestCandidate.ring)
+			+ ": self-intersection pairs reduced from " + std::to_string(sourcePairs.size()) + " to "
+			+ std::to_string(bestCandidate.remainingPairCount)
+			+ "; selected by remaining pairs, ring, removed faces, then smallest subpatch face/index.");
+		return true;
+	}
 }
 
 namespace poca::geometry {
 	std::vector<std::vector<std::size_t>> MeshRepair::clusterIntersectionPairs(
 		const std::vector<std::pair<std::size_t, std::size_t>>& pairs)
 	{
-		std::map<std::size_t, std::set<std::size_t>> adjacency;
-		for (const auto& pair : pairs) {
-			adjacency[pair.first].insert(pair.second);
-			adjacency[pair.second].insert(pair.first);
-		}
-
-		std::set<std::size_t> remaining;
-		for (const auto& entry : adjacency) remaining.insert(entry.first);
-		std::vector<std::vector<std::size_t>> clusters;
-		while (!remaining.empty()) {
-			std::vector<std::size_t> pending{ *remaining.begin() };
-			remaining.erase(remaining.begin());
-			std::vector<std::size_t> cluster;
-			while (!pending.empty()) {
-				const auto faceIndex = pending.back();
-				pending.pop_back();
-				cluster.push_back(faceIndex);
-				for (const auto neighbor : adjacency.at(faceIndex)) {
-					const auto found = remaining.find(neighbor);
-					if (found == remaining.end()) continue;
-					pending.push_back(neighbor);
-					remaining.erase(found);
-				}
-			}
-			std::sort(cluster.begin(), cluster.end());
-			clusters.push_back(std::move(cluster));
-		}
-		std::sort(clusters.begin(), clusters.end(), [](const auto& left, const auto& right) {
-			return left.front() < right.front();
-			});
-		return clusters;
+		return buildIntersectionClusters(pairs);
 	}
 
 	MeshInspection MeshRepair::inspect(const Surface_mesh_3_double& source)
@@ -663,8 +917,16 @@ namespace poca::geometry {
 			// inspection above is therefore the only source of self-intersection faces.
 			if (!current.selfIntersectionPairs.empty()) {
 				result.attemptedRepairMask |= MeshRepairSelfIntersection;
+				const auto initialClusters = clusterIntersectionPairs(current.selfIntersectionPairs);
+				const std::size_t maximumRepairIterations = current.selfIntersectionPairs.size() + initialClusters.size();
+				std::size_t repairIteration = 0;
 				std::size_t clusterIndex = 0;
 				while (!current.selfIntersectionPairs.empty()) {
+					if (repairIteration >= maximumRepairIterations) {
+						result.failures.emplace_back("self-intersection repair exceeded its conservative progress iteration limit");
+						result.after = current;
+						return result;
+					}
 					const auto clusters = clusterIntersectionPairs(current.selfIntersectionPairs);
 					if (clusters.empty()) {
 						result.failures.emplace_back("self-intersection pairs were present but no face cluster could be formed");
@@ -698,11 +960,20 @@ namespace poca::geometry {
 						+ std::to_string(clusterPairCount) + " pair(s); trying local rings 0..3.");
 
 					Mesh locallyRepaired;
+					std::vector<std::string> wholeClusterFailures;
 					if (!repairSelfIntersectionClusterLocally(candidate, clusterFaces, clusterIndex,
 						clusterPairCount, current.selfIntersectionPairs.size(), locallyRepaired,
-						result.counts, result.steps, result.failures)) {
-						result.after = current;
-						return result;
+						result.counts, result.steps, wholeClusterFailures)) {
+						result.steps.push_back("Cluster " + std::to_string(clusterIndex)
+							+ " whole-cluster local repair failed; checking mesh-surface adjacency subpatches.");
+						std::vector<std::string> subpatchFailures;
+						if (!repairSurfaceSubpatchLocally(candidate, clusterFaces, current.selfIntersectionPairs,
+							clusterIndex, locallyRepaired, result.counts, result.steps, subpatchFailures)) {
+							result.failures.insert(result.failures.end(), wholeClusterFailures.begin(), wholeClusterFailures.end());
+							result.failures.insert(result.failures.end(), subpatchFailures.begin(), subpatchFailures.end());
+							result.after = current;
+							return result;
+						}
 					}
 					candidate = std::move(locallyRepaired);
 					current = inspect(candidate);
@@ -710,6 +981,7 @@ namespace poca::geometry {
 					result.steps.push_back("Recomputed self-intersections after cluster " + std::to_string(clusterIndex)
 						+ ": " + std::to_string(current.selfIntersectionPairs.size()) + " pair(s) in "
 						+ std::to_string(remainingClusters.size()) + " cluster(s) remain.");
+					++repairIteration;
 					++clusterIndex;
 				}
 				candidateRepairMask |= MeshRepairSelfIntersection;
