@@ -267,7 +267,9 @@ namespace {
 		std::size_t ring = 0;
 		std::size_t removedFaceCount = 0;
 		std::size_t createdFaceCount = 0;
+		std::size_t createdVertexCount = 0;
 		std::size_t remainingPairCount = 0;
+		bool refinedReconstruction = false;
 	};
 
 	const char* selfIntersectionStrategyName(const SelfIntersectionRepairStrategy strategy)
@@ -286,9 +288,13 @@ namespace {
 	{
 		if (candidate.remainingPairCount != currentBest.remainingPairCount)
 			return candidate.remainingPairCount < currentBest.remainingPairCount;
+		if (candidate.refinedReconstruction != currentBest.refinedReconstruction)
+			return !candidate.refinedReconstruction;
 		if (candidate.ring != currentBest.ring) return candidate.ring < currentBest.ring;
 		if (candidate.removedFaceCount != currentBest.removedFaceCount)
 			return candidate.removedFaceCount < currentBest.removedFaceCount;
+		if (candidate.createdFaceCount != currentBest.createdFaceCount)
+			return candidate.createdFaceCount < currentBest.createdFaceCount;
 		if (candidate.smallestSourceFaceIndex != currentBest.smallestSourceFaceIndex)
 			return candidate.smallestSourceFaceIndex < currentBest.smallestSourceFaceIndex;
 		if (candidate.clusterIndex != currentBest.clusterIndex)
@@ -296,6 +302,104 @@ namespace {
 		if (candidate.strategy != currentBest.strategy)
 			return static_cast<int>(candidate.strategy) < static_cast<int>(currentBest.strategy);
 		return candidate.localIndex < currentBest.localIndex;
+	}
+
+	bool tryRefinedHoleReconstruction(
+		const Mesh& source,
+		const std::set<std::size_t>& patchIndices,
+		const std::set<std::size_t>& clusterFaceIndices,
+		const std::vector<std::pair<std::size_t, std::size_t>>& sourcePairs,
+		const SelfIntersectionRepairStrategy strategy,
+		const std::size_t clusterIndex,
+		const std::size_t localIndex,
+		const std::size_t smallestSourceFaceIndex,
+		const std::size_t ring,
+		const std::string& label,
+		SelfIntersectionCandidate& repaired,
+		std::vector<std::string>& steps)
+	{
+		const auto invalidFaceIndex = (std::numeric_limits<std::size_t>::max)();
+		try {
+			Mesh candidate = source;
+			auto sourceFaceMap = candidate.add_property_map<Face, std::size_t>(
+				"f:poca_mesh_repair_source_face", invalidFaceIndex).first;
+			for (const auto candidateFace : candidate.faces())
+				sourceFaceMap[candidateFace] = static_cast<std::size_t>(candidateFace.idx());
+
+			removeFacePatch(candidate, patchIndices);
+			if (!CGAL::is_valid_polygon_mesh(candidate)) {
+				steps.push_back(label + " refined local reconstruction rejected: face removal produced invalid polygon topology.");
+				return false;
+			}
+
+			std::vector<Halfedge> boundaryLoops;
+			PMP::extract_boundary_cycles(candidate, std::back_inserter(boundaryLoops));
+			if (boundaryLoops.size() != 1) {
+				steps.push_back(label + " refined local reconstruction not attempted: local patch produced "
+					+ std::to_string(boundaryLoops.size()) + " boundary loops instead of one.");
+				return false;
+			}
+
+			steps.push_back(label + " ordinary triangulate_hole made no safe progress; trying triangulate_and_refine_hole on a fresh local candidate.");
+			std::vector<Face> createdFaces;
+			std::vector<Vertex> createdVertices;
+#if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
+			PMP::triangulate_and_refine_hole(candidate, boundaryLoops.front(),
+				CGAL::parameters::face_output_iterator(std::back_inserter(createdFaces))
+				.vertex_output_iterator(std::back_inserter(createdVertices)));
+#else
+			PMP::triangulate_and_refine_hole(candidate, boundaryLoops.front(),
+				std::back_inserter(createdFaces), std::back_inserter(createdVertices));
+#endif
+			if (createdFaces.empty()) {
+				steps.push_back(label + " refined local reconstruction rejected: triangulate_and_refine_hole created no faces.");
+				return false;
+			}
+
+			const auto inspection = poca::geometry::MeshRepair::inspect(candidate);
+			std::vector<std::string> candidateFailures;
+			if (!structurallyValidBeforeOrientation(inspection, candidateFailures, false)) {
+				std::ostringstream reason;
+				reason << label << " refined local reconstruction rejected after validation";
+				if (!candidateFailures.empty()) reason << ": " << candidateFailures.front();
+				steps.push_back(reason.str());
+				return false;
+			}
+			if (inspection.selfIntersectionPairs.size() >= sourcePairs.size()) {
+				steps.push_back(label + " refined local reconstruction rejected: self-intersection pair count did not strictly decrease.");
+				return false;
+			}
+			if (introducesUnrelatedIntersectionCluster(candidate, inspection, sourceFaceMap, sourcePairs, clusterFaceIndices)) {
+				steps.push_back(label + " refined local reconstruction rejected: it introduced an unrelated self-intersection cluster.");
+				return false;
+			}
+
+			candidate.remove_property_map(sourceFaceMap);
+			repaired.mesh = std::move(candidate);
+			repaired.strategy = strategy;
+			repaired.clusterIndex = clusterIndex;
+			repaired.localIndex = localIndex;
+			repaired.smallestSourceFaceIndex = smallestSourceFaceIndex;
+			repaired.ring = ring;
+			repaired.removedFaceCount = patchIndices.size();
+			repaired.createdFaceCount = createdFaces.size();
+			repaired.createdVertexCount = createdVertices.size();
+			repaired.remainingPairCount = inspection.selfIntersectionPairs.size();
+			repaired.refinedReconstruction = true;
+			steps.push_back(label + " refined local reconstruction is a valid candidate: removed source faces="
+				+ std::to_string(repaired.removedFaceCount) + ", refined patch faces="
+				+ std::to_string(repaired.createdFaceCount) + ", new vertices="
+				+ std::to_string(repaired.createdVertexCount) + ", self-intersections "
+				+ std::to_string(sourcePairs.size()) + " -> " + std::to_string(repaired.remainingPairCount) + ".");
+			return true;
+		}
+		catch (const std::bad_alloc&) {
+			throw;
+		}
+		catch (const std::exception& exception) {
+			steps.push_back(label + " refined local reconstruction rejected by exception: " + exception.what());
+			return false;
+		}
 	}
 
 	bool repairSelfIntersectionClusterLocally(
@@ -684,6 +788,111 @@ namespace {
 		return true;
 	}
 
+	bool repairRefinedHoleLocally(
+		const Mesh& source,
+		const std::set<std::size_t>& clusterFaceIndices,
+		const std::vector<std::pair<std::size_t, std::size_t>>& sourcePairs,
+		const std::size_t clusterIndex,
+		SelfIntersectionCandidate& repaired,
+		std::vector<std::string>& steps,
+		std::vector<std::string>& failures)
+	{
+		constexpr std::size_t normalMaximumRing = 3;
+		constexpr std::size_t extendedMaximumRing = 6;
+		constexpr double extendedMaximumPatchFraction = 0.15;
+		bool hasBestCandidate = false;
+		SelfIntersectionCandidate bestCandidate;
+		auto considerCandidate = [&](SelfIntersectionCandidate&& candidate) {
+			if (!hasBestCandidate || isBetterSelfIntersectionCandidate(candidate, bestCandidate)) {
+				bestCandidate = std::move(candidate);
+				hasBestCandidate = true;
+			}
+			};
+
+		steps.push_back("Cluster " + std::to_string(clusterIndex)
+			+ " ordinary whole-cluster, surface-subpatch, and seeded strategies produced no candidate; trying final local refined-hole reconstruction.");
+
+		auto wholePatch = facePatch(source, clusterFaceIndices);
+		if (wholePatch.size() == clusterFaceIndices.size()) {
+			for (std::size_t ring = 0; ring <= normalMaximumRing; ++ring) {
+				if (ring != 0) expandFacePatch(source, wholePatch);
+				std::set<std::size_t> patchIndices;
+				for (const auto patchFace : wholePatch) patchIndices.insert(static_cast<std::size_t>(patchFace.idx()));
+				SelfIntersectionCandidate candidate;
+				const std::string label = "Cluster " + std::to_string(clusterIndex)
+					+ " whole-cluster ring " + std::to_string(ring);
+				if (tryRefinedHoleReconstruction(source, patchIndices, clusterFaceIndices, sourcePairs,
+					SelfIntersectionRepairStrategy::WholeCluster, clusterIndex, 0,
+					*clusterFaceIndices.begin(), ring, label, candidate, steps))
+					considerCandidate(std::move(candidate));
+			}
+		}
+
+		const auto subpatches = buildSurfaceSubpatches(source, clusterFaceIndices);
+		if (subpatches.size() > 1) {
+			for (std::size_t subpatchIndex = 0; subpatchIndex < subpatches.size(); ++subpatchIndex) {
+				const auto& subpatch = subpatches[subpatchIndex];
+				const std::set<std::size_t> subpatchFaceIndices(subpatch.begin(), subpatch.end());
+				auto patch = facePatch(source, subpatchFaceIndices);
+				if (patch.size() != subpatchFaceIndices.size()) continue;
+				for (std::size_t ring = 0; ring <= normalMaximumRing; ++ring) {
+					if (ring != 0) expandFacePatch(source, patch);
+					std::set<std::size_t> patchIndices;
+					for (const auto patchFace : patch) patchIndices.insert(static_cast<std::size_t>(patchFace.idx()));
+					SelfIntersectionCandidate candidate;
+					const std::string label = "Cluster " + std::to_string(clusterIndex) + " subpatch "
+						+ std::to_string(subpatchIndex) + " ring " + std::to_string(ring);
+					if (tryRefinedHoleReconstruction(source, patchIndices, clusterFaceIndices, sourcePairs,
+						SelfIntersectionRepairStrategy::SurfaceSubpatch, clusterIndex, subpatchIndex,
+						subpatch.front(), ring, label, candidate, steps))
+						considerCandidate(std::move(candidate));
+				}
+			}
+		}
+
+		bool hasNormalRingSeedCandidate = false;
+		for (std::size_t searchPass = 0; searchPass < 2 && !hasNormalRingSeedCandidate; ++searchPass) {
+			const std::size_t minimumRing = searchPass == 0 ? 0 : normalMaximumRing + 1;
+			const std::size_t maximumRing = searchPass == 0 ? normalMaximumRing : extendedMaximumRing;
+			for (const auto seedFaceIndex : clusterFaceIndices) {
+				const std::set<std::size_t> seedFaceIndices{ seedFaceIndex };
+				auto patch = facePatch(source, seedFaceIndices);
+				if (patch.size() != 1) continue;
+				for (std::size_t ring = 0; ring <= maximumRing; ++ring) {
+					if (ring != 0) expandFacePatch(source, patch);
+					if (ring < minimumRing) continue;
+					if (ring > normalMaximumRing
+						&& static_cast<double>(patch.size()) > static_cast<double>(source.number_of_faces()) * extendedMaximumPatchFraction)
+						break;
+					std::set<std::size_t> patchIndices;
+					for (const auto patchFace : patch) patchIndices.insert(static_cast<std::size_t>(patchFace.idx()));
+					SelfIntersectionCandidate candidate;
+					const std::string label = "Cluster " + std::to_string(clusterIndex) + " seed face "
+						+ std::to_string(seedFaceIndex) + " ring " + std::to_string(ring);
+					if (tryRefinedHoleReconstruction(source, patchIndices, clusterFaceIndices, sourcePairs,
+						SelfIntersectionRepairStrategy::SeededFace, clusterIndex, seedFaceIndex,
+						seedFaceIndex, ring, label, candidate, steps)) {
+						considerCandidate(std::move(candidate));
+						if (searchPass == 0) hasNormalRingSeedCandidate = true;
+					}
+				}
+			}
+		}
+
+		if (!hasBestCandidate) {
+			failures.emplace_back("cluster " + std::to_string(clusterIndex)
+				+ ": no valid single-loop patch in the existing whole/subpatch/seeded rings safely reduced intersections with triangulate_and_refine_hole");
+			return false;
+		}
+
+		repaired = std::move(bestCandidate);
+		steps.push_back("Best cluster " + std::to_string(clusterIndex) + " refined-hole candidate: strategy="
+			+ selfIntersectionStrategyName(repaired.strategy) + ", ring " + std::to_string(repaired.ring)
+			+ ", " + std::to_string(sourcePairs.size()) + " -> " + std::to_string(repaired.remainingPairCount)
+			+ " self-intersection pair(s).");
+		return true;
+	}
+
 	void recordSelectedSelfIntersectionCandidate(
 		const SelfIntersectionCandidate& selected,
 		const std::size_t sourcePairCount,
@@ -698,14 +907,17 @@ namespace {
 
 		std::ostringstream summary;
 		summary << "Selected GLOBAL candidate: cluster " << selected.clusterIndex
-			<< ", strategy=" << selfIntersectionStrategyName(selected.strategy);
+			<< ", strategy=" << selfIntersectionStrategyName(selected.strategy)
+			<< ", reconstruction=" << (selected.refinedReconstruction ? "triangulate_and_refine_hole" : "triangulate_hole");
 		if (selected.strategy == SelfIntersectionRepairStrategy::SurfaceSubpatch)
 			summary << ", subpatch=" << selected.localIndex;
 		else if (selected.strategy == SelfIntersectionRepairStrategy::SeededFace)
 			summary << ", seed face=" << selected.localIndex;
 		summary << ", ring=" << selected.ring << ", pairs " << sourcePairCount << " -> "
 			<< selected.remainingPairCount << ", removed faces=" << selected.removedFaceCount
-			<< "; ranked by remaining pairs, ring, removed faces, then deterministic face/cluster index.";
+			<< ", created faces=" << selected.createdFaceCount;
+		if (selected.refinedReconstruction) summary << ", new vertices=" << selected.createdVertexCount;
+		summary << "; ranked by remaining pairs, ordinary before refined reconstruction, ring, removed/created faces, then deterministic face/cluster index.";
 		steps.push_back(summary.str());
 	}
 }
@@ -1014,18 +1226,101 @@ namespace poca::geometry {
 			if (current.degenerateTriangleCount != 0) {
 				result.attemptedRepairMask |= MeshRepairDegenerateFaces;
 				const std::size_t degeneratesBefore = current.degenerateTriangleCount;
-				PMP::remove_degenerate_faces(candidate);
-				PMP::remove_isolated_vertices(candidate);
-				candidate.collect_garbage();
-				current = inspect(candidate);
-				if (!basicStageValid(current) || current.degenerateTriangleCount != 0) {
-					result.failures.emplace_back("remove_degenerate_faces did not conservatively eliminate the degenerate-face defect");
-					result.after = current;
-					return result;
+				bool resolvedByComponentRemoval = false;
+				if (current.connectedComponentCount > 1) {
+					auto componentMap = candidate.add_property_map<Face, std::size_t>(
+						"f:poca_mesh_repair_degenerate_cc", 0).first;
+					const std::size_t componentCount = PMP::connected_components(candidate, componentMap);
+					std::vector<std::size_t> componentFaceCounts(componentCount, 0);
+					std::map<std::size_t, Face> indexedFaces;
+					for (const auto face : candidate.faces()) {
+						if (componentMap[face] < componentFaceCounts.size()) ++componentFaceCounts[componentMap[face]];
+						indexedFaces.emplace(static_cast<std::size_t>(face.idx()), face);
+					}
+
+					std::ostringstream componentSummary;
+					componentSummary << "Degenerate faces detected: " << degeneratesBefore << "; connected components: [";
+					for (std::size_t component = 0; component < componentFaceCounts.size(); ++component) {
+						if (component != 0) componentSummary << ",";
+						componentSummary << componentFaceCounts[component];
+					}
+					componentSummary << "].";
+					result.steps.push_back(componentSummary.str());
+
+					const auto largestIterator = std::max_element(componentFaceCounts.begin(), componentFaceCounts.end());
+					const std::size_t largestComponent = static_cast<std::size_t>(
+						std::distance(componentFaceCounts.begin(), largestIterator));
+					const bool uniqueLargest = largestIterator != componentFaceCounts.end()
+						&& std::count(componentFaceCounts.begin(), componentFaceCounts.end(), *largestIterator) == 1;
+					std::set<std::size_t> degenerateComponents;
+					std::size_t mappedDegenerateFaces = 0;
+					for (const auto& issue : current.problemFaces) {
+						if ((issue.issueMask & MeshIssueDegenerate) == 0) continue;
+						const auto found = indexedFaces.find(issue.faceIndex);
+						if (found == indexedFaces.end()) continue;
+						degenerateComponents.insert(componentMap[found->second]);
+						++mappedDegenerateFaces;
+					}
+					const bool allDegeneratesOutsideLargest = uniqueLargest
+						&& mappedDegenerateFaces == degeneratesBefore
+						&& !degenerateComponents.empty()
+						&& degenerateComponents.count(largestComponent) == 0;
+					candidate.remove_property_map(componentMap);
+
+					if (allDegeneratesOutsideLargest) {
+						result.steps.emplace_back("All degenerate faces belong exclusively to non-largest component(s); trying the existing largest-component cleanup first.");
+						result.attemptedRepairMask |= MeshRepairDisconnectedComponents;
+						Mesh componentCandidate = candidate;
+						const std::size_t facesBefore = componentCandidate.number_of_faces();
+						PMP::keep_largest_connected_components(componentCandidate, 1);
+						PMP::remove_isolated_vertices(componentCandidate);
+						componentCandidate.collect_garbage();
+						const auto componentInspection = inspect(componentCandidate);
+						const std::size_t removedFaces = facesBefore - componentCandidate.number_of_faces();
+						const std::size_t removedComponents = componentCount > componentInspection.connectedComponentCount
+							? componentCount - componentInspection.connectedComponentCount : 0;
+						result.steps.push_back("Degenerate-component cleanup removed "
+							+ std::to_string(removedComponents) + " component(s) / "
+							+ std::to_string(removedFaces) + " face(s); reinspection: degenerate triangles="
+							+ std::to_string(componentInspection.degenerateTriangleCount) + ".");
+						if (basicStageValid(componentInspection)
+							&& componentInspection.degenerateTriangleCount == 0
+							&& componentInspection.connectedComponentCount == 1) {
+							candidate = std::move(componentCandidate);
+							current = componentInspection;
+							candidateRepairMask |= MeshRepairDegenerateFaces | MeshRepairDisconnectedComponents;
+							result.counts.removedDegenerateFaces += degeneratesBefore;
+							result.counts.removedComponents += removedComponents;
+							result.counts.removedComponentFaces += removedFaces;
+							resolvedByComponentRemoval = true;
+							result.steps.emplace_back("Committed component-aware degenerate repair; both degenerateFaces and disconnectedComponents repair bits are recorded.");
+						}
+						else {
+							result.steps.emplace_back("Degenerate-component cleanup was not structurally valid after reinspection; retaining the pristine stage and falling back to remove_degenerate_faces.");
+						}
+					}
+					else if (!uniqueLargest) {
+						result.steps.emplace_back("Component-aware degenerate shortcut skipped because there is no unique largest component; using remove_degenerate_faces.");
+					}
+					else {
+						result.steps.emplace_back("At least one degenerate face belongs to the largest component (or could not be mapped); using remove_degenerate_faces.");
+					}
 				}
-				candidateRepairMask |= MeshRepairDegenerateFaces;
-				result.counts.removedDegenerateFaces = degeneratesBefore - current.degenerateTriangleCount;
-				result.steps.push_back("Removed " + std::to_string(result.counts.removedDegenerateFaces) + " degenerate face(s) and isolated vertices.");
+
+				if (!resolvedByComponentRemoval) {
+					PMP::remove_degenerate_faces(candidate);
+					PMP::remove_isolated_vertices(candidate);
+					candidate.collect_garbage();
+					current = inspect(candidate);
+					if (!basicStageValid(current) || current.degenerateTriangleCount != 0) {
+						result.failures.emplace_back("remove_degenerate_faces did not conservatively eliminate the degenerate-face defect");
+						result.after = current;
+						return result;
+					}
+					candidateRepairMask |= MeshRepairDegenerateFaces;
+					result.counts.removedDegenerateFaces += degeneratesBefore - current.degenerateTriangleCount;
+					result.steps.push_back("Removed " + std::to_string(degeneratesBefore - current.degenerateTriangleCount) + " degenerate face(s) and isolated vertices.");
+				}
 			}
 
 			if (current.connectedComponentCount > 1) {
@@ -1181,12 +1476,19 @@ namespace poca::geometry {
 								std::vector<std::string> seededFailures;
 								if (!repairSeededFaceLocally(candidate, clusterFaces, current.selfIntersectionPairs,
 									currentCluster, clusterCandidate, result.steps, seededFailures)) {
-									iterationFailures.insert(iterationFailures.end(), wholeClusterFailures.begin(), wholeClusterFailures.end());
-									iterationFailures.insert(iterationFailures.end(), subpatchFailures.begin(), subpatchFailures.end());
-									iterationFailures.insert(iterationFailures.end(), seededFailures.begin(), seededFailures.end());
 									result.steps.push_back("Cluster " + std::to_string(currentCluster)
-										+ " produced no safe progress-making candidate; continuing with the other current clusters.");
-									continue;
+										+ " seeded rings 0..6 failed; checking the final refined local-hole fallback.");
+									std::vector<std::string> refinedFailures;
+									if (!repairRefinedHoleLocally(candidate, clusterFaces, current.selfIntersectionPairs,
+										currentCluster, clusterCandidate, result.steps, refinedFailures)) {
+										iterationFailures.insert(iterationFailures.end(), wholeClusterFailures.begin(), wholeClusterFailures.end());
+										iterationFailures.insert(iterationFailures.end(), subpatchFailures.begin(), subpatchFailures.end());
+										iterationFailures.insert(iterationFailures.end(), seededFailures.begin(), seededFailures.end());
+										iterationFailures.insert(iterationFailures.end(), refinedFailures.begin(), refinedFailures.end());
+										result.steps.push_back("Cluster " + std::to_string(currentCluster)
+											+ " produced no safe progress-making candidate; continuing with the other current clusters.");
+										continue;
+									}
 								}
 							}
 						}
