@@ -30,14 +30,14 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <thrust\pair.h>
-#include <thrust\device_vector.h>
-#include <thrust\host_vector.h>
-#include <thrust\extrema.h>
-#include <thrust\sort.h>
-#include <thrust\unique.h>
-#include <thrust\sequence.h>
-#include <thrust\distance.h>
+#include <thrust/pair.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/extrema.h>
+#include <thrust/sort.h>
+#include <thrust/unique.h>
+#include <thrust/sequence.h>
+#include <thrust/distance.h>
 #include <thrust/binary_search.h>
 
 #include "ConnectedComponents.h"

@@ -47,9 +47,10 @@
 #include <CGAL/Implicit_surface_3.h>
 #include <CGAL/Kernel/global_functions_2.h>
 #endif
+#include <thrust/distance.h>
 #include <thrust/host_vector.h>
-#include <thrust\sort.h>
-#include <thrust\functional.h>
+#include <thrust/sort.h>
+#include <thrust/functional.h>
 #include <thrust/execution_policy.h>
 #include <thrust/unique.h>
 #include <thrust/binary_search.h>

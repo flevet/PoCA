@@ -41,10 +41,10 @@
 #ifndef NO_CUDA
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <thrust\pair.h>
-#include <thrust\device_vector.h>
-#include <thrust\extrema.h>
-#include <thrust\sort.h>
+#include <thrust/pair.h>
+#include <thrust/device_vector.h>
+#include <thrust/extrema.h>
+#include <thrust/sort.h>
 #endif
 
 #ifndef NO_CUDA
@@ -109,9 +109,6 @@ struct summary_stats_unary_op
 // all values that have been agregated so far
 template <typename T>
 struct summary_stats_binary_op
-	: public thrust::binary_function<const summary_stats_data<T>&,
-	const summary_stats_data<T>&,
-	summary_stats_data<T> >
 {
 	__host__ __device__
 		summary_stats_data<T> operator()(const summary_stats_data<T>& x, const summary_stats_data <T>& y) const

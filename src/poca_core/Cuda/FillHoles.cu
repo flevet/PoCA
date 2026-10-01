@@ -6,6 +6,7 @@
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 #include <thrust/extrema.h>
+#include <thrust/execution_policy.h>
 #include <cuda_runtime.h>
 #include <cuda/std/limits>
 #include <queue>

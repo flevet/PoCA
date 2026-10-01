@@ -45,7 +45,6 @@
 #include <QtCore/QCoreApplication>
 #include <algorithm>
 #include <float.h>
-#include <dtv.h>
 
 #include <OpenGL/Camera.hpp>
 #include <General/Engine.hpp>

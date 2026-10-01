@@ -42,7 +42,7 @@
 #ifndef NO_CUDA
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <thrust\device_vector.h>
+#include <thrust/device_vector.h>
 #include <thrust/transform.h>
 #endif
 
