@@ -37,12 +37,25 @@
 #include <array>
 #include <cstddef>
 #include <functional>
+#include <cstdint>
+#include <string>
+#include <stdexcept>
 
 #include <General/BasicComponent.hpp>
 #include <General/Misc.h>
 #include <General/Region3D.hpp>
 
 namespace poca::core {
+	struct ImageSpatialMetadata {
+		std::array<double, 3> spacing{ 1.0, 1.0, 1.0 }; // x, y, z
+		std::array<double, 3> origin{ 0.0, 0.0, 0.0 };  // x, y, z
+		std::array<std::string, 3> units{ "", "", "" };
+	};
+
+	struct ImagePyramidLevelInfo {
+		uint32_t width{ 0 }, height{ 0 }, depth{ 0 };
+	};
+
 	class ImageInterface : public BasicComponent {
 	public:
 		virtual ~ImageInterface() = default;
@@ -73,6 +86,29 @@ namespace poca::core {
 		virtual void setPyramidalRenderingEnabled(const bool _enabled) { m_pyramidalRenderingEnabled = _enabled; }
 		virtual void invalidatePyramidCache() const {}
 		virtual std::size_t pyramidCacheBytes() const { return 0; }
+
+		// Core metadata only: does not affect display scale or bounding boxes.
+		const ImageSpatialMetadata& spatialMetadata() const { return m_spatialMetadata; }
+		void setSpatialMetadata(const ImageSpatialMetadata& _metadata) { m_spatialMetadata = _metadata; }
+
+		// Configure before rendering. Level 0 describes the full-resolution image;
+		// subsequent entries describe progressively coarser stored levels.
+		bool hasNativePyramid() const { return !m_nativePyramidLevels.empty(); }
+		std::size_t nativePyramidLevelCount() const { return m_nativePyramidLevels.size(); }
+		bool nativePyramidLevelInfo(const std::size_t _level, ImagePyramidLevelInfo& _info) const {
+			if (_level >= m_nativePyramidLevels.size())
+				return false;
+			_info = m_nativePyramidLevels[_level];
+			return true;
+		}
+		virtual void setNativePyramidLevels(const std::vector<ImagePyramidLevelInfo>& _levels) {
+			for (const auto& info : _levels)
+				if (info.width == 0 || info.height == 0 || info.depth == 0)
+					throw std::invalid_argument("Native pyramid dimensions must be positive");
+			m_nativePyramidLevels = _levels;
+			invalidatePyramidCache();
+		}
+		virtual bool canReadNativePyramid() const { return false; }
 
 		virtual const uint32_t dimension() const { return (m_depth > 1) ? 3 : 2; }
 		virtual inline uint32_t width() const { return m_width; }
@@ -110,6 +146,8 @@ namespace poca::core {
 		int m_currentFrame{ -1 };
 		bool m_outOfCoreEnabled{ false };
 		bool m_pyramidalRenderingEnabled{ false };
+		ImageSpatialMetadata m_spatialMetadata;
+		std::vector<ImagePyramidLevelInfo> m_nativePyramidLevels;
 
 		//Currently just store volumes for labels data, TODO think better about the structure
 		std::vector <float> m_volumes;

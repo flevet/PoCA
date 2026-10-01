@@ -42,6 +42,8 @@
 #include <numeric>
 #include <mutex>
 #include <vector>
+#include <limits>
+#include <stdexcept>
 #include <type_traits> 
 
 #include <Interfaces/ImageInterface.hpp>
@@ -88,6 +90,11 @@ namespace poca::core {
 		void setPixelReloadCallback(std::function<void(std::vector<T>&)>);
 		void setPlaneReaderCallback(std::function<bool(uint64_t, void*, std::size_t)>);
 		void setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)>);
+		// Native values are contiguous, with x fastest, then y, then z.
+		using NativePyramidReader = std::function<bool(uint32_t, std::vector<T>&)>;
+		void setNativePyramidLevelReaderCallback(NativePyramidReader);
+		void setNativePyramidLevels(const std::vector<ImagePyramidLevelInfo>&) override;
+		bool canReadNativePyramid() const override;
 
 		void save(const std::string&) const;
 
@@ -155,7 +162,11 @@ namespace poca::core {
 
 		// mutable: cache is logically const
 		mutable std::unordered_map<PyramidKey, PyramidLevel, PyramidKeyHash> m_pyramid; // [PYRAMID]
+		mutable std::unordered_map<int, PyramidLevel> m_nativePyramidCache;
 		mutable std::recursive_mutex m_pyramidMutex;
+
+		PyramidLevelView getOrCreateNativePyramidLevel(int, const ImagePyramidLevelInfo&) const;
+		PyramidLevelView getOrCreateGeneratedPyramidLevel(int, uint32_t, uint32_t, uint32_t, DownsampleMode) const;
 
 		// [PYRAMID] downsample core
 		static PyramidLevel downsampleLevel(
@@ -174,6 +185,7 @@ namespace poca::core {
 	private:
 		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
 		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
+		NativePyramidReader m_nativePyramidReaderCallback;
 	};
 
 	//maxValue is used for shaders. uint8_t & uint16_t textures are normalized so need to know the maxValue to find back the pixel value
@@ -189,7 +201,10 @@ namespace poca::core {
 	template <class T>
 	Image<T>::Image(const Image& _o) : ImageInterface(_o)
 	{
+		std::lock_guard<std::recursive_mutex> lock(_o.m_pyramidMutex);
 		m_pyramid = _o.m_pyramid;
+		m_nativePyramidCache = _o.m_nativePyramidCache;
+		m_nativePyramidReaderCallback = _o.m_nativePyramidReaderCallback;
 		m_outOfCoreEnabled = _o.m_outOfCoreEnabled;
 		m_pyramidalRenderingEnabled = _o.m_pyramidalRenderingEnabled;
 		m_planeReaderCallback = _o.m_planeReaderCallback;
@@ -258,6 +273,7 @@ namespace poca::core {
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_pyramid.clear();
+		m_nativePyramidCache.clear();
 	}
 
 	template <class T>
@@ -266,6 +282,8 @@ namespace poca::core {
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		std::size_t bytes = 0;
 		for (const auto& kv : m_pyramid)
+			bytes += kv.second.data.size() * sizeof(T);
+		for (const auto& kv : m_nativePyramidCache)
 			bytes += kv.second.data.size() * sizeof(T);
 		return bytes;
 	}
@@ -560,6 +578,20 @@ namespace poca::core {
 			return v;
 		}
 
+		ImagePyramidLevelInfo info;
+		if (m_nativePyramidReaderCallback && nativePyramidLevelInfo(static_cast<std::size_t>(level), info))
+			return getOrCreateNativePyramidLevel(level, info);
+
+		return getOrCreateGeneratedPyramidLevel(level, fx, fy, fz, mode);
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::getOrCreateGeneratedPyramidLevel(
+		int level, uint32_t fx, uint32_t fy, uint32_t fz, DownsampleMode mode
+	) const
+	{
+		// Called under m_pyramidMutex; generated parents stay independent of
+		// native dimensions and stored downsampling semantics.
 		PyramidKey key{ level, fx, fy, fz, uint8_t(mode) };
 		auto it = m_pyramid.find(key);
 		if (it != m_pyramid.end()) {
@@ -587,7 +619,7 @@ namespace poca::core {
 			return v;
 		}
 		else {
-			PyramidLevelView pv = getOrCreatePyramidLevel(level - 1, fx, fy, fz, mode);
+			PyramidLevelView pv = getOrCreateGeneratedPyramidLevel(level - 1, fx, fy, fz, mode);
 			PyramidKey pkey{ level - 1, fx, fy, fz, uint8_t(mode) };
 			auto pit = m_pyramid.find(pkey);
 			if (pit != m_pyramid.end()) {
@@ -874,6 +906,56 @@ namespace poca::core {
 	void Image<T>::setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)> _callback)
 	{
 		m_regionReaderCallback = std::move(_callback);
+	}
+
+	template <class T>
+	void Image<T>::setNativePyramidLevelReaderCallback(NativePyramidReader _callback)
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		m_nativePyramidReaderCallback = std::move(_callback);
+		invalidatePyramidCache();
+	}
+
+	template <class T>
+	void Image<T>::setNativePyramidLevels(const std::vector<ImagePyramidLevelInfo>& _levels)
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		ImageInterface::setNativePyramidLevels(_levels);
+	}
+
+	template <class T>
+	bool Image<T>::canReadNativePyramid() const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		return static_cast<bool>(m_nativePyramidReaderCallback);
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::getOrCreateNativePyramidLevel(int _level, const ImagePyramidLevelInfo& _info) const
+	{
+		// Called under m_pyramidMutex. Native cache keys ignore factors/mode.
+		auto it = m_nativePyramidCache.find(_level);
+		if (it == m_nativePyramidCache.end()) {
+			PyramidLevel native;
+			native.w = _info.width; native.h = _info.height; native.d = _info.depth;
+			const std::size_t maxValues = native.data.max_size();
+			std::size_t count = native.w;
+			if (count > maxValues / native.h)
+				throw std::overflow_error("Native pyramid level is too large");
+			count *= native.h;
+			if (count > maxValues / native.d)
+				throw std::overflow_error("Native pyramid level is too large");
+			count *= native.d;
+			if (!m_nativePyramidReaderCallback(static_cast<uint32_t>(_level), native.data))
+				throw std::runtime_error("Could not read native pyramid level " + std::to_string(_level));
+			if (native.data.size() != count)
+				throw std::runtime_error("Native pyramid level size mismatch at level " + std::to_string(_level));
+			it = m_nativePyramidCache.emplace(_level, std::move(native)).first;
+		}
+		PyramidLevelView view;
+		view.w = it->second.w; view.h = it->second.h; view.d = it->second.d;
+		view.ptr = it->second.data.data();
+		return view;
 	}
 
 	template <class T>
