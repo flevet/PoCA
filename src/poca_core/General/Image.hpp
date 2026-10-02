@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <numeric>
 #include <mutex>
 #include <vector>
@@ -47,6 +48,7 @@
 #include <type_traits> 
 
 #include <Interfaces/ImageInterface.hpp>
+#include <General/ImagePyramidValidation.hpp>
 #include <Interfaces/HistogramInterface.hpp>
 #include <General/MyData.hpp>
 #include <General/ArrayStatistics.hpp>
@@ -67,6 +69,9 @@ namespace poca::core {
 		BasicComponentInterface* copy();
 
 		void finalizeImage(const uint32_t, const uint32_t, const uint32_t);
+		// Metadata-only RAW image; _sample contains a coarse native level, never level zero.
+		void initializeStorageBacked(const uint32_t, const uint32_t, const uint32_t,
+			const std::vector<T>&, bool = false, float = 0.f, float = 0.f);
 		void addFeatureLabels();
 
 		void uint8_normalisedData(std::vector <unsigned char>&) const;
@@ -95,6 +100,18 @@ namespace poca::core {
 		void setNativePyramidLevelReaderCallback(NativePyramidReader);
 		void setNativePyramidLevels(const std::vector<ImagePyramidLevelInfo>&) override;
 		bool canReadNativePyramid() const override;
+		bool hasNativePyramid() const override {
+			std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+			return ImageInterface::hasNativePyramid();
+		}
+		std::size_t nativePyramidLevelCount() const override {
+			std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+			return ImageInterface::nativePyramidLevelCount();
+		}
+		bool nativePyramidLevelInfo(std::size_t _level, ImagePyramidLevelInfo& _info) const override {
+			std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+			return ImageInterface::nativePyramidLevelInfo(_level, _info);
+		}
 
 		void save(const std::string&) const;
 
@@ -114,6 +131,11 @@ namespace poca::core {
 		struct PyramidLevelView {
 			uint32_t w = 0, h = 0, d = 0;
 			const T* ptr = nullptr;
+			std::size_t count = 0;
+			const char* source = "generated";
+			// Positive levels retain immutable storage across cache invalidation.
+			// Level zero is borrowed; rendering uses copyFullResolutionLevel().
+			std::shared_ptr<const void> owner;
 		};
 
 		// factors are applied per level (typically 2,2,2)
@@ -122,6 +144,9 @@ namespace poca::core {
 			uint32_t fx = 2, uint32_t fy = 2, uint32_t fz = 2,
 			DownsampleMode mode = DownsampleMode::Average
 		) const;
+
+		// A full-resolution snapshot uses Histogram's existing protected copy.
+		PyramidLevelView copyFullResolutionLevel(std::vector<T>&) const;
 
 		// Call this if the underlying pixels change (optional for now)
 		void invalidatePyramidCache() const override;
@@ -161,11 +186,14 @@ namespace poca::core {
 		};
 
 		// mutable: cache is logically const
-		mutable std::unordered_map<PyramidKey, PyramidLevel, PyramidKeyHash> m_pyramid; // [PYRAMID]
-		mutable std::unordered_map<int, PyramidLevel> m_nativePyramidCache;
+		mutable std::unordered_map<PyramidKey, std::shared_ptr<const PyramidLevel>, PyramidKeyHash> m_pyramid; // [PYRAMID]
+		mutable std::unordered_map<int, std::shared_ptr<const PyramidLevel>> m_nativePyramidCache;
 		mutable std::recursive_mutex m_pyramidMutex;
+		mutable uint64_t m_pyramidRevision{ 0 };
 
-		PyramidLevelView getOrCreateNativePyramidLevel(int, const ImagePyramidLevelInfo&) const;
+		PyramidLevelView makePyramidLevelView(const std::shared_ptr<const PyramidLevel>&, int, const char*) const;
+		PyramidLevelView fullResolutionLevelView() const;
+		PyramidLevelView getOrCreateNativePyramidLevel(int, ImagePyramidLevelInfo) const;
 		PyramidLevelView getOrCreateGeneratedPyramidLevel(int, uint32_t, uint32_t, uint32_t, DownsampleMode) const;
 
 		// [PYRAMID] downsample core
@@ -193,6 +221,12 @@ namespace poca::core {
 	template <class T>
 	Image<T>::Image(const ImageType _typeImage) :ImageInterface(_typeImage)
 	{
+		if constexpr (std::is_same_v<T, uint8_t>) m_type = UINT8;
+		else if constexpr (std::is_same_v<T, uint16_t>) m_type = UINT16;
+		else if constexpr (std::is_same_v<T, uint32_t>) m_type = UINT32;
+		else if constexpr (std::is_same_v<T, int32_t>) m_type = INT32;
+		else if constexpr (std::is_same_v<T, float>) m_type = FLOAT;
+		else throw std::invalid_argument("Unsupported image scalar type");
 		m_data.insert(std::make_pair("intensity", new poca::core::MyData(new poca::core::Histogram<T>(), false)));
 		std::string type = typeid(T).name();
 		m_maxValue = (type == "float" || type == "unsigned int" || type == "int") ? 1 : std::numeric_limits<T>::max();
@@ -220,6 +254,26 @@ namespace poca::core {
 	BasicComponentInterface* Image<T>::copy()
 	{
 		return new Image(*this);
+	}
+
+	template <class T>
+	void Image<T>::initializeStorageBacked(const uint32_t _w, const uint32_t _h, const uint32_t _d,
+		const std::vector<T>& _sample, bool _hasDisplayBounds, float _displayMin, float _displayMax)
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if (!isRawImage() || m_width != 0 || !canReloadPixels())
+			throw std::invalid_argument("Storage initialization requires a new RAW image with a reload callback");
+		const std::size_t count = checkedPyramidElementCount(0, "storage/initialization", _w, _h, _d);
+		checkedPyramidByteCount(0, "storage/initialization", _w, _h, _d, sizeof(T));
+		auto* histogram = dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"));
+		histogram->initializeStorageBacked(count, _sample, _hasDisplayBounds, _displayMin, _displayMax);
+		m_width = _w; m_height = _h; m_depth = _d;
+		m_bbox.set(0, 0, 0, _w, _h, _d);
+		m_selection.clear();
+		setCurrentHistogramType("intensity");
+		m_min = histogram->getMin(); m_max = histogram->getMax();
+		m_outOfCoreEnabled = m_pyramidalRenderingEnabled = true;
+		invalidatePyramidCache();
 	}
 
 	template <class T>
@@ -272,6 +326,7 @@ namespace poca::core {
 	void Image<T>::invalidatePyramidCache() const
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		++m_pyramidRevision;
 		m_pyramid.clear();
 		m_nativePyramidCache.clear();
 	}
@@ -282,9 +337,9 @@ namespace poca::core {
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		std::size_t bytes = 0;
 		for (const auto& kv : m_pyramid)
-			bytes += kv.second.data.size() * sizeof(T);
+			bytes += kv.second->data.size() * sizeof(T);
 		for (const auto& kv : m_nativePyramidCache)
-			bytes += kv.second.data.size() * sizeof(T);
+			bytes += kv.second->data.size() * sizeof(T);
 		return bytes;
 	}
 
@@ -305,7 +360,7 @@ namespace poca::core {
 		dst.w = std::max(1u, src.w / fx);
 		dst.h = std::max(1u, src.h / fy);
 		dst.d = std::max(1u, src.d / fz);
-		dst.data.resize(size_t(dst.w) * dst.h * dst.d);
+		dst.data.resize(checkedPyramidElementCount(0, "generated/allocation", dst.w, dst.h, dst.d));
 
 		auto idxSrc = [&](uint32_t x, uint32_t y, uint32_t z) -> size_t {
 			return (size_t(z) * src.h + y) * src.w + x;
@@ -431,7 +486,7 @@ namespace poca::core {
 		dst.h = std::max(1u, src.h / fy);
 		dst.d = std::max(1u, src.d / fz);
 
-		dst.data.resize(size_t(dst.w) * dst.h * dst.d);
+		dst.data.resize(checkedPyramidElementCount(0, "generated/allocation", dst.w, dst.h, dst.d));
 
 		auto idxSrc = [&](uint32_t x, uint32_t y, uint32_t z) -> size_t {
 			return (size_t(z) * src.h + y) * src.w + x;
@@ -559,133 +614,110 @@ namespace poca::core {
 	}
 
 	template <class T>
-	typename Image<T>::PyramidLevelView Image<T>::getOrCreatePyramidLevel(
-		int level,
-		uint32_t fx, uint32_t fy, uint32_t fz,
-		DownsampleMode mode
-	) const
+	typename Image<T>::PyramidLevelView Image<T>::makePyramidLevelView(
+		const std::shared_ptr<const PyramidLevel>& _storage, int _level, const char* _source) const
+	{
+		PyramidLevelView view;
+		view.w = _storage->w; view.h = _storage->h; view.d = _storage->d;
+		view.ptr = _storage->data.data(); view.count = _storage->data.size();
+		view.source = _source; view.owner = _storage;
+		validatePyramidBuffer(_level, _source, view.w, view.h, view.d, view.count, view.ptr);
+		return view;
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::fullResolutionLevelView() const
+	{
+		const auto& values = this->pixels();
+		PyramidLevelView view;
+		view.w = this->width(); view.h = this->height(); view.d = this->depth();
+		view.ptr = values.data(); view.count = values.size();
+		validatePyramidBuffer(0, "generated/full-resolution", view.w, view.h, view.d, view.count, view.ptr);
+		return view;
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::copyFullResolutionLevel(std::vector<T>& _values) const
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		auto* histogram = dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"));
+		if (histogram == nullptr)
+			throw std::runtime_error("Image pyramid full-resolution histogram type mismatch");
+		histogram->copyValues(_values);
+		PyramidLevelView view;
+		view.w = this->width(); view.h = this->height(); view.d = this->depth();
+		view.ptr = _values.data(); view.count = _values.size();
+		validatePyramidBuffer(0, "generated/full-resolution", view.w, view.h, view.d, view.count, view.ptr);
+		return view;
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::getOrCreatePyramidLevel(
+		int level, uint32_t fx, uint32_t fy, uint32_t fz, DownsampleMode mode) const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if (level < 0)
+			failPyramidBuffer(level, "generated", width(), height(), depth(), "unknown", 0, "negative requested level");
 		if (!m_pyramidalRenderingEnabled)
 			level = 0;
-		// level 0 is the original full-res pixels
-		if (level <= 0) {
-			PyramidLevelView v;
-			v.w = this->width();
-			v.h = this->height();
-			v.d = this->depth();
-			v.ptr = this->data();
-			return v;
-		}
-
+		if (level == 0)
+			return fullResolutionLevelView();
 		ImagePyramidLevelInfo info;
 		if (m_nativePyramidReaderCallback && nativePyramidLevelInfo(static_cast<std::size_t>(level), info))
 			return getOrCreateNativePyramidLevel(level, info);
-
+		if (level > 31 || fx == 0 || fy == 0 || fz == 0)
+			failPyramidBuffer(level, "generated", width(), height(), depth(), "unknown", 0, "invalid level or zero factor");
 		return getOrCreateGeneratedPyramidLevel(level, fx, fy, fz, mode);
 	}
 
 	template <class T>
 	typename Image<T>::PyramidLevelView Image<T>::getOrCreateGeneratedPyramidLevel(
-		int level, uint32_t fx, uint32_t fy, uint32_t fz, DownsampleMode mode
-	) const
+		int level, uint32_t fx, uint32_t fy, uint32_t fz, DownsampleMode mode) const
 	{
-		// Called under m_pyramidMutex; generated parents stay independent of
-		// native dimensions and stored downsampling semantics.
+		// All recursion is locked and uses generated parents only. Rehashing an
+		// unordered_map does not invalidate its elements; clearing did invalidate
+		// the old borrowed views, so views now retain immutable shared storage.
 		PyramidKey key{ level, fx, fy, fz, uint8_t(mode) };
 		auto it = m_pyramid.find(key);
-		if (it != m_pyramid.end()) {
-			PyramidLevelView v;
-			v.w = it->second.w;
-			v.h = it->second.h;
-			v.d = it->second.d;
-			v.ptr = it->second.data.data();
-			return v;
-		}
-
-		// Ensure parent exists, then downsample from it without copying the full
-		// parent level. With hundreds of images, that copy becomes visible during
-		// interactive LOD changes.
-		PyramidLevel fallbackParent;
-		const PyramidLevel* parent = nullptr;
+		if (it != m_pyramid.end())
+			return makePyramidLevelView(it->second, level, "generated");
+		PyramidLevel result;
 		if (level == 1) {
-			PyramidLevel lvl = downsampleRaw(this->data(), this->width(), this->height(), this->depth(), fx, fy, fz, mode);
-			auto [insIt, _] = m_pyramid.emplace(key, std::move(lvl));
-			PyramidLevelView v;
-			v.w = insIt->second.w;
-			v.h = insIt->second.h;
-			v.d = insIt->second.d;
-			v.ptr = insIt->second.data.data();
-			return v;
+			const auto source = fullResolutionLevelView();
+			result = downsampleRaw(source.ptr, source.w, source.h, source.d, fx, fy, fz, mode);
 		}
 		else {
-			PyramidLevelView pv = getOrCreateGeneratedPyramidLevel(level - 1, fx, fy, fz, mode);
-			PyramidKey pkey{ level - 1, fx, fy, fz, uint8_t(mode) };
-			auto pit = m_pyramid.find(pkey);
-			if (pit != m_pyramid.end()) {
-				parent = &pit->second;
-			}
-			else {
-				// fallback (should not happen)
-				fallbackParent.w = pv.w; fallbackParent.h = pv.h; fallbackParent.d = pv.d;
-				fallbackParent.data.assign(pv.ptr, pv.ptr + size_t(pv.w) * pv.h * pv.d);
-				parent = &fallbackParent;
-			}
+			getOrCreateGeneratedPyramidLevel(level - 1, fx, fy, fz, mode);
+			const PyramidKey parentKey{ level - 1, fx, fy, fz, uint8_t(mode) };
+			const auto parent = m_pyramid.find(parentKey);
+			if (parent == m_pyramid.end())
+				throw std::runtime_error("Missing generated image pyramid parent at level " + std::to_string(level - 1));
+			result = downsampleLevel(*parent->second, fx, fy, fz, mode);
 		}
-
-		PyramidLevel lvl = downsampleLevel(*parent, fx, fy, fz, mode);
-		auto [insIt, _] = m_pyramid.emplace(key, std::move(lvl));
-
-		PyramidLevelView v;
-		v.w = insIt->second.w;
-		v.h = insIt->second.h;
-		v.d = insIt->second.d;
-		v.ptr = insIt->second.data.data();
-		return v;
+		auto storage = std::make_shared<const PyramidLevel>(std::move(result));
+		const auto view = makePyramidLevelView(storage, level, "generated");
+		m_pyramid.emplace(key, std::move(storage));
+		return view;
 	}
 
 	template <class T>
 	typename Image<T>::PyramidLevelView Image<T>::getOrCreateDownsampled(
-		uint32_t fx, uint32_t fy, uint32_t fz,
-		DownsampleMode mode
-	) const
+		uint32_t fx, uint32_t fy, uint32_t fz, DownsampleMode mode) const
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
-		if (!m_pyramidalRenderingEnabled) {
-			PyramidLevelView v;
-			v.w = this->width();
-			v.h = this->height();
-			v.d = this->depth();
-			v.ptr = this->data();
-			return v;
-		}
-		// clamp factors
-		fx = std::max(1u, fx);
-		fy = std::max(1u, fy);
-		fz = std::max(1u, fz);
-
-		// Use a special "level" value in the key to avoid colliding with pyramid levels
-		PyramidKey key{ -1, fx, fy, fz, uint8_t(mode) };
-
+		if (!m_pyramidalRenderingEnabled)
+			return fullResolutionLevelView();
+		fx = std::max(1u, fx); fy = std::max(1u, fy); fz = std::max(1u, fz);
+		const PyramidKey key{ -1, fx, fy, fz, uint8_t(mode) };
 		auto it = m_pyramid.find(key);
-		if (it != m_pyramid.end()) {
-			PyramidLevelView v;
-			v.w = it->second.w;
-			v.h = it->second.h;
-			v.d = it->second.d;
-			v.ptr = it->second.data.data();
-			return v;
-		}
-
-		PyramidLevel dst = downsampleRaw(this->data(), this->width(), this->height(), this->depth(), fx, fy, fz, mode);
-		auto [insIt, _] = m_pyramid.emplace(key, std::move(dst));
-
-		PyramidLevelView v;
-		v.w = insIt->second.w;
-		v.h = insIt->second.h;
-		v.d = insIt->second.d;
-		v.ptr = insIt->second.data.data();
-		return v;
+		if (it != m_pyramid.end())
+			return makePyramidLevelView(it->second, 0, "generated/downsampled");
+		const auto source = fullResolutionLevelView();
+		auto storage = std::make_shared<const PyramidLevel>(
+			downsampleRaw(source.ptr, source.w, source.h, source.d, fx, fy, fz, mode));
+		const auto view = makePyramidLevelView(storage, 0, "generated/downsampled");
+		m_pyramid.emplace(key, std::move(storage));
+		return view;
 	}
 
 	template <class T>
@@ -807,6 +839,7 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::releasePixels()
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		if (!m_outOfCoreEnabled || !canReloadPixels())
 			return;
 
@@ -931,30 +964,28 @@ namespace poca::core {
 	}
 
 	template <class T>
-	typename Image<T>::PyramidLevelView Image<T>::getOrCreateNativePyramidLevel(int _level, const ImagePyramidLevelInfo& _info) const
+	typename Image<T>::PyramidLevelView Image<T>::getOrCreateNativePyramidLevel(int _level, ImagePyramidLevelInfo _info) const
 	{
-		// Called under m_pyramidMutex. Native cache keys ignore factors/mode.
+		// Metadata and the callable are copied before invoking user code; a
+		// reentrant callback cannot destroy its own invocation or metadata.
 		auto it = m_nativePyramidCache.find(_level);
-		if (it == m_nativePyramidCache.end()) {
-			PyramidLevel native;
-			native.w = _info.width; native.h = _info.height; native.d = _info.depth;
-			const std::size_t maxValues = native.data.max_size();
-			std::size_t count = native.w;
-			if (count > maxValues / native.h)
-				throw std::overflow_error("Native pyramid level is too large");
-			count *= native.h;
-			if (count > maxValues / native.d)
-				throw std::overflow_error("Native pyramid level is too large");
-			count *= native.d;
-			if (!m_nativePyramidReaderCallback(static_cast<uint32_t>(_level), native.data))
-				throw std::runtime_error("Could not read native pyramid level " + std::to_string(_level));
-			if (native.data.size() != count)
-				throw std::runtime_error("Native pyramid level size mismatch at level " + std::to_string(_level));
-			it = m_nativePyramidCache.emplace(_level, std::move(native)).first;
-		}
-		PyramidLevelView view;
-		view.w = it->second.w; view.h = it->second.h; view.d = it->second.d;
-		view.ptr = it->second.data.data();
+		if (it != m_nativePyramidCache.end())
+			return makePyramidLevelView(it->second, _level, "native");
+		PyramidLevel native;
+		native.w = _info.width; native.h = _info.height; native.d = _info.depth;
+		const auto count = checkedPyramidElementCount(_level, "native", native.w, native.h, native.d);
+		if (count > native.data.max_size())
+			failPyramidBuffer(_level, "native", native.w, native.h, native.d, "too large", 0, "vector capacity exceeded");
+		const auto reader = m_nativePyramidReaderCallback;
+		const auto revision = m_pyramidRevision;
+		if (!reader(static_cast<uint32_t>(_level), native.data))
+			throw std::runtime_error("Could not read native pyramid level " + std::to_string(_level));
+		if (revision != m_pyramidRevision)
+			failPyramidBuffer(_level, "native", native.w, native.h, native.d,
+				std::to_string(count).c_str(), native.data.size(), "native reader changed image pyramid configuration");
+		auto storage = std::make_shared<const PyramidLevel>(std::move(native));
+		const auto view = makePyramidLevelView(storage, _level, "native");
+		m_nativePyramidCache.emplace(_level, std::move(storage));
 		return view;
 	}
 

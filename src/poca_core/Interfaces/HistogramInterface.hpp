@@ -36,6 +36,8 @@
 #include <vector>
 
 namespace poca::core {
+	// Display metadata supplies bounds only; native samples are approximate.
+	enum class HistogramStatisticsSource { FullResolution, NativeSample, DisplayMetadata };
 
 	class HistogramInterface {
 	public:
@@ -53,6 +55,8 @@ namespace poca::core {
 
 		virtual const std::size_t getNbValues() const = 0;
 		virtual const std::size_t getNbBins() const = 0;
+		virtual HistogramStatisticsSource statisticsSource() const { return HistogramStatisticsSource::FullResolution; }
+		virtual std::size_t statisticsSampleCount() const { return getNbValues(); }
 
 		virtual const float getMean() const = 0;
 		virtual const float getMedian() const = 0;
@@ -87,4 +91,3 @@ namespace poca::core {
 }
 
 #endif
-

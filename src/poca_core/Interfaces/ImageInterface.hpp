@@ -54,6 +54,7 @@ namespace poca::core {
 
 	struct ImagePyramidLevelInfo {
 		uint32_t width{ 0 }, height{ 0 }, depth{ 0 };
+		bool available{ true }; // An unavailable entry retains its level index for generated fallback.
 	};
 
 	class ImageInterface : public BasicComponent {
@@ -93,10 +94,10 @@ namespace poca::core {
 
 		// Configure before rendering. Level 0 describes the full-resolution image;
 		// subsequent entries describe progressively coarser stored levels.
-		bool hasNativePyramid() const { return !m_nativePyramidLevels.empty(); }
-		std::size_t nativePyramidLevelCount() const { return m_nativePyramidLevels.size(); }
-		bool nativePyramidLevelInfo(const std::size_t _level, ImagePyramidLevelInfo& _info) const {
-			if (_level >= m_nativePyramidLevels.size())
+		virtual bool hasNativePyramid() const { return !m_nativePyramidLevels.empty(); }
+		virtual std::size_t nativePyramidLevelCount() const { return m_nativePyramidLevels.size(); }
+		virtual bool nativePyramidLevelInfo(const std::size_t _level, ImagePyramidLevelInfo& _info) const {
+			if (_level >= m_nativePyramidLevels.size() || !m_nativePyramidLevels[_level].available)
 				return false;
 			_info = m_nativePyramidLevels[_level];
 			return true;
@@ -140,9 +141,9 @@ namespace poca::core {
 		}
 
 	protected:
-		uint32_t m_width, m_height, m_depth;
-		float m_min, m_max, m_maxValue;
-		ImageType m_type, m_typeImage;
+		uint32_t m_width{ 0 }, m_height{ 0 }, m_depth{ 0 };
+		float m_min{ 0.f }, m_max{ 0.f }, m_maxValue{ 0.f };
+		ImageType m_type{ NONE }, m_typeImage{ RAW };
 		int m_currentFrame{ -1 };
 		bool m_outOfCoreEnabled{ false };
 		bool m_pyramidalRenderingEnabled{ false };

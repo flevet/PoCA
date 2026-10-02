@@ -42,7 +42,9 @@ set(GENERAL_HEADER_FILES
   General/EquationFit.hpp
   General/Engine.hpp
   General/Histogram.hpp
+  General/HistogramStorageStatistics.hpp
   General/Image.hpp
+  General/ImagePyramidValidation.hpp
   General/ImagesList.hpp
   General/json.hpp
   General/JsonCommandContext.hpp

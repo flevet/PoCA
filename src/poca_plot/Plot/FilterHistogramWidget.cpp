@@ -128,7 +128,16 @@ namespace poca::plot {
 	{
 		m_name = _name.toLatin1().data();
 		m_buttonDelete->setEnabled(m_name != "x" && m_name != "y" && m_name != "z");
-		m_customPlot->setInfos(_name, _hist, _palette);
+		QString displayName = _name;
+		if (_hist->statisticsSource() == poca::core::HistogramStatisticsSource::NativeSample)
+			displayName += tr(" (coarse estimate)");
+		else if (_hist->statisticsSource() == poca::core::HistogramStatisticsSource::DisplayMetadata)
+			displayName += tr(" (display bounds; statistics unavailable)");
+		m_customPlot->setInfos(displayName, _hist, _palette);
+		m_customPlot->setToolTip(QString());
+		if (_hist->statisticsSource() == poca::core::HistogramStatisticsSource::NativeSample)
+			m_customPlot->setToolTip(tr("Histogram and statistics estimated from %1 coarse image values. They are not exact full-resolution statistics.")
+				.arg(static_cast<qulonglong>(_hist->statisticsSampleCount())));
 		m_customPlot->setEnabled(_hist->hasInteraction());
 		m_customPlot->update();
 		double minV = m_customPlot->getCurrentMin();
@@ -253,4 +262,3 @@ namespace poca::plot {
 		m_redraw = false;
 	}
 }
-

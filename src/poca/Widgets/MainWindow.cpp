@@ -1574,6 +1574,12 @@ void MainWindow::openDir()
 		QFileDialog::DontUseNativeDialog | QFileDialog::DontResolveSymlinks);
 
 	if (dirName.isEmpty()) return;
+	const QFileInfo selectedDirectory(dirName);
+	if (selectedDirectory.suffix().compare("zarr", Qt::CaseInsensitive) == 0) {
+		poca::core::CommandInfo ci(true, "open", "path", selectedDirectory.absoluteFilePath().toStdString());
+		execute(&ci);
+		return;
+	}
 
 	QDir dir(dirName);
 	dir.setFilter(QDir::Files | QDir::NoSymLinks);

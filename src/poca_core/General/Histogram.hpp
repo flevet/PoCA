@@ -44,6 +44,7 @@
 
 #include "../Interfaces/HistogramInterface.hpp"
 #include "ArrayStatistics.hpp"
+#include "HistogramStorageStatistics.hpp"
 #include "../Cuda/CoreMisc.h"
 
 namespace poca::core {
@@ -96,6 +97,11 @@ namespace poca::core {
 		const size_t nbElements() const;
 
 		void computeStats();
+		void initializeStorageBacked(std::size_t, const std::vector<T>&, bool, float, float);
+		HistogramStatisticsSource statisticsSource() const override { return m_statisticsSource; }
+		std::size_t statisticsSampleCount() const override {
+			return m_statisticsSource == HistogramStatisticsSource::FullResolution ? m_nbValues : m_statisticsSample.size();
+		}
 		void releaseValues();
 		bool hasValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty(); }
 		bool canMaterializeValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return static_cast<bool>(m_materializeValuesCallback); }
@@ -140,6 +146,9 @@ namespace poca::core {
 		float m_minDefined{ 0.f }, m_maxDefined{ 0.f };
 		std::function<void(std::vector<T>&)> m_materializeValuesCallback;
 		mutable std::mutex m_valuesMutex;
+		bool m_storageBacked{ false };
+		HistogramStatisticsSource m_statisticsSource{ HistogramStatisticsSource::FullResolution };
+		std::vector<T> m_statisticsSample;
 		//EquationFit * m_eqn;
 	};
 
@@ -163,7 +172,7 @@ namespace poca::core {
 	Histogram<T>::Histogram(const Histogram& _o) :m_values(_o.m_values), m_bins(_o.m_bins), m_ts(_o.m_ts), m_nbValues(_o.m_nbValues), m_nbBins(_o.m_nbBins),
 		m_stats(_o.m_stats), m_stepX(_o.m_stepX), m_maxY(_o.m_maxY), m_currentMin(_o.m_currentMin),
 		m_currentMax(_o.m_currentMax), m_isMinDefined(_o.m_isMinDefined), m_isMaxDefined(_o.m_isMaxDefined), m_isLog(_o.m_isLog),
-		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined), m_materializeValuesCallback(_o.m_materializeValuesCallback)
+		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined), m_materializeValuesCallback(_o.m_materializeValuesCallback), m_storageBacked(_o.m_storageBacked), m_statisticsSource(_o.m_statisticsSource), m_statisticsSample(_o.m_statisticsSample)
 	{
 	}
 
@@ -186,6 +195,9 @@ namespace poca::core {
 		m_minDefined = _o.m_minDefined;
 		m_maxDefined = _o.m_maxDefined;
 		m_materializeValuesCallback = _o.m_materializeValuesCallback;
+		m_storageBacked = _o.m_storageBacked;
+		m_statisticsSource = _o.m_statisticsSource;
+		m_statisticsSample = _o.m_statisticsSample;
 
 		return *this;
 	}
@@ -205,12 +217,35 @@ namespace poca::core {
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
 		//std::cout << "Time copy " << elapsed << std::endl;
 
+		m_statisticsSource = HistogramStatisticsSource::FullResolution;
+		m_statisticsSample.clear();
 		setHistogram(_isLog, _nbBins, _isMinDefined, _minDefined, _isMaxDefined, _maxDefined);
 	}
 
 	template <class T>
 	void Histogram<T>::setHistogram(const bool _isLog, const int _nbBins, const bool _isMinDefined, const float _minDefined, const bool _isMaxDefined, const float _maxDefined)
 	{
+		if (m_storageBacked && !hasValues()) {
+			if (_isLog) throw std::invalid_argument("Unloaded intensity histogram cannot be made logarithmic");
+			setNbBins(_nbBins);
+			return;
+		}
+		if (m_storageBacked) {
+			m_stats = storageSampleStatistics(m_values);
+			m_nbValues = m_values.size();
+			m_statisticsSource = HistogramStatisticsSource::FullResolution;
+			m_statisticsSample.clear();
+			m_isMinDefined = m_isMaxDefined = true;
+			m_minDefined = _isMinDefined ? _minDefined : m_stats.getData(ArrayStatistics::Min);
+			m_maxDefined = _isMaxDefined ? _maxDefined : m_stats.getData(ArrayStatistics::Max);
+			m_isLog = _isLog;
+			storageDisplayInterval(m_minDefined, m_maxDefined);
+			resetBounds();
+			setNbBins(_nbBins);
+			return;
+		}
+		m_statisticsSource = HistogramStatisticsSource::FullResolution;
+		m_statisticsSample.clear();
 		m_isMinDefined = _isMinDefined; m_isMaxDefined = _isMaxDefined; m_minDefined = _minDefined; m_maxDefined = _maxDefined; m_isLog = _isLog;
 
 		m_nbValues = m_values.size();
@@ -249,13 +284,24 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::resetBounds()
 	{
-		m_currentMin = m_stats.getData(ArrayStatistics::Min);
-		m_currentMax = m_stats.getData(ArrayStatistics::Max);
+		m_currentMin = m_storageBacked ? getMin() : m_stats.getData(ArrayStatistics::Min);
+		m_currentMax = m_storageBacked ? getMax() : m_stats.getData(ArrayStatistics::Max);
 	}
 
 	template <class T>
 	void Histogram<T>::setNbBins(const std::size_t _nbBins)
 	{
+		if (m_storageBacked && m_statisticsSource != HistogramStatisticsSource::FullResolution) {
+			m_nbBins = _nbBins;
+			storageSampleBins(m_statisticsSample, m_bins, m_ts, _nbBins, getMin(), getMax(), m_stepX, m_maxY);
+			return;
+		}
+		if (m_storageBacked) {
+			ensureValuesLoaded();
+			m_nbBins = _nbBins;
+			storageSampleBins(m_values, m_bins, m_ts, _nbBins, getMin(), getMax(), m_stepX, m_maxY);
+			return;
+		}
 		setNbBins(_nbBins, m_values);
 	}
 
@@ -375,6 +421,7 @@ namespace poca::core {
 	template <class T>
 	const size_t Histogram<T>::nbElements() const
 	{
+		if (m_storageBacked) return m_nbValues;
 		ensureValuesLoaded();
 		return m_values.size();
 	}
@@ -383,8 +430,50 @@ namespace poca::core {
 	void Histogram<T>::computeStats()
 	{
 		ensureValuesLoaded();
+		if (m_storageBacked) {
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			if (m_values.size() != m_nbValues || m_values.empty())
+				throw std::runtime_error("Storage-backed statistics require complete intensity values");
+			const auto stats = storageSampleStatistics(m_values);
+			float min = stats.getData(ArrayStatistics::Min), max = stats.getData(ArrayStatistics::Max);
+			storageDisplayInterval(min, max);
+			storageSampleBins(m_values, m_bins, m_ts, m_nbBins, min, max, m_stepX, m_maxY);
+			m_stats = stats;
+			m_isMinDefined = m_isMaxDefined = true;
+			m_minDefined = min; m_maxDefined = max;
+			m_statisticsSource = HistogramStatisticsSource::FullResolution;
+			m_statisticsSample.clear();
+			resetBounds();
+			return;
+		}
 		m_stats = ArrayStatistics::generateArrayStatistics(m_values, m_nbValues);
 		resetBounds();
+	}
+
+	template <class T>
+	void Histogram<T>::initializeStorageBacked(std::size_t _count, const std::vector<T>& _sample,
+		bool _hasDisplayBounds, float _displayMin, float _displayMax)
+	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
+		if (_count == 0 || !m_values.empty() || !_sample.empty() && _sample.size() > _count)
+			throw std::invalid_argument("Invalid unloaded intensity initialization");
+		if (_sample.empty() && !_hasDisplayBounds)
+			throw std::invalid_argument("Unloaded image requires native statistics or display metadata");
+		if (_hasDisplayBounds && (!std::isfinite(_displayMin) || !std::isfinite(_displayMax) || _displayMin >= _displayMax))
+			throw std::invalid_argument("Invalid image display metadata bounds");
+		m_stats = storageSampleStatistics(_sample);
+		m_storageBacked = true;
+		m_statisticsSample = _sample;
+		m_statisticsSource = _sample.empty() ? HistogramStatisticsSource::DisplayMetadata : HistogramStatisticsSource::NativeSample;
+		m_nbValues = _count;
+		m_isMinDefined = m_isMaxDefined = true;
+		m_minDefined = _hasDisplayBounds ? _displayMin : m_stats.getData(ArrayStatistics::Min);
+		m_maxDefined = _hasDisplayBounds ? _displayMax : m_stats.getData(ArrayStatistics::Max);
+		// A constant sample still needs a finite, nonzero display interval.
+		storageDisplayInterval(m_minDefined, m_maxDefined);
+		m_currentMin = m_minDefined;
+		m_currentMax = m_maxDefined;
+		setNbBins(100);
 	}
 
 	template <class T>
@@ -464,4 +553,3 @@ namespace poca::core {
 	}
 }
 #endif // Histogram_h__
-
