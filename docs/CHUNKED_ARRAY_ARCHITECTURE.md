@@ -971,3 +971,10 @@ Native-level metadata now carries optional actual calibration, and storage-backe
 The Zarr plugin owns OME metadata and staged filesystem publication. Its generic write adapter uses the existing standalone backend C ABI; no backend API additions, TensorStore integration in PoCA, or Debug/Release import changes are required. Labels, geometry/features, multichannel/time, collections and remote writing remain future work.
 
 Source implementation/review only; build and runtime validation remain UNCONFIRMED. See [Phase 3 export report](../../poca_extra/src/poca_loaderZarrFile/EXPORT_README.md) for command parameters, safety, source tests and full file inventory.
+## Phase 4 OME-NGFF labels (2026-10-02)
+
+Associated labels remain ordinary integer Image<T>(LABEL) entries inside ImagesList with source-entry indices. The existing saveOmeZarr command gathers associated entries through the list or image owner, and File/Export dispatches that recorded command. Standard labels groups and image-label metadata are plugin-owned; the generic backend ABI and dependency isolation are unchanged.
+
+Label export shares Phase 3 staging/publication and streams level zero, matching calibrated native levels or bounded physical nearest sampling into the source image's actual target pyramid. Scientific level zero remains independent of display LOD. Sparse explicit colors are retained without a new categorical rendering subsystem; labels lacking object feature tables use scalar palette display and nearest filtering. Imported labels start hidden to avoid materializing single-level labels when opening the source.
+
+Source implementation complete / manual validation required. No configure/generate/build/link/install, application executable, Python script or test was run. See [Phase 4 report](../../poca_extra/src/poca_loaderZarrFile/LABELS_README.md) for source inventory, test coverage and limitations.

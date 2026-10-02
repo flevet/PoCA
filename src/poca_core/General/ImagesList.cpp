@@ -39,6 +39,13 @@ namespace poca::core {
 	ImagesList::ImagesList(ImageInterface* _im, const std::string& _name) :BasicComponentList("ImagesList", _im)
 	{
 		m_names.push_back(_name);
+		m_labelSources.push_back(-1);
+	}
+
+	ImagesList::ImagesList(const ImagesList& _other) : BasicComponentList(_other),
+		m_names(_other.m_names), m_labelSources(_other.m_labelSources)
+	{
+		m_currentComponent = _other.m_currentComponent;
 	}
 
 	ImagesList::~ImagesList() {
@@ -51,18 +58,53 @@ namespace poca::core {
 	}
 
 	void ImagesList::copyComponentsPtr(BasicComponentList* _list) {
+		const auto offset = m_components.size();
 		BasicComponentList::copyComponentsPtr(_list);
 		ImagesList* list = dynamic_cast <ImagesList*>(_list);
 		if (list) {
 			for (const auto& name : list->m_names)
 				m_names.push_back(name);
+			for (const auto source : list->m_labelSources)
+				m_labelSources.push_back(source < 0 ? -1 : source + static_cast<int64_t>(offset));
 		}
 	}
 
 	void ImagesList::addImage(ImageInterface* _obj, const std::string& _name)
 	{
+		int64_t source = -1;
+		if (_obj->isLabelImage() && m_currentComponent < m_components.size()) {
+			const auto* current = static_cast<ImageInterface*>(m_components[m_currentComponent]);
+			source = current->isRawImage() ? static_cast<int64_t>(m_currentComponent) : m_labelSources.at(m_currentComponent);
+		}
 		addComponent(_obj);
 		m_names.push_back(_name);
+		m_labelSources.push_back(source);
+	}
+
+	void ImagesList::associateLabel(uint32_t _label, uint32_t _source)
+	{
+		if (_label >= m_components.size() || _source >= m_components.size() ||
+			!getImage(_label)->isLabelImage() || !getImage(_source)->isRawImage())
+			throw std::invalid_argument("Label association requires a LABEL entry and a RAW source entry");
+		m_labelSources.at(_label) = _source;
+	}
+
+	void ImagesList::addLabelImage(ImageInterface* _image, const std::string& _name, uint32_t _source)
+	{
+		if (!_image || !_image->isLabelImage() || _source >= m_components.size() || !getImage(_source)->isRawImage())
+			throw std::invalid_argument("Invalid source/label image association");
+		addImage(_image, _name);
+		associateLabel(m_currentComponent, _source);
+	}
+
+	std::vector<uint32_t> ImagesList::labelsForImage(uint32_t _source) const
+	{
+		if (_source >= m_components.size()) throw std::out_of_range("Source image index");
+		std::vector<uint32_t> labels;
+		for (uint32_t i = 0; i < m_components.size(); ++i)
+			if (m_labelSources.at(i) == _source && static_cast<ImageInterface*>(m_components[i])->isLabelImage())
+				labels.push_back(i);
+		return labels;
 	}
 
 	ImageInterface* ImagesList::currentImage()
@@ -83,8 +125,18 @@ namespace poca::core {
 	void ImagesList::eraseComponent(const uint32_t _index)
 	{
 		if (m_components.empty()) return;
+		if (_index >= m_components.size()) throw std::out_of_range("Image index");
+		const auto previousCurrent = m_currentComponent;
 		BasicComponentList::eraseComponent(_index);
+		if (_index < previousCurrent) m_currentComponent = previousCurrent-1;
 		m_names.erase(m_names.begin() + _index);
+		m_labelSources.erase(m_labelSources.begin() + _index);
+		for (auto& source : m_labelSources) {
+			if (source == _index) source = -1;
+			else if (source > _index) --source;
+		}
+		if (!m_components.empty() && m_currentComponent >= m_components.size())
+			m_currentComponent = static_cast<uint32_t>(m_components.size()-1);
 	}
 
 	const std::string& ImagesList::currentName() const

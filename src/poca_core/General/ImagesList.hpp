@@ -34,6 +34,7 @@
 #define ImagesList_hpp__
 
 
+#include <cstdint>
 #include <General/BasicComponentList.hpp>
 
 namespace poca::core {
@@ -43,11 +44,16 @@ namespace poca::core {
 	public:
 		ImagesList(ImageInterface*, const std::string & = "");
 		~ImagesList();
+		ImagesList(const ImagesList&);
 
 		BasicComponentInterface* copy();
 		virtual void copyComponentsPtr(BasicComponentList*);
 
 		void addImage(ImageInterface*, const std::string & = "");
+		// Labels remain ordinary entries; source indices survive copy/erase/append.
+		void addLabelImage(ImageInterface*, const std::string&, uint32_t);
+		void associateLabel(uint32_t, uint32_t);
+		std::vector<uint32_t> labelsForImage(uint32_t) const;
 		ImageInterface* currentImage();
 		ImageInterface* getImage(const uint32_t);
 		uint32_t currentImageIndex() const;
@@ -63,6 +69,7 @@ namespace poca::core {
 
 	protected:
 		std::vector <std::string> m_names;
+		std::vector<int64_t> m_labelSources; // -1 means no explicit association.
 	};
 }
 #endif

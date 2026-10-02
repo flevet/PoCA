@@ -274,8 +274,8 @@ namespace poca::core {
 		const std::vector<T>& _sample, bool _hasDisplayBounds, float _displayMin, float _displayMax)
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
-		if (!isRawImage() || m_width != 0 || !canReloadPixels())
-			throw std::invalid_argument("Storage initialization requires a new RAW image with a reload callback");
+		if ((!isRawImage() && !isLabelImage()) || (isLabelImage() && !std::is_integral_v<T>) || m_width != 0 || !canReloadPixels())
+			throw std::invalid_argument("Storage initialization requires a new scalar RAW or integer LABEL image with a reload callback");
 		const std::size_t count = checkedPyramidElementCount(0, "storage/initialization", _w, _h, _d);
 		checkedPyramidByteCount(0, "storage/initialization", _w, _h, _d, sizeof(T));
 		auto* histogram = dynamic_cast<Histogram<T>*>(getOriginalHistogram("intensity"));

@@ -34,6 +34,7 @@
 #define ImageInterface_h__
 
 #include <vector>
+#include <map>
 #include <array>
 #include <cstddef>
 #include <functional>
@@ -134,6 +135,11 @@ namespace poca::core {
 		virtual bool isLabelImage() const { return m_typeImage == LABEL; }
 		virtual bool isRawImage() const { return m_typeImage == RAW; }
 
+		// Explicit sparse label colors only; continuous palettes are not label-ID maps.
+		using LabelColors = std::map<int64_t, std::array<uint8_t, 4>>;
+		const LabelColors& labelColors() const { return m_labelColors; }
+		void setLabelColors(const LabelColors& _colors) { m_labelColors = _colors; }
+
 		virtual std::vector <float>& volumes() { return m_volumes; }
 		virtual const std::vector <float>& volumes() const { return m_volumes; }
 
@@ -154,6 +160,7 @@ namespace poca::core {
 		bool m_pyramidalRenderingEnabled{ false };
 		ImageSpatialMetadata m_spatialMetadata;
 		std::vector<ImagePyramidLevelInfo> m_nativePyramidLevels;
+		LabelColors m_labelColors;
 
 		//Currently just store volumes for labels data, TODO think better about the structure
 		std::vector <float> m_volumes;
