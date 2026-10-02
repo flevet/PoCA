@@ -55,6 +55,9 @@ namespace poca::core {
 	struct ImagePyramidLevelInfo {
 		uint32_t width{ 0 }, height{ 0 }, depth{ 0 };
 		bool available{ true }; // An unavailable entry retains its level index for generated fallback.
+		// Optional actual stored-level calibration; never inferred from a level index.
+		ImageSpatialMetadata spatial;
+		bool hasSpatialMetadata{ false };
 	};
 
 	class ImageInterface : public BasicComponent {
@@ -110,6 +113,8 @@ namespace poca::core {
 			invalidatePyramidCache();
 		}
 		virtual bool canReadNativePyramid() const { return false; }
+		virtual bool canReadNativePyramidRegion() const { return false; }
+		virtual bool readNativePyramidRegion(uint32_t, const Region3D&, void*, std::size_t) const { return false; }
 
 		virtual const uint32_t dimension() const { return (m_depth > 1) ? 3 : 2; }
 		virtual inline uint32_t width() const { return m_width; }

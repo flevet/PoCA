@@ -961,3 +961,13 @@ Taking the TensorStore and object-type discussion into account, the recommended 
 - multiresolution: required or strongly enforced
 
 This is a better fit for PoCA than trying to force one identical strategy on every image workflow.
+
+## Phase 3 scalar export implementation (2026-10-02)
+
+Local scalar RAW images can be exported with the recordable saveOmeZarr command to OME-NGFF 0.5 / Zarr v3 stores. Depth 1 writes YX; volumes write ZYX, with uint8/uint16/uint32/int32/float32 values. Resident scientific level-zero pixels are read directly in chunks; unloaded sources use ImageInterface full-resolution regions. Rendering LOD never selects output dataset zero.
+
+Native-level metadata now carries optional actual calibration, and storage-backed images expose native region reads. Exports preserve calibrated native levels. Generated pyramids stream the preceding written array through the existing PoCA Average downsampler and use actual dimension ratios for physical scale. No second full-resolution output volume, independent image class or analysis LOD change is introduced. Signed integer Average accumulation is corrected in the shared downsampler.
+
+The Zarr plugin owns OME metadata and staged filesystem publication. Its generic write adapter uses the existing standalone backend C ABI; no backend API additions, TensorStore integration in PoCA, or Debug/Release import changes are required. Labels, geometry/features, multichannel/time, collections and remote writing remain future work.
+
+Source implementation/review only; build and runtime validation remain UNCONFIRMED. See [Phase 3 export report](../../poca_extra/src/poca_loaderZarrFile/EXPORT_README.md) for command parameters, safety, source tests and full file inventory.

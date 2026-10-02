@@ -98,6 +98,10 @@ namespace poca::core {
 		// Native values are contiguous, with x fastest, then y, then z.
 		using NativePyramidReader = std::function<bool(uint32_t, std::vector<T>&)>;
 		void setNativePyramidLevelReaderCallback(NativePyramidReader);
+		using NativePyramidRegionReader = std::function<bool(uint32_t, const Region3D&, void*, std::size_t)>;
+		void setNativePyramidRegionReaderCallback(NativePyramidRegionReader);
+		bool canReadNativePyramidRegion() const override;
+		bool readNativePyramidRegion(uint32_t, const Region3D&, void*, std::size_t) const override;
 		void setNativePyramidLevels(const std::vector<ImagePyramidLevelInfo>&) override;
 		bool canReadNativePyramid() const override;
 		bool hasNativePyramid() const override {
@@ -144,6 +148,13 @@ namespace poca::core {
 			uint32_t fx = 2, uint32_t fy = 2, uint32_t fz = 2,
 			DownsampleMode mode = DownsampleMode::Average
 		) const;
+
+		// Explicit native access for export, independent of display enablement/LOD.
+		PyramidLevelView nativePyramidLevelView(uint32_t) const;
+
+		// Export uses the same downsampler on an aligned, bounded parent region.
+		// This operation is independent of rendering flags and does not cache pixels.
+		static PyramidLevelView downsampleRegion(const T*, uint32_t, uint32_t, uint32_t);
 
 		// A full-resolution snapshot uses Histogram's existing protected copy.
 		PyramidLevelView copyFullResolutionLevel(std::vector<T>&) const;
@@ -214,6 +225,7 @@ namespace poca::core {
 		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
 		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
 		NativePyramidReader m_nativePyramidReaderCallback;
+		NativePyramidRegionReader m_nativePyramidRegionReaderCallback;
 	};
 
 	//maxValue is used for shaders. uint8_t & uint16_t textures are normalized so need to know the maxValue to find back the pixel value
@@ -239,6 +251,7 @@ namespace poca::core {
 		m_pyramid = _o.m_pyramid;
 		m_nativePyramidCache = _o.m_nativePyramidCache;
 		m_nativePyramidReaderCallback = _o.m_nativePyramidReaderCallback;
+		m_nativePyramidRegionReaderCallback = _o.m_nativePyramidRegionReaderCallback;
 		m_outOfCoreEnabled = _o.m_outOfCoreEnabled;
 		m_pyramidalRenderingEnabled = _o.m_pyramidalRenderingEnabled;
 		m_planeReaderCallback = _o.m_planeReaderCallback;
@@ -437,7 +450,8 @@ namespace poca::core {
 					}
 
 					if constexpr (std::is_integral_v<T>) {
-						uint64_t sum = 0;
+						using Sum = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
+						Sum sum = 0;
 						uint64_t cnt = 0;
 						for (uint32_t dz = 0; dz < fz; ++dz) {
 							uint32_t sz = std::min(sz0 + dz, src.d - 1);
@@ -445,12 +459,12 @@ namespace poca::core {
 								uint32_t sy = std::min(sy0 + dy, src.h - 1);
 								for (uint32_t dx = 0; dx < fx; ++dx) {
 									uint32_t sx = std::min(sx0 + dx, src.w - 1);
-									sum += uint64_t(srcData[idxSrc(sx, sy, sz)]);
+									sum += static_cast<Sum>(srcData[idxSrc(sx, sy, sz)]);
 									++cnt;
 								}
 							}
 						}
-						dst.data[idxDst(x, y, z)] = T(sum / std::max<uint64_t>(1, cnt));
+						dst.data[idxDst(x, y, z)] = T(sum / static_cast<Sum>(std::max<uint64_t>(1, cnt)));
 					}
 					else {
 						double sum = 0.0;
@@ -575,7 +589,8 @@ namespace poca::core {
 					// Average
 					// Use wider accumulator for integer types
 					if constexpr (std::is_integral_v<T>) {
-						uint64_t sum = 0;
+						using Sum = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
+						Sum sum = 0;
 						uint64_t cnt = 0;
 						for (uint32_t dz = 0; dz < fz; ++dz) {
 							uint32_t sz = std::min(sz0 + dz, src.d - 1);
@@ -583,12 +598,12 @@ namespace poca::core {
 								uint32_t sy = std::min(sy0 + dy, src.h - 1);
 								for (uint32_t dx = 0; dx < fx; ++dx) {
 									uint32_t sx = std::min(sx0 + dx, src.w - 1);
-									sum += uint64_t(src.data[idxSrc(sx, sy, sz)]);
+									sum += static_cast<Sum>(src.data[idxSrc(sx, sy, sz)]);
 									++cnt;
 								}
 							}
 						}
-						dst.data[idxDst(x, y, z)] = T(sum / std::max<uint64_t>(1, cnt));
+						dst.data[idxDst(x, y, z)] = T(sum / static_cast<Sum>(std::max<uint64_t>(1, cnt)));
 					}
 					else {
 						double sum = 0.0;
@@ -947,6 +962,66 @@ namespace poca::core {
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_nativePyramidReaderCallback = std::move(_callback);
 		invalidatePyramidCache();
+	}
+
+	template <class T>
+	void Image<T>::setNativePyramidRegionReaderCallback(NativePyramidRegionReader _callback)
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		m_nativePyramidRegionReaderCallback = std::move(_callback);
+		invalidatePyramidCache();
+	}
+
+	template <class T>
+	bool Image<T>::canReadNativePyramidRegion() const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		return static_cast<bool>(m_nativePyramidRegionReaderCallback);
+	}
+
+	template <class T>
+	bool Image<T>::readNativePyramidRegion(uint32_t _level, const Region3D& _region, void* _dst, std::size_t _bytes) const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		ImagePyramidLevelInfo info;
+		if (!ImageInterface::nativePyramidLevelInfo(_level, info) || !m_nativePyramidRegionReaderCallback)
+			return false;
+		if (_region.empty() || _region.x >= info.width || _region.y >= info.height || _region.z >= info.depth ||
+			_region.width > info.width - _region.x || _region.height > info.height - _region.y || _region.depth > info.depth - _region.z)
+			throw std::invalid_argument("Native pyramid region is outside its level");
+		const auto bytes = checkedPyramidByteCount(_level, "native/region", static_cast<uint32_t>(_region.width),
+			static_cast<uint32_t>(_region.height), static_cast<uint32_t>(_region.depth), sizeof(T));
+		if (_dst == nullptr || _bytes != bytes)
+			throw std::invalid_argument("Native pyramid region buffer size mismatch");
+		const auto reader = m_nativePyramidRegionReaderCallback;
+		const auto revision = m_pyramidRevision;
+		const bool read = reader(_level, _region, _dst, _bytes);
+		if (revision != m_pyramidRevision)
+			throw std::runtime_error("Native region reader changed image pyramid configuration");
+		return read;
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::nativePyramidLevelView(uint32_t _level) const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		ImagePyramidLevelInfo info;
+		if (_level == 0 || _level > static_cast<uint32_t>((std::numeric_limits<int>::max)()) ||
+			!ImageInterface::nativePyramidLevelInfo(_level, info) || !m_nativePyramidReaderCallback)
+			throw std::invalid_argument("Missing positive native pyramid level/reader");
+		return getOrCreateNativePyramidLevel(static_cast<int>(_level), info);
+	}
+
+	template <class T>
+	typename Image<T>::PyramidLevelView Image<T>::downsampleRegion(const T* _data, uint32_t _w, uint32_t _h, uint32_t _d)
+	{
+		checkedPyramidByteCount(0, "export/downsample", _w, _h, _d, sizeof(T));
+		if (_data == nullptr) throw std::invalid_argument("Null export downsample source");
+		auto storage = std::make_shared<const PyramidLevel>(downsampleRaw(_data, _w, _h, _d, 2, 2, 2, DownsampleMode::Average));
+		PyramidLevelView view;
+		view.w = storage->w; view.h = storage->h; view.d = storage->d;
+		view.ptr = storage->data.data(); view.count = storage->data.size(); view.owner = storage;
+		return view;
 	}
 
 	template <class T>
