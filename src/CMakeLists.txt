@@ -25,6 +25,9 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 option(POCA_ENABLE_CUDA "Enable CUDA acceleration" ON)
 option(POCA_BUILD_EXTRA "Build plugins from the poca_extra repository" ON)
 
+# Validate the optional installed Zarr backend before dependency discovery.
+include(cmake/PoCAZarrBackend.cmake)
+
 set(POCA_EXTRA_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../poca_extra/src"
     CACHE PATH
