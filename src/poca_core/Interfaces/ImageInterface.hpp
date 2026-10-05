@@ -89,6 +89,10 @@ namespace poca::core {
 		virtual std::size_t fullResolutionRegionScratchBytes() const { return (std::numeric_limits<std::size_t>::max)(); }
 		virtual bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const = 0;
 		virtual bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const = 0;
+		using ImageRegionReader = std::function<bool(const Region3D&, void*, std::size_t)>;
+		// Optional request-local storage session. Its scratch has the same declared
+		// cost as regional reads; scientific APIs and their precedence are unchanged.
+		virtual ImageRegionReader openFullResolutionRegionSession() const { return {}; }
 
 		virtual bool outOfCoreEnabled() const { return m_outOfCoreEnabled; }
 		virtual void setOutOfCoreEnabled(const bool _enabled) { m_outOfCoreEnabled = _enabled; }

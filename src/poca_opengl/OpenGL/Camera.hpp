@@ -419,7 +419,8 @@ namespace poca::opengl {
 		float m_perspectiveFov;
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid, m_interactiveRendering;
-		uint64_t m_interactiveRenderingSerial;
+		QTimer m_imageStreamSettleTimer;
+		void beginImageStreamInteraction();
 		bool m_alreadyInitialized;
 		bool m_openGLContextInitializedNotified;
 		bool m_cullFace, m_fillPolygon;

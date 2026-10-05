@@ -12,11 +12,15 @@ namespace poca::opengl {
 		std::size_t gpuBytes{ 512ull * 1024 * 1024 };
 		std::size_t cpuBytes{ 256ull * 1024 * 1024 };
 		std::size_t textureBytes{ 64ull * 1024 * 1024 };
-		std::size_t scratchBytes{ 1024ull * 1024 };
+		std::size_t scratchBytes{ 4ull * 1024 * 1024 }; // Target source slab bytes; included in each CPU lease.
+		std::size_t residentCopyBytes{ 1024ull * 1024 }; // Preserve the small resident whole-preview fast path.
 		std::size_t uploadBytes{ 16ull * 1024 * 1024 };
 		uint32_t previewEdge{ 64 }, displayEdge{ 512 }, interactiveEdge{ 128 };
 		uint32_t regionQuantum{ 16 }, offscreenGraceFrames{ 12 };
 		double guardFraction{ .25 }, safeFraction{ .10 };
+		double zoomInReuseTolerance{ 1.25 }, zoomOutReuseTolerance{ .88 };
+		double displayOversampling{ 1.5 };
+		uint32_t interactionSettleMs{ 150 };
 	};
 	inline const ImageStreamPolicy& imageStreamPolicy() { static const ImageStreamPolicy policy; return policy; }
 	inline std::size_t streamMultiply(std::size_t _a, std::size_t _b) {

@@ -22,6 +22,7 @@
 #include <tinytiffreader.h>
 
 #include "Region3D.hpp"
+#include "TiffRegionReader.hpp"
 
 namespace poca::core::tiff {
 	template <class T, class M>
@@ -92,73 +93,27 @@ namespace poca::core::tiff {
 	template <class T>
 	inline bool readPlane(const std::string& _filename, const uint64_t _planeIndex, std::vector<T>& _plane, uint32_t& _width, uint32_t& _height, uint32_t& _depth)
 	{
-		uint16_t bitsPerSample = 0, sampleFormat = 0;
-		TinyTIFFReaderFile* tiffr = TinyTIFFReader_open(_filename.c_str());
-		if (!tiffr)
-			return false;
-
-		_width = TinyTIFFReader_getWidth(tiffr);
-		_height = TinyTIFFReader_getHeight(tiffr);
-		_depth = TinyTIFFReader_countFrames(tiffr);
-		bitsPerSample = TinyTIFFReader_getBitsPerSample(tiffr, 0);
-		sampleFormat = TinyTIFFReader_getSampleFormat(tiffr);
-		if (_planeIndex >= _depth) {
-			TinyTIFFReader_close(tiffr);
-			return false;
-		}
-
-		for (uint64_t n = 0; n < _planeIndex; ++n) {
-			if (!TinyTIFFReader_readNext(tiffr)) {
-				TinyTIFFReader_close(tiffr);
-				return false;
-			}
-		}
-
-		_plane.resize(static_cast<size_t>(_width) * static_cast<size_t>(_height));
-		uint8_t* tmpImage = NULL;
-		if (sampleFormat == 2) {
-			if (bitsPerSample == 16)
-				tmpImage = reinterpret_cast<uint8_t*>(new uint16_t[_width * _height * (bitsPerSample / 8)]);
-			else if (bitsPerSample == 32)
-				tmpImage = reinterpret_cast<uint8_t*>(new uint32_t[_width * _height * (bitsPerSample / 8)]);
-		}
-
-		if (tmpImage != NULL) {
-			TinyTIFFReader_getSampleData(tiffr, tmpImage, 0);
-			if (bitsPerSample == 16)
-				convertSignedToUnsigned<int16_t, uint16_t>(tmpImage, reinterpret_cast<uint8_t*>(_plane.data()), _width * _height);
-			else if (bitsPerSample == 32)
-				convertSignedToUnsigned<int32_t, uint32_t>(tmpImage, reinterpret_cast<uint8_t*>(_plane.data()), _width * _height);
-			delete[] tmpImage;
-		}
-		else {
-			TinyTIFFReader_getSampleData(tiffr, reinterpret_cast<uint8_t*>(_plane.data()), 0);
-		}
-
-		const bool ok = !TinyTIFFReader_wasError(tiffr);
-		TinyTIFFReader_close(tiffr);
-		return ok;
+		TiffRegionReader<T> session(_filename);
+		const auto dims = session.dimensions();
+		_width = dims.width; _height = dims.height; _depth = dims.depth;
+		if (_planeIndex >= _depth) return false;
+		_plane.resize(checkedPyramidElementCount(0, "TIFF plane", _width, _height, 1));
+		return session.read({ 0, 0, _planeIndex, _width, _height, 1 }, _plane.data(),
+			checkedPyramidByteCount(0, "TIFF plane", _width, _height, 1, sizeof(T)));
 	}
 
 	template <class T>
 	inline bool readRegion(const std::string& _filename, const Region3D& _region, std::vector<T>& _regionValues, uint32_t& _width, uint32_t& _height, uint32_t& _depth)
 	{
-		if (_region.empty())
-			return false;
-
-		_regionValues.resize(_region.nbVoxels());
-		std::vector<T> plane;
-		T* dst = _regionValues.data();
-		for (uint64_t z = 0; z < _region.depth; ++z) {
-			if (!readPlane(_filename, _region.z + z, plane, _width, _height, _depth))
-				return false;
-			for (uint64_t y = 0; y < _region.height; ++y) {
-				const std::size_t srcOffset = static_cast<std::size_t>((_region.y + y) * _width + _region.x);
-				std::memcpy(dst, plane.data() + srcOffset, static_cast<std::size_t>(_region.width) * sizeof(T));
-				dst += _region.width;
-			}
-		}
-		return true;
+		if (_region.empty()) return false;
+		TiffRegionReader<T> session(_filename);
+		const auto dims = session.dimensions();
+		_width = dims.width; _height = dims.height; _depth = dims.depth;
+		if (_region.x >= _width || _region.y >= _height || _region.z >= _depth ||
+			_region.width > _width - _region.x || _region.height > _height - _region.y || _region.depth > _depth - _region.z) return false;
+		const auto bytes = checkedPyramidByteCount(0, "TIFF region", uint32_t(_region.width), uint32_t(_region.height), uint32_t(_region.depth), sizeof(T));
+		_regionValues.resize(bytes / sizeof(T));
+		return session.read(_region, _regionValues.data(), bytes);
 	}
 }
 

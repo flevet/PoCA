@@ -48,7 +48,9 @@ namespace poca::opengl {
 		uint64_t imageId{ 0 };
 		uint32_t requestedLevel{ 0 };
 		uint32_t requestVersion{ 0 };
+		uint64_t viewGeneration{ 0 };
 		float priority{ 0.f };
+		glm::vec2 effectiveTarget{ 1 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		// Empty sourceRegion retains the bounded legacy test/whole-level contract.
@@ -76,6 +78,7 @@ namespace poca::opengl {
 		uint64_t imageId{ 0 };
 		uint32_t requestedLevel{ 0 };
 		uint32_t requestVersion{ 0 };
+		uint64_t viewGeneration{ 0 };
 		glm::uvec3 preparedDims{ 1u, 1u, 1u };
 		bool visible{ true };
 		bool obsolete{ false };
@@ -91,7 +94,9 @@ namespace poca::opengl {
 		uint32_t currentDisplayedLevel{ 0 };
 		uint32_t requestedLevel{ 0 };
 		uint32_t latestVersion{ 0 };
+		uint64_t viewGeneration{ 0 };
 		float priority{ 0.f };
+		glm::vec2 effectiveTarget{ 1 };
 		LodRequestStatus status{ LodRequestStatus::Idle };
 		uint64_t lastVisibleFrame{ 0 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
@@ -117,6 +122,7 @@ namespace poca::opengl {
 
 		uint32_t request(const ImageLodRequest& request, uint64_t frameIndex);
 		void cancel(uint64_t imageId);
+		void invalidateDetail(uint64_t imageId);
 		void forget(uint64_t imageId);
 		void cancelInvisible();
 		bool isCurrent(const ImageLodReady&) const;
@@ -142,6 +148,7 @@ namespace poca::opengl {
 
 	private:
 		void workerLoop();
+		bool takeAdmittedRequestUnsafe(ImageLodRequest&, std::shared_ptr<ImageStreamMemory::Reservation>&);
 		bool popNextQueuedRequestUnsafe(ImageLodRequest&);
 		void removeQueuedRequestsForImageUnsafe(uint64_t imageId);
 		void removeReadyUploadsForImageUnsafe(uint64_t imageId);

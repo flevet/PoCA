@@ -101,6 +101,15 @@ namespace poca::core {
 		void setPixelReloadCallback(std::function<void(std::vector<T>&)>);
 		void setPlaneReaderCallback(std::function<bool(uint64_t, void*, std::size_t)>);
 		void setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)>);
+		using RegionSessionFactory = std::function<ImageRegionReader()>;
+		void setRegionSessionFactory(RegionSessionFactory _factory) {
+			std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex); m_regionSessionFactory = std::move(_factory);
+		}
+		ImageRegionReader openFullResolutionRegionSession() const override {
+			std::unique_lock<std::recursive_mutex> lock(m_pyramidMutex);
+			const auto factory = m_regionSessionFactory; lock.unlock();
+			return factory ? factory() : ImageRegionReader{};
+		}
 		// Native values are contiguous, with x fastest, then y, then z.
 		using NativePyramidReader = std::function<bool(uint32_t, std::vector<T>&)>;
 		void setNativePyramidLevelReaderCallback(NativePyramidReader);
@@ -231,6 +240,7 @@ namespace poca::core {
 		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
 		std::size_t m_regionReaderScratchBytes{ 0 };
 		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
+		RegionSessionFactory m_regionSessionFactory;
 		NativePyramidReader m_nativePyramidReaderCallback;
 		NativePyramidRegionReader m_nativePyramidRegionReaderCallback;
 	};
@@ -264,6 +274,7 @@ namespace poca::core {
 		m_planeReaderCallback = _o.m_planeReaderCallback;
 		m_regionReaderScratchBytes = _o.m_regionReaderScratchBytes;
 		m_regionReaderCallback = _o.m_regionReaderCallback;
+		m_regionSessionFactory = _o.m_regionSessionFactory;
 	}
 
 	template <class T>
@@ -981,6 +992,7 @@ namespace poca::core {
 	{
 		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_regionReaderCallback = std::move(_callback);
+		m_regionSessionFactory = {}; // A replaced reader must not retain a session from its old source.
 	}
 
 	template <class T>

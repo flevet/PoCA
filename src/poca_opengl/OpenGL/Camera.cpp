@@ -569,7 +569,7 @@ namespace poca::opengl {
 		return m_rect[0] <= _x && _x <= x2 && m_rect[1] <= _y && _y <= y2;
 	}
 
-	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_identifyObjectsUntilMsec(0), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false), m_interactiveRenderingSerial(0)
+	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_identifyObjectsUntilMsec(0), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false)
 	{
 		// Opaque occlusion requires an actual depth attachment, not only GL_DEPTH_TEST.
 		QSurfaceFormat surface = format();
@@ -580,6 +580,13 @@ namespace poca::opengl {
 		this->addActionToObserve("updateDisplay");
 		this->setWindowTitle(_obj->getName().c_str());
 		m_lodUpdateManager = std::make_shared<poca::opengl::LodUpdateManager>(this);
+		m_imageStreamSettleTimer.setSingleShot(true);
+		m_imageStreamSettleTimer.setInterval(int(imageStreamPolicy().interactionSettleMs));
+		connect(&m_imageStreamSettleTimer, &QTimer::timeout, this, [this]() {
+			m_interactiveRendering = false;
+			if (m_object) m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+			update();
+		});
 
 		m_clip.resize(6);
 
@@ -1884,6 +1891,7 @@ namespace poca::opengl {
 
 	void Camera::mousePressEvent(QMouseEvent* _event)
 	{
+		beginImageStreamInteraction();
 		emit(clickInsideWindow());
 		makeCurrent();
 		setClickPoint(_event->pos().x(), _event->pos().y());
@@ -2029,6 +2037,7 @@ namespace poca::opengl {
 
 	void Camera::mouseMoveEvent(QMouseEvent* _event)
 	{
+		if (_event->buttons() != Qt::NoButton) beginImageStreamInteraction();
 		int x = _event->pos().x(), y = _event->pos().y();
 		makeCurrent();
 		setClickPoint(_event->pos().x(), _event->pos().y());
@@ -2253,6 +2262,7 @@ namespace poca::opengl {
 
 	void Camera::mouseReleaseEvent(QMouseEvent* _event)
 	{
+		beginImageStreamInteraction();
 		makeCurrent();
 		if (m_activeClippingPlane >= 0) {
 			m_activeClippingPlane = -1;
@@ -2580,16 +2590,15 @@ namespace poca::opengl {
 		}
 	}
 
-	void Camera::wheelEvent(QWheelEvent* _event)
+	void Camera::beginImageStreamInteraction()
 	{
 		m_interactiveRendering = true;
-		const uint64_t interactionSerial = ++m_interactiveRenderingSerial;
-		QTimer::singleShot(150, this, [this, interactionSerial]() {
-			if (interactionSerial != m_interactiveRenderingSerial)
-				return;
-			m_interactiveRendering = false;
-			update();
-		});
+		m_imageStreamSettleTimer.start(); // Restart from the LAST wheel/drag event.
+	}
+
+	void Camera::wheelEvent(QWheelEvent* _event)
+	{
+		beginImageStreamInteraction();
 
 		float mult = _event->angleDelta().y() < 0 ? 1.f : -1.f;
 

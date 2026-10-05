@@ -77,7 +77,7 @@ namespace poca::opengl {
 		ImageLodState& state = m_states[_request.imageId];
 
 		const bool sameTarget =
-			state.requestedLevel == _request.requestedLevel &&
+			state.requestedLevel == _request.requestedLevel && state.viewGeneration == _request.viewGeneration &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
 			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.preview == _request.preview && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
@@ -99,8 +99,8 @@ namespace poca::opengl {
 			return state.latestVersion;
 		}
 
-		state.requestedLevel = _request.requestedLevel;
-		state.priority = _request.priority;
+		state.requestedLevel = _request.requestedLevel; state.viewGeneration = _request.viewGeneration;
+		state.priority = _request.priority; state.effectiveTarget = _request.effectiveTarget;
 		state.targetDims = _request.targetDims;
 		state.downsampleFactors = _request.downsampleFactors;
 		state.visible = _request.visible;
@@ -131,6 +131,19 @@ namespace poca::opengl {
 		m_condition.notify_all();
 		//std::cout << "request = " << queued << std::endl;
 		return state.latestVersion;
+	}
+
+	void LodUpdateManager::invalidateDetail(uint64_t _imageId)
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_states.find(_imageId);
+		// Whole-image first pixels are camera-independent; do not restart their I/O.
+		if (it == m_states.end() || it->second.preview || it->second.status == LodRequestStatus::Idle) return;
+		it->second.latestVersion = ++m_nextVersion;
+		it->second.status = LodRequestStatus::Idle;
+		removeQueuedRequestsForImageUnsafe(_imageId);
+		removeReadyUploadsForImageUnsafe(_imageId);
+		if (lodDebugEnabled()) std::cout << "[PoCA][ImageStream][schedule] action=discarded image=" << _imageId << std::endl;
 	}
 
 	void LodUpdateManager::cancel(uint64_t _imageId)
@@ -384,6 +397,29 @@ namespace poca::opengl {
 		return uploaded;
 	}
 
+	bool LodUpdateManager::takeAdmittedRequestUnsafe(ImageLodRequest& _request, std::shared_ptr<ImageStreamMemory::Reservation>& _reservation)
+	{
+		std::vector<ImageLodRequest> deferred;
+		bool found = false;
+		while (!m_requests.empty()) {
+			auto next = m_requests.top(); m_requests.pop();
+			auto state = m_states.find(next.imageId);
+			if (state == m_states.end() || state->second.latestVersion != next.requestVersion) continue;
+			if (!next.estimatedPreparedBytes || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes) {
+				state->second.status = LodRequestStatus::Idle;
+				std::cerr << "[PoCA][ImageStream] Rejected unbounded CPU preparation" << std::endl;
+				continue;
+			}
+			// A canceled reader can still be inside an uninterruptible call. Keep only
+			// its latest queued successor, and let other images obtain first pixels.
+			if (m_inFlight.find(next.imageId) == m_inFlight.end()) _reservation = m_memory->reserve(next.estimatedPreparedBytes);
+			if (_reservation) { _request = std::move(next); found = true; break; }
+			deferred.push_back(std::move(next));
+		}
+		for (auto& queued : deferred) m_requests.push(std::move(queued));
+		return found;
+	}
+
 	void LodUpdateManager::workerLoop()
 	{
 		for (;;) {
@@ -395,15 +431,7 @@ namespace poca::opengl {
 				m_condition.wait_for(lock, std::chrono::milliseconds(25), [this]() { return m_stopWorker || !m_requests.empty(); });
 				if (m_stopWorker) return;
 				if (m_requests.empty()) continue;
-				const auto& next = m_requests.top();
-				if (next.estimatedPreparedBytes == 0 || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes) {
-					m_states[next.imageId].status = LodRequestStatus::Idle;
-					std::cerr << "[PoCA][ImageStream] Rejected request without a bounded preparation estimate" << std::endl;
-					m_requests.pop(); continue;
-				}
-				reservation = m_memory->reserve(next.estimatedPreparedBytes);
-				if (!reservation) { m_condition.wait_for(lock, std::chrono::milliseconds(25)); continue; }
-				if (!popNextQueuedRequestUnsafe(request)) continue;
+				if (!takeAdmittedRequestUnsafe(request, reservation)) { m_condition.wait_for(lock, std::chrono::milliseconds(25)); continue; }
 				m_states.at(request.imageId).status = LodRequestStatus::Preparing;
 				++m_inFlight[request.imageId];
 			}
@@ -413,7 +441,7 @@ namespace poca::opengl {
 			};
 			ImageLodReady ready;
 			ready.imageId = request.imageId; ready.requestedLevel = request.requestedLevel;
-			ready.requestVersion = request.requestVersion; ready.visible = request.visible;
+			ready.requestVersion = request.requestVersion; ready.viewGeneration = request.viewGeneration; ready.visible = request.visible;
 			ready.uploadCallback = request.uploadCallback;
 			bool success = false;
 			try {
@@ -429,13 +457,19 @@ namespace poca::opengl {
 			}
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
-				auto flight = m_inFlight.find(request.imageId);
-				if (--flight->second == 0) m_inFlight.erase(flight);
 				auto state = m_states.find(request.imageId);
-				if (state != m_states.end() && state->second.latestVersion == request.requestVersion) {
+				const bool current = state != m_states.end() && state->second.latestVersion == request.requestVersion;
+				if (!current || !success || ready.obsolete) {
+					// Release obsolete payload/scratch BEFORE declaring this reader finished.
+					// forget() and its queued successor then see balanced CPU accounting.
+					ready.payload.reset(); ready.memoryReservation.reset(); reservation.reset(); success = false;
+				}
+				if (current) {
 					state->second.status = success ? LodRequestStatus::Ready : LodRequestStatus::Idle;
 					if (success) m_ready.push_back(std::move(ready));
 				}
+				auto flight = m_inFlight.find(request.imageId);
+				if (--flight->second == 0) m_inFlight.erase(flight);
 				m_condition.notify_all();
 				if (m_camera != nullptr) QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
 			}

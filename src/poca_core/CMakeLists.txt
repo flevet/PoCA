@@ -61,6 +61,7 @@ set(GENERAL_HEADER_FILES
   General/Scatterplot.hpp
   General/TestRegistry.hpp
   General/TiffImageIO.hpp
+  General/TiffRegionReader.hpp
   General/Vec2.hpp
   General/Vec3.hpp
   General/Vec4.hpp

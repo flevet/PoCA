@@ -1,4 +1,6 @@
 // Shared display-only preview/detail mapping. Scientific normalized positions stay unchanged.
+// hasDetail / streamFlags.x means resident AND usable for the current CPU view;
+// old texture bounds alone must never reactivate invalid detail after dezoom.
 float streamUnsigned(usampler3D tex, vec3 coord, bool linear)
 {
     if (!linear) return float(texture(tex, coord).r);

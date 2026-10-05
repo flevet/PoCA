@@ -1,6 +1,65 @@
-# Phase 5: regional image streaming
+# Phase 5 / 5.1: regional image streaming
 
 Source implementation dated 2026-10-02. Compilation, shader validation and runtime performance are **UNCONFIRMED**. No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
+
+## Phase 5.1: responsiveness hardening (2026-10-05)
+
+This section supersedes the Phase 5 reuse, scheduling, source-tile and TIFF startup descriptions below. Runtime behavior, Qt debounce timing, shader execution, GPU publication and performance still require manual validation.
+
+- **Asymmetric pitch hysteresis:** an active pitch up to 1.25 times the desired pitch tolerates zoom-in delay; an active pitch below 0.88 times desired is promptly invalid on dezoom. Both values are centralized in ImageStreamPolicy.
+- **Current-view validity:** CPU safe-volume coverage and pitch checks set detailUsableForCurrentView. Residency and validity are independent. The existing shared GLSL hasDetail uniform / streamFlags.x receives resident AND usable, consistently across all 13 single/array/multi fragment variants, including MIP, alpha/direct, frame and LABEL paths. Dezoom disables the central detail patch on the next drawn frame; the complete preview supplies coherent pixels while the old texture remains resident. Ray-step planning follows the sampled preview dimensions/bounds during fallback. Replacement publishes only after successful GL upload, matching request version and view generation.
+- **Effective target first:** projected pixels times 1.5 oversampling are capped by 128 during interaction or 512 at rest, preview 64, and GL axis limits before native selection. The planner chooses the coarsest native source sufficient for that regional target. A 900-pixel overview therefore selects a roughly 128 source interactively; deep zoom still selects a regional level zero. Physical calibration and independent Z caps remain intact.
+- **Debounce/coalescing:** one restartable 150 ms camera timer covers wheel, drag/pan/rotation/crop/transform gestures and release. Active input updates visibility, the desired target and validity, but submits no new detail preparation. First-preview jobs may start during interaction and survive camera movement. Settle wakes rendering through the existing requestLodUpdate command. Planning is cached by observed view, interaction state, publication and budget share.
+- **Generation/version boundary:** each command observes MVP, viewport, crop/transform, scientific bounds, frame, mode and resident-source identity. A changed view invalidates old detail versions before upload, even if the batch submission budget is exhausted. One in-flight reader plus at most one latest queued target is allowed per image; busy images do not block other images' admitted work. Successful but obsolete results release payload/scratch leases before the reader is declared finished. The existing manager version remains the cancellation/publication authority; view generation supplements the render-thread guard.
+- **Adaptive source slabs:** the centralized scratch byte target is 4 MiB, reduced if the admitted lease has less available scratch. Slabs prefer complete X rows, complete XY planes, then consecutive Z. A 700 x 700 x 41 uint16 source uses at most 11 useful full-XY slab reads rather than thousands of fixed tiles. TIFF keeps one session across those reads, decoding 41 planes once. Native readers use ordinary ImageInterface regions; no chunk, Zarr or TensorStore knowledge enters rendering. MIP/Average include all contributing voxels; nearest LABEL never averages or invents IDs.
+- **TIFF opening/regions:** outOfCore=true creates an unloaded Image with reload, plane, region and request-local session callbacks. One metadata directory traversal validates homogeneous scalar planes without decoding pixels. A CPU-admitted sample reads up to three distributed planes in one session, retaining at most 24,576 sampled values for approximate histogram statistics. Scientific full access remains explicit. Region operations use one handle, seek once, decode requested planes sequentially and copy XY directly to the destination. Adjacent XY reads at the same Z reuse the decoded plane. outOfCore=false retains explicit eager scientific loading.
+
+### TIFF first-display source trace
+
+| Stage | Thread / potential cost | Phase 5.1 behavior |
+| --- | --- | --- |
+| Loader dispatch / TIFF metadata | Opening caller; file open and O(depth) directory traversal | One validation pass; no full-volume pixels |
+| Opening statistics | Opening caller; seek/decode up to three complete planes, bounded sample copies and sample histogram | Shared CPU lease; at most 8192 samples per distinct plane; no full-resolution histogram or generated pyramid |
+| Image / ImagesList / image-command/widget setup | GUI; metadata, parameters, histogram bins and ranges | RAW startup constructors/range access do not request scientific pixels |
+| First createDisplay | Render thread; capability query, LUT and small feature textures, cube/VAO setup | No synchronous volume preparation; visibility checked before initialization |
+| Visible preview planning/admission | Render thread then workers; metadata/frustum planning, queue and shared budget | Camera-independent bounded whole preview gets priority before detail |
+| TIFF preview read/resampling | Worker; one open, forward directory walk, one decode per required Z, slab copies and reduction | No reopen per plane/tile; bounded live source/output buffers; Y/Z index arithmetic hoisted; cancellation before/after reads and during reduction |
+| Prepared payload copy | Worker; bounded output copy and optional signed RAW float transfer | No scientific-volume memcpy, cache generation or immediate full-pixel release |
+| Preview texture upload/first coarse draw | Render thread; bounded GL allocation/upload/bindless residency | Atomic successful publication; no GL on workers; frame completion schedules the draw |
+| Regional refinement | Worker after last event settles | One latest guarded ROI; level zero remains regional |
+
+There is no claim that all synchronous work or full-source I/O vanished. TinyTIFF offers the existing whole-plane decode and forward-directory APIs, not arbitrary bounded strip/tile decoding. Three sampled planes and metadata traversal can still delay the opening caller. MIP/Average without a native pyramid need one full source traversal before an exact coarse preview; it now runs asynchronously, bounded in memory, without eagerly loading and discarding scientific pixels. Time to first pixels still depends on the source and decoder. Sampled display bounds/statistics are approximate until explicitly recomputed from scientific data; a uniform sample cannot safely justify rejecting the entire image as constant.
+
+The adapter declares conservative scratch of eight decoded-plane byte sizes. Oversized single planes are explicitly refused at bounded opening/display admission. Backend/decoder internal allocations remain conservatively estimated, not measured. Exact integral Majority still uses bounded per-bin votes and may rewind/redecode TIFF planes for nonmonotonic bin requests; oversized bins fail explicitly. This mode is not the one-pass MIP/Average slab path. Arbitrary scientific region calls each own their session. No native TIFF pyramid, random-access API, new codec/dependency or backend ABI has been invented.
+
+### Phase 5.1 source fixtures (not run)
+
+The existing Images Tests registry now also calls ImageStreamingResponsivenessTests, ImageStreamingSchedulingTests and ImageStreamingTiffTests. TIFF fixtures inject a fake adapter into the real session/factory; they verify control flow and counters, not real TinyTIFF codecs. Scheduling fixtures exercise real manager workers with fake CPU/upload callbacks, not GL. Existing geometry/preparation/budget fixtures remain registered.
+
+| Requested Phase 5.1 cases | Source coverage / runtime limit |
+| --- | --- |
+| 1-4, 17-19: asymmetric reuse, invalid fine island, residency retained, safe pan / outside pan | Shared production pitch, coverage and sample-choice helpers; GPU visibility is manual |
+| 5: preview descriptor selection when validity=false | Shared sample-choice helper and unchanged std430 descriptor flag; GLSL execution is manual |
+| 6: successful upload activation only | Real manager failed/successful callback protocol plus source audit of GL commit point; real GL failure injection is manual |
+| 7-11, 20: capped native target, 900/128 example, settled refinement, deep zoom/regional level zero, anisotropy | Real planner with unloaded mock native images; original preparation fixtures retain regional read checks |
+| 12-14: repeated events/latest target, no interactive detail submission, settle submission | View-generation/submission helper, one-queued-target fixture; actual Qt timer timing is manual |
+| 15-16: stale successful result / CPU lease release | Real worker version supersession, no cancellation check in the stale successful mock, forgotten-reader ownership |
+| 21-22: nearest LABEL / 2D | Existing typed preparation/reducer/frame tests plus five-type TIFF depth-one fixtures |
+| 23-24: TIFF open once / planes not reopened separately | Real region session with fake adapter counters; 700-stack preview uses one session and 41 decodes |
+| 25-26: adaptive scratch bounds / useful source reads | Real slab policy and reduced-lease fixture; 700-stack sequential preparation |
+| 27-28: scientific pixels and independent full access | Real lazy TIFF factory/five-type region layout, explicit scientific reload, copied callback factory, resident-edit fixtures |
+| 29-30: MyMultipleObject offscreen / GPU residency | Existing geometry/culling and real residency policy fixtures; actual multiple-object GL allocation remains manual |
+
+### Manual scenarios A-F (pending)
+
+A. Open a normal 700 x 700 x 41 TIFF: check UI responsiveness, sampled histogram provenance, first coarse pixels, one preview session / 41 decoded planes and no eager full-volume load followed by discard.
+B. Zoom continuously: preview or valid resident detail stays responsive; no new detail I/O per wheel tick; one latest settled target refines; genuine deep zoom reaches only a padded level-zero ROI.
+C. Strongly dezoom from a small fine ROI: the next frame is coherent whole preview, with no central fine island; larger/coarser replacement becomes active after upload.
+D. Rapidly alternate zoom/dezoom: at most one latest queued target per image, obsolete successful reads never publish, preparing/ready reservations return to baseline.
+E. Use the 2048 x 2048 x 1937 to 64 x 64 x 1937 native pyramid: interactive source selection is coarse, settled source can refine, Z textures stay bounded, no unnecessary level-zero reads.
+F. MyMultipleObject with many images: offscreen images stay unrefined, tiny visible objects stay coarse, busy readers do not prevent other previews, fine jobs wait for settle, residency/picking remain stable.
+
+Also validate small guarded pans, larger pans, rotation inside a resident source volume, frame/crop/transform changes, all scalar types, nearest labels, reader/upload errors and every shared-helper shader variant.
 
 ## Why whole-level rendering was insufficient
 
@@ -12,7 +71,7 @@ Scientific dimensions, pixels(), data(), getImage(), level-zero reload, existing
 
 ImageLodRequest now carries source level and dimensions, Region3D, target texture dimensions, physical resident bounds, scientific image bounds, frame, reduction mode, preview/detail intent, priority, visibility, resident-source identity, version, checked texture bytes, reader scratch and peak preparation estimate. Target dimensions describe display samples; sourceRegion describes storage voxels. Those values are independent.
 
-Workers capture the scientific ImageInterface pointer and an immutable request. Cancellation is checked between fixed storage tiles. The request version and full target identity prevent old ROI/frame/mode results from becoming current. Command destruction cancels and waits for in-flight readers; ordinary view changes cancel without waiting. Image<T> clears commands before its callback/mutex members and scientific histogram are destroyed. Native storage callbacks execute outside the image metadata mutex, followed by a revision check. Resident region copying remains protected against pixel release.
+Workers capture the scientific ImageInterface pointer and an immutable request. Cancellation is checked before/after adaptive source slabs and during reduction. The request version and full target identity prevent old ROI/frame/mode results from becoming current. Command destruction cancels and waits for in-flight readers; ordinary view changes cancel without waiting. Image<T> clears commands before its callback/mutex members and scientific histogram are destroyed. Native storage callbacks execute outside the image metadata mutex, followed by a revision check. Resident region copying remains protected against pixel release.
 
 ImageLodReady owns both its prepared payload and a shared RAII memory reservation. Draining the queue transfers that ownership; it does not release accounting. Consumers must retain the ready object/reservation while retaining its payload. The reservation releases when the last ready owner dies. A shared camera manager lifetime avoids dereferencing a destroyed camera.
 
@@ -24,11 +83,11 @@ ImageViewRegion intersects six homogeneous frustum planes, six local image plane
 
 The projected clipped footprint drives quality and priority. Bounds map into the chosen native level using actual dimensions and optional stored origin/spacing relative to scientific calibration and the image bbox. Floor/ceil and subtractive bounds checks produce a valid Region3D.
 
-A detail region expands each axis by 25%, aligns to 16-voxel boundaries and clamps to source edges. Its reusable safe interior excludes 10% margins except at image boundaries. Active texture pitch tolerates a 1.25 coarsening / 0.5 refinement interval. Pending targets reuse the guard region, preventing small-pan version churn. A view outside the safe interior produces a new request.
+A detail region expands each axis by 25%, aligns to 16-voxel boundaries and clamps to source edges. Its reusable safe interior excludes 10% margins except at image boundaries. Active texture pitch tolerates at most 1.25 times desired on zoom-in and at least 0.88 times desired on dezoom. Current-view coverage/pitch decides sampling independently of residency; small pans reuse resident safe bounds. A view outside the safe interior produces a new request.
 
 ## Regional preparation and progressive display
 
-The planner prefers the coarsest native level retaining approximately 1.5 source samples per visible pixel. Deep zoom can select level zero. Resident pixels take precedence over stored/native data through a non-materializing readResidentRegion seam; existing full-resolution API callback precedence remains unchanged. Settled native selection honors pyramidalRenderingEnabled while the initial coarse preview remains bounded. Native-capable sources use readNativePyramidRegion; scientific level-zero sources use readFullResolutionRegion. Display tiles are at most 64 x 64 x 16 voxels. No regional native request calls getOrCreatePyramidLevel or materializes a whole native level.
+The planner caps projected-pixel oversampling by the effective display edge before selecting the coarsest sufficient native level. Deep zoom can select level zero. Resident pixels take precedence over stored/native data through a non-materializing readResidentRegion seam; existing full-resolution API callback precedence remains unchanged. Settled native selection honors pyramidalRenderingEnabled while the initial coarse preview remains bounded. Native-capable sources use readNativePyramidRegion; scientific level-zero sources use readFullResolutionRegion. Adaptive slabs fit a centralized 4 MiB scratch target, reduced to available reserved bytes. No regional native request calls getOrCreatePyramidLevel or materializes a whole native level.
 
 The initial tier is a whole-image preview bounded to 64 per axis. Detail uses one guarded regional texture, bounded to 512 per axis at rest or 128 while interacting. Both are further constrained by GL_MAX_3D_TEXTURE_SIZE, per-image share and byte budgets. Small resident images of at most 1 MiB use a single direct full-resolution preview/copy, with no redundant detail tier.
 
@@ -59,7 +118,7 @@ Defaults are centralized in ImageStreamPolicy.hpp, with no new preferences UI:
 | Volume textures per camera | 512 MiB |
 | CPU preparing + ready, shared by managers | 256 MiB |
 | One texture | 64 MiB |
-| Reader/reducer tile scratch allowance | 1 MiB, plus declared adapter scratch |
+| Reader/reducer source scratch target | 4 MiB, plus declared adapter scratch |
 | Upload drain | 4 results / nominal 16 MiB per frame |
 | Preview / resting detail / interactive detail edge | 64 / 512 / 128 |
 | Offscreen grace | 12 rendered frames |
@@ -69,7 +128,7 @@ On NVX-capable drivers the camera lowers its GPU budget to at most one eighth of
 
 Visible/pinned images are retained while old/offscreen alternatives exist. Budget pressure evicts oldest invisible entries immediately; ordinary invisibility retains textures for 12 frames, then deletes preview/detail handles/textures while retaining command, LUT and feature state. Follow-up frames advance grace without queuing offscreen reads. Returning images obtain a preview before refinement.
 
-Workers reserve the estimated peak before allocation or storage reads. Estimates include two typed output copies, Average accumulators, fixed tile scratch, declared reader scratch and bounded legacy whole-level copies. Ready transition releases temporary scratch and retains final bytes. Overflow checks protect dimensions, voxel counts, byte sums and region bounds. Unknown or oversized readers/refinements are refused. Preparation verifies the declared estimate before allocating its buffers; a released resident input cancels and requires replanning with storage scratch.
+Workers reserve the estimated peak before allocation or storage reads. Estimates include two typed output copies, Average accumulators, byte-bounded source scratch, declared reader scratch and bounded legacy whole-level copies. Ready transition releases temporary scratch and retains final bytes. Overflow checks protect dimensions, voxel counts, byte sums and region bounds. Unknown or oversized readers/refinements are refused. Preparation verifies the declared estimate before allocating its buffers; a released resident input cancels and requires replanning with storage scratch.
 
 One result exceeding the nominal 16 MiB upload throttle is allowed alone to guarantee progress, but still respects the 64 MiB texture and aggregate residency budgets. GPU accounting covers volume textures, not LUT/feature textures, picking FBOs, path-tracing buffers, driver staging or other application geometry. CPU accounting covers display buffers/declared reader scratch, not preexisting scientific arrays or backend-internal codec/chunk caches.
 
@@ -83,7 +142,7 @@ Visible overlap grouping remains the existing pairwise connected-component group
 
 Opening Zarr statistics now reads up to 4 x 4 x 4 distributed regions, each at most 8 cubed: at most 32,768 voxels / 128 KiB across five scalar types. It does not retain a huge complete coarsest level. Existing histogram provenance distinguishes measured level-zero values, bounded storage sample and metadata range. Valid OMERO display limits continue to win; single-level RAW/label opening policies from Phases 2/4 remain unchanged.
 
-TIFF continues through the generic reader contract. Its current region adapter can decode complete planes repeatedly; it declares conservative plane scratch and unsafe refinements are refused. Very large TIFF/nonregional readers may be unable to provide even the initial preview within the budget. No TIFF strip/tile I/O rewrite was introduced. A native regional Zarr reader exercises the complete bounded path.
+TIFF continues through the generic reader/session contract, with sequential plane decoding and conservative declared scratch; unsafe refinements are refused. Very large TIFF/nonregional readers may be unable to provide even the initial preview within the budget. No TIFF strip/tile I/O rewrite was introduced. A native regional Zarr reader exercises the complete bounded path.
 
 ## Source tests and remaining manual coverage
 
@@ -140,3 +199,46 @@ Modified files:
 Prefixes: poca_core, poca_opengl and shaders are under poca/src; image/TIFF/Zarr plugins are under poca_extra/src.
 
 Future evolution may replace the one-detail tier with a bounded brick cache or sparse texture implementation behind these request/residency contracts. This phase adds no sparse GPU textures, atlas/page table, remote storage, additional persistence, schema/backend work or dependency.
+
+## Phase 5.1 changed-file inventory
+
+- CONTINUITY.md
+- poca_extra/src/poca_imageplugin/CMakeLists.txt
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreaming.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreamView.cpp
+- poca_extra/src/poca_imageplugin/ImageRegionalLodPlanner.cpp
+- poca_extra/src/poca_imageplugin/ImageRegionalLodPreparation.hpp
+- poca_extra/src/poca_imageplugin/ImageRegionalMajority.hpp
+- poca_extra/src/poca_imageplugin/ImageRegionalReduction.hpp
+- poca_extra/src/poca_imageplugin/ImagesListCommands.cpp
+- poca_extra/src/poca_imageplugin/ImagesListCommands.hpp
+- poca_extra/src/poca_imageplugin/ImagesListMultiObjectDisplayCommand.cpp
+- poca_extra/src/poca_imageplugin/ImagesListMultiObjectDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImageSourceSlab.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamingBudgetTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingPreparationTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingResponsivenessTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingSchedulingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTiffTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamView.hpp
+- poca_extra/src/poca_imageplugin/ImageVolumeLodPreparation.cpp
+- poca_extra/src/poca_loaderTiffFile/CMakeLists.txt
+- poca_extra/src/poca_loaderTiffFile/LoaderTiffFile.cpp
+- poca_extra/src/poca_loaderTiffFile/LoaderTiffFile.hpp
+- poca_extra/src/poca_loaderTiffFile/TiffStorageImage.hpp
+- poca/docs/IMAGE_STREAMING_ARCHITECTURE.md
+- poca/src/poca_core/CMakeLists.txt
+- poca/src/poca_core/General/Image.hpp
+- poca/src/poca_core/General/TiffImageIO.hpp
+- poca/src/poca_core/General/TiffRegionReader.hpp
+- poca/src/poca_core/Interfaces/ImageInterface.hpp
+- poca/src/poca_opengl/OpenGL/Camera.cpp
+- poca/src/poca_opengl/OpenGL/Camera.hpp
+- poca/src/poca_opengl/OpenGL/ImageStreamPolicy.hpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.cpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.hpp
+- poca/src/shaders/image_stream_sampling.glsl
