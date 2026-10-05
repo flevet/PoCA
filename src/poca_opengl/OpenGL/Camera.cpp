@@ -82,6 +82,7 @@
 #include <QtGui/QBrush>
 
 #include "Camera.hpp"
+#include "CameraGeometry.hpp"
 #include "Shader.hpp"
 #include "TextDisplayer.hpp"
 #include "../General/Roi.hpp"
@@ -602,7 +603,7 @@ namespace poca::opengl {
 		m_originalDistanceOrtho = w > h ? w / 2 : h / 2;
 		m_originalDistanceOrtho = m_originalDistanceOrtho > t ? m_originalDistanceOrtho : t;
 		m_distanceOrtho = m_originalDistanceOrtho;
-		m_cameraDistance = getCameraDistance();
+		m_cameraDistance = safeInitialCameraDistance(m_distanceOrtho, glm::vec3(w, h, t), m_perspectiveFov);
 
 		this->setFocusPolicy(Qt::StrongFocus);
 	}
@@ -1725,24 +1726,14 @@ namespace poca::opengl {
 		m_viewport = glm::uvec4(0, 0, this->width(), this->height());
 		unsigned int smallestDim = this->width() < this->height() ? this->width() : this->height();
 
-		float factorW = 1.f, factorH = 1.f;
-		float diffX = this->width(), diffY = this->height();
-		if (diffX > diffY)
-			factorW = diffX / diffY;
-		else
-			factorH = diffY / diffX;
+		const auto factors = cameraProjectionFactors(float(this->width()), float(this->height()));
+		const float factorW = factors.x, factorH = factors.y;
 
-		float d;
 		poca::core::BoundingBox bbox = m_object->boundingBox();
-		float w = bbox[3] - bbox[0], h = bbox[4] - bbox[1], t = bbox[5] - bbox[2];
-		d = w > h ? w / 2 : h / 2;
-		d = d > t ? d : t;
-
-
-		const float cameraDistance = std::abs(getCameraDistance());
-		const float sceneRadius = std::max(1.f, d * sqrt(3.f));
-		const float projNear = std::max(0.001f, cameraDistance / 1000.f);
-		const float projFar = cameraDistance + sceneRadius * 4.f;
+		const glm::vec3 sceneSize(bbox[3] - bbox[0], bbox[4] - bbox[1], bbox[5] - bbox[2]);
+		// Orthographic extent never participates in the depth interval.
+		const auto depth = projectionDepthRange(getCameraDistance(), sceneSize);
+		const float projNear = depth.nearPlane, projFar = depth.farPlane;
 
 		if (m_projectionType == Perspective) {
 			const float aspect = this->height() == 0 ? 1.f : (float)this->width() / (float)this->height();
@@ -1819,8 +1810,7 @@ namespace poca::opengl {
 		if (_event->key() == Qt::Key_Z && _event->modifiers() & Qt::ControlModifier && m_undoPossible) {
 			m_matrixModel = m_matrixModelSaved;
 			m_stateCamera.m_matrix = m_matrixViewSaved;
-			m_distanceOrtho = m_distanceOrthoSaved;
-			m_cameraDistance = m_cameraDistanceSaved;
+			restoreCameraDistances(m_distanceOrthoSaved, m_cameraDistanceSaved, m_distanceOrtho, m_cameraDistance);
 			m_stateCamera.m_rotationSum = glm::quat(1.f, 0, 0, 0);
 			updateCameraEyeUp(true, false);
 			recalcModelView();
@@ -2917,9 +2907,7 @@ namespace poca::opengl {
 		float w = _bbox[3] - _bbox[0], h = _bbox[4] - _bbox[1], t = _bbox[5] - _bbox[2];
 		if (_recomputeOrthoD) {
 			m_distanceOrtho = w > h ? w / 2 : h / 2;
-			//m_distanceOrtho = m_distanceOrtho > t ? m_distanceOrtho : t;
-			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-			m_cameraDistance = m_distanceOrtho / tan(halfFov);
+			m_cameraDistance = safeInitialCameraDistance(m_distanceOrtho, glm::vec3(w, h, t), m_perspectiveFov);
 			
 			m_translation.x = _bbox[0] + (_bbox[3] - _bbox[0]) / 2.f;
 			m_translation.y = _bbox[1] + (_bbox[4] - _bbox[1]) / 2.f;
@@ -3336,13 +3324,8 @@ namespace poca::opengl {
 
 	glm::vec3 Camera::getCameraPosition() const
 	{
-		glm::vec3 direction = m_stateCamera.m_eye - m_stateCamera.m_center;
-		if (glm::length2(direction) < 1e-8f)
-			direction = glm::vec3(0.f, 0.f, 1.f);
-		direction = glm::normalize(direction);
-		const float distance = getCameraDistance();
-		const float signedDistance = std::abs(distance) < 0.0001f ? (distance < 0.f ? -0.0001f : 0.0001f) : distance;
-		return m_stateCamera.m_center + direction * signedDistance;
+		// Eye is an orientation anchor; ortho zoom does not change this physical position.
+		return physicalCameraPosition(m_stateCamera.m_eye, m_stateCamera.m_center, getCameraDistance());
 	}
 
 	const glm::mat4& Camera::getMatrix()
@@ -3373,15 +3356,12 @@ namespace poca::opengl {
 	{
 		if (m_projectionType == _type)
 			return;
-		if (_type == Perspective) {
-			m_cameraDistance = getCameraDistance();
-		}
-		else {
-			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-			m_distanceOrtho = std::max(0.0001f, std::abs(m_cameraDistance) * tan(halfFov));
-		}
+		// Projection transitions convert once; normal ortho zoom never moves the eye.
+		const auto factors = cameraProjectionFactors(float(this->width()), float(this->height()));
+		convertCameraProjection(_type == Perspective, m_perspectiveFov, factors.y, m_distanceOrtho, m_cameraDistance);
 		m_projectionType = _type;
-		updateCameraEyeUp(true, false);
+		if (_type == Perspective)
+			updateCamera();
 		recalcModelView();
 		update();
 	}
@@ -3429,48 +3409,34 @@ namespace poca::opengl {
 
 	void Camera::updateCamera()
 	{
-		glm::vec3 direction = m_stateCamera.m_eye - m_stateCamera.m_center;
-		if (glm::length2(direction) < 1e-8f)
-			direction = glm::vec3(0.f, 0.f, 1.f);
-		direction = glm::normalize(direction);
-		const float distance = getCameraDistance();
-		const float signedDistance = std::abs(distance) < 0.0001f ? (distance < 0.f ? -0.0001f : 0.0001f) : distance;
-		const glm::vec3 translatedEye = m_stateCamera.m_center + direction * signedDistance;
+		const glm::vec3 translatedEye = getCameraPosition();
 		m_stateCamera.m_matrix = glm::lookAt(translatedEye, m_stateCamera.m_center, m_stateCamera.m_up);
 	}
 
 	float Camera::getCameraDistance() const
 	{
-		if (m_projectionType == Perspective)
-			return m_cameraDistance;
-		const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-		return std::max(0.0001f, m_distanceOrtho / tan(halfFov));
+		return m_cameraDistance;
 	}
 
 	void Camera::zoomBy(float _delta)
 	{
-		if (m_projectionType == Perspective) {
-			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-			m_cameraDistance += _delta / tan(halfFov);
-			m_distanceOrtho = std::max(0.0001f, std::abs(m_cameraDistance) * tan(halfFov));
-		}
-		else {
-			m_distanceOrtho += _delta;
-			if (m_distanceOrtho < 0.0001f)
-				m_distanceOrtho = 0.0001f;
-		}
-		updateCameraEyeUp(true, false);
+		applyCameraZoom(_delta, isPerspectiveProjection(), m_perspectiveFov, m_distanceOrtho, m_cameraDistance);
+		if (isPerspectiveProjection())
+			updateCameraEyeUp(true, false);
 		recalcModelView();
 	}
 
 	void Camera::setDistanceOrtho(const float _val)
 	{
-		m_distanceOrtho = std::max(0.0001f, _val);
-		const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-		const float sign = m_cameraDistance < 0.f ? -1.f : 1.f;
-		m_cameraDistance = sign * (m_distanceOrtho / tan(halfFov));
-		updateCameraEyeUp(true, false);
+		applyDistanceOrtho(_val);
+		if (isPerspectiveProjection())
+			updateCameraEyeUp(true, false);
 		recalcModelView();
+	}
+
+	void Camera::applyDistanceOrtho(float _value)
+	{
+		applyCameraExtent(_value, isPerspectiveProjection(), m_perspectiveFov, m_distanceOrtho, m_cameraDistance);
 	}
 
 	void Camera::computeRotation()
@@ -4560,9 +4526,7 @@ namespace poca::opengl {
 		m_angleRotation = (2 * M_PI) / nbs;
 
 		if (m_travelingCameraPath) {
-			m_distanceOrtho = _distances[0];
-			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-			m_cameraDistance = m_distanceOrtho / tan(halfFov);
+			applyDistanceOrtho(_distances[0]);
 			m_stateCamera = _states[0];
 			//m_stateCamera.m_translationModel = _states[0].m_translationModel;
 		}
@@ -4588,10 +4552,7 @@ namespace poca::opengl {
 	{
 		if (m_travelingCameraPath) {
 			const std::tuple<float, glm::vec3, glm::quat>& current = m_pathIterations[m_currentStepPath];
-			m_distanceOrtho = std::get<0>(current);
-			const float halfFov = glm::radians(m_perspectiveFov) / 2.f;
-			const float sign = m_cameraDistance < 0.f ? -1.f : 1.f;
-			m_cameraDistance = sign * (m_distanceOrtho / tan(halfFov));
+			applyDistanceOrtho(std::get<0>(current));
 			m_stateCamera.m_translationModel = std::get<1>(current);
 			m_stateCamera.m_rotationSum = std::get<2>(current);
 		}
@@ -4620,7 +4581,7 @@ namespace poca::opengl {
 				emit(askForMovieCreation());
 		}
 		/*if (m_travelingCameraPath) {
-			m_distanceOrtho += m_stepDistanceCameraPath;
+			applyDistanceOrtho(m_distanceOrtho + m_stepDistanceCameraPath);
 
 			auto stepTranslation = (m_statesPath[1].m_translationModel - m_statesPath[0].m_translationModel) / (float)m_nbImagesCameraPath;
 			m_stateCamera.m_translationModel = m_stateCamera.m_translationModel + stepTranslation;

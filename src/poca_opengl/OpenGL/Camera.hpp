@@ -268,7 +268,11 @@ namespace poca::opengl {
 
 		inline const float getDistanceOrtho() const { return m_distanceOrtho; }
 		inline const float getOriginalDistanceOrtho() const { return m_originalDistanceOrtho; }
+		// Ortho: projection only. Perspective: equivalent zoom for movie/path compatibility.
 		void setDistanceOrtho(const float);
+		float getCameraDistance() const;
+		void saveZoomState(nlohmann::json&) const;
+		void restoreZoomState(const nlohmann::json&, bool view, bool zoom);
 		inline void setOriginalDistanceOrtho(const float _val) { m_originalDistanceOrtho = _val; }
 		inline const bool isCropped() const { return !m_resetedProj; }
 
@@ -353,7 +357,7 @@ namespace poca::opengl {
 		bool dispatchCameraMouseEvent(const std::string&, QMouseEvent*, const bool);
 
 	protected:
-		float getCameraDistance() const;
+		void applyDistanceOrtho(float); // No matrix rebuild; animation batches orientation/scale.
 		void zoomBy(float);
 		void computeRotation();
 		void computeCameraEye(glm::vec3& eye);
@@ -415,7 +419,8 @@ namespace poca::opengl {
 		std::vector <glm::vec4> m_clip;
 		bool m_applyClippingPlanes{ true };
 
-		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho, m_cameraDistance;
+		float m_precX, m_precY, m_distanceOrtho, m_originalDistanceOrtho;
+		float m_cameraDistance; // Signed physical eye radius, independent of orthographic scale.
 		float m_perspectiveFov;
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid, m_interactiveRendering;

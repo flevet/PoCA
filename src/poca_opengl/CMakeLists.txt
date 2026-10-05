@@ -11,6 +11,8 @@ set(MISC_SOURCE_FILES
 set(OPENGL_HEADER_FILES
   OpenGL/BasicDisplayCommand.hpp
   OpenGL/Camera.hpp
+  OpenGL/CameraGeometry.hpp
+  OpenGL/CameraZoomPersistence.hpp
   OpenGL/GLBuffer.hpp
   OpenGL/Helper.h
   OpenGL/LodUpdateManager.hpp
@@ -28,6 +30,7 @@ set(OPENGL_HEADER_FILES
 set(OPENGL_SOURCE_FILES
   OpenGL/BasicDisplayCommand.cpp
   OpenGL/Camera.cpp
+  OpenGL/CameraPersistence.cpp
   OpenGL/Helper.cpp
   OpenGL/LodUpdateManager.cpp
   OpenGL/SsaoShader.cpp

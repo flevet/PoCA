@@ -2244,7 +2244,7 @@ void MainWindow::savePositionCamera(const std::string& _filename)
 	json["stateCamera"]["matrix"] = stateCam.m_matrix;
 	json["stateCamera"]["up"] = stateCam.m_up;
 	json["stateCamera"]["translationModel"] = cam->getTranslationModel();
-	json["distanceOrtho"] = cam->getDistanceOrtho();
+	cam->saveZoomState(json);
 	json["distanceOrthoOriginal"] = cam->getOriginalDistanceOrtho();
 	json["crop"] = cam->getCurrentCrop();
 
@@ -2272,6 +2272,7 @@ void MainWindow::pathCameraSlot(QString _pos1, QString _pos2, float _duration, b
 	std::array <QString, 2> names = { _pos1, _pos2 };
 	std::array <poca::opengl::StateCamera, 2> scams;
 	std::array <float, 2> distances;
+	nlohmann::json initialZoom;
 
 	for (auto n = 0; n < 2; n++) {
 		nlohmann::json json;
@@ -2299,8 +2300,12 @@ void MainWindow::pathCameraSlot(QString _pos1, QString _pos2, float _duration, b
 		}
 		if (json.contains("distanceOrtho"))
 			distances[n] = json["distanceOrtho"].get<float>();
+		if (n == 0)
+			initialZoom = json;
 	}
 
+	if (_traveling)
+		cam->restoreZoomState(initialZoom, true, true);
 	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
 }
 
@@ -2313,6 +2318,7 @@ void MainWindow::pathCameraSlot2(nlohmann::json _pos1, nlohmann::json _pos2, flo
 	std::array <nlohmann::json, 2> jsons = { _pos1, _pos2 };
 	std::array <poca::opengl::StateCamera, 2> scams;
 	std::array <float, 2> distances;
+	nlohmann::json initialZoom;
 
 	for (auto n = 0; n < 2; n++) {
 		const nlohmann::json& json = jsons[n];
@@ -2335,8 +2341,12 @@ void MainWindow::pathCameraSlot2(nlohmann::json _pos1, nlohmann::json _pos2, flo
 		}
 		if (json.contains("distanceOrtho"))
 			distances[n] = json["distanceOrtho"].get<float>();
+		if (n == 0)
+			initialZoom = json;
 	}
 
+	if (_traveling)
+		cam->restoreZoomState(initialZoom, true, true);
 	cam->animateCameraPath(scams, distances, _duration, _saveImages, _traveling);
 }
 
@@ -2402,8 +2412,7 @@ void MainWindow::loadPositionCamera(const std::string& _filename, const bool _re
 			stateCam.m_translationModel = tmp["translationModel"].get<glm::vec3>();
 
 	}
-	if (json.contains("distanceOrtho") && _zoom)
-		cam->setDistanceOrtho(json["distanceOrtho"].get<float>());
+	cam->restoreZoomState(json, _view, _zoom);
 	if (json.contains("crop") && _crop)
 		cam->setCurrentCrop(json["crop"].get<poca::core::BoundingBox>());
 

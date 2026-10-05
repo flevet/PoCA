@@ -538,7 +538,7 @@ void MainFilterWidget::actionNeeded()
 			json["stateCamera"]["matrix"] = stateCam.m_matrix;
 			json["stateCamera"]["up"] = stateCam.m_up;
 			json["stateCamera"]["translationModel"] = m_currentCamera->getTranslationModel();
-			json["distanceOrtho"] = m_currentCamera->getDistanceOrtho();
+			m_currentCamera->saveZoomState(json);
 			json["distanceOrthoOriginal"] = m_currentCamera->getOriginalDistanceOrtho();
 			json["crop"] = m_currentCamera->getCurrentCrop();
 
