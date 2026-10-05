@@ -978,3 +978,9 @@ Associated labels remain ordinary integer Image<T>(LABEL) entries inside ImagesL
 Label export shares Phase 3 staging/publication and streams level zero, matching calibrated native levels or bounded physical nearest sampling into the source image's actual target pyramid. Scientific level zero remains independent of display LOD. Sparse explicit colors are retained without a new categorical rendering subsystem; labels lacking object feature tables use scalar palette display and nearest filtering. Imported labels start hidden to avoid materializing single-level labels when opening the source.
 
 Source implementation complete / manual validation required. No configure/generate/build/link/install, application executable, Python script or test was run. See [Phase 4 report](../../poca_extra/src/poca_loaderZarrFile/LABELS_README.md) for source inventory, test coverage and limitations.
+
+## Phase 5 regional rendering (2026-10-02)
+
+Whole-level display upload is replaced by generic view-dependent region requests, bounded preview/detail textures, display-only anisotropic reduction and CPU/GPU admission. Scientific level zero, analyses, export and backend isolation remain intact. MyMultipleObject culls before expensive initialization, releases offscreen volumes and caches picking geometry; storage opening statistics use distributed bounded samples.
+
+Implementation and source review only; compilation, shader validation and runtime performance are UNCONFIRMED. See [Phase 5 architecture and source report](IMAGE_STREAMING_ARCHITECTURE.md) for policies, limitations, source-test coverage, file inventory and manual validation scenarios.

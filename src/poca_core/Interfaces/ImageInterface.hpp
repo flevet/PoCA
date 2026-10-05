@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <string>
 #include <stdexcept>
+#include <limits>
 
 #include <General/BasicComponent.hpp>
 #include <General/Misc.h>
@@ -82,6 +83,10 @@ namespace poca::core {
 		virtual void releasePixels() = 0;
 		virtual bool canReadFullResolutionPlane() const = 0;
 		virtual bool canReadFullResolutionRegion() const = 0;
+		// Copies authoritative current resident pixels without invoking storage or materialization.
+		virtual bool readResidentRegion(const Region3D&, void*, std::size_t) const { return false; }
+		// Peak reader scratch beyond the supplied ROI buffer. Unknown readers are rejected by the display planner.
+		virtual std::size_t fullResolutionRegionScratchBytes() const { return (std::numeric_limits<std::size_t>::max)(); }
 		virtual bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const = 0;
 		virtual bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const = 0;
 
@@ -168,4 +173,3 @@ namespace poca::core {
 }
 
 #endif
-

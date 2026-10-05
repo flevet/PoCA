@@ -579,7 +579,7 @@ namespace poca::opengl {
 		this->setMouseTracking(true);
 		this->addActionToObserve("updateDisplay");
 		this->setWindowTitle(_obj->getName().c_str());
-		m_lodUpdateManager = std::make_unique<poca::opengl::LodUpdateManager>(this);
+		m_lodUpdateManager = std::make_shared<poca::opengl::LodUpdateManager>(this);
 
 		m_clip.resize(6);
 
@@ -602,6 +602,7 @@ namespace poca::opengl {
 
 	Camera::~Camera()
 	{
+		m_lodUpdateManager.reset(); // Join readers before destroying the camera's update receiver.
 		for (std::map <std::string, Shader*>::iterator it = m_shaders.begin(); it != m_shaders.end(); it++)
 			delete it->second;
 		m_shaders.clear();
@@ -631,6 +632,10 @@ namespace poca::opengl {
 		}
 
 //#ifdef DEBUG
+		if (GLEW_NVX_gpu_memory_info) {
+			GLint dedicatedKiB = 0; glGetIntegerv(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, &dedicatedKiB);
+			if (dedicatedKiB > 0) m_lodUpdateManager->residency().setBudget(std::min(imageStreamPolicy().gpuBytes, std::size_t(dedicatedKiB) * 1024 / 8));
+		}
 		const unsigned char* glvendor = glGetString(GL_VENDOR);
 		const unsigned char* glrend = glGetString(GL_RENDERER);
 		const unsigned char* glver = glGetString(GL_VERSION);
@@ -854,6 +859,11 @@ namespace poca::opengl {
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
 		m_stateCamera.m_matrixView = m_stateCamera.m_matrix;
 		recomputeFrame(m_currentCrop);
+		ImageResidencyFrame imageResidencyFrame(m_lodUpdateManager->residency(), [this]() {
+			m_lodUpdateManager->cancelInvisible();
+			const bool uploaded = m_lodUpdateManager->uploadReadyForFrame();
+			if (uploaded || m_lodUpdateManager->hasReadyUploads() || m_lodUpdateManager->residency().needsGraceFrames()) update();
+		});
 		clock_t beginFrame = clock();
 
 		GL_CHECK_ERRORS();

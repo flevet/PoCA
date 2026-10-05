@@ -32,11 +32,20 @@ struct ImageDescriptor {
     uvec4 lutHandle;
     uvec4 featureHandle;
     uvec4 volumeHandle;
+    vec4 residentBottom;
+    vec4 residentTop;
+    vec4 previewBottom;
+    vec4 previewTop;
+    uvec4 previewHandle;
+    uvec4 streamFlags;
 };
 
 layout(std430, binding = 0) readonly buffer ImageDescriptorBuffer {
     ImageDescriptor images[];
 };
+
+#define STREAM_MULTI
+#include "image_stream_sampling.glsl"
 
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y)
 {
@@ -57,12 +66,12 @@ bool sampleFeatureValue(int imageIndex, vec3 parentRayOrigin, vec3 parentRayDire
     ImageDescriptor desc = images[imageIndex];
     vec3 localOrigin = (desc.invModel * vec4(parentRayOrigin, 1.0)).xyz;
     vec3 localTarget = (desc.invModel * vec4(parentRayOrigin + parentRayDirection, 1.0)).xyz;
-    vec3 localDirection = normalize(localTarget - localOrigin);
+    vec3 localDirection = localTarget - localOrigin;
 
     if (abs(localDirection.z) < 1e-6)
         return false;
 
-    float planeZ = float(currentFrame) + 0.5;
+    float planeZ = desc.bottom.z + (desc.featureDims.w + 0.5) * (desc.top.z - desc.bottom.z) / max(1.0, desc.featureDims.z);
     float t = (planeZ - localOrigin.z) / localDirection.z;
     if (t < 0.0)
         return false;
@@ -77,14 +86,14 @@ bool sampleFeatureValue(int imageIndex, vec3 parentRayOrigin, vec3 parentRayDire
 
     vec3 sizeImage = desc.top.xyz - desc.bottom.xyz;
     vec3 position = (imagePosition - desc.bottom.xyz) / max(sizeImage, vec3(1e-6));
-    position.z = (float(currentFrame) + 0.5 - desc.bottom.z) / max(sizeImage.z, 1e-6);
+    position.z = (desc.featureDims.w + 0.5) / max(1.0, desc.featureDims.z);
     position = clamp(position, vec3(0.0), vec3(1.0));
 
     float intensity;
     if (desc.flags.y != 0u)
-        intensity = texture(sampler3D(desc.volumeHandle.xy), position).r;
+        intensity = streamRaw(desc, imagePosition);
     else
-        intensity = float(texture(usampler3D(desc.volumeHandle.xy), position).r);
+        intensity = streamRaw(desc, imagePosition);
 
     if (intensity < desc.pixelParams.x)
         return false;

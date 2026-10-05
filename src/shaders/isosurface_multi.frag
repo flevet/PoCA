@@ -41,11 +41,20 @@ struct ImageDescriptor {
     uvec4 lutHandle;
     uvec4 featureHandle;
     uvec4 volumeHandle;
+    vec4 residentBottom;
+    vec4 residentTop;
+    vec4 previewBottom;
+    vec4 previewTop;
+    uvec4 previewHandle;
+    uvec4 streamFlags;
 };
 
 layout(std430, binding = 0) readonly buffer ImageDescriptorBuffer {
     ImageDescriptor images[];
 };
+
+#define STREAM_MULTI
+#include "image_stream_sampling.glsl"
 
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y)
 {
@@ -95,11 +104,11 @@ float sampleRawIntensity(ImageDescriptor desc, vec3 position)
     position = clamp(position, vec3(0.0), vec3(1.0));
     if (desc.flags.y != 0u) {
         sampler3D volume = sampler3D(desc.volumeHandle.xy);
-        return texture(volume, position).r;
+        return streamRaw(desc, desc.bottom.xyz + position * (desc.top.xyz - desc.bottom.xyz));
     }
 
     usampler3D uvolume = usampler3D(desc.volumeHandle.xy);
-    return float(texture(uvolume, position).r);
+    return streamRaw(desc, desc.bottom.xyz + position * (desc.top.xyz - desc.bottom.xyz));
 }
 
 bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureValue, out vec3 imagePosition, out ImageDescriptor desc)

@@ -24,6 +24,7 @@ uniform vec3 background_colour;
 const int MAX_NB_IMAGES = 16;
 uniform int nbImages;
 uniform int currentFrame;
+uniform float scientificDepth;
 uniform float gamma;
 
 uniform bool applyThreshold[MAX_NB_IMAGES];
@@ -52,6 +53,9 @@ struct Ray {
     vec3 direction;
 };
 
+#define STREAM_ARRAY
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y)
 {
     float id = label_id - 1.0;
@@ -70,9 +74,9 @@ bool sampleFeatureValue(int imageIndex, vec3 position, out float featureValue)
 {
     float intensity;
     if (isFloat[imageIndex])
-        intensity = texture(volume[imageIndex], position).r;
+        intensity = streamRaw(imageIndex, position);
     else
-        intensity = float(texture(uvolume[imageIndex], position).r);
+        intensity = streamRaw(imageIndex, position);
 
     if (intensity < pixel_min[imageIndex])
         return false;
@@ -143,7 +147,7 @@ void main()
     vec3 current_ray_origin = perspective_projection ? camera_position : ray_origin + current_ray_direction;
     Ray casting_ray = Ray(current_ray_origin, current_ray_direction);
 
-    float planeZ = float(currentFrame) + 0.5;
+    float planeZ = bottom.z + (float(currentFrame) + 0.5) * (top.z - bottom.z) / max(1.0, scientificDepth);
     if (abs(casting_ray.direction.z) < 1e-6)
         discard;
 
@@ -165,7 +169,7 @@ void main()
         discard;
 
     vec3 position = (worldPos - bottom) / max(top - bottom, vec3(1e-6));
-    position.z = (float(currentFrame) + 0.5 - bottom.z) / max(top.z - bottom.z, 1e-6);
+    position.z = (float(currentFrame) + 0.5) / max(1.0, scientificDepth);
     position = clamp(position, vec3(0.0), vec3(1.0));
 
     a_colour = vec4(0.0);

@@ -90,6 +90,12 @@ namespace poca::core {
 		void releasePixels() override;
 		bool canReadFullResolutionPlane() const override;
 		bool canReadFullResolutionRegion() const override;
+		bool readResidentRegion(const Region3D&, void*, std::size_t) const override;
+		std::size_t fullResolutionRegionScratchBytes() const override {
+			std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+			return m_regionReaderCallback ? m_regionReaderScratchBytes : (m_planeReaderCallback ? checkedPyramidByteCount(0, "plane/region scratch", m_width, m_height, 1, sizeof(T)) : 0);
+		}
+		void setRegionReaderScratchBytes(std::size_t _bytes) { std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex); m_regionReaderScratchBytes = _bytes; }
 		bool readFullResolutionPlane(const uint64_t, void*, const std::size_t) const override;
 		bool readFullResolutionRegion(const Region3D&, void*, const std::size_t) const override;
 		void setPixelReloadCallback(std::function<void(std::vector<T>&)>);
@@ -223,6 +229,7 @@ namespace poca::core {
 
 	private:
 		std::function<bool(uint64_t, void*, std::size_t)> m_planeReaderCallback;
+		std::size_t m_regionReaderScratchBytes{ 0 };
 		std::function<bool(const Region3D&, void*, std::size_t)> m_regionReaderCallback;
 		NativePyramidReader m_nativePyramidReaderCallback;
 		NativePyramidRegionReader m_nativePyramidRegionReaderCallback;
@@ -255,12 +262,15 @@ namespace poca::core {
 		m_outOfCoreEnabled = _o.m_outOfCoreEnabled;
 		m_pyramidalRenderingEnabled = _o.m_pyramidalRenderingEnabled;
 		m_planeReaderCallback = _o.m_planeReaderCallback;
+		m_regionReaderScratchBytes = _o.m_regionReaderScratchBytes;
 		m_regionReaderCallback = _o.m_regionReaderCallback;
 	}
 
 	template <class T>
 	Image<T>::~Image()
 	{
+		// Reader-owning display commands must join before callbacks/mutexes and histogram data die.
+		CommandableObject::clearCommands();
 	}
 
 	template <class T>
@@ -870,12 +880,14 @@ namespace poca::core {
 	template <class T>
 	bool Image<T>::canReadFullResolutionPlane() const
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		return static_cast<bool>(m_planeReaderCallback) || hasPixels();
 	}
 
 	template <class T>
 	bool Image<T>::canReadFullResolutionRegion() const
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		return static_cast<bool>(m_regionReaderCallback) || canReadFullResolutionPlane() || hasPixels();
 	}
 
@@ -901,39 +913,52 @@ namespace poca::core {
 	}
 
 	template <class T>
+	bool Image<T>::readResidentRegion(const Region3D& _region, void* _dst, const std::size_t _bytes) const
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if (!hasPixels()) return false;
+		if (_region.empty() || _region.x >= m_width || _region.y >= m_height || _region.z >= m_depth ||
+			_region.width > m_width - _region.x || _region.height > m_height - _region.y || _region.depth > m_depth - _region.z)
+			throw std::invalid_argument("Resident image region outside scientific dimensions");
+		const auto required = checkedPyramidByteCount(0, "resident region", uint32_t(_region.width), uint32_t(_region.height), uint32_t(_region.depth), sizeof(T));
+		if (!_dst || _bytes < required) throw std::invalid_argument("Resident image region buffer is too small");
+		const auto& values = pixels(); T* dst = static_cast<T*>(_dst);
+		const std::size_t slice = std::size_t(m_width) * m_height;
+		for (uint64_t z = 0; z < _region.depth; ++z) for (uint64_t y = 0; y < _region.height; ++y) {
+			const auto offset = std::size_t(_region.z + z) * slice + std::size_t(_region.y + y) * m_width + _region.x;
+			std::memcpy(dst, values.data() + offset, std::size_t(_region.width) * sizeof(T)); dst += _region.width;
+		}
+		return true;
+	}
+
+	template <class T>
 	bool Image<T>::readFullResolutionRegion(const Region3D& _region, void* _dst, const std::size_t _bytes) const
 	{
-		if (_region.empty() || _region.endX() > m_width || _region.endY() > m_height || _region.endZ() > m_depth)
+		std::unique_lock<std::recursive_mutex> lock(m_pyramidMutex);
+		if (_region.empty() || _region.x >= m_width || _region.y >= m_height || _region.z >= m_depth ||
+			_region.width > m_width - _region.x || _region.height > m_height - _region.y || _region.depth > m_depth - _region.z)
 			return false;
 
-		const std::size_t required = _region.nbVoxels() * sizeof(T);
+		const std::size_t required = checkedPyramidByteCount(0, "full-resolution region", uint32_t(_region.width), uint32_t(_region.height), uint32_t(_region.depth), sizeof(T));
 		if (_bytes < required)
 			return false;
 
-		if (m_regionReaderCallback)
-			return m_regionReaderCallback(_region, _dst, _bytes);
-
-		if (hasPixels()) {
-			const std::vector<T>& vals = pixels();
-			T* dst = static_cast<T*>(_dst);
-			const std::size_t slice = static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height);
-			for (uint64_t z = 0; z < _region.depth; ++z) {
-				for (uint64_t y = 0; y < _region.height; ++y) {
-					const std::size_t srcOffset = static_cast<std::size_t>(_region.z + z) * slice + static_cast<std::size_t>(_region.y + y) * static_cast<std::size_t>(m_width) + static_cast<std::size_t>(_region.x);
-					std::memcpy(dst, vals.data() + srcOffset, static_cast<std::size_t>(_region.width) * sizeof(T));
-					dst += _region.width;
-				}
-			}
-			return true;
+		if (m_regionReaderCallback) {
+			const auto reader = m_regionReaderCallback;
+			lock.unlock();
+			return reader(_region, _dst, _bytes);
 		}
 
-		if (!canReadFullResolutionPlane())
-			return false;
+		if (hasPixels()) return readResidentRegion(_region, _dst, _bytes);
+
+		const auto planeReader = m_planeReaderCallback;
+		if (!planeReader) return false;
+		lock.unlock();
 
 		std::vector<T> plane(static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height));
 		T* dst = static_cast<T*>(_dst);
 		for (uint64_t z = 0; z < _region.depth; ++z) {
-			if (!readFullResolutionPlane(_region.z + z, plane.data(), plane.size() * sizeof(T)))
+			if (!planeReader(_region.z + z, plane.data(), plane.size() * sizeof(T)))
 				return false;
 			for (uint64_t y = 0; y < _region.height; ++y) {
 				const std::size_t srcOffset = static_cast<std::size_t>(_region.y + y) * static_cast<std::size_t>(m_width) + static_cast<std::size_t>(_region.x);
@@ -947,12 +972,14 @@ namespace poca::core {
 	template <class T>
 	void Image<T>::setPlaneReaderCallback(std::function<bool(uint64_t, void*, std::size_t)> _callback)
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_planeReaderCallback = std::move(_callback);
 	}
 
 	template <class T>
 	void Image<T>::setRegionReaderCallback(std::function<bool(const Region3D&, void*, std::size_t)> _callback)
 	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
 		m_regionReaderCallback = std::move(_callback);
 	}
 
@@ -982,7 +1009,7 @@ namespace poca::core {
 	template <class T>
 	bool Image<T>::readNativePyramidRegion(uint32_t _level, const Region3D& _region, void* _dst, std::size_t _bytes) const
 	{
-		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		std::unique_lock<std::recursive_mutex> lock(m_pyramidMutex);
 		ImagePyramidLevelInfo info;
 		if (!ImageInterface::nativePyramidLevelInfo(_level, info) || !m_nativePyramidRegionReaderCallback)
 			return false;
@@ -995,7 +1022,9 @@ namespace poca::core {
 			throw std::invalid_argument("Native pyramid region buffer size mismatch");
 		const auto reader = m_nativePyramidRegionReaderCallback;
 		const auto revision = m_pyramidRevision;
+		lock.unlock();
 		const bool read = reader(_level, _region, _dst, _bytes);
+		lock.lock();
 		if (revision != m_pyramidRevision)
 			throw std::runtime_error("Native region reader changed image pyramid configuration");
 		return read;

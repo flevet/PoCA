@@ -87,6 +87,9 @@ struct AABB {
     vec3 bottom;
 };
 
+#define STREAM_ARRAY
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
 	y = floor(id / w) / (h - 1);
@@ -207,9 +210,9 @@ void main()
 			//if(!found[curImage]){
 				float intensityTex;
 				if(isFloat[curImage])
-					intensityTex = texture(volume[curImage], position).r;
+					intensityTex = streamRaw(curImage, position);
 				else
-					intensityTex = float(texture(uvolume[curImage], position).r);
+					intensityTex = streamRaw(curImage, position);
 				
 				if(intensityTex >= current_min[curImage] && intensityTex <= current_max[curImage]){
 					//we retrieve the true pixel value from the pixel

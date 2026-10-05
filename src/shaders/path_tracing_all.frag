@@ -135,13 +135,16 @@ void rayBoxIntersection(Ray ray, AABB box, out float t0, out float t1)
 	t1 = min(tFar.x, tFar.y);
 }
 
+#define STREAM_ARRAY
+#include "image_stream_sampling.glsl"
+
 float readRawVolume(vec3 position)
 {
 	if (any(lessThan(position, vec3(0.0))) || any(greaterThan(position, vec3(1.0))))
 		return pixel_min[IMAGE_INDEX] - 1.0;
 	if (isFloat[IMAGE_INDEX])
-		return texture(volume[IMAGE_INDEX], position).r;
-	return float(texture(uvolume[IMAGE_INDEX], position).r);
+		return streamRaw(IMAGE_INDEX, position);
+	return streamRaw(IMAGE_INDEX, position);
 }
 
 float featureFromRaw(float rawIntensity)

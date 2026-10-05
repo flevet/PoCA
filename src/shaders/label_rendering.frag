@@ -94,6 +94,9 @@ struct AABB {
     vec3 bottom;
 };
 
+#define STREAM_SINGLE
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
 	y = floor(id / w) / (h - 1);
@@ -136,7 +139,7 @@ void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
 
 bool isBorderVoxel(vec3 position, uint label, int radius) {
     vec3 volumeDims = vec3(textureSize(uvolume, 0)); // voxel grid dimensions
-    vec3 texelSize = 1.0 / volumeDims;
+    vec3 texelSize = (residentTop - residentBottom) / max(top - bottom, vec3(1e-6)) / volumeDims;
 
     for (int x = -radius; x <= radius; ++x) {
         for (int y = -radius; y <= radius; ++y) {
@@ -149,7 +152,7 @@ bool isBorderVoxel(vec3 position, uint label, int radius) {
             if (any(lessThan(neighborPos, vec3(0.0))) || any(greaterThanEqual(neighborPos, vec3(1.0))))
                 continue;
 
-            uint neighborLabel = texture(uvolume, neighborPos).r;
+            uint neighborLabel = streamLabel(neighborPos);
             if (neighborLabel != label)
                 return true;
         }
@@ -167,13 +170,13 @@ void raycast_normal(vec3 ray_start, vec3 ray_step)
     for(int n = 0; n < nb_steps && !found; n++){
 		position = position + ray_step;
 		if(isFloat)
-			labelId = texture(volume, position).r;
+			labelId = streamRaw(position);
 		else{
 			ivec3 tsize = textureSize(uvolume, 0);
 			if(tsize.z == 1)
 				tsize.z = tsize.z - 1;
 			ivec3 texPos = ivec3(position * vec3(tsize));
-			labelId = float(texelFetch(uvolume, texPos, 0).r);
+			labelId = float(streamLabel(position));
 		}
 		
 		if(labelId > 0){
@@ -260,13 +263,13 @@ void raycast_test(vec3 ray_start, vec3 ray_step)
     for(int n = 0; n < nb_steps && !found; n++){
 		position = position + ray_step;
 		if(isFloat)
-			labelId = texture(volume, position).r;
+			labelId = streamRaw(position);
 		else{
 			ivec3 tsize = textureSize(uvolume, 0);
 			if(tsize.z == 1)
 				tsize.z = tsize.z - 1;
 			ivec3 texPos = ivec3(position * vec3(tsize));
-			labelId = float(texelFetch(uvolume, texPos, 0).r);
+			labelId = float(streamLabel(position));
 		}
 		
 		if(labelId > 0){

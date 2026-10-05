@@ -87,6 +87,9 @@ struct AABB {
     vec3 bottom;
 };
 
+#define STREAM_ARRAY
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y)
 {
     float id = label_id - 1.0;
@@ -118,11 +121,11 @@ bool sampleFeatureValue(int imageIndex, vec3 position, out float featureValue)
 {
     float intensity;
     if (isFloat[imageIndex]) {
-        intensity = texture(volume[imageIndex], position).r;
+        intensity = streamRaw(imageIndex, position);
     }
     else {
         usampler3D tex = uvolume[imageIndex];
-        intensity = float(texture(tex, position).r);
+        intensity = streamRaw(imageIndex, position);
     }
 
     if (intensity < pixel_min[imageIndex])

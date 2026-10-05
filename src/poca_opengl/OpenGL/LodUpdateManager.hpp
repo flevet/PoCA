@@ -14,6 +14,8 @@
 #define LodUpdateManager_h__
 
 #include <cstdint>
+#include <ostream>
+#include <string>
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -24,6 +26,9 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <General/Region3D.hpp>
+#include "ImageStreamMemory.hpp"
+#include "ImageVolumeResidency.hpp"
 
 namespace poca::opengl {
 
@@ -46,8 +51,18 @@ namespace poca::opengl {
 		float priority{ 0.f };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
+		// Empty sourceRegion retains the bounded legacy test/whole-level contract.
+		poca::core::Region3D sourceRegion;
+		glm::uvec3 sourceDims{ 1u };
+		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
+		std::size_t estimatedPreparedBytes{ 0 }, textureBytes{ 0 }, readerScratchBytes{ 0 };
+		bool regional{ false }, preview{ false }, residentSource{ false };
+		int currentFrame{ -1 };
+		std::string reductionMode{ "MIP" };
+		std::function<bool()> canceled;
 		bool visible{ true };
 		std::function<bool(const ImageLodRequest&, ImageLodReady&)> prepareCallback;
+		std::function<bool(const ImageLodReady&)> uploadCallback;
 
 		bool operator<(const ImageLodRequest& _other) const
 		{
@@ -64,7 +79,10 @@ namespace poca::opengl {
 		glm::uvec3 preparedDims{ 1u, 1u, 1u };
 		bool visible{ true };
 		bool obsolete{ false };
+		std::size_t preparedBytes{ 0 };
+		std::shared_ptr<ImageStreamMemory::Reservation> memoryReservation;
 		std::shared_ptr<void> payload;
+		std::function<bool(const ImageLodReady&)> uploadCallback;
 	
 		friend std::ostream& operator<<(std::ostream&, const ImageLodReady&);
 	};
@@ -78,6 +96,12 @@ namespace poca::opengl {
 		uint64_t lastVisibleFrame{ 0 };
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
+		poca::core::Region3D sourceRegion;
+		bool preview{ false }, residentSource{ false };
+		int currentFrame{ -1 };
+		glm::uvec3 sourceDims{ 1u };
+		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
+		std::string reductionMode;
 		bool visible{ true };
 	
 		friend std::ostream& operator<<(std::ostream&, const ImageLodState&);
@@ -85,7 +109,7 @@ namespace poca::opengl {
 
 	class LodUpdateManager {
 	public:
-		explicit LodUpdateManager(Camera* = nullptr);
+		explicit LodUpdateManager(Camera* = nullptr, std::shared_ptr<ImageStreamMemory> = sharedImageStreamMemory());
 		~LodUpdateManager();
 
 		void setCamera(Camera*);
@@ -93,18 +117,24 @@ namespace poca::opengl {
 
 		uint32_t request(const ImageLodRequest& request, uint64_t frameIndex);
 		void cancel(uint64_t imageId);
+		void forget(uint64_t imageId);
+		void cancelInvisible();
+		bool isCurrent(const ImageLodReady&) const;
+		ImageVolumeResidency& residency() { return m_residency; }
+		ImageStreamMemory::Usage memoryUsage() const { return m_memory->usage(); }
 		void clear();
 
 		bool hasQueuedRequests() const;
 		bool hasReadyUploads() const;
+		bool uploadReadyForFrame();
 
 		bool popNextQueuedRequest(ImageLodRequest&);
 		std::vector<ImageLodRequest> drainQueuedRequests();
-		std::vector<ImageLodReady> drainReadyUploads(std::size_t maxUploads = 0, std::size_t maxPreparedVoxels = 0);
+		std::vector<ImageLodReady> drainReadyUploads(std::size_t maxUploads = 0, std::size_t maxPreparedBytes = 0);
 
 		void markPreparing(uint64_t imageId, uint32_t requestVersion);
 		void markReady(const ImageLodReady&);
-		void markUploaded(uint64_t imageId, uint32_t displayedLevel);
+		void markUploaded(uint64_t imageId, uint32_t displayedLevel, uint32_t version = 0);
 
 		bool state(uint64_t imageId, ImageLodState& outState) const;
 
@@ -116,6 +146,10 @@ namespace poca::opengl {
 		void removeQueuedRequestsForImageUnsafe(uint64_t imageId);
 		void removeReadyUploadsForImageUnsafe(uint64_t imageId);
 
+		std::shared_ptr<ImageStreamMemory> m_memory;
+		ImageVolumeResidency m_residency;
+		std::unordered_map<uint64_t, unsigned int> m_inFlight;
+		uint32_t m_nextVersion{ 0 };
 		Camera* m_camera{ nullptr };
 		std::priority_queue<ImageLodRequest> m_requests;
 		std::vector<ImageLodReady> m_ready;

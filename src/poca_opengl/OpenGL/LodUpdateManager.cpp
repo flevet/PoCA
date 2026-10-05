@@ -13,6 +13,7 @@
 #include "LodUpdateManager.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <QtCore/QMetaObject>
 
@@ -40,9 +41,10 @@ namespace poca::opengl {
 		}
 	}
 
-	LodUpdateManager::LodUpdateManager(Camera* _camera)
-		: m_camera(_camera)
+	LodUpdateManager::LodUpdateManager(Camera* _camera, std::shared_ptr<ImageStreamMemory> _memory)
+		: m_memory(std::move(_memory)), m_camera(_camera)
 	{
+		if (!m_memory) throw std::invalid_argument("Image stream memory accounting is required");
 		unsigned int workerCount = std::thread::hardware_concurrency();
 		workerCount = workerCount > 1u ? workerCount - 1u : 1u;
 		workerCount = std::max(1u, std::min(4u, workerCount));
@@ -78,7 +80,7 @@ namespace poca::opengl {
 			state.requestedLevel == _request.requestedLevel &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
-			state.visible == _request.visible;
+			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.preview == _request.preview && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
 
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
 			const bool queuedPriorityIncreased = state.status == LodRequestStatus::Queued && _request.priority > state.priority;
@@ -90,7 +92,7 @@ namespace poca::opengl {
 				queued.requestVersion = state.latestVersion;
 				queued.priority = state.priority;
 				m_requests.push(std::move(queued));
-				m_condition.notify_one();
+				m_condition.notify_all();
 			}
 			if (lodDebugEnabled())
 				std::cout << "[PoCA][ImageLOD][queue-skip-same] " << _request << " queueSize=" << m_requests.size() << " readySize=" << m_ready.size() << std::endl;
@@ -102,8 +104,11 @@ namespace poca::opengl {
 		state.targetDims = _request.targetDims;
 		state.downsampleFactors = _request.downsampleFactors;
 		state.visible = _request.visible;
+		state.sourceRegion = _request.sourceRegion; state.preview = _request.preview; state.residentSource = _request.residentSource; state.reductionMode = _request.reductionMode;
+		state.currentFrame = _request.currentFrame; state.sourceDims = _request.sourceDims;
+		state.residentBottom = _request.residentBottom; state.residentTop = _request.residentTop; state.imageBottom = _request.imageBottom; state.imageTop = _request.imageTop;
 		state.lastVisibleFrame = _frameIndex;
-		state.latestVersion++;
+		state.latestVersion = ++m_nextVersion;
 		state.status = LodRequestStatus::Queued;
 
 		removeQueuedRequestsForImageUnsafe(_request.imageId);
@@ -123,7 +128,7 @@ namespace poca::opengl {
 				<< " queueSize=" << m_requests.size()
 				<< " readySize=" << m_ready.size()
 				<< std::endl;
-		m_condition.notify_one();
+		m_condition.notify_all();
 		//std::cout << "request = " << queued << std::endl;
 		return state.latestVersion;
 	}
@@ -137,7 +142,7 @@ namespace poca::opengl {
 		if (it->second.status == LodRequestStatus::Idle)
 			return;
 
-		it->second.latestVersion++;
+		it->second.latestVersion = ++m_nextVersion;
 		it->second.status = LodRequestStatus::Idle;
 		removeQueuedRequestsForImageUnsafe(_imageId);
 		removeReadyUploadsForImageUnsafe(_imageId);
@@ -201,7 +206,7 @@ namespace poca::opengl {
 		return requests;
 	}
 
-	std::vector<ImageLodReady> LodUpdateManager::drainReadyUploads(std::size_t _maxUploads, std::size_t _maxPreparedVoxels)
+	std::vector<ImageLodReady> LodUpdateManager::drainReadyUploads(std::size_t _maxUploads, std::size_t _maxPreparedBytes)
 	{
 		poca::core::PerformanceProfiler::ScopedTimer timer("LOD queue", "Drain ready LOD uploads");
 		std::lock_guard<std::mutex> lock(m_mutex);
@@ -226,26 +231,26 @@ namespace poca::opengl {
 				return frameA > frameB;
 			});
 		std::vector<ImageLodReady> ready;
-		if ((_maxUploads == 0 || _maxUploads >= m_ready.size()) && _maxPreparedVoxels == 0) {
+		if ((_maxUploads == 0 || _maxUploads >= m_ready.size()) && _maxPreparedBytes == 0) {
 			ready.swap(m_ready);
 			if (lodDebugEnabled() && !ready.empty())
 				std::cout << "[PoCA][ImageLOD][ready-drain] count=" << ready.size() << " remainingReady=" << m_ready.size() << std::endl;
 			return ready;
 		}
 
-		auto preparedVoxels = [](const ImageLodReady& _ready) -> std::size_t {
-			return std::size_t(_ready.preparedDims.x) * std::size_t(_ready.preparedDims.y) * std::size_t(_ready.preparedDims.z);
+		auto preparedBytes = [](const ImageLodReady& _ready) -> std::size_t {
+			return _ready.preparedBytes;
 		};
 
 		std::size_t drainCount = 0;
-		std::size_t drainedVoxels = 0;
+		std::size_t drainedBytes = 0;
 		while (drainCount < m_ready.size()) {
 			if (_maxUploads != 0 && drainCount >= _maxUploads)
 				break;
-			const std::size_t nextVoxels = preparedVoxels(m_ready[drainCount]);
-			if (_maxPreparedVoxels != 0 && drainCount > 0 && drainedVoxels + nextVoxels > _maxPreparedVoxels)
+			const std::size_t nextBytes = preparedBytes(m_ready[drainCount]);
+			if (_maxPreparedBytes != 0 && drainCount > 0 && nextBytes > _maxPreparedBytes - std::min(drainedBytes, _maxPreparedBytes))
 				break;
-			drainedVoxels += nextVoxels;
+			drainedBytes = streamAdd(drainedBytes, nextBytes);
 			++drainCount;
 		}
 		if (drainCount == 0 && !m_ready.empty())
@@ -279,19 +284,21 @@ namespace poca::opengl {
 		if (_ready.requestVersion != it->second.latestVersion)
 			return;
 
+		if (_ready.payload && !_ready.memoryReservation) throw std::logic_error("Ready image stream payload must own its CPU reservation");
 		it->second.status = LodRequestStatus::Ready;
 		m_ready.push_back(_ready);
 		if (lodDebugEnabled())
 			std::cout << "[PoCA][ImageLOD][ready-push] " << _ready << " readySize=" << m_ready.size() << std::endl;
 	}
 
-	void LodUpdateManager::markUploaded(uint64_t _imageId, uint32_t _displayedLevel)
+	void LodUpdateManager::markUploaded(uint64_t _imageId, uint32_t _displayedLevel, uint32_t _version)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 		auto it = m_states.find(_imageId);
 		if (it == m_states.end())
 			return;
 
+		if (_version && it->second.latestVersion != _version) return;
 		it->second.currentDisplayedLevel = _displayedLevel;
 		it->second.status = LodRequestStatus::Idle;
 
@@ -339,56 +346,101 @@ namespace poca::opengl {
 			m_ready.end());
 	}
 
+	void LodUpdateManager::cancelInvisible()
+	{
+		std::vector<uint64_t> ids;
+		{ std::lock_guard<std::mutex> lock(m_mutex); for (const auto& state : m_states)
+			if (!m_residency.visible(state.first)) ids.push_back(state.first); }
+		for (auto id : ids) cancel(id);
+	}
+	void LodUpdateManager::forget(uint64_t _imageId)
+	{
+		cancel(_imageId);
+		std::unique_lock<std::mutex> lock(m_mutex);
+		m_condition.wait(lock, [this, _imageId]() { return m_inFlight.find(_imageId) == m_inFlight.end(); });
+		m_states.erase(_imageId);
+	}
+
+	bool LodUpdateManager::isCurrent(const ImageLodReady& _ready) const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_states.find(_ready.imageId);
+		return !_ready.obsolete && it != m_states.end() && it->second.latestVersion == _ready.requestVersion;
+	}
+
+	bool LodUpdateManager::uploadReadyForFrame()
+	{
+		bool uploaded = false;
+		const auto readyUploads = drainReadyUploads(4, imageStreamPolicy().uploadBytes);
+		for (const auto& ready : readyUploads) {
+			if (!isCurrent(ready) || !m_residency.visible(ready.imageId)) continue;
+			if (!ready.uploadCallback) throw std::logic_error("Image stream has no render-thread upload callback");
+			const bool changed = ready.uploadCallback(ready);
+			ImageLodState current;
+			if (state(ready.imageId, current))
+				markUploaded(ready.imageId, changed ? ready.requestedLevel : current.currentDisplayedLevel, ready.requestVersion);
+			uploaded = uploaded || changed;
+		}
+		return uploaded;
+	}
+
 	void LodUpdateManager::workerLoop()
 	{
 		for (;;) {
 			ImageLodRequest request;
+			std::shared_ptr<ImageStreamMemory::Reservation> reservation;
 			{
 				std::unique_lock<std::mutex> lock(m_mutex);
-				m_condition.wait(lock, [this]() { return m_stopWorker || !m_requests.empty(); });
-				if (m_stopWorker)
-					return;
-				if (!popNextQueuedRequestUnsafe(request))
-					continue;
-
-				auto it = m_states.find(request.imageId);
-				if (it == m_states.end())
-					continue;
-				if (request.requestVersion != it->second.latestVersion)
-					continue;
-				it->second.status = LodRequestStatus::Preparing;
+				// A timed wake also observes reservations released by drained payload owners.
+				m_condition.wait_for(lock, std::chrono::milliseconds(25), [this]() { return m_stopWorker || !m_requests.empty(); });
+				if (m_stopWorker) return;
+				if (m_requests.empty()) continue;
+				const auto& next = m_requests.top();
+				if (next.estimatedPreparedBytes == 0 || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes) {
+					m_states[next.imageId].status = LodRequestStatus::Idle;
+					std::cerr << "[PoCA][ImageStream] Rejected request without a bounded preparation estimate" << std::endl;
+					m_requests.pop(); continue;
+				}
+				reservation = m_memory->reserve(next.estimatedPreparedBytes);
+				if (!reservation) { m_condition.wait_for(lock, std::chrono::milliseconds(25)); continue; }
+				if (!popNextQueuedRequestUnsafe(request)) continue;
+				m_states.at(request.imageId).status = LodRequestStatus::Preparing;
+				++m_inFlight[request.imageId];
 			}
-
+			request.canceled = [this, id = request.imageId, version = request.requestVersion]() {
+				std::lock_guard<std::mutex> lock(m_mutex);
+				auto it = m_states.find(id); return m_stopWorker || it == m_states.end() || it->second.latestVersion != version;
+			};
 			ImageLodReady ready;
-			ready.imageId = request.imageId;
-			ready.requestedLevel = request.requestedLevel;
-			ready.requestVersion = request.requestVersion;
-			ready.preparedDims = request.targetDims;
-			ready.visible = request.visible;
-			if (request.prepareCallback && !request.prepareCallback(request, ready))
-				continue;
-
+			ready.imageId = request.imageId; ready.requestedLevel = request.requestedLevel;
+			ready.requestVersion = request.requestVersion; ready.visible = request.visible;
+			ready.uploadCallback = request.uploadCallback;
+			bool success = false;
+			try {
+				if (request.prepareCallback) success = request.prepareCallback(request, ready);
+				if (success) {
+					reservation->ready(ready.preparedBytes);
+					ready.memoryReservation = std::move(reservation);
+				}
+			}
+			catch (const ImageStreamCanceled&) { ready.obsolete = true; }
+			catch (const std::exception& error) {
+				std::cerr << "[PoCA][ImageStream][read] image=" << request.imageId << " level=" << request.requestedLevel << ": " << error.what() << std::endl;
+			}
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
-				auto it = m_states.find(ready.imageId);
-				if (it == m_states.end())
-					continue;
-				if (ready.requestVersion != it->second.latestVersion)
-					continue;
-
-				it->second.status = LodRequestStatus::Ready;
-				m_ready.push_back(ready);
-				if (lodDebugEnabled())
-					std::cout << "[PoCA][ImageLOD][worker-ready] " << ready << " readySize=" << m_ready.size() << std::endl;
+				auto flight = m_inFlight.find(request.imageId);
+				if (--flight->second == 0) m_inFlight.erase(flight);
+				auto state = m_states.find(request.imageId);
+				if (state != m_states.end() && state->second.latestVersion == request.requestVersion) {
+					state->second.status = success ? LodRequestStatus::Ready : LodRequestStatus::Idle;
+					if (success) m_ready.push_back(std::move(ready));
+				}
+				m_condition.notify_all();
+				if (m_camera != nullptr) QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
 			}
-
-			if (m_camera != nullptr)
-				QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
-			//std::cout << "LodUpdateManager::workerLoop - " << m_requests.size() << std::endl;
 		}
 	}
-
-
 	std::ostream& operator<<(std::ostream& _os, const ImageLodRequest& _ilr)
 	{
 		return _os << "ImageLodRequest, imageID=" <<_ilr.imageId << ", requestedLevel=" << _ilr.requestedLevel

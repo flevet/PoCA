@@ -30,6 +30,10 @@ namespace poca::opengl {
 		poca::opengl::Camera* camera = nullptr;
 	};
 
+	struct ImageStreamingHandled {
+		bool handled = false;
+	};
+
 	struct DeferImageListOverlays {
 		bool defer = false;
 	};

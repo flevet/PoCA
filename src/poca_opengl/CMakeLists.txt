@@ -14,6 +14,10 @@ set(OPENGL_HEADER_FILES
   OpenGL/GLBuffer.hpp
   OpenGL/Helper.h
   OpenGL/LodUpdateManager.hpp
+  OpenGL/ImageStreamPolicy.hpp
+  OpenGL/ImageStreamMemory.hpp
+  OpenGL/ImageVolumeResidency.hpp
+  OpenGL/ShaderSource.hpp
   OpenGL/MultiPrimitiveData.hpp
   OpenGL/SsaoShader.hpp
   OpenGL/Shader.hpp

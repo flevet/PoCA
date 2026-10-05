@@ -61,6 +61,7 @@ uniform bool isFrame;
 uniform bool borderRendering;
 uniform uint borderSize;
 uniform int currentFrame;
+uniform float scientificDepth;
 
 uniform float width_feature_texture;
 uniform float height_feature_texture;
@@ -99,6 +100,9 @@ struct AABB {
     vec3 bottom;
 };
 
+#define STREAM_SINGLE
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
 	y = floor(id / w) / (h - 1);
@@ -115,7 +119,7 @@ bool isBorderVoxel(vec3 position, uint label, int radius) {
     if(!borderRendering)
 	return true;
     vec3 volumeDims = vec3(textureSize(uvolume, 0)); // voxel grid dimensions
-    vec3 texelSize = 1.0 / volumeDims;
+    vec3 texelSize = (residentTop - residentBottom) / max(top - bottom, vec3(1e-6)) / volumeDims;
 
     for (int x = -radius; x <= radius; ++x) {
         for (int y = -radius; y <= radius; ++y) {
@@ -128,7 +132,7 @@ bool isBorderVoxel(vec3 position, uint label, int radius) {
             if (any(lessThan(neighborPos, vec3(0.0))) || any(greaterThanEqual(neighborPos, vec3(1.0))))
                 continue;
 
-            uint neighborLabel = texture(uvolume, neighborPos).r;
+            uint neighborLabel = streamLabel(neighborPos);
             if (neighborLabel != label)
                 return true;
         }
@@ -140,9 +144,9 @@ bool sampleFeatureValue(vec3 position, out float featureValue)
 {
     float intensity;
     if (isFloat)
-        intensity = texture(volume, position).r;
+        intensity = streamRaw(position);
     else
-        intensity = float(texture(uvolume, position).r);
+        intensity = float(streamLabel(position));
 
     if (intensity <= 0)
         return false;
@@ -208,7 +212,7 @@ void main()
     vec3 current_ray_origin = perspective_projection ? camera_position : ray_origin + current_ray_direction;
     Ray casting_ray = Ray(current_ray_origin, current_ray_direction);
 
-    float planeZ = float(currentFrame) + 0.5;
+    float planeZ = bottom.z + (float(currentFrame) + 0.5) * (top.z - bottom.z) / max(1.0, scientificDepth);
     if (abs(casting_ray.direction.z) < 1e-6)
         discard;
 
@@ -230,7 +234,7 @@ void main()
         discard;
 
     vec3 position = (worldPos - bottom) / max(top - bottom, vec3(1e-6));
-    position.z = (float(currentFrame) + 0.5 - bottom.z) / max(top.z - bottom.z, 1e-6);
+    position.z = (float(currentFrame) + 0.5) / max(1.0, scientificDepth);
     position = clamp(position, vec3(0.0), vec3(1.0));
 
     float value;

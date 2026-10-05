@@ -90,6 +90,9 @@ struct AABB {
 
 bool clippedByPlane(vec3 worldPos);
 
+#define STREAM_ARRAY
+#include "image_stream_sampling.glsl"
+
 void offset_feature_texture(float label_id, float w, float h, out float x, out float y){
 	float id = label_id - 1;
 	y = floor(id / w) / (h - 1);
@@ -156,9 +159,9 @@ void raycast_normal(vec3 ray_start, vec3 ray_step)
 		for(int curImage = 0; curImage < nbImages; curImage++){
 			float intensity;
 			if(isFloat[curImage])
-				intensity = texture(volume[curImage], position).r;
+				intensity = streamRaw(curImage, position);
 			else{
-				intensity = float(texture(uvolume[curImage], position).r);
+				intensity = streamRaw(curImage, position);
 			}
 				
 			if(intensity >= pixel_min[curImage]){
@@ -245,13 +248,13 @@ void raycast_test(vec3 ray_start, vec3 ray_step)
 		for(int curImage = 0; curImage < nbImages; curImage++){
 			float intensity;
 			if(isFloat[curImage]){
-				intensity = texture(volume[curImage], position).r;
-				intensity = float(255);//float(texelFetch(uvolume[curImage], texPos, 0).r);
+				intensity = streamRaw(curImage, position);
+				// Display coordinates are mapped by the shared resident/preview sampler.
 			}
 			else{
 				ivec3 texPos = ivec3(position * vec3(textureSize(uvolume[curImage], 0).xy, 0));
-				intensity = float(texelFetch(uvolume[curImage], texPos, 0).r);
-				//intensity = 255;//texture(volume[curImage], position).r;
+				intensity = streamRaw(curImage, position);
+				//intensity = 255;//streamRaw(curImage, position);
 			}
 				
 			if(intensity >= maximum_intensity[curImage])

@@ -44,6 +44,7 @@
 #include <sstream>
 #include <iostream>
 #include <vector>
+#include "ShaderSource.hpp"
 
 namespace poca::opengl {
 
@@ -102,7 +103,7 @@ namespace poca::opengl {
 				fShaderFile.close();
 				// Convert stream into string
 				m_vertexCode = vShaderStream.str();
-				m_fragmentCode = fShaderStream.str();
+				m_fragmentCode = expandShaderIncludes(fShaderStream.str(), std::filesystem::path(fragmentPath));
 				// If geometry shader path is present, also load a geometry shader
 				if (geometryPath != nullptr)
 				{
@@ -373,4 +374,3 @@ namespace poca::opengl {
 }
 
 #endif
-

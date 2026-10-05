@@ -224,6 +224,7 @@ namespace poca::opengl {
 		int getWidth() const { return this->width(); }
 		int getHeight() const { return this->height(); }
 		LodUpdateManager& lodUpdateManager() { return *m_lodUpdateManager; }
+		std::weak_ptr<LodUpdateManager> lodUpdateManagerLifetime() { return m_lodUpdateManager; }
 		const LodUpdateManager& lodUpdateManager() const { return *m_lodUpdateManager; }
 
 		void setCameraInteraction(const int);
@@ -427,7 +428,7 @@ namespace poca::opengl {
 		StateCamera m_stateCamera;
 
 		poca::core::MyObjectInterface* m_object;
-		std::unique_ptr<LodUpdateManager> m_lodUpdateManager;
+		std::shared_ptr<LodUpdateManager> m_lodUpdateManager;
 		QStringList m_infoPicking;
 
 		poca::core::BoundingBox m_currentCrop;

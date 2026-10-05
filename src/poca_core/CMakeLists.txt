@@ -45,6 +45,7 @@ set(GENERAL_HEADER_FILES
   General/HistogramStorageStatistics.hpp
   General/Image.hpp
   General/ImagePyramidValidation.hpp
+  General/ImageStorageSampling.hpp
   General/ImagesList.hpp
   General/json.hpp
   General/JsonCommandContext.hpp
