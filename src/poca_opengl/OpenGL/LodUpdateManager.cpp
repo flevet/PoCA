@@ -76,8 +76,9 @@ namespace poca::opengl {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		ImageLodState& state = m_states[_request.imageId];
 
+		// Camera generation is diagnostic; versions identify immutable storage targets.
 		const bool sameTarget =
-			state.requestedLevel == _request.requestedLevel && state.viewGeneration == _request.viewGeneration &&
+			state.requestedLevel == _request.requestedLevel &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
 			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.preview == _request.preview && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;

@@ -1,10 +1,69 @@
-# Phase 5 / 5.1: regional image streaming
+# Phase 5 / 5.1 / 5.2: regional image streaming
 
 Source implementation dated 2026-10-02. Compilation, shader validation and runtime performance are **UNCONFIRMED**. No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
 
+## Phase 5.2: interaction-stable detail (2026-10-05)
+
+This section supersedes Phase 5.1 pitch-based sampling invalidity, camera-based cancellation/publication, and interactive desired-detail replanning. Runtime visual behavior, responsiveness, Qt timing and GL/shader execution remain **UNCONFIRMED** and require manual validation.
+
+- **Renderable versus optimal:** ImageStreamDetailState separates guarded spatial/source compatibility from pitch quality. A covered texture with matching source image, frame, scalar type, RAW/LABEL role, reduction, resident-source identity and scientific bounds remains renderable even when too coarse or too fine. Explicit scientific invalidation still clears its region. The existing 0.88/1.25 pitch thresholds now request replacement quality only.
+- **Interaction reuse:** zoom-in keeps covered detail while it becomes softer; modest dezoom keeps over-resolved detail; rotation/pan recompute the conservative image-space requirement without invalidating merely because MVP changed. The existing 25% ROI guard, 10% safe inset and source-edge exemption are retained. A fixed one-plane frame has no Z guard to inset; matching-frame coverage uses its full plane extent, while wrong-frame identity still invalidates it. Leaving the safe interior selects coherent whole preview, including preview-based ray steps. No additional navigation tier or increased preview size was introduced.
+- **Observation versus storage identity:** full MVP/viewport/crop/transform equality caches camera observation and increments a diagnostic camera generation. It does not identify storage data. Manager target equality uses source level, ROI/dimensions/bounds, frame, reduction, resident-source state, preview class and display dimensions/factors; viewGeneration is excluded. ImageStreamTarget performs source compatibility and coverage checks using the pending target's own native-level geometry.
+- **Useful work survives:** covered queued/preparing/ready detail survives camera and quality changes, including a newly preferred source level. It finishes before further refinement. New input submits no detail reads; the unchanged 150 ms timer dispatches requestLodUpdate after settle. A materially uncovered ROI, incompatible source/frame/mode, invisibility, explicit scientific invalidation or teardown still retires storage versions. One in-flight reader plus at most one latest queued successor and reservation release remain intact.
+- **Publication:** a completed result is rechecked against the latest source/requirement and immutable request geometry before admission or GL allocation. An older camera generation alone cannot reject it. During interaction a replacement cannot coarsen any axis of a covered resident; an already quality-optimal resident also takes precedence. Settled quality may replace an over-resolved detail. Failed/refused upload retains the old texture; successful upload/residency precedes handle replacement.
+- **Shared shader contract:** existing hasDetail and streamFlags.x carry resident AND renderable, in single, array and MyMultipleObject paths. No new uniform, std430 field, shader quality policy or descriptor-layout change is needed. All 13 helper consumers were source-reviewed; LABEL sampling remains nearest and RAW reducers are untouched.
+- **Diagnostics:** optional lodDebug/debugPyramidalRendering reuse messages report cameraGeneration, storageTargetInvalidated, renderability, optimality, refinement, quality and fallback/keep-detail reason on state transitions. Normal operation does not emit these logs.
+- **Limits:** a conservative rotated requirement can legitimately leave a partial safe ROI; preview fallback is then intentional. Useful under-resolved work may publish and require another settled refinement. Budget refusal/eviction and unsupported source limits still apply. No visual/performance, real Qt, GPU publication or shader validation claim follows from source fixtures.
+
+### Phase 5.2 source fixture coverage (not run)
+
+| Requested cases | Source coverage and limits |
+| --- | --- |
+| 1–3: changed MVP, full-volume rotation, rotation inside guard | ImageStreamingInteractionTests uses real frustum intersection, camera observation, detail/target helpers and descriptor flags |
+| 4, 8, 13: rotation/dezoom outside guard, obsolete ROI | Real coverage helpers, deferred submission, result rejection and manager version invalidation; actual timer/GL fallback remains manual |
+| 5–7, 9: zoom pitch mismatch, refinement and covered dezoom | Production renderability/quality helper with under/over-resolved and unavailable-quality-plan cases |
+| 10–11: wrong frame/source/reduction/type | Semantic stamp variants and prepared-result compatibility checks |
+| 12, 14–15: old camera generation, useful in-flight work, bounded queue | ImageStreamingRequestReuseTests holds a real manager worker across 100 camera changes, preserves version, completes useful older-generation data, rejects uncovered results and balances leases |
+| 16: atomic replacement | Existing scheduling fixture now preserves valid old detail after a refused upload; replacement policy checks prevent interactive downgrades; real GL commit is source-audited/manual |
+| 17, 20: preview precedence and visible MyMultipleObject reuse | Sample-choice and shared descriptor flag fixtures; all three CPU uniform/descriptor writers use renderability; actual multiple-object rendering remains manual |
+| 18–19, 24: nearest LABEL, RAW reductions, scientific independence | Existing typed preparation/reduction/resident-edit/frame fixtures retained; new reuse helpers do not mutate image data |
+| 21–23: offscreen refinement, GPU/CPU budgets | Existing planner/culling/residency/reservation/version-supersession fixtures retained; new useful/rejected result fixture balances preparing/ready ownership |
+
+### Manual Phase 5.2 acceptance (pending)
+
+A. **Continuous rotation:** with a full/covering detailed ROI, rotate repeatedly and verify no coarse flash. With partial coverage, keep detail until the conservative requirement leaves its safe guard, then verify coherent fallback.
+B. **Continuous zoom-in:** covered detail stretches/softens progressively without jumping to the 64-edge preview; settled finer detail replaces it.
+C. **Zoom-out:** retain covered over-resolved detail; fallback only at the safe-coverage boundary; after settle, verify the larger appropriate detail.
+D. **Rotate and zoom together:** verify no cancellation cascade, no interactive quality downgrade, bounded queued work and latest useful/optimal settled detail.
+E. **Hundreds of images / MyMultipleObject:** verify visible detail reuse together with offscreen culling, budgets, eviction/grace, tiny-object overview, labels and stable picking.
+
+Also validate wrong-frame/reduction transitions, all helper shader variants, read/upload rejection, unchanged X/Y/Z scaling and scientific analyses. Source fixtures have not been executed.
+
+### Phase 5.2 changed-file inventory
+
+- CONTINUITY.md
+- poca/docs/IMAGE_STREAMING_ARCHITECTURE.md
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.cpp
+- poca/src/shaders/image_stream_sampling.glsl
+- poca_extra/src/poca_imageplugin/CMakeLists.txt
+- poca_extra/src/poca_imageplugin/ImageStreamView.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamTarget.hpp (new)
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreamView.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreaming.cpp
+- poca_extra/src/poca_imageplugin/ImagesListCommands.cpp
+- poca_extra/src/poca_imageplugin/ImagesListMultiObjectDisplayCommand.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingResponsivenessTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingSchedulingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingInteractionTests.cpp (new)
+- poca_extra/src/poca_imageplugin/ImageStreamingRequestReuseTests.cpp (new)
+
 ## Phase 5.1: responsiveness hardening (2026-10-05)
 
-This section supersedes the Phase 5 reuse, scheduling, source-tile and TIFF startup descriptions below. Runtime behavior, Qt debounce timing, shader execution, GPU publication and performance still require manual validation.
+Historical Phase 5.1 description: Phase 5.2 above supersedes its reuse and generation/version policies. Its source I/O, startup, budgets and debounce remain applicable. Runtime behavior, Qt debounce timing, shader execution, GPU publication and performance still require manual validation.
 
 - **Asymmetric pitch hysteresis:** an active pitch up to 1.25 times the desired pitch tolerates zoom-in delay; an active pitch below 0.88 times desired is promptly invalid on dezoom. Both values are centralized in ImageStreamPolicy.
 - **Current-view validity:** CPU safe-volume coverage and pitch checks set detailUsableForCurrentView. Residency and validity are independent. The existing shared GLSL hasDetail uniform / streamFlags.x receives resident AND usable, consistently across all 13 single/array/multi fragment variants, including MIP, alpha/direct, frame and LABEL paths. Dezoom disables the central detail patch on the next drawn frame; the complete preview supplies coherent pixels while the old texture remains resident. Ray-step planning follows the sampled preview dimensions/bounds during fallback. Replacement publishes only after successful GL upload, matching request version and view generation.
@@ -71,7 +130,7 @@ Scientific dimensions, pixels(), data(), getImage(), level-zero reload, existing
 
 ImageLodRequest now carries source level and dimensions, Region3D, target texture dimensions, physical resident bounds, scientific image bounds, frame, reduction mode, preview/detail intent, priority, visibility, resident-source identity, version, checked texture bytes, reader scratch and peak preparation estimate. Target dimensions describe display samples; sourceRegion describes storage voxels. Those values are independent.
 
-Workers capture the scientific ImageInterface pointer and an immutable request. Cancellation is checked before/after adaptive source slabs and during reduction. The request version and full target identity prevent old ROI/frame/mode results from becoming current. Command destruction cancels and waits for in-flight readers; ordinary view changes cancel without waiting. Image<T> clears commands before its callback/mutex members and scientific histogram are destroyed. Native storage callbacks execute outside the image metadata mutex, followed by a revision check. Resident region copying remains protected against pixel release.
+Workers capture the scientific ImageInterface pointer and an immutable request. Cancellation is checked before/after adaptive source slabs and during reduction. The request version and full target identity prevent old ROI/frame/mode results from becoming current. Command destruction cancels and waits for in-flight readers; incompatible source state or uncovered pending ROI cancels without waiting; harmless camera changes retain useful work. Image<T> clears commands before its callback/mutex members and scientific histogram are destroyed. Native storage callbacks execute outside the image metadata mutex, followed by a revision check. Resident region copying remains protected against pixel release.
 
 ImageLodReady owns both its prepared payload and a shared RAII memory reservation. Draining the queue transfers that ownership; it does not release accounting. Consumers must retain the ready object/reservation while retaining its payload. The reservation releases when the last ready owner dies. A shared camera manager lifetime avoids dereferencing a destroyed camera.
 
@@ -83,13 +142,13 @@ ImageViewRegion intersects six homogeneous frustum planes, six local image plane
 
 The projected clipped footprint drives quality and priority. Bounds map into the chosen native level using actual dimensions and optional stored origin/spacing relative to scientific calibration and the image bbox. Floor/ceil and subtractive bounds checks produce a valid Region3D.
 
-A detail region expands each axis by 25%, aligns to 16-voxel boundaries and clamps to source edges. Its reusable safe interior excludes 10% margins except at image boundaries. Active texture pitch tolerates at most 1.25 times desired on zoom-in and at least 0.88 times desired on dezoom. Current-view coverage/pitch decides sampling independently of residency; small pans reuse resident safe bounds. A view outside the safe interior produces a new request.
+A detail region expands each axis by 25%, aligns to 16-voxel boundaries and clamps to source edges. Its reusable safe interior excludes 10% margins except at image boundaries. Active texture pitch tolerates at most 1.25 times desired on zoom-in and at least 0.88 times desired on dezoom. Current-view source compatibility and coverage decide sampling independently of quality/residency; pitch only decides refinement. Covered rotations, zooms and small pans reuse resident safe bounds. A view outside the safe interior produces a new request.
 
 ## Regional preparation and progressive display
 
 The planner caps projected-pixel oversampling by the effective display edge before selecting the coarsest sufficient native level. Deep zoom can select level zero. Resident pixels take precedence over stored/native data through a non-materializing readResidentRegion seam; existing full-resolution API callback precedence remains unchanged. Settled native selection honors pyramidalRenderingEnabled while the initial coarse preview remains bounded. Native-capable sources use readNativePyramidRegion; scientific level-zero sources use readFullResolutionRegion. Adaptive slabs fit a centralized 4 MiB scratch target, reduced to available reserved bytes. No regional native request calls getOrCreatePyramidLevel or materializes a whole native level.
 
-The initial tier is a whole-image preview bounded to 64 per axis. Detail uses one guarded regional texture, bounded to 512 per axis at rest or 128 while interacting. Both are further constrained by GL_MAX_3D_TEXTURE_SIZE, per-image share and byte budgets. Small resident images of at most 1 MiB use a single direct full-resolution preview/copy, with no redundant detail tier.
+The initial tier is a whole-image preview bounded to 64 per axis. Detail uses one guarded regional texture, bounded to 512 per axis for settled refinement. The planner retains its 128 interactive cap, but active input submits no new detail work and retains the latest settled-quality target. Both are further constrained by GL_MAX_3D_TEXTURE_SIZE, per-image share and byte budgets. Small resident images of at most 1 MiB use a single direct full-resolution preview/copy, with no redundant detail tier.
 
 Target pitch considers stored physical sampling where present. Independent axis caps and CPU/GPU byte admission reduce pathological Z depth even if every native pyramid level preserves all 1937 slices. The source remains unchanged. Two-dimensional images keep depth one. Frame requests read one scientific plane; positive native levels are used only when their Z count, origin and spacing preserve that plane.
 
@@ -101,7 +160,7 @@ A new GL texture and resident handle are created before old handles/textures are
 
 ## Texture coordinate and ray mapping
 
-Scientific normalized ray coordinates map to local physical position, then into detail bounds when inside, otherwise into preview bounds. No regional texture is stretched across the full image bbox. Single-array, single-label and multi-volume shaders share image_stream_sampling.glsl. ImageDescriptorGPU adds resident/preview bounds, handles and flags with checked 304-byte std430 stride and a 208-byte regional-field offset.
+Scientific normalized ray coordinates map to local physical position, then into detail bounds only when CPU source/coverage renderability is true and the sample is inside; otherwise they use preview bounds. No regional texture is stretched across the full image bbox. Single-array, single-label and multi-volume shaders share image_stream_sampling.glsl. ImageDescriptorGPU adds resident/preview bounds, handles and flags with checked 304-byte std430 stride and a 208-byte regional-field offset.
 
 Bindless texture parameters stay fixed at GL_NEAREST. RAW linear interpolation is implemented in the shared sampler using eight clamped texel fetches; nearest settings and LABEL sampling remain nearest. Frame plane position uses scientific depth and calibrated bbox, independently of resident texture depth. Multi-frame descriptors carry each image's frame.
 
