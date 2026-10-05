@@ -214,8 +214,7 @@ vec3 transferColor(float featureValue)
 
 vec3 gradientNormal(vec3 position, vec3 viewDirection, out float gradientMagnitude)
 {
-	ivec3 textureDimensions = isFloat[IMAGE_INDEX] ? textureSize(volume[IMAGE_INDEX], 0) : textureSize(uvolume[IMAGE_INDEX], 0);
-	vec3 stepSize = 1.0 / max(vec3(textureDimensions), vec3(1.0));
+	vec3 stepSize = streamVoxelStep(IMAGE_INDEX, position);
 	float dx = densityOnly(position + vec3(stepSize.x, 0.0, 0.0)) - densityOnly(position - vec3(stepSize.x, 0.0, 0.0));
 	float dy = densityOnly(position + vec3(0.0, stepSize.y, 0.0)) - densityOnly(position - vec3(0.0, stepSize.y, 0.0));
 	float dz = densityOnly(position + vec3(0.0, 0.0, stepSize.z)) - densityOnly(position - vec3(0.0, 0.0, stepSize.z));

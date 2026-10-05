@@ -81,7 +81,7 @@ namespace poca::opengl {
 			state.requestedLevel == _request.requestedLevel &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
-			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.preview == _request.preview && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
+			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
 
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
 			const bool queuedPriorityIncreased = state.status == LodRequestStatus::Queued && _request.priority > state.priority;
@@ -105,7 +105,7 @@ namespace poca::opengl {
 		state.targetDims = _request.targetDims;
 		state.downsampleFactors = _request.downsampleFactors;
 		state.visible = _request.visible;
-		state.sourceRegion = _request.sourceRegion; state.preview = _request.preview; state.residentSource = _request.residentSource; state.reductionMode = _request.reductionMode;
+		state.sourceRegion = _request.sourceRegion; state.role = _request.role; state.navigationClass = _request.navigationClass; state.failed = false; state.residentSource = _request.residentSource; state.reductionMode = _request.reductionMode;
 		state.currentFrame = _request.currentFrame; state.sourceDims = _request.sourceDims;
 		state.residentBottom = _request.residentBottom; state.residentTop = _request.residentTop; state.imageBottom = _request.imageBottom; state.imageTop = _request.imageTop;
 		state.lastVisibleFrame = _frameIndex;
@@ -120,6 +120,7 @@ namespace poca::opengl {
 		m_requests.push(std::move(queued));
 		if (lodDebugEnabled())
 			std::cout << "[PoCA][ImageLOD][queue-push] imageID=" << _request.imageId
+				<< " role=" << streamRoleName(_request.role) << " class=" << _request.navigationClass
 				<< " level=" << _request.requestedLevel
 				<< " version=" << state.latestVersion
 				<< " priority=" << _request.priority
@@ -138,8 +139,8 @@ namespace poca::opengl {
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 		auto it = m_states.find(_imageId);
-		// Whole-image first pixels are camera-independent; do not restart their I/O.
-		if (it == m_states.end() || it->second.preview || it->second.status == LodRequestStatus::Idle) return;
+		// Emergency and navigation fallback work is camera-independent; do not restart its I/O.
+		if (it == m_states.end() || streamWholeImage(it->second.role) || it->second.status == LodRequestStatus::Idle) return;
 		it->second.latestVersion = ++m_nextVersion;
 		it->second.status = LodRequestStatus::Idle;
 		removeQueuedRequestsForImageUnsafe(_imageId);
@@ -153,6 +154,7 @@ namespace poca::opengl {
 		auto it = m_states.find(_imageId);
 		if (it == m_states.end())
 			return;
+		it->second.failed = false;
 		if (it->second.status == LodRequestStatus::Idle)
 			return;
 
@@ -390,6 +392,8 @@ namespace poca::opengl {
 			if (!isCurrent(ready) || !m_residency.visible(ready.imageId)) continue;
 			if (!ready.uploadCallback) throw std::logic_error("Image stream has no render-thread upload callback");
 			const bool changed = ready.uploadCallback(ready);
+			{ std::lock_guard<std::mutex> lock(m_mutex); auto it = m_states.find(ready.imageId);
+				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) it->second.failed = !changed; }
 			ImageLodState current;
 			if (state(ready.imageId, current))
 				markUploaded(ready.imageId, changed ? ready.requestedLevel : current.currentDisplayedLevel, ready.requestVersion);
@@ -443,6 +447,7 @@ namespace poca::opengl {
 			ImageLodReady ready;
 			ready.imageId = request.imageId; ready.requestedLevel = request.requestedLevel;
 			ready.requestVersion = request.requestVersion; ready.viewGeneration = request.viewGeneration; ready.visible = request.visible;
+			ready.role = request.role; ready.navigationClass = request.navigationClass;
 			ready.uploadCallback = request.uploadCallback;
 			bool success = false;
 			try {
@@ -467,6 +472,7 @@ namespace poca::opengl {
 				}
 				if (current) {
 					state->second.status = success ? LodRequestStatus::Ready : LodRequestStatus::Idle;
+					state->second.failed = !success && !ready.obsolete;
 					if (success) m_ready.push_back(std::move(ready));
 				}
 				auto flight = m_inFlight.find(request.imageId);
@@ -479,20 +485,20 @@ namespace poca::opengl {
 	std::ostream& operator<<(std::ostream& _os, const ImageLodRequest& _ilr)
 	{
 		return _os << "ImageLodRequest, imageID=" <<_ilr.imageId << ", requestedLevel=" << _ilr.requestedLevel
-			<< ", requestVersion=" << _ilr.requestVersion << ", priority=" << _ilr.priority << ", targetDim=" << glm::to_string(_ilr.targetDims)
+			<< ", role=" << streamRoleName(_ilr.role) << ", requestVersion=" << _ilr.requestVersion << ", priority=" << _ilr.priority << ", targetDim=" << glm::to_string(_ilr.targetDims)
 			<< ", downsampleFactors=" << glm::to_string(_ilr.downsampleFactors);
 	}
 
 	std::ostream& operator<<(std::ostream& _os, const ImageLodReady& _ilr)
 	{
 		return _os << "ImageLodReady, imageID=" << _ilr.imageId << ", requestedLevel=" << _ilr.requestedLevel
-			<< ", requestVersion=" << _ilr.requestVersion << ", obsolete=" << _ilr.obsolete << ", preparedDims=" << glm::to_string(_ilr.preparedDims);
+			<< ", role=" << streamRoleName(_ilr.role) << ", requestVersion=" << _ilr.requestVersion << ", obsolete=" << _ilr.obsolete << ", preparedDims=" << glm::to_string(_ilr.preparedDims);
 	}
 
 	std::ostream& operator<<(std::ostream& _os, const ImageLodState& _ils)
 	{
 		return _os << "ImageLodState, currentDisplayedLevel=" << _ils.currentDisplayedLevel << ", requestedLevel=" << _ils.requestedLevel
-			<< ", latestVersion=" << _ils.latestVersion << ", priority=" << _ils.priority << ", targetDims=" << glm::to_string(_ils.targetDims)
+			<< ", role=" << streamRoleName(_ils.role) << ", latestVersion=" << _ils.latestVersion << ", priority=" << _ils.priority << ", targetDims=" << glm::to_string(_ils.targetDims)
 			<< ", downsampleFactors=" << glm::to_string(_ils.downsampleFactors)
 			<< ", visible=" << _ils.visible;
 	}

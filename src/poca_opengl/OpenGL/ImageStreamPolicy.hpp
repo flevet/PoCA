@@ -2,11 +2,22 @@
 #ifndef ImageStreamPolicy_hpp__
 #define ImageStreamPolicy_hpp__
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <glm/glm.hpp>
 #include <General/Region3D.hpp>
 namespace poca::opengl {
+	enum class ImageStreamRole : uint8_t { EmergencyPreview, Navigation, Detail };
+	inline bool streamWholeImage(ImageStreamRole role) { return role != ImageStreamRole::Detail; }
+	inline const char* streamRoleName(ImageStreamRole role) {
+		switch (role) {
+		case ImageStreamRole::EmergencyPreview: return "EmergencyPreview";
+		case ImageStreamRole::Navigation: return "Navigation";
+		case ImageStreamRole::Detail: return "Detail";
+		}
+		throw std::invalid_argument("Unknown image stream role");
+	}
 	struct ImageStreamCanceled : std::exception { const char* what() const noexcept override { return "Obsolete image stream preparation"; } };
 	struct ImageStreamPolicy {
 		std::size_t gpuBytes{ 512ull * 1024 * 1024 };
@@ -15,7 +26,8 @@ namespace poca::opengl {
 		std::size_t scratchBytes{ 4ull * 1024 * 1024 }; // Target source slab bytes; included in each CPU lease.
 		std::size_t residentCopyBytes{ 1024ull * 1024 }; // Preserve the small resident whole-preview fast path.
 		std::size_t uploadBytes{ 16ull * 1024 * 1024 };
-		uint32_t previewEdge{ 64 }, displayEdge{ 512 }, interactiveEdge{ 128 };
+		uint32_t previewEdge{ 64 }, navigationMinEdge{ 128 }, navigationEdge{ 256 }, displayEdge{ 512 }, interactiveEdge{ 128 };
+		double navigationOversampling{ 1.25 }, navigationUpgradeRatio{ 1.5 };
 		uint32_t regionQuantum{ 16 }, offscreenGraceFrames{ 12 };
 		double guardFraction{ .25 }, safeFraction{ .10 };
 		double zoomInReuseTolerance{ 1.25 }, zoomOutReuseTolerance{ .88 };

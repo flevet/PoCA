@@ -58,7 +58,9 @@ namespace poca::opengl {
 		glm::uvec3 sourceDims{ 1u };
 		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
 		std::size_t estimatedPreparedBytes{ 0 }, textureBytes{ 0 }, readerScratchBytes{ 0 };
-		bool regional{ false }, preview{ false }, residentSource{ false };
+		bool regional{ false }, residentSource{ false };
+		ImageStreamRole role{ ImageStreamRole::Detail };
+		uint32_t navigationClass{ 0 };
 		int currentFrame{ -1 };
 		std::string reductionMode{ "MIP" };
 		std::function<bool()> canceled;
@@ -82,6 +84,8 @@ namespace poca::opengl {
 		glm::uvec3 preparedDims{ 1u, 1u, 1u };
 		bool visible{ true };
 		bool obsolete{ false };
+		ImageStreamRole role{ ImageStreamRole::Detail };
+		uint32_t navigationClass{ 0 };
 		std::size_t preparedBytes{ 0 };
 		std::shared_ptr<ImageStreamMemory::Reservation> memoryReservation;
 		std::shared_ptr<void> payload;
@@ -102,7 +106,9 @@ namespace poca::opengl {
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		poca::core::Region3D sourceRegion;
-		bool preview{ false }, residentSource{ false };
+		bool residentSource{ false }, failed{ false };
+		ImageStreamRole role{ ImageStreamRole::Detail };
+		uint32_t navigationClass{ 0 };
 		int currentFrame{ -1 };
 		glm::uvec3 sourceDims{ 1u };
 		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };

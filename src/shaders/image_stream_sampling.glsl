@@ -1,4 +1,5 @@
-// Shared display-only preview/detail mapping. Scientific normalized positions stay unchanged.
+// Shared display-only fallback/detail mapping. Fallback is Navigation, or EmergencyPreview until upgraded.
+// Scientific normalized positions stay unchanged; both whole-image roles share the same samplers.
 // hasDetail / streamFlags.x means resident AND spatially/semantically renderable.
 // CPU quality mismatch requests refinement; it never disables covered detail.
 // Bounds alone must never reactivate a source-incompatible or uncovered texture.
@@ -46,6 +47,17 @@ uniform vec3 previewBottom[MAX_NB_IMAGES], previewTop[MAX_NB_IMAGES];
 uniform bool hasDetail[MAX_NB_IMAGES], streamLinear[MAX_NB_IMAGES];
 uniform sampler3D previewVolume[MAX_NB_IMAGES];
 uniform usampler3D previewUvolume[MAX_NB_IMAGES];
+vec3 streamVoxelStep(int imageIndex, vec3 scientificPosition)
+{
+    vec3 local = bottom + scientificPosition * (top - bottom);
+    bool detail = hasDetail[imageIndex] && streamContains(local, residentBottom[imageIndex], residentTop[imageIndex]);
+    vec3 low = detail ? residentBottom[imageIndex] : previewBottom[imageIndex];
+    vec3 high = detail ? residentTop[imageIndex] : previewTop[imageIndex];
+    ivec3 dims = isFloat[imageIndex] ?
+        (detail ? textureSize(volume[imageIndex], 0) : textureSize(previewVolume[imageIndex], 0)) :
+        (detail ? textureSize(uvolume[imageIndex], 0) : textureSize(previewUvolume[imageIndex], 0));
+    return (high - low) / max(top - bottom, vec3(1e-6)) / max(vec3(dims), vec3(1.0));
+}
 float streamRaw(int imageIndex, vec3 scientificPosition)
 {
     vec3 local = bottom + scientificPosition * (top - bottom);
@@ -64,6 +76,17 @@ uniform vec3 residentBottom, residentTop, previewBottom, previewTop;
 uniform bool hasDetail, streamLinear;
 uniform sampler3D previewVolume;
 uniform usampler3D previewUvolume;
+vec3 streamVoxelStep(vec3 scientificPosition)
+{
+    vec3 local = bottom + scientificPosition * (top - bottom);
+    bool detail = hasDetail && streamContains(local, residentBottom, residentTop);
+    vec3 low = detail ? residentBottom : previewBottom;
+    vec3 high = detail ? residentTop : previewTop;
+    ivec3 dims = isFloat ?
+        (detail ? textureSize(volume, 0) : textureSize(previewVolume, 0)) :
+        (detail ? textureSize(uvolume, 0) : textureSize(previewUvolume, 0));
+    return (high - low) / max(top - bottom, vec3(1e-6)) / max(vec3(dims), vec3(1.0));
+}
 float streamRaw(vec3 scientificPosition)
 {
     vec3 local = bottom + scientificPosition * (top - bottom);

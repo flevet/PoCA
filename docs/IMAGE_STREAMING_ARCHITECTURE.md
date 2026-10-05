@@ -1,6 +1,94 @@
-# Phase 5 / 5.1 / 5.2: regional image streaming
+# Phase 5 / 5.1 / 5.2 / 5.3: regional image streaming
 
 Source implementation dated 2026-10-02. Compilation, shader validation and runtime performance are **UNCONFIRMED**. No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
+
+## Phase 5.3: persistent whole-image navigation (2026-10-05)
+
+This section supersedes Phase 5.2's permanent 64-edge fallback. Phase 5.2's separation of spatial renderability from settled quality, guarded Detail reuse, debounce, and regional level-zero reads remains applicable. Source changes are implemented; compilation, runtime visual behavior, GL/shader execution and performance remain **UNCONFIRMED**.
+
+### Representations and progression
+
+ImageStreamRole explicitly distinguishes EmergencyPreview, Navigation and Detail in ImageLodRequest, ImageLodState, ImageLodReady and PreparedVolumeLod. The old ambiguous preview boolean is removed. Navigation class is explicit metadata, never inferred from texture dimensions.
+
+- **EmergencyPreview:** complete source/current frame, normally capped at 64 per axis, coarsest readable native level permitted. Queued first and allowed during interaction. The existing at-most-1-MiB resident full-copy shortcut remains; completely represented small sources need no subsequent tier.
+- **Navigation:** asynchronously prepared complete source/current frame at a stable 128 or 256 class. Replaces the emergency texture in the existing m_previewTexture/m_previewHandle slot. Allowed during interaction; orientation, visible ROI and MVP do not describe its storage target.
+- **Detail:** one guarded regional texture in m_volume_texture/m_volumeTextureHandle, retaining settled display quality and regional native/level-zero reads. New Detail submissions wait for settle. A useful pending Detail is allowed to finish before a navigation upgrade.
+
+ImageStreamProgression is the shared source-only progression planner. No fallback means EmergencyPreview only; a source-current emergency fallback does not count as completed Navigation. Eligible Navigation precedes new Detail; tiny/budget-limited images and already sufficient Navigation proceed to Detail. A completely represented source needs neither upgrade nor redundant Detail.
+
+Arbitrary rotation can expose scientific locations outside a regional Detail ROI. A camera-independent whole-image volume is therefore necessary to bridge that gap. When covered and source-compatible, Detail takes precedence; otherwise the same fallback handle supplies Navigation, or EmergencyPreview when an upgrade is unavailable. There is no storage request merely to sample another orientation.
+
+### Stable quality and source selection
+
+Central policy keeps previewEdge=64 and adds navigationMinEdge=128, navigationEdge=256, navigationOversampling=1.25 and navigationUpgradeRatio=1.5. Demand is the larger projected screen dimension times 1.25. Demand exceeding 96 allows 128; exceeding 192 allows 256. For example, a resident 128 class at 140 screen pixels remains 128. Only clear demand can upgrade it; reduced footprint does not downgrade a resident class.
+
+The class is capped before native selection by queried GL limits, scalar bytes, calibrated per-axis display dimensions, the texture-byte limit and estimated CPU output/reduction buffers. Each fallback and Detail gets at most one quarter of the existing GPU-budget/visible-count share for planning. Quantization can therefore choose 128, or leave emergency 64 in place, for many visible datasets. Already resident higher quality is retained until existing eviction policy releases it. Source-reader scratch is then validated for the selected source; unsafe preparation is refused.
+
+Navigation selects the **coarsest sufficient** native level by checking all three source sample counts against its effective whole-image display target, plus coverage of the complete scientific image/current frame. It uses stored geometry for registration and does not stretch an incomplete native level into the scientific bounds. For 2048/1024/512/256/128/64 XY levels, a 256 class selects 256 rather than 64. A 128 class selects 128. With an XY-only 256 x 256 x 1937 native level, display Z is independently bounded (and reduced according to existing physical pitch), not blindly retained at 1937.
+
+Whole-image requests have zero camera generation. Deduplication includes role, class, level, source ROI/dimensions/bounds, frame, mode and resident-source identity. Source stamps also check image identity, scalar type, LABEL/RAW and image bounds. The pending fallback is retained through rotation, zoom, pan, crop changes and class-demand changes while source-compatible; a useful preparing 128 class finishes before considering 256. Source/frame/mode/bounds changes cancel it. Result admission compares immutable role/class/geometry and current source before any GL allocation. Camera generations remain diagnostic.
+
+Failed read/upload/admission is recorded in the existing manager state. The command suppresses repeated attempts of that navigation class at the same or smaller share, retaining the current fallback and allowing Detail to proceed. A larger share, source refresh or eviction/return can retry; errors still report through existing diagnostics. This prevents failed background upgrades from indefinitely starving Detail.
+
+### Upload, residency and renderer wiring
+
+Steady state remains **one whole-image fallback plus one regional Detail**. No third persistent texture or sampler is added. A temporary candidate is allocated/uploaded, made bindless-resident, and checked for GL errors while the old fallback is alive. Only successful publication switches the fallback handle, dimensions, bounds, role, class, native level and bytes; the old handle then becomes nonresident and its texture is deleted. Failure keeps the previous fallback and accounting.
+
+Unchanged ImageVolumeResidency admission includes old-plus-new allocation and reserves steady-state headroom. After success only new fallback bytes plus Detail bytes remain. Existing shared CPU preparation/ready leases, serialized readers and latest queued successor are reused. Existing offscreen-first budget eviction and grace eviction still release both slots. Visible Navigation is not pinned for every image ever visited; returning images can restart progressively.
+
+Single-image, ImagesList shader arrays and MyMultipleObject SSBO descriptors all consume the upgraded preview handle from ImageDisplayCommand. The 304-byte descriptor and 208-byte resident-field offset are unchanged. Visibility and the existing per-frame initialization/request limits still gate submissions; opening hundreds of objects does not eagerly submit navigation for all of them. Priority retains projected area/center weighting, boosts missing Emergency by viewport area, and gives Navigation a modest 5% area boost. Finite classes, retained pending work and failure suppression let important Detail proceed.
+
+Displayed dimensions/bounds and activePyramidLevel describe the sampled fallback when Detail is not renderable; single/array/multi adaptive ray steps therefore use Navigation display dimensions. All 13 helper-consuming fragment variants were source-reviewed: MIP, direct, alpha, isosurface, frame, LABEL and path tracing. The shared sampler still selects Detail versus the single fallback. Path-tracing gradient and LABEL border offsets now use the selected texture's texel pitch and mapped bounds, fixing their reliance on inactive Detail dimensions. Isosurface keeps its existing fixed gradient offsets and samples through the shared fallback mapper.
+
+Fallback publication resets path-tracing accumulation; its signature also includes the fallback handle and displayed dimensions/level. No navigation invalidation or accumulation reset is added for every ordinary unchanged frame. Existing camera-driven signature changes remain.
+
+RAW uses the configured MIP/Average/Nearest/Majority reducers. LABEL always uses nearest and retains IDs. Frame/2D Navigation remains one plane. TIFF uses the existing single request-local session and bounded slab traversal; exact MIP/Average can traverse the entire source asynchronously. Zarr stays behind ImageInterface and uses an appropriate native level; no TensorStore/rendering dependency or backend modification is introduced.
+
+Debug-only plan/upload/reuse logs now include role, class, native level, dimensions, upgrade classes and render source. Navigation skip decisions are logged when the decision changes (tiny-screen, already-sufficient, waiting-for-emergency, or budget-or-source), avoiding per-frame skip spam.
+
+### Source fixture coverage (written and registered, not run)
+
+The existing image_regional_streaming menu entry includes three modular navigation fixture files. Existing Phase-5 fixtures were migrated to explicit roles, and the fake TIFF fixture now checks a Navigation traversal opens one session and decodes each required plane once.
+
+| Requested cases | Source evidence and remaining limits |
+| --- | --- |
+| 1-6, 36: first pixels, whole emergency payload, navigation eligibility/quality | NavigationPlanningTests uses the production progression/planner; NavigationRenderingTests calls the real preparer. Time-to-first-pixels remains manual. |
+| 7-9: sufficient native source and anisotropic Z | Planning fixture checks the six-level 2048-to-64 XY pyramid at 256 and 128, full source coverage and bounded Z. |
+| 10-13: same fallback slot, atomic upgrade, separate Detail | Lifecycle fixture exercises actual residency admission and fallback quality commit; production GL routing/order source-audited. Actual texture/handle failure injection is manual. |
+| 14-16: covered Detail versus rotated Navigation | Rendering fixture computes covered/rotated requirements and production Detail/sample-choice state; descriptor flags reviewed. Pixel-level shader output is manual. |
+| 17-21: rotation/zoom/pan/source changes and retained 128 work | Lifecycle fixture blocks a real manager worker across 100 camera observations, checks one version, higher desired class survival, source rejection and balanced leases. Scalar/LABEL identity is checked by source stamps. |
+| 22-25: hysteresis, tiny/large/many-image classes | Planning fixtures use 30/100/140/200/900 screen demand, retained classes, GL/CPU caps and 1/16/300 visible shares. |
+| 26-29: combined GPU bytes, transient safety, eviction/return | Lifecycle fixture exercises real admission, failed/successful accounting, offscreen grace release and progressive state reset. Actual VRAM remains manual. |
+| 30-32: RAW, LABEL, 2D/frame | Real navigation preparation checks a bright RAW MIP voxel, nearest high-ID labels and frame/2D depth one; TIFF checks one-session traversal. |
+| 33-35: multi/single fallback and ray steps | Shared displayed dimensions/level helpers, descriptor layout/flag and adaptive ray-step fixtures. Actual single/array/multi GPU rendering remains manual. |
+| 37-38: regional level zero and scientific invariants | Production progression fixture retains a small deep-zoom level-zero Detail ROI; preparation checks scientific dimensions/pixel residency remain unchanged. Existing five-type/calibration fixtures remain registered. |
+
+### Manual Phase 5.3 acceptance (pending)
+
+A. **Startup TIFF/Zarr:** quick EmergencyPreview first, asynchronous visible whole-image Navigation improvement without input, then useful Detail. Trace exact TIFF I/O latency; opening never waits for Navigation.
+B. **Arbitrary rotation:** covered Detail remains; leaving its safe ROI selects moderate whole Navigation with no 64-edge flash; latest Detail refines after settle.
+C. **Continuous rapid rotation:** persistent Navigation, no request/restart per camera frame, no emergency flashing; preparing 128 finishes even if demand grows.
+D. **Zoom plus rotation:** best valid Detail when covered, Navigation otherwise, source-current latest Detail after settle. Exercise crop and RAW/LABEL, all shader modes and path-tracing accumulation.
+E. **Huge anisotropic Zarr:** 2048 x 2048 x 1937 down to 64 x 64 x 1937; appropriate 256/128 native source, bounded display Z, correct physical alignment, no level-zero traversal when a sufficient native level exists.
+F. **Hundreds of MyMultipleObject images:** tiny/offscreen objects receive no navigation upgrade; meaningful visible images upgrade progressively; CPU/GPU budgets and temporary replacement peaks stay bounded. Leave/return to FOV and inject reader/GL/budget failures.
+
+### Limitations and changed files
+
+Exact whole-image reductions can still cost a full scientific traversal on non-pyramidal TIFF. Very large planes, unsupported regional readers or excessive declared reader scratch can prevent Navigation (or even Emergency); valid Emergency remains when available. A failed class can stay suppressed until budget share improves or the source/residency is refreshed. Conservative class/byte decisions can leave emergency 64 under severe pressure. No measured startup latency, visual continuity, GL failure handling, shader compilation, VRAM, Qt timing or performance claim is made.
+
+Camera geometry/persistence, image scale/calibration, scientific data, storage readers, poca_zarr_backend and C:/tsb/C:/tsbd are untouched.
+
+- Core: poca/src/poca_opengl/OpenGL/ImageStreamPolicy.hpp; LodUpdateManager.hpp/.cpp.
+- Renderer/planning: poca_extra/src/poca_imageplugin/ImageDisplayCommand.hpp/.cpp; ImageDisplayStreaming.cpp; ImageDisplayStreamView.cpp; ImageRegionalLodPlanner.hpp/.cpp; ImageStreamView.hpp; ImageStreamTarget.hpp; ImagesListMultiObjectDisplayCommand.cpp.
+- New modules: ImageNavigationPolicy.hpp; ImageStreamProgression.hpp/.cpp in the image plugin.
+- Preparation: ImageVolumeLodPreparation.hpp/.cpp; ImageRegionalLodPreparation.hpp.
+- New fixtures: ImageStreamingNavigationPlanningTests.cpp; ImageStreamingNavigationLifecycleTests.cpp; ImageStreamingNavigationRenderingTests.cpp.
+- Migrated/extended fixtures: ImageStreamingPreparationTests.cpp; ImageStreamingInteractionTests.cpp; ImageStreamingResponsivenessTests.cpp; ImageStreamingSchedulingTests.cpp; ImageStreamingTiffTests.cpp; ImageStreamingTests.hpp/.cpp.
+- Registration: poca_extra/src/poca_imageplugin/CMakeLists.txt (source registration only).
+- Shaders: poca/src/shaders/image_stream_sampling.glsl; path_tracing_all.frag; label_rendering.frag; frame_label_rendering.frag.
+- Documentation: this file and CONTINUITY.md.
+
+No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
 
 ## Phase 5.2: interaction-stable detail (2026-10-05)
 

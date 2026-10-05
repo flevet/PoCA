@@ -138,8 +138,7 @@ void test_ray_box_intersection(Ray ray, AABB box, out bool intersected)
 }
 
 bool isBorderVoxel(vec3 position, uint label, int radius) {
-    vec3 volumeDims = vec3(textureSize(uvolume, 0)); // voxel grid dimensions
-    vec3 texelSize = (residentTop - residentBottom) / max(top - bottom, vec3(1e-6)) / volumeDims;
+    vec3 texelSize = streamVoxelStep(position);
 
     for (int x = -radius; x <= radius; ++x) {
         for (int y = -radius; y <= radius; ++y) {
