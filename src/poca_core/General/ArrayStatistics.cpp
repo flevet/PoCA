@@ -43,17 +43,14 @@ namespace poca::core {
 		m_data.resize(STATS_NB_PARAMS, 0.f);
 	}
 
-	ArrayStatistics::ArrayStatistics(const float _mean, const float _median, const float _stdDev, const float _min, const float _max) 
+	ArrayStatistics::ArrayStatistics(const float _mean, const float _median, const float _stdDev, const float _min, const float _max) : m_data{ _mean, _median, _stdDev, _min, _max }
 	{
-		m_data[Mean] = _mean;
-		m_data[Median] = _median;
-		m_data[StdDev] = _stdDev;
-		m_data[Min] = _min; 
-		m_data[Max] = _max;
 	}
 
 	ArrayStatistics::ArrayStatistics(const std::vector<float>& _vals) 
 	{ 
+		if (m_data.size() != STATS_NB_PARAMS)
+			throw std::invalid_argument("ArrayStatistics requires exactly five values");
 		std::copy(_vals.begin(), _vals.end(), std::back_inserter(m_data));
 	}
 
