@@ -1,5 +1,30 @@
 # PoCA quantitative data alongside OME-NGFF
 
+## Compact storage keys (2026-10-06)
+
+Logical names and physical keys are separate. ZarrStorageKeys in the existing ZarrSafeNames.hpp/.cpp owns deterministic typed ordinal keys: objects o000005, image components c000004, images i000002, associated labels l000003, points p000001, meshes m000002 and features f000017. Six decimal digits are a minimum width; larger indices retain every digit. Keys never accept logical names. Duplicate names cannot collide through this policy.
+
+Exact names, order, associations, transforms, ObjectLists entry/plugin/CommandInfo data and feature names remain in the existing manifests and NGFF/array metadata. Schema 0.1/0.2 already has explicit path fields; no version bump or loader changes are required. Loaders open recorded paths and restore recorded names for legacy safe-name stores and new compact stores. Ordinary OME image stores and their legacy label paths remain supported. Standard OME labels declarations reference the actual compact subgroups, with source.image="../../" unchanged; orphans remain independent.
+
+Audit covered child objects, image components/ImagesList, RAW and associated/orphan/direct LABELs, points, ObjectLists/direct meshes and scalar features. Remaining positions, vertices, faces, offsets, rendering axes, pyramid levels and chunk hierarchies use fixed semantic/numeric segments. Source/plugin/object/component/image/label/feature strings never determine internal writer keys. Users must not treat subgroup names as display names.
+
+Standalone, selected-child and full multiple export reuse the same object serializer. One root transaction and staging UUID remain; scientific algorithms, ownership, GUI/CommandInfo dispatch and backend ABI are unchanged. A user-selected extremely deep destination can still exceed filesystem limits; the existing contextual storage error is retained without renaming it. Image errors now include the exact logical name, and dataset writes retain child/component/image indices and names.
+
+Optional source fixtures were updated, not executed:
+
+| Requested cases | Source coverage |
+| --- | --- |
+| 1-11, 17-18 long/duplicate simultaneous names | DatasetContainerFixture::longObject/checkLongNames: 420-character Windows source-path stems, duplicate and nearly duplicate images, associated/orphan/direct labels, long points/ObjectLists/meshes/features/plugin/command strings |
+| 12, 14 name/path symmetry | checkCompactPaths/checkLongNames: stored paths, NGFF/array exact names, lazy loaded features, round-trip re-export and actual chunk-path bounds (fixture relative paths <=128; segments <=24) |
+| 13 legacy compatibility | rewriteLegacyObjectPaths/checkLegacyPaths: old safe-name images/labels/quantitative/features and duplicate children; full 0.2 reconstruction and 0.1 quantitative loading |
+| 15-16 shared selected/full policy | checkLongNames: selected command equals standalone serializer; every full multiple child has ordered o-prefixed paths |
+| 19-20 rollback/diagnostics | checkRollback: late failing child, previous destination/staging cleanup and exact long logical child/component/image plus level diagnostics |
+| Policy edge cases | PocaZarrSchemaTests: all seven prefixes, deterministic keys, >999999 and maximum-size_t ordinals; OmeZarrLabelsTests: compact declarations |
+
+Modified files: ZarrSafeNames.hpp/.cpp; PocaZarrDatasetExporter.cpp; PocaZarrExtensionExport.cpp; PocaZarrFeatures.cpp; OmeZarrLabelsMetadata.cpp; OmeZarrExport.cpp; PocaZarrSchemaTests.cpp; OmeZarrLabelsTests.cpp; PocaZarrDatasetContainerTests.cpp; LABELS_README.md; EXPORT_README.md; this document; CONTINUITY.md. No files added. Existing optional test registration covers all changed fixtures.
+
+Static review only: runtime, compilation and test results remain UNCONFIRMED.
+
 ## Phase 6.1 — complete dataset containers (2026-10-06)
 
 This section supersedes the image-only scope statements in the historical Phase-6 sections below. Source implementation and static source audit only; compilation, Qt/backend/CGAL behavior and runtime round trips are UNCONFIRMED.
@@ -50,27 +75,27 @@ Every root and child has a Zarr v3 group. Root attributes.poca_dataset identifie
 - A multiple_object additionally has ordered objects: index, exact name, unique relative path and kind=object; hierarchy nodes with label, level_name, parent, children, object indices and string metadata; grid_boxes; and an optional current_object preference.
 - Parent hierarchy nodes precede their children, matching the current addHierarchyNode API. Duplicate visible object/image names are valid; unique indices and deterministic safe paths identify entries.
 
-Conceptual layout (actual safe names depend on original names and collisions):
+Conceptual compact layout (keys depend on serialized ordinals; logical names remain metadata):
 
 ```text
 dataset.ome.zarr/
   zarr.json                         PoCA container; no dummy root image
   poca/zarr.json                    0.2 manifest
-  images/ImagesList/
-    actin/                         independent NGFF RAW group
+  images/c000002/
+    i000000/                       independent NGFF RAW group (logical actin)
       0/ ...
-      labels/mask/                 explicitly associated NGFF LABEL
-      labels/mask_2/               second label for the same RAW
-    actin_2/                       another independent RAW
-    orphan_manual/                 scalar LABEL; no image-label.source
+      labels/l000000/              explicitly associated NGFF LABEL (logical mask)
+      labels/l000001/              second label for the same RAW (logical mask)
+    i000002/                       another independent RAW (logical actin)
+    i000003/                       scalar LABEL; no image-label.source
   poca/points/...                  existing Phase-6 positions/features
   poca/meshes/...                  existing indexed geometry/object features
 
 multiple.ome.zarr/
   zarr.json
   poca/zarr.json                    kind=multiple_object, ordered child descriptors
-  objects/same_name/               complete kind=object dataset
-  objects/same_name_2/             another child with the same exact visible name
+  objects/o000000/                 complete kind=object dataset
+  objects/o000001/                 another child with the same exact visible name
   objects/...                     all remaining children
 ```
 
