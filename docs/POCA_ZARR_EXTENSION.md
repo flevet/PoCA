@@ -1,5 +1,202 @@
 # PoCA quantitative data alongside OME-NGFF
 
+## Phase 6.1 — complete dataset containers (2026-10-06)
+
+This section supersedes the image-only scope statements in the historical Phase-6 sections below. Source implementation and static source audit only; compilation, Qt/backend/CGAL behavior and runtime round trips are UNCONFIRMED.
+
+### Actions and recordable commands
+
+| Active entity | Export image as OME-Zarr... | Export dataset as OME-Zarr... | Export selected dataset as OME-Zarr... |
+| --- | --- | --- | --- |
+| MyObject | Existing action; enabled for the current RAW | Complete active MyObject | Hidden |
+| MyMultipleObject | Existing action; enabled for the current child's current RAW | Complete outer object and ALL children | Visible; currentObject() as a standalone MyObject |
+| No selected child | Disabled image action | Full export still traverses every available child | Disabled and safely rejected |
+
+The image action retains `saveOmeZarr`, one current RAW, explicitly associated labels, and the existing optional Phase-6 quantitative extension. Dataset actions record `saveDatasetOmeZarr` or `saveSelectedDatasetOmeZarr` through LoaderZarr's `actionNeeded` and normal CommandInfo dispatch. MDI activation, child selection and File-menu opening update action state through PluginInterface::updateActions; no polling timer is used. The active camera's entity is the target, never all open windows.
+
+Both dataset commands accept outputPath, overwrite=false, multiscale=true, componentChunkRows=65536 and chunkX/Y/Z=256/256/4. The command specification includes executeOnObjectOnly=true. MyMultipleObject also recognizes both commands as owner operations for direct/replayed CommandInfo without that parameter, so child command forwarding cannot produce repeated partial exports. Complete export cannot turn off labels or quantitative data; direct options requesting partial export are rejected.
+
+Default GUI filenames use the existing ZarrSafeNames and suffix normalization: the active object name, multiple-object name, or selected child's name followed by .ome.zarr. No internal ID is added. Empty names use the sanitizer's explicit dataset name policy. Errors include exactly "No current dataset to export.", "No datasets are available in the current multiple dataset.", and "No dataset is currently selected." where applicable. Dataset actions do not use the image-only intensity-selection error.
+
+### Class responsibilities and shared serialization
+
+| Class | Responsibility |
+| --- | --- |
+| PocaZarrDatasetManifest (added) | Captures and restores names/transforms/hierarchy; owns ordered component/image/child descriptors, quantitative references, validation, JSON and persistence |
+| PocaZarrDatasetExporter (added) | Resolves full/selected targets; preflights all scientific content; writes one MyObject, all multiple children and every ImagesList entry; delegates payload writers; owns one staging transaction |
+| PocaZarrDatasetLoader (added) | Loads declared entries and explicit associations, reuses scalar/point/mesh reconstruction, assembles ordered owned children/aggregate components, restores state, registers only the completed root |
+| OmeZarrExportCommand (extended) | Existing image command plus dataset command specs/dispatch and owner-aware copies |
+| LoaderZarr (extended) | Three actions, dynamic visibility/enabling, filename/dialog/error collection, command creation and version dispatch |
+| Engine (extended) | Unregistered owning assembly for MyObject and MyMultipleObject; one final root registration; components/plugins installed once |
+| ImagesList (extended) | Reads explicit source indices and accepts owned unassociated images without selection-based inference |
+| MyMultipleObject (extended) | Persistence constructor can bypass grid recomputation; dataset commands execute once at the owner |
+| Command / CommandableObject (extended) | copyFor(owner) lets export commands bind the new owner during base construction; the default preserves other commands' existing copy behavior |
+| PluginInterface (extended in both distributions) | Default updateActions hook for event-driven menu state |
+
+One shared header declares the three dataset classes; three substantial implementation files separate metadata, export and reconstruction. No class wraps one trivial operation. The existing PocaZarrManifest.cpp now also supplies the manifest class's shared quantitative validator, preserving the v0.1 reader entry point. Existing scalar/pyramid/label/template writers remain in their current files; the new group-writing and label-validation entry points are adapters needed to reuse those implementations. Tiny local matrix conversions and existing safe-name/arithmetic helpers remain stateless.
+
+Exactly one `exportObject` implementation serializes a standalone object, a selected child and every full multiple-object child. Full export never chooses currentObject as its target; only selected export does. Selected export creates kind=object and no one-child wrapper.
+
+### Scientific hierarchy and schema 0.2
+
+The outer store is a **PoCA extension stored in Zarr**, containing standards-compliant NGFF 0.5 image groups where applicable. It is not an official OME-NGFF multiple-dataset standard. Generic OME viewers may need to open an individual contained image group; they need not understand the outer container.
+
+Every root and child has a Zarr v3 group. Root attributes.poca_dataset identifies version=0.2 and manifest=poca. The authoritative manifest is attributes.poca in poca/zarr.json:
+
+- version=0.2, kind=object or multiple_object, exact name and transform.
+- components is ordered and has contiguous component_index, exact name and kind: images_list, image, points, mesh_collection or object_lists.
+- An images_list descriptor has images with contiguous index, exact entry name, type=raw/label, relative path and source=null or an explicit same-list RAW index.
+- An object_lists descriptor also has entry_count. quantitative retains the unchanged Phase-6 component payload references, including container ID/name, ordered entry index/name, plugin and normalized CommandInfo.
+- A multiple_object additionally has ordered objects: index, exact name, unique relative path and kind=object; hierarchy nodes with label, level_name, parent, children, object indices and string metadata; grid_boxes; and an optional current_object preference.
+- Parent hierarchy nodes precede their children, matching the current addHierarchyNode API. Duplicate visible object/image names are valid; unique indices and deterministic safe paths identify entries.
+
+Conceptual layout (actual safe names depend on original names and collisions):
+
+```text
+dataset.ome.zarr/
+  zarr.json                         PoCA container; no dummy root image
+  poca/zarr.json                    0.2 manifest
+  images/ImagesList/
+    actin/                         independent NGFF RAW group
+      0/ ...
+      labels/mask/                 explicitly associated NGFF LABEL
+      labels/mask_2/               second label for the same RAW
+    actin_2/                       another independent RAW
+    orphan_manual/                 scalar LABEL; no image-label.source
+  poca/points/...                  existing Phase-6 positions/features
+  poca/meshes/...                  existing indexed geometry/object features
+
+multiple.ome.zarr/
+  zarr.json
+  poca/zarr.json                    kind=multiple_object, ordered child descriptors
+  objects/same_name/               complete kind=object dataset
+  objects/same_name_2/             another child with the same exact visible name
+  objects/...                     all remaining children
+```
+
+All ImagesList entries are considered independently of current selection: every RAW, all explicitly associated labels, and every orphan. Associated labels use the existing Phase-4 writer beneath their declared RAW. Orphans use that same scalar label/pyramid implementation at an independent group and remove the source member; type=label and source=null restore LABEL semantics and remain unassociated. Owned insertion avoids addImage's existing current-entry inference; associations are restored after all entries exist, including labels that precede their RAW.
+
+Points-only, mesh-only, LABEL-only and mixed datasets need no RAW or dummy image. DetectionSets and direct top-level ObjectListMesh components need no image association. ObjectLists retains its container, exact entry order/names/plugins/commands; it is not flattened. Top-level component order is independent of path sorting. Every supported component is written once, including supported aggregate components owned directly by MyMultipleObject.
+
+The existing positions, indexed double vertices/u64 faces/offsets, coordinate metadata, nbSlices, bounding boxes, float32 feature arrays, lazy feature sampling and lazy KD-tree paths are reused. No new source-image associations or scientific units are guessed.
+
+### Transforms, metadata and ownership
+
+Source inspection found MyMultipleObject's ordered raw-pointer child vector, unbounded nbColors count, unchecked currentObject access, an owning destructor, hierarchy metadata, selected-object indices and batch-rendering/grid state. Its constructor normally recomputes grid placement. Its interface accepts arbitrary MyObjectInterface pointers, so nested multiple containers are technically possible but are explicitly unsupported by this schema and rejected with child context.
+
+For each object, model and rotation are persisted as 16 row-major float32 values (JSON numeric scalars), and translation as three float32 values. Access/reconstruction converts GLM's column-indexed matrix to this documented representation. The authoritative model matrix, including any scale, is restored directly; rotation and PoCA's stored translation are also restored so subsequent gizmo edits retain the saved decomposition. Nothing is baked into pixels, vertices or localizations. Saved grid boxes and hierarchy node metadata are preserved. The multiple constructor bypasses placement recalculation during reconstruction.
+
+The current-child index is an optional UI preference. Valid indices are restored; malformed/out-of-range preferences are ignored without discarding scientific children. Multi-selection, display visibility/category/colors, batch-rendering switches, camera and command history are not captured as generic dataset state. Label color metadata and already supported mesh feature/display metadata retain their existing payload behavior.
+
+Loader reconstruction uses local unique_ptr owners throughout. Children are assembled without registration, moved into MyMultipleObject once, and deleted by its existing destructor. Aggregate/child component commands and root commands are installed once, after the relevant components exist. Only the completely restored root is registered in Engine. Failure releases all partially reconstructed owners without registering children or an incomplete root. The new command-copy binding avoids exporting through an original owner pointer after MyObject/ImagesList/Image copies.
+
+### Preflight, transaction and compatibility
+
+Complete export preflights the outer object and every child, all top-level components, all ImagesList entries, ObjectLists entry types, quantitative feature types/readability/display metadata, and ROIs stored outside components. Unsupported state is aggregated with object name, child index/name, component or entry name and reason. Skeleton, TrackSet, Voronoi/Delaunay, plugin-private unsupported components, ObjectListPolygon and ROI/annotation state must not be silently omitted. Empty ImagesList/ObjectLists cannot currently be reconstructed and are explicitly rejected. Null/repeated children or aliased owned entries are rejected.
+
+Unsupported-content preflight finishes before creating staging. Pixel/feature reads, geometry validation and metadata/filesystem failures during serialization still fail the entire transaction. Exactly one OmeZarrExportStore stages the full hierarchy; subgroup/child writers do not publish. Only after all children and manifests succeed does the existing rename/backup publication run. A late child failure cleans staging and preserves the old destination. Existing overwrite/link checks and rollback/backup retention remain. The operation remains a synchronous local-filesystem transaction, without a new cross-process or crash-durability guarantee; existing same-store source-handle limitations remain.
+
+LoaderZarr recognizes 0.2 before image-centric loading, restores object or multiple_object without requiring a root image, and rejects malformed supported manifests. Version 0.1 remains readable through its shared quantitative validation and old root-image path. Stores without a PoCA manifest continue through the external normal OME-Zarr image/labels loader. The image export still writes the existing 0.1 extension and retains its established unsupported-component skip policy; the new complete export has the stricter policy described above.
+
+No backend ABI/TensorStore wrapper changes, dependency installations, source changes in poca_zarr_backend or C:/tsb/C:/tsbd, camera changes, image scaling/calibration changes, navigation/detail streaming changes, GPU-budget changes or unrelated refactors were made. The PoCA plugin interface gains a default action hook; the eventual user-controlled build must include the updated interface consistently across core and plugins.
+
+### Source fixtures and requested coverage
+
+PocaZarrDatasetContainerTests.cpp contains one cohesive DatasetContainerFixture, two necessary synthetic unsupported/null-selection fixtures, and one TestRegistry adapter. It is registered as an optional manual Tests/Images action under the existing POCA_ZARR_EXPORT_SOURCE_TESTS flag (OFF by default). These sources were written and statically reviewed only, never executed.
+
+| Requested cases | Source evidence for later execution |
+| --- | --- |
+| 1–8 GUI | checkGui: three actual QActions, both switch directions, invalid/null child, image action retained; MainWindow activation/menu/selection hooks audited |
+| 9–17 every image entry | checkObject: duplicate RAW names, two labels on one RAW, second RAW's label, orphan source=null, exact order/name/type/source; checkImageOnlyVariants adds LABEL-only and LABEL-before-RAW |
+| 18–22 quantitative components | checkObject/checkImageOnlyVariants: points with/without images, ordered ObjectLists metadata, direct mesh, direct scalar component, lazy open/re-export; existing point/mesh fixtures retain scientific payload coverage |
+| 23–33 multiple datasets | checkMultiple: 1, 4 and 133 children, all children vs last current child, exact duplicate names, paths/order, model/rotation/translation, grid boxes, hierarchy metadata and current preference; empty case in checkPreflight |
+| 34–37 selected | checkSelected: command-selected/direct manifest equality, standalone kind=object with no wrapper, changing selection, full direct command owner scope |
+| 38–42 mixed children | checkMultiple cycles RAW+LABEL+points+ObjectLists, points-only, mesh-only, orphan LABEL+mesh; aggregate outer points also round-trip |
+| 43–46 transaction | checkRollback: final child pixel-reader failure after earlier children wrote staging, old manifest retained, no published objects, staging/backup absent |
+| 47–51 unsupported | checkPreflight: unsupported normal component, nested multiple rejection, two different child issues, name/index/reason aggregation, external ROI marker, no destination created; loader/manifest strict supported-kind checks audited |
+| 52–56 compatibility | Existing ordinary and v0.1 whole-object/image fixtures remain registered; checkObject/checkMultiple/checkRegistration exercise new 0.2 dispatch; old image command/dialog/labels fixtures retained |
+| Additional guards | checkManifestRejection: path alias/traversal, hierarchy cycles, optional invalid current preference, fabricated orphan source; checkCopiedOwner: original deleted before copied object's command runs |
+
+Static source audit covers the 34 requested structural checks: retained image action; correct normal/multiple visibility; all-child traversal; selected-only currentObject; one shared object serializer; every image/orphan/RAW; independent point/direct-mesh components; explicit ObjectLists/multiple hierarchy and ordering; safe duplicate names; persisted transforms; no inferred associations; full unsupported-content preflight; one transaction and rollback; v0.1/external dispatch; unchanged backend/rendering/calibration boundaries; and three substantive OO responsibilities rather than tiny utility files. Final static checks pass 39 UTF-8/consistent-CRLF files, 34 balanced lexical source streams, 78 existing plugin source-list paths, 26 new-source local includes, new-source whitespace and git diff --check. The documented 5-added/34-modified inventory exactly matches the working tree after excluding externally edited AGENTS.md. These are source findings, not runtime assertions.
+
+### Known limitations and later manual validation
+
+Nested MyMultipleObject, empty component lists and unsupported scientific/ROI components are explicit complete-export errors. Source callbacks, objects and destination trees must remain stable for synchronous export. The existing lazy sampling, in-memory mesh reconstruction, scalar dtype restrictions, same-store source handles and local publication limitations remain. Build/link/API/Qt/backend/CGAL behavior remains UNCONFIRMED.
+
+Manual checklist for a separately supplied build and user-controlled validation:
+
+1. Switch normal → multiple → normal MDI windows; confirm both dataset actions update and the old image action remains present.
+2. Select different children and RAW/LABEL entries; confirm image applicability and selected-dataset enablement.
+3. Validate empty entity/empty multiple/null current-child messages without unchecked vector access.
+4. Export a normal object with two RAWs, multiple associated labels and an orphan; open each RAW group in an NGFF-aware viewer.
+5. Reopen in PoCA; compare every entry's exact name, type, order and explicit/orphan association, including LABEL-before-RAW.
+6. Round-trip LABEL-only, points-only, mesh-only and LABEL+mesh datasets without a dummy RAW.
+7. Compare ObjectLists entry order/names/plugin/normalized commands and direct mesh presence.
+8. Inspect lazy feature/index state after load and after unchanged re-export; use existing scientific point/mesh fixtures to compare values/topology.
+9. Full-export one, several and 133 children with duplicate names and a selected child near the end; count all ordered child datasets.
+10. Compare saved/reopened child and outer matrices, rotation/translation, hierarchy labels/membership/metadata and grid boxes; then make a gizmo edit.
+11. Export selected child twice after changing selection; compare each standalone store against direct export of that child.
+12. Replay both recordable dataset commands; confirm owner execution once and copied objects export their own content.
+13. Introduce unsupported components and ROI state in separate children; check all diagnostics and no staging/destination write.
+14. Inject a late child read failure over an existing destination; verify previous data, no partial children and staging cleanup.
+15. Load ordinary external OME-Zarr, old 0.1 stores and both 0.2 container kinds through Engine; check one root registration and no duplicate commands. Run the optional source fixtures only when separately authorized.
+
+### Phase 6.1 complete file inventory
+
+The externally edited AGENTS.md is preserved and excluded from the implementation inventory below.
+
+
+Added (5 files):
+
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrDataset.hpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrDatasetContainerTests.cpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrDatasetExporter.cpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrDatasetLoader.cpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrDatasetManifest.cpp`
+
+Modified (34 files):
+
+- `CONTINUITY.md`
+- `poca_extra/include/PluginInterface.hpp`
+- `poca_extra/src/poca_loaderZarrFile/CMakeLists.txt`
+- `poca_extra/src/poca_loaderZarrFile/EXPORT_README.md`
+- `poca_extra/src/poca_loaderZarrFile/LoaderZarr.cpp`
+- `poca_extra/src/poca_loaderZarrFile/LoaderZarr.hpp`
+- `poca_extra/src/poca_loaderZarrFile/LoaderZarrGui.cpp`
+- `poca_extra/src/poca_loaderZarrFile/LoaderZarrObject.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExport.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExport.hpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportCommand.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportCommand.hpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportGui.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportGui.hpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportMetadataTests.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrExportTests.hpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrLabelsExport.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrLabelsExport.hpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrLabelsLoad.cpp`
+- `poca_extra/src/poca_loaderZarrFile/OmeZarrLabelsLoad.hpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrExtensionExport.cpp`
+- `poca_extra/src/poca_loaderZarrFile/PocaZarrManifest.cpp`
+- `poca_extra/src/poca_loaderZarrFile/README.md`
+- `poca/docs/POCA_ZARR_EXTENSION.md`
+- `poca/include/PluginInterface.hpp`
+- `poca/src/poca_core/General/Command.hpp`
+- `poca/src/poca_core/General/CommandableObject.cpp`
+- `poca/src/poca_core/General/Engine.hpp`
+- `poca/src/poca_core/General/EngineObjectAssembly.cpp`
+- `poca/src/poca_core/General/ImagesList.cpp`
+- `poca/src/poca_core/General/ImagesList.hpp`
+- `poca/src/poca_core/Objects/MyMultipleObject.cpp`
+- `poca/src/poca_core/Objects/MyMultipleObject.hpp`
+- `poca/src/poca/Widgets/MainWindow.cpp`
+
+Suggested commit: `feat(zarr): export complete MyObject and MyMultipleObject datasets`.
+
+No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
+
+## Historical Phase-6 image-oriented foundation (version 0.1)
+
 2026-10-05 — Phase 6 source implementation. This is a **PoCA extension stored alongside OME-NGFF**, not an OME-NGFF point-cloud or mesh standard. Compilation and runtime behavior are UNCONFIRMED. The source fixtures below are registered for later manual execution and have not been run.
 
 ## Scope and entry points

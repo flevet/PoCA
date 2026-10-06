@@ -587,6 +587,11 @@ void MainWindow::createMenus()
 	QMenuBar* menuB = menuBar();
 
 	QMenu* fileMenu = menuB->addMenu("File");
+	connect(fileMenu, &QMenu::aboutToShow, this, [this]() {
+		auto* object = m_currentMdi ? m_currentMdi->getWidget()->getObject() : nullptr;
+		for (auto* plugin : poca::core::Engine::instance()->getPlugins()->getPlugins())
+			plugin->updateActions(object);
+	});
 	QMenu* openMenu = fileMenu->addMenu("Open");
 	openMenu->addAction(m_openFileAct);
 	openMenu->addAction(m_openDirAct);
@@ -1803,6 +1808,8 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 			_mdiChild = qobject_cast <MdiChild*>(window);
 		}
 	}
+	for (auto* plugin : engine->getPlugins()->getPlugins())
+		plugin->updateActions(_mdiChild ? _mdiChild->getWidget()->getObject() : nullptr);
 	if (_mdiChild && _mdiChild != m_currentMdi){
 		poca::core::MyObjectInterface * wobj = _mdiChild->getWidget()->getObject();
 		mediator->setCurrentObject(wobj);
@@ -2193,6 +2200,8 @@ void MainWindow::changeColorObject(int _index)
 
 	//int index = m_colorButtonsGroup->id(_button);
 	obj->setCurrentObject(_index);
+	for (auto* plugin : poca::core::Engine::instance()->getPlugins()->getPlugins())
+		plugin->updateActions(obj);
 	obj->notify("LoadObjCharacteristicsAllWidgets");
 	obj->notifyAll("updateDisplay");
 	refreshObjectsPanel();

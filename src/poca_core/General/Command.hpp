@@ -49,6 +49,7 @@
 
 namespace poca::core {
 
+	class CommandableObject;
 	template<typename T>
 	struct is_c_string_pointer : std::false_type {};
 
@@ -612,6 +613,8 @@ namespace poca::core {
 			execute(_ci, _context);
 		}
 		virtual Command* copy() = 0;
+		// The owner is still in its base constructor; bind without inspecting its derived type.
+		virtual Command* copyFor(CommandableObject*) { return copy(); }
 		virtual CommandInfo createCommand(const std::string& _nameCommand, const nlohmann::json& _parameters) {
 			return createCommandFromSpecs(_nameCommand, _parameters);
 		}

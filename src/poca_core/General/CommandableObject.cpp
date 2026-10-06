@@ -46,7 +46,7 @@ namespace poca::core {
 	{
 		for (std::vector < Command* >::const_iterator it = _o.m_commands.begin(); it != _o.m_commands.end(); it++) {
 			Command* com = *it;
-			this->addCommand(com->copy());
+			this->addCommand(com->copyFor(this));
 		}
 	}
 

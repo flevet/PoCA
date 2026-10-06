@@ -88,6 +88,29 @@ namespace poca::core {
 		m_labelSources.push_back(source);
 	}
 
+	void ImagesList::addImage(std::unique_ptr<ImageInterface> _image, const std::string& _name)
+	{
+		if (!_image) throw std::invalid_argument("Missing owned image");
+		auto box = boundingBox();
+		const auto& added = _image->boundingBox();
+		for (int i = 0; i < 3; ++i) box[i] = (std::min)(box[i],added[i]);
+		for (int i = 3; i < 6; ++i) box[i] = (std::max)(box[i],added[i]);
+		m_components.reserve(m_components.size()+1);
+		m_labelSources.reserve(m_labelSources.size()+1);
+		m_names.push_back(_name);
+		m_labelSources.push_back(-1);
+		m_components.push_back(_image.get());
+		_image.release();
+		m_currentComponent = static_cast<uint32_t>(m_components.size()-1);
+		m_bbox = box;
+	}
+
+	int64_t ImagesList::labelSourceIndex(uint32_t _index) const
+	{
+		if (_index >= m_components.size()) throw std::out_of_range("Image association index");
+		return m_labelSources.at(_index);
+	}
+
 	void ImagesList::associateLabel(uint32_t _label, uint32_t _source)
 	{
 		if (_label >= m_components.size() || _source >= m_components.size() ||

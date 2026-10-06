@@ -97,6 +97,10 @@ namespace poca::core {
 		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
 		// Whole-dataset assembly: owned components are ready before one registration.
 		MyObjectInterface* createObject(const std::string&, const std::string&, std::vector<std::unique_ptr<BasicComponentInterface>>);
+		std::unique_ptr<MyObjectInterface> assembleObject(const std::string&, const std::string&, std::vector<std::unique_ptr<BasicComponentInterface>>);
+		std::unique_ptr<MyObjectInterface> assembleMultipleObject(std::vector<std::unique_ptr<MyObjectInterface>>,
+			std::vector<std::unique_ptr<BasicComponentInterface>> = {});
+		MyObjectInterface* registerObject(std::unique_ptr<MyObjectInterface>);
 		MyObjectInterface* createObjectFromImages(const std::string&, const std::string&, const std::vector<std::pair<ImageInterface*, std::string>>&);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);
 		bool addComponentToComponentList(MyObjectInterface*, const std::string&, BasicComponentInterface*);

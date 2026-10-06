@@ -64,6 +64,7 @@ public:
     virtual ~PluginInterface() = default;
     virtual void addGUI(poca::core::MediatorWObjectFWidgetInterface*, QTabWidget*) = 0;
     virtual std::vector <std::pair<QAction*, QString>> getActions() = 0;
+    virtual void updateActions(poca::core::MyObjectInterface*) {}
     virtual poca::core::MyObjectInterface* actionTriggered(QObject*, poca::core::MyObjectInterface*) = 0;
     virtual void addCommands(poca::core::CommandableObject*) = 0;
     virtual void setPlugins(poca::core::PluginList*) = 0;

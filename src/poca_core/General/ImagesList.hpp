@@ -51,6 +51,9 @@ namespace poca::core {
 		virtual void copyComponentsPtr(BasicComponentList*);
 
 		void addImage(ImageInterface*, const std::string & = "");
+		// Explicit owned insertion never infers an association from UI selection.
+		void addImage(std::unique_ptr<ImageInterface>, const std::string&);
+		int64_t labelSourceIndex(uint32_t) const;
 		// Labels remain ordinary entries; source indices survive copy/erase/append.
 		void addLabelImage(ImageInterface*, const std::string&, uint32_t);
 		void addLabelImage(std::unique_ptr<ImageInterface>, const std::string&, uint32_t);

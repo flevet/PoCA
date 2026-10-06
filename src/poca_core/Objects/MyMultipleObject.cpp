@@ -200,11 +200,11 @@ namespace {
 
 }
 
-MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors, const bool _batchComponentRendering) :MyObject(), m_colors(_colors), m_currentColor(0), m_batchComponentRendering(_batchComponentRendering)
+MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors, const bool _batchComponentRendering, const bool _initializeGrid) :MyObject(), m_colors(_colors), m_currentColor(0), m_batchComponentRendering(_batchComponentRendering)
 {
 	m_internalId = poca::core::NbObjects++;
 
-	recomputeGrid();
+	if (_initializeGrid && !m_colors.empty()) recomputeGrid();
 }
 
 MyMultipleObject::~MyMultipleObject()
@@ -306,7 +306,8 @@ void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::
 void MyMultipleObject::executeCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
 	// Analyses that own their complete sample traversal must execute once at this level.
-	if (_ci && _ci->hasParameter("executeOnObjectOnly") && _ci->getParameter<bool>("executeOnObjectOnly")) {
+	if (_ci && (_ci->nameCommand == "saveDatasetOmeZarr" || _ci->nameCommand == "saveSelectedDatasetOmeZarr" ||
+		(_ci->hasParameter("executeOnObjectOnly") && _ci->getParameter<bool>("executeOnObjectOnly")))) {
 		poca::core::CommandableObject::executeCommand(_ci, _context, _result);
 		return;
 	}

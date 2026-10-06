@@ -56,7 +56,8 @@ public:
 		std::map<std::string, std::string> metadata;
 	};
 
-	MyMultipleObject(std::vector<poca::core::MyObjectInterface*>, const bool = false);
+	// Persistence assembly may retain supplied transforms without grid placement.
+	MyMultipleObject(std::vector<poca::core::MyObjectInterface*>, const bool = false, const bool = true);
 	~MyMultipleObject();
 
 	float getX() const;
