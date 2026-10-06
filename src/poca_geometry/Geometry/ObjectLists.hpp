@@ -46,6 +46,8 @@ namespace poca::geometry {
 	class ObjectLists : public poca::core::BasicComponentList {
 	public:
 		ObjectLists(ObjectListInterface*, const poca::core::CommandInfo&, const std::string&, const std::string& = "");
+		ObjectLists(std::unique_ptr<ObjectListInterface>, const poca::core::CommandInfo&, const std::string&, const std::string&);
+		void addObjectList(std::unique_ptr<ObjectListInterface>, const poca::core::CommandInfo&, const std::string&, const std::string&);
 		~ObjectLists();
 
 		poca::core::BasicComponentInterface* copy();

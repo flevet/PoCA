@@ -36,6 +36,7 @@
 #include <vector>
 #include <map>
 #include <any>
+#include <memory>
 
 #include "../Interfaces/BasicComponentInterface.hpp"
 #include "../DesignPatterns/Subject.hpp"
@@ -117,6 +118,8 @@ namespace poca::core {
 		MyData* getMyData(const std::string&);
 		MyData* getCurrentMyData();
 		void deleteFeature(const std::string&);
+		// Takes ownership; replaces a persisted feature without leaking the old MyData.
+		void replaceFeature(const std::string&, std::unique_ptr<MyData>);
 		const std::map <std::string, MyData*>& getData() const;
 		std::map <std::string, MyData*>& getData();
 		virtual const unsigned int memorySize() const;

@@ -68,10 +68,12 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/UMAP.cpp
   Geometry/DelaunayTriangulation.cpp
   Geometry/DetectionSet.cpp
+  Geometry/DetectionSetStorage.cpp
   Geometry/MeshRepair.cpp
   Geometry/ObjectLists.cpp
   Geometry/ObjectListDelaunay.cpp
   Geometry/ObjectListMesh.cpp
+  Geometry/ObjectListMeshPersistence.cpp
   Geometry/ObjectListPolygon.cpp
   Geometry/StraightLine.cpp
   Geometry/Skeleton.cpp

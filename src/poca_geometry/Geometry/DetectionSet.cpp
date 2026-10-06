@@ -73,8 +73,9 @@ namespace poca::geometry {
 	{
 	}
 
-	DetectionSet::DetectionSet(const DetectionSet& _o) : poca::core::BasicComponent(_o), m_nbPoints(_o.m_nbPoints), m_nbSlices(_o.m_nbSlices), m_kdTree(NULL)
+	DetectionSet::DetectionSet(const DetectionSet& _o) : poca::core::BasicComponent(_o), m_nbPoints(_o.m_nbPoints), m_nbSlices(_o.m_nbSlices), m_kdTree(NULL), m_storageBacked(_o.m_storageBacked)
 	{
+		if (m_storageBacked) return;
 		const std::vector <float>& xs = m_data["x"]->getOriginalData<float>(), & ys = m_data["y"]->getOriginalData<float>();
 		m_pointCloud.resize(xs.size());
 		if (hasData("z")) {
@@ -183,10 +184,17 @@ namespace poca::geometry {
 
 	DetectionSet::~DetectionSet()
 	{
+		delete m_kdTree;
 	}
 
 	const unsigned int DetectionSet::memorySize() const
 	{
+		if (m_storageBacked) {
+			const size_t resident = poca::core::BasicComponent::memorySize()
+				+ m_pointCloud.m_pts.capacity() * sizeof(poca::core::Vec3<double>)
+				+ (m_kdTree ? m_kdTree->usedMemory() : 0);
+			return static_cast<unsigned int>((std::min)(resident, size_t((std::numeric_limits<unsigned int>::max)())));
+		}
 		size_t memoryS = 0;
 		memoryS += 2 * sizeof(float);
 		memoryS += 2 * sizeof(int);

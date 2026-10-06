@@ -36,6 +36,7 @@
 #include <vector>
 #include <array>
 #include <map>
+#include <mutex>
 
 #include <General/BasicComponent.hpp>
 #include <General/Vec3.hpp>
@@ -95,6 +96,9 @@ namespace poca::geometry {
 		DetectionSet(const DetectionSet&);
 		DetectionSet(const std::vector < DetectionSet* >&);
 		DetectionSet(const std::map <std::string, std::vector <float>>&);
+		void initializeStorageBacked(size_t, uint32_t, size_t, const poca::core::BoundingBox&,
+			std::map<std::string, std::unique_ptr<poca::core::MyData>>);
+		bool hasSpatialIndex() const { return m_kdTree != nullptr; }
 		~DetectionSet();
 
 		inline size_t nbSlices() const { return m_nbSlices; }
@@ -117,16 +121,19 @@ namespace poca::geometry {
 
 		void computeBBoxFromPoints();
 
-		inline const poca::core::DetectionPointCloud& getKdTreeCloud() const { return m_pointCloud; }
-		inline KdTree_DetectionPoint* getKdTree() { return m_kdTree; }
+		inline const poca::core::DetectionPointCloud& getKdTreeCloud() const { ensureSpatialIndex(); return m_pointCloud; }
+		inline KdTree_DetectionPoint* getKdTree() { ensureSpatialIndex(); return m_kdTree; }
 
 	protected:
 		
 
 	protected:
-		size_t m_nbPoints, m_nbSlices;
-		poca::core::DetectionPointCloud m_pointCloud;
-		KdTree_DetectionPoint* m_kdTree;
+		void ensureSpatialIndex() const;
+		size_t m_nbPoints{ 0 }, m_nbSlices{ 0 };
+		mutable poca::core::DetectionPointCloud m_pointCloud;
+		mutable KdTree_DetectionPoint* m_kdTree{ nullptr };
+		bool m_storageBacked{ false };
+		mutable std::mutex m_spatialIndexMutex;
 	};
 }
 

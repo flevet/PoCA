@@ -43,6 +43,7 @@ namespace poca::core {
 	class ImagesList : public BasicComponentList {
 	public:
 		ImagesList(ImageInterface*, const std::string & = "");
+		ImagesList(std::unique_ptr<ImageInterface>, const std::string&);
 		~ImagesList();
 		ImagesList(const ImagesList&);
 
@@ -52,6 +53,7 @@ namespace poca::core {
 		void addImage(ImageInterface*, const std::string & = "");
 		// Labels remain ordinary entries; source indices survive copy/erase/append.
 		void addLabelImage(ImageInterface*, const std::string&, uint32_t);
+		void addLabelImage(std::unique_ptr<ImageInterface>, const std::string&, uint32_t);
 		void associateLabel(uint32_t, uint32_t);
 		std::vector<uint32_t> labelsForImage(uint32_t) const;
 		ImageInterface* currentImage();

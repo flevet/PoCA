@@ -39,6 +39,8 @@
 #include "../Interfaces/MyObjectInterface.hpp"
 #include "BasicComponent.hpp"
 
+#include <memory>
+#include <limits>
 #include "Palette.hpp"
 #include "Histogram.hpp"
 #include "Command.hpp"
@@ -51,9 +53,15 @@ namespace poca::core {
 		m_palette = Palette::getStaticLutPtr(_namePalette);
 	}
 
-	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_data(_o.m_data), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected)
+	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected), m_hilow(_o.m_hilow), m_palette(nullptr), m_paletteSaved(nullptr), m_selection(_o.m_selection)
 	{
-		m_palette = new Palette(*_o.m_palette);
+		std::unique_ptr<Palette> palette(new Palette(*_o.m_palette));
+		std::map<std::string, std::unique_ptr<MyData>> features;
+		for (const auto& feature : _o.m_data)
+			features.emplace(feature.first, std::make_unique<MyData>(*feature.second));
+		for (auto& feature : features) m_data.emplace(feature.first, feature.second.get());
+		for (auto& feature : features) feature.second.release();
+		m_palette = palette.release();
 	}
 
 	BasicComponent::~BasicComponent()
@@ -79,10 +87,23 @@ namespace poca::core {
 		m_data[_nameF] = _dataF;
 	}
 
+	void BasicComponent::replaceFeature(const std::string& _name, std::unique_ptr<MyData> _data)
+	{
+		if (!_data) throw std::invalid_argument("Missing replacement feature " + _name);
+		auto found = m_data.find(_name);
+		if (found == m_data.end()) m_data.emplace(_name, _data.get());
+		else { delete found->second; found->second = _data.get(); }
+		_data.release();
+	}
+
 	const unsigned int BasicComponent::memorySize() const
 	{
-		unsigned int memoryS = 0;
-		return memoryS;
+		size_t memoryS = (m_selection.capacity() + 7) / 8;
+		for (const auto& feature : m_data) {
+			const auto* data = feature.second;
+			memoryS += data->memorySize();
+		}
+		return static_cast<unsigned int>((std::min)(memoryS, size_t((std::numeric_limits<unsigned int>::max)())));
 	}
 
 	void BasicComponent::forceRegenerateSelection()
@@ -97,7 +118,7 @@ namespace poca::core {
 		}
 
 		m_nbSelection = 0;
-		for (int n = 0; n < m_selection.size(); n++)
+		for (size_t n = 0; n < m_selection.size(); n++)
 			if (m_selection[n])
 				m_nbSelection++;
 	}

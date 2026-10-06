@@ -234,6 +234,16 @@ namespace poca::core {
 		void executeCommand(const bool _record, const std::string& _nameCommand, const std::string& _nameParameter, T* _param, Args... more) { m_components[m_currentComponent]->executeCommand(_record, _nameCommand, _nameParameter, _param, more...); }
 		*/
 	protected:
+		BasicComponentList(const std::string& _name, std::unique_ptr<BasicComponent> bc)
+			: BasicComponentInterface(_name), m_nameComponent(_name), m_dontDeleteComponents(false)
+		{
+			if (!bc) throw std::invalid_argument("Component list requires an owned component");
+			m_bbox = bc->boundingBox();
+			m_components.push_back(bc.get());
+			m_currentComponent = 0;
+			bc.release();
+		}
+
 		BasicComponentList(const std::string& _name, BasicComponent* bc) : BasicComponentInterface(_name), m_nameComponent(_name), m_dontDeleteComponents(false)
 		{
 			m_components.push_back(bc);

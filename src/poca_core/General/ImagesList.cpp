@@ -42,6 +42,13 @@ namespace poca::core {
 		m_labelSources.push_back(-1);
 	}
 
+	ImagesList::ImagesList(std::unique_ptr<ImageInterface> _image, const std::string& _name)
+		: BasicComponentList("ImagesList",std::unique_ptr<BasicComponent>(std::move(_image)))
+	{
+		m_names.push_back(_name);
+		m_labelSources.push_back(-1);
+	}
+
 	ImagesList::ImagesList(const ImagesList& _other) : BasicComponentList(_other),
 		m_names(_other.m_names), m_labelSources(_other.m_labelSources)
 	{
@@ -95,6 +102,24 @@ namespace poca::core {
 			throw std::invalid_argument("Invalid source/label image association");
 		addImage(_image, _name);
 		associateLabel(m_currentComponent, _source);
+	}
+
+	void ImagesList::addLabelImage(std::unique_ptr<ImageInterface> _image, const std::string& _name, uint32_t _source)
+	{
+		if (!_image || !_image->isLabelImage() || _source >= m_components.size() || !getImage(_source)->isRawImage())
+			throw std::invalid_argument("Invalid owned source/label image association");
+		auto box = boundingBox();
+		const auto& added = _image->boundingBox();
+		for (int i = 0; i < 3; ++i) box[i] = (std::min)(box[i],added[i]);
+		for (int i = 3; i < 6; ++i) box[i] = (std::max)(box[i],added[i]);
+		m_components.reserve(m_components.size()+1);
+		m_labelSources.reserve(m_labelSources.size()+1);
+		m_names.push_back(_name);
+		m_labelSources.push_back(_source);
+		m_components.push_back(_image.get());
+		_image.release();
+		m_currentComponent = static_cast<uint32_t>(m_components.size()-1);
+		m_bbox = box;
 	}
 
 	std::vector<uint32_t> ImagesList::labelsForImage(uint32_t _source) const

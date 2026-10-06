@@ -75,6 +75,7 @@ set(GENERAL_SOURCE_FILES
   General/CommandableObject.cpp
   General/EquationFit.cpp
   General/Engine.cpp
+  General/EngineObjectAssembly.cpp
   General/ImagesList.cpp
   General/Misc.cpp
   General/MyData.cpp

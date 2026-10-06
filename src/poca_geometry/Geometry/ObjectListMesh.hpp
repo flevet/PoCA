@@ -52,6 +52,12 @@ namespace poca::geometry {
 		// Lightweight constructor used by diagnostics: one open triangle per object.
 		// It intentionally bypasses closed-surface volume/repair assumptions.
 		ObjectListMesh(const std::vector < std::array<poca::core::Vec3mf, 3> >&);
+		// Persistence-only path: adopts validated indexed topology, no repair, stitching, PCA or remeshing.
+		struct PersistedIndexedMeshes {};
+		ObjectListMesh(PersistedIndexedMeshes, std::vector<Surface_mesh_3_double>&&,
+			std::map<std::string, std::unique_ptr<poca::core::MyData>>, bool = false,
+			std::vector<std::array<poca::core::Vec3mf,3>> = {});
+		const unsigned int memorySize() const override;
 		~ObjectListMesh();
 
 		poca::core::BasicComponentInterface* copy();

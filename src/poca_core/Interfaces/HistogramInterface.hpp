@@ -77,6 +77,9 @@ namespace poca::core {
 		virtual void setSelection(std::vector <bool>&) = 0;
 		virtual void saveValues(std::ofstream&) const = 0;
 		virtual HistogramInterface* computeLogHistogram() const = 0;
+		virtual HistogramInterface* clone() const = 0;
+		virtual bool valuesUnloaded() const { return false; }
+		virtual const size_t memorySize() const = 0;
 		virtual const size_t nbElements() const = 0;
 
 		virtual void setInteraction(const bool) = 0;

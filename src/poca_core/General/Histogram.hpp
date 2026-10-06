@@ -41,6 +41,7 @@
 #include <execution>
 #include <fstream>
 #include <mutex>
+#include <memory>
 
 #include "../Interfaces/HistogramInterface.hpp"
 #include "ArrayStatistics.hpp"
@@ -97,7 +98,7 @@ namespace poca::core {
 		const size_t nbElements() const;
 
 		void computeStats();
-		void initializeStorageBacked(std::size_t, const std::vector<T>&, bool, float, float);
+		void initializeStorageBacked(std::size_t, const std::vector<T>&, bool, float, float, bool = false);
 		HistogramStatisticsSource statisticsSource() const override { return m_statisticsSource; }
 		std::size_t statisticsSampleCount() const override {
 			return m_statisticsSource == HistogramStatisticsSource::FullResolution ? m_nbValues : m_statisticsSample.size();
@@ -106,6 +107,12 @@ namespace poca::core {
 		bool hasValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty(); }
 		bool canMaterializeValues() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return static_cast<bool>(m_materializeValuesCallback); }
 		void setMaterializeValuesCallback(std::function<void(std::vector<T>&)> _callback) { std::lock_guard<std::mutex> lock(m_valuesMutex); m_materializeValuesCallback = std::move(_callback); }
+		using ValuesRegionReader = std::function<bool(std::size_t, std::size_t, T*)>;
+		void setValuesRegionReader(ValuesRegionReader _reader) { std::lock_guard<std::mutex> lock(m_valuesMutex); m_valuesRegionReader = std::move(_reader); }
+		bool canReadValuesRegion() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty() || static_cast<bool>(m_valuesRegionReader); }
+		bool readValuesRegion(std::size_t, std::size_t, T*) const;
+		bool valuesUnloaded() const override { return m_storageBacked && !hasValues(); }
+		HistogramInterface* clone() const override { return new Histogram<T>(*this); }
 		void copyValues(std::vector<T>& _out) const;
 		void ensureValuesLoaded() const;
 
@@ -145,6 +152,7 @@ namespace poca::core {
 		bool m_isMinDefined{ false }, m_isMaxDefined{ false }, m_isLog{ false }, m_hasLogHistogram{ true }, m_hasInteraction{ true }, m_scaleLUT{ false };
 		float m_minDefined{ 0.f }, m_maxDefined{ 0.f };
 		std::function<void(std::vector<T>&)> m_materializeValuesCallback;
+		ValuesRegionReader m_valuesRegionReader;
 		mutable std::mutex m_valuesMutex;
 		bool m_storageBacked{ false };
 		HistogramStatisticsSource m_statisticsSource{ HistogramStatisticsSource::FullResolution };
@@ -172,8 +180,11 @@ namespace poca::core {
 	Histogram<T>::Histogram(const Histogram& _o) :m_values(_o.m_values), m_bins(_o.m_bins), m_ts(_o.m_ts), m_nbValues(_o.m_nbValues), m_nbBins(_o.m_nbBins),
 		m_stats(_o.m_stats), m_stepX(_o.m_stepX), m_maxY(_o.m_maxY), m_currentMin(_o.m_currentMin),
 		m_currentMax(_o.m_currentMax), m_isMinDefined(_o.m_isMinDefined), m_isMaxDefined(_o.m_isMaxDefined), m_isLog(_o.m_isLog),
-		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined), m_materializeValuesCallback(_o.m_materializeValuesCallback), m_storageBacked(_o.m_storageBacked), m_statisticsSource(_o.m_statisticsSource), m_statisticsSample(_o.m_statisticsSample)
+		m_minDefined(_o.m_minDefined), m_maxDefined(_o.m_maxDefined), m_materializeValuesCallback(_o.m_materializeValuesCallback), m_valuesRegionReader(_o.m_valuesRegionReader), m_storageBacked(_o.m_storageBacked), m_statisticsSource(_o.m_statisticsSource), m_statisticsSample(_o.m_statisticsSample)
 	{
+		m_hasInteraction = _o.m_hasInteraction;
+		m_scaleLUT = _o.m_scaleLUT;
+		m_hasLogHistogram = _o.m_hasLogHistogram;
 	}
 
 	template <class T>
@@ -195,6 +206,9 @@ namespace poca::core {
 		m_minDefined = _o.m_minDefined;
 		m_maxDefined = _o.m_maxDefined;
 		m_materializeValuesCallback = _o.m_materializeValuesCallback;
+		m_valuesRegionReader = _o.m_valuesRegionReader;
+		m_hasInteraction = _o.m_hasInteraction;
+		m_scaleLUT = _o.m_scaleLUT;
 		m_storageBacked = _o.m_storageBacked;
 		m_statisticsSource = _o.m_statisticsSource;
 		m_statisticsSample = _o.m_statisticsSample;
@@ -373,6 +387,11 @@ namespace poca::core {
 	template <class T>
 	const size_t Histogram<T>::memorySize() const
 	{
+		if (m_storageBacked) {
+			std::lock_guard<std::mutex> lock(m_valuesMutex);
+			return sizeof(*this) + m_values.capacity() * sizeof(T) + m_statisticsSample.capacity() * sizeof(T)
+				+ (m_bins.capacity() + m_ts.capacity()) * sizeof(float);
+		}
 		size_t memoryS = 0;
 		memoryS += 3 * sizeof(float*);
 		if (!m_values.empty())
@@ -390,11 +409,14 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::setSelection(std::vector <bool>& _selection)
 	{
+		// An inactive full-range lazy filter contributes nothing to selection.
+		if (valuesUnloaded() && (!m_hasInteraction ||
+			(getCurrentMin() <= getMin() && getCurrentMax() >= getMax()))) return;
 		ensureValuesLoaded();
 		if (_selection.size() != m_values.size()) return;
 		T minV = T(getCurrentMin()), maxV = T(getCurrentMax());
 #pragma omp parallel for
-		for (int n = 0; n < m_values.size(); n++)
+		for (std::ptrdiff_t n = 0; n < static_cast<std::ptrdiff_t>(m_values.size()); n++)
 			_selection[n] = _selection[n] && minV <= m_values[n] && m_values[n] <= maxV;
 	}
 
@@ -410,12 +432,12 @@ namespace poca::core {
 	HistogramInterface* Histogram<T>::computeLogHistogram() const
 	{
 		ensureValuesLoaded();
-		poca::core::Histogram<T>* logHistogram = new Histogram<T>();
+		auto logHistogram = std::make_unique<Histogram<T>>();
 		std::vector<T>& values = logHistogram->getValues();
 		values.resize(m_values.size());
 		std::transform(std::execution::par, m_values.begin(), m_values.end(), values.begin(), [](auto i) { return  (T)log10(i); });
 		logHistogram->setHistogram(true);
-		return logHistogram;
+		return logHistogram.release();
 	}
 
 	template <class T>
@@ -452,14 +474,14 @@ namespace poca::core {
 
 	template <class T>
 	void Histogram<T>::initializeStorageBacked(std::size_t _count, const std::vector<T>& _sample,
-		bool _hasDisplayBounds, float _displayMin, float _displayMax)
+		bool _hasDisplayBounds, float _displayMin, float _displayMax, bool _preserveBounds)
 	{
 		std::lock_guard<std::mutex> lock(m_valuesMutex);
 		if (_count == 0 || !m_values.empty() || !_sample.empty() && _sample.size() > _count)
 			throw std::invalid_argument("Invalid unloaded intensity initialization");
 		if (_sample.empty() && !_hasDisplayBounds)
 			throw std::invalid_argument("Unloaded image requires native statistics or display metadata");
-		if (_hasDisplayBounds && (!std::isfinite(_displayMin) || !std::isfinite(_displayMax) || _displayMin >= _displayMax))
+		if (_hasDisplayBounds && (!std::isfinite(_displayMin) || !std::isfinite(_displayMax) || _displayMin > _displayMax))
 			throw std::invalid_argument("Invalid image display metadata bounds");
 		m_stats = storageSampleStatistics(_sample);
 		m_storageBacked = true;
@@ -469,8 +491,8 @@ namespace poca::core {
 		m_isMinDefined = m_isMaxDefined = true;
 		m_minDefined = _hasDisplayBounds ? _displayMin : m_stats.getData(ArrayStatistics::Min);
 		m_maxDefined = _hasDisplayBounds ? _displayMax : m_stats.getData(ArrayStatistics::Max);
-		// A constant sample still needs a finite, nonzero display interval.
-		storageDisplayInterval(m_minDefined, m_maxDefined);
+		// Images retain a finite display interval; quantitative features may preserve exact constant bounds.
+		if (!_preserveBounds) storageDisplayInterval(m_minDefined, m_maxDefined);
 		m_currentMin = m_minDefined;
 		m_currentMax = m_maxDefined;
 		setNbBins(100);
@@ -494,6 +516,21 @@ namespace poca::core {
 
 		self->m_materializeValuesCallback(self->m_values);
 		self->m_nbValues = self->m_values.size();
+	}
+
+	template <class T>
+	bool Histogram<T>::readValuesRegion(std::size_t _start, std::size_t _count, T* _destination) const
+	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
+		if (_start > m_nbValues || _count > m_nbValues - _start || (_count && !_destination))
+			throw std::invalid_argument("Histogram range outside values");
+		if (!_count) return true;
+		if (!m_values.empty()) {
+			if (m_values.size() != m_nbValues) throw std::runtime_error("Histogram resident count mismatch");
+			std::copy_n(m_values.data() + _start, _count, _destination);
+			return true;
+		}
+		return m_valuesRegionReader && m_valuesRegionReader(_start, _count, _destination);
 	}
 
 	template <class T>

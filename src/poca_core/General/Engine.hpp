@@ -38,6 +38,7 @@
 #include <QtCore/QStringList>
 #include <QtCore/QVariant>
 #include <vector>
+#include <memory>
 #include <algorithm>
 #include <map>
 #include <string>
@@ -94,6 +95,8 @@ namespace poca::core {
 		MyObjectInterface* loadDataAndCreateObject(const QString&, poca::core::CommandInfo* = NULL);
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);
 		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
+		// Whole-dataset assembly: owned components are ready before one registration.
+		MyObjectInterface* createObject(const std::string&, const std::string&, std::vector<std::unique_ptr<BasicComponentInterface>>);
 		MyObjectInterface* createObjectFromImages(const std::string&, const std::string&, const std::vector<std::pair<ImageInterface*, std::string>>&);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);
 		bool addComponentToComponentList(MyObjectInterface*, const std::string&, BasicComponentInterface*);
@@ -151,6 +154,7 @@ namespace poca::core {
 		inline MediatorWObjectFWidget* getMediator() { return m_mediator; }
 		inline const std::vector < LoaderInterface* >& getLoaders() const { return m_loadersFile; }
 		inline PluginList* getPlugins() { return m_plugins; }
+		size_t datasetCount() const { return m_datasets.size(); }
 		inline TestRegistry& tests() { return m_tests; }
 		inline const TestRegistry& tests() const { return m_tests; }
 

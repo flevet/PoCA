@@ -31,6 +31,7 @@
 */
 
 #include "MyData.hpp"
+#include <memory>
 
 namespace poca::core {
 	MyData::MyData() :m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(false)
@@ -43,17 +44,19 @@ namespace poca::core {
 		m_logHistogram = _logHist;
 	}
 
-	MyData::MyData(HistogramInterface* _hist, const bool _computeLogHisto): m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(_computeLogHisto)
+	MyData::MyData(HistogramInterface* _hist, const bool _computeLogHisto, const bool _deferLog): m_histogram(nullptr), m_logHistogram(nullptr), m_log(false), m_computeLog(_computeLogHisto)
 	{
 		m_histogram = _hist;
-		if(m_computeLog)
+		if(m_computeLog && !_deferLog && !m_histogram->valuesUnloaded())
 			m_logHistogram = m_histogram->computeLogHistogram();
 	}
 
-	MyData::MyData(const MyData& _o)
+	MyData::MyData(const MyData& _o) : m_histogram(nullptr), m_logHistogram(nullptr), m_log(_o.m_log), m_computeLog(_o.m_computeLog), m_deferredLog(_o.m_deferredLog)
 	{
-		m_histogram = _o.m_histogram;
-		m_logHistogram = _o.m_logHistogram;
+		std::unique_ptr<HistogramInterface> original(_o.m_histogram ? _o.m_histogram->clone() : nullptr);
+		std::unique_ptr<HistogramInterface> log(_o.m_logHistogram ? _o.m_logHistogram->clone() : nullptr);
+		m_histogram = original.release();
+		m_logHistogram = log.release();
 	}
 
 	MyData::~MyData()
@@ -68,8 +71,11 @@ namespace poca::core {
 	void MyData::finalizeData()
 	{
 		m_histogram->setHistogram(false);
-		if (m_computeLog) 
-			m_logHistogram = m_histogram->computeLogHistogram();
+		if (m_computeLog && !m_histogram->valuesUnloaded()) {
+			std::unique_ptr<HistogramInterface> log(m_histogram->computeLogHistogram());
+			delete m_logHistogram;
+			m_logHistogram = log.release();
+		}
 	}
 
 	const size_t MyData::nbElements() const
@@ -78,6 +84,12 @@ namespace poca::core {
 	}
 
 	void MyData::setLog(const bool _val) {
+		m_deferredLog = false;
+		if (_val == m_log) return;
+		if (_val && !m_logHistogram) {
+			if (!m_computeLog) throw std::invalid_argument("Feature does not support logarithmic display");
+			m_logHistogram = m_histogram->computeLogHistogram();
+		}
 		HistogramInterface* current = m_log ? m_logHistogram : m_histogram;
 		HistogramInterface* other = !m_log ? m_logHistogram : m_histogram;
 		if (current == NULL) return;

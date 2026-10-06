@@ -48,6 +48,29 @@ namespace poca::geometry {
 		m_infos.push_back(std::make_tuple(_com, _plugin, _name));
 	}
 
+	ObjectLists::ObjectLists(std::unique_ptr<ObjectListInterface> _object, const poca::core::CommandInfo& _command,
+		const std::string& _plugin, const std::string& _name)
+		: BasicComponentList("ObjectLists", std::unique_ptr<poca::core::BasicComponent>(std::move(_object)))
+	{
+		m_infos.push_back(std::make_tuple(_command, _plugin, _name));
+	}
+
+	void ObjectLists::addObjectList(std::unique_ptr<ObjectListInterface> _object, const poca::core::CommandInfo& _command,
+		const std::string& _plugin, const std::string& _name)
+	{
+		if (!_object) throw std::invalid_argument("Missing owned ObjectLists entry");
+		auto box = boundingBox();
+		const auto& added = _object->boundingBox();
+		for (int i = 0; i < 3; ++i) box[i] = (std::min)(box[i],added[i]);
+		for (int i = 3; i < 6; ++i) box[i] = (std::max)(box[i],added[i]);
+		m_components.reserve(m_components.size()+1);
+		m_infos.push_back(std::make_tuple(_command,_plugin,_name));
+		m_components.push_back(_object.get());
+		_object.release();
+		m_currentComponent = static_cast<uint32_t>(m_components.size()-1);
+		m_bbox = box;
+	}
+
 	ObjectLists::~ObjectLists(){
 
 	}

@@ -45,7 +45,7 @@ namespace poca::core {
 	public:
 		MyData();
 		MyData(HistogramInterface*, HistogramInterface* = NULL);
-		MyData(HistogramInterface*,const bool = false);
+		MyData(HistogramInterface*,const bool = false, const bool = false);
 		MyData(const MyData&);
 		~MyData();
 
@@ -60,7 +60,11 @@ namespace poca::core {
 		template <class T>
 		std::vector < T >& getData();
 		const size_t nbElements() const;
+		size_t memorySize() const { return m_histogram->memorySize() + (m_logHistogram ? m_logHistogram->memorySize() : 0); }
 		void setLog(const bool);
+		// Persist a display preference without computing the full logarithmic array at open.
+		void deferLogDisplay(bool _value) { m_deferredLog = _value; }
+		bool logDisplayRequested() const { return m_log || m_deferredLog; }
 
 		inline HistogramInterface* getHistogram() { return m_log ? m_logHistogram : m_histogram; }
 		inline HistogramInterface* getHistogram() const { return m_log ? m_logHistogram : m_histogram; }
@@ -71,7 +75,7 @@ namespace poca::core {
 
 	protected:
 		HistogramInterface* m_histogram, * m_logHistogram;
-		bool m_log{ false }, m_computeLog{ true };
+		bool m_log{ false }, m_computeLog{ true }, m_deferredLog{ false };
 	};
 
 	
