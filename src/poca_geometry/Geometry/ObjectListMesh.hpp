@@ -35,6 +35,7 @@
 
 #include <any>
 #include <tuple>
+#include <mutex>
 
 #include <General/BasicComponentList.hpp>
 #include <array>
@@ -52,11 +53,28 @@ namespace poca::geometry {
 		// Lightweight constructor used by diagnostics: one open triangle per object.
 		// It intentionally bypasses closed-surface volume/repair assumptions.
 		ObjectListMesh(const std::vector < std::array<poca::core::Vec3mf, 3> >&);
-		// Persistence-only path: adopts validated indexed topology, no repair, stitching, PCA or remeshing.
+		// Backend-independent scientific topology; double coordinates and global face indices.
+		class IndexedMeshGeometry {
+		public:
+			std::vector<std::array<double,3>> vertices;
+			std::vector<std::array<uint64_t,3>> faces;
+			std::vector<uint64_t> vertexOffsets, faceOffsets;
+
+			size_t nbObjects() const { return vertexOffsets.empty() ? 0 : vertexOffsets.size()-1; }
+			void validate() const;
+			void generateNormals(std::vector<poca::core::Vec3mf>&, std::vector<poca::core::Vec3mf>&) const;
+			std::vector<Surface_mesh_3_double> materialize() const;
+			static IndexedMeshGeometry fromMeshes(const std::vector<Surface_mesh_3_double>&);
+			size_t memorySize() const;
+		};
+		// Persistence-only path: no repair, stitching, PCA, remeshing or CGAL construction.
 		struct PersistedIndexedMeshes {};
-		ObjectListMesh(PersistedIndexedMeshes, std::vector<Surface_mesh_3_double>&&,
+		ObjectListMesh(PersistedIndexedMeshes, IndexedMeshGeometry&&,
 			std::map<std::string, std::unique_ptr<poca::core::MyData>>, bool = false,
-			std::vector<std::array<poca::core::Vec3mf,3>> = {});
+			std::vector<std::array<poca::core::Vec3mf,3>> = {},
+			std::optional<poca::core::PersistedHistogramState> = std::nullopt);
+		ObjectListMesh(const ObjectListMesh&);
+		ObjectListMesh& operator=(const ObjectListMesh&) = delete;
 		const unsigned int memorySize() const override;
 		~ObjectListMesh();
 
@@ -87,7 +105,7 @@ namespace poca::geometry {
 		virtual poca::core::Vec3mf computeBarycenterElement(const int) const;
 
 		inline const uint32_t dimension() const { return 3; }
-		inline const size_t nbObjects() const { return m_meshes.size(); }
+		inline const size_t nbObjects() const { return m_indexedGeometry ? m_indexedGeometry->nbObjects() : m_meshes.size(); }
 
 		const float* getXs() const { return m_xs.data(); }
 		const float* getYs() const { return m_ys.data(); }
@@ -104,8 +122,11 @@ namespace poca::geometry {
 
 		inline const poca::core::MyArrayVec3mf& getSkeletons() const { return m_edgesSkeleton; }
 		inline const poca::core::MyArrayVec3mf& getLinks() const { return m_linksSkeleton; }
-		inline const std::vector <Surface_mesh_3_double>& getMeshes() const { return m_meshes; }
-		inline  std::vector <Surface_mesh_3_double>& getMeshes() { return m_meshes; }
+		// Const access materializes a reusable analysis cache; mutable access invalidates indexed authority.
+		const std::vector <Surface_mesh_3_double>& getMeshes() const;
+		std::vector <Surface_mesh_3_double>& getMeshes();
+		bool meshesMaterialized() const;
+		std::shared_ptr<const IndexedMeshGeometry> indexedGeometry() const;
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 		inline const std::vector <poca::core::BoundingBox>& getBBoxMeshes() const { return m_bboxMeshes; }
 		inline bool useVertexNormals() const { return m_useVertexNormals; }
@@ -124,7 +145,12 @@ namespace poca::geometry {
 										std::vector <float>&);
 
 	protected:
-		std::vector < Surface_mesh_3_double> m_meshes;
+		void ensureMeshesMaterialized() const; // Caller holds m_meshMutex.
+		mutable std::mutex m_meshMutex;
+		mutable std::vector < Surface_mesh_3_double> m_meshes;
+		mutable bool m_meshesMaterialized{ true };
+		std::shared_ptr<const IndexedMeshGeometry> m_indexedGeometry;
+		std::vector<poca::core::Vec3mf> m_indexedVertexNormals, m_indexedFaceNormals;
 		std::vector <poca::core::Vec3mf> m_centroids;
 		std::vector <poca::core::BoundingBox> m_bboxMeshes;
 

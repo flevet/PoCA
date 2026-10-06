@@ -53,7 +53,7 @@ namespace poca::core {
 		m_palette = Palette::getStaticLutPtr(_namePalette);
 	}
 
-	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected), m_hilow(_o.m_hilow), m_palette(nullptr), m_paletteSaved(nullptr), m_selection(_o.m_selection)
+	BasicComponent::BasicComponent(const BasicComponent& _o) : BasicComponentInterface(_o), m_nameComponent(_o.m_nameComponent), m_bbox(_o.m_bbox), m_currentHistogram(_o.m_currentHistogram), m_log(_o.m_log), m_nbSelection(_o.m_nbSelection), m_selected(_o.m_selected), m_hilow(_o.m_hilow), m_palette(nullptr), m_paletteSaved(nullptr), m_selection(_o.m_selection), m_persistedFeatures(_o.m_persistedFeatures)
 	{
 		std::unique_ptr<Palette> palette(new Palette(*_o.m_palette));
 		std::map<std::string, std::unique_ptr<MyData>> features;
@@ -85,6 +85,7 @@ namespace poca::core {
 	void BasicComponent::addFeature(const std::string& _nameF, MyData* _dataF)
 	{
 		m_data[_nameF] = _dataF;
+		m_persistedFeatures.erase(_nameF);
 	}
 
 	void BasicComponent::replaceFeature(const std::string& _name, std::unique_ptr<MyData> _data)
@@ -94,6 +95,35 @@ namespace poca::core {
 		if (found == m_data.end()) m_data.emplace(_name, _data.get());
 		else { delete found->second; found->second = _data.get(); }
 		_data.release();
+		m_persistedFeatures.erase(_name);
+	}
+
+	void BasicComponent::adoptPersistedFeatures(std::map<std::string,std::unique_ptr<MyData>> _features,
+		std::optional<size_t> _selectionCount, const std::string& _current)
+	{
+		if (_selectionCount && *_selectionCount > (std::numeric_limits<unsigned int>::max)())
+			throw std::invalid_argument("Persisted selection exceeds PoCA count limits");
+		auto installed = m_data;
+		auto persisted = m_persistedFeatures;
+		auto selection = _selectionCount ? std::vector<bool>(*_selectionCount,true) : m_selection;
+		std::string current = _current;
+		for (const auto& feature : _features) {
+			if (feature.first.empty() || !feature.second)
+				throw std::invalid_argument("Invalid persisted feature " + feature.first);
+			installed[feature.first] = feature.second.get();
+			persisted.insert(feature.first);
+		}
+		if (!installed.count(current)) throw std::invalid_argument("Missing persisted current feature " + current);
+		m_data.swap(installed);
+		m_persistedFeatures.swap(persisted);
+		m_selection.swap(selection);
+		m_currentHistogram.swap(current);
+		for (auto& feature : _features) {
+			const auto previous = installed.find(feature.first);
+			if (previous != installed.end()) delete previous->second;
+			feature.second.release();
+		}
+		if (_selectionCount) m_nbSelection = static_cast<unsigned int>(*_selectionCount);
 	}
 
 	const unsigned int BasicComponent::memorySize() const
@@ -139,6 +169,7 @@ namespace poca::core {
 		std::map <std::string, MyData*>::iterator it = m_data.find(_type);
 		if (it == m_data.end() || m_data.size() == 1) return;
 		m_data.erase(it);
+		m_persistedFeatures.erase(_type);
 		if(m_currentHistogram == _type)
 			m_currentHistogram = m_data.empty() ? "" : m_data.begin()->first;
 	}

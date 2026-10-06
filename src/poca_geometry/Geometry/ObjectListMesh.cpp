@@ -589,7 +589,8 @@ namespace poca::geometry {
 		std::vector <std::vector <Point_3_double>> allVertices;
 		std::vector < std::vector <std::vector <std::size_t>>> allTriangles;
 
-		for (const auto& mesh : m_meshes) {
+		const auto& meshes = static_cast<const ObjectListMesh&>(*this).getMeshes();
+		for (const auto& mesh : meshes) {
 			bool inside = false;
 			for (const auto& point : mesh.points()) {
 				for (auto curROI = 0; curROI < _ROIs.size() && !inside; curROI++) {
@@ -626,6 +627,7 @@ namespace poca::geometry {
 		std::vector <std::vector <Point_3_double>> allVertices;
 		std::vector < std::vector <std::vector <std::size_t>>> allTriangles;
 
+		getMeshes();
 		for (auto n = 0; n < m_meshes.size(); n++) {
 			if (m_selection[n]) {
 				const auto& mesh = m_meshes[n];
@@ -790,6 +792,7 @@ namespace poca::geometry {
 
 	void ObjectListMesh::generateNormalLocs(std::vector <poca::core::Vec3mf>& _norms)
 	{
+		if (m_indexedGeometry) { _norms = m_indexedVertexNormals; return; }
 		_norms.clear();
 		for (const auto& mesh : m_meshes) {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
@@ -920,6 +923,13 @@ namespace poca::geometry {
 	void ObjectListMesh::generateNormals(std::vector <poca::core::Vec3mf>& _normals)
 	{
 		_normals.clear();
+		if (m_indexedGeometry) {
+			_normals.reserve(m_indexedGeometry->faces.size()*3);
+			for (size_t f = 0; f < m_indexedGeometry->faces.size(); ++f)
+				for (const auto v : m_indexedGeometry->faces[f])
+					_normals.push_back(m_useVertexNormals ? m_indexedVertexNormals[v] : m_indexedFaceNormals[f]);
+			return;
+		}
 		if (m_useVertexNormals) {
 			for (const auto& mesh : m_meshes) {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
@@ -941,7 +951,7 @@ namespace poca::geometry {
 #if CGAL_VERSION_NR >= CGAL_VERSION_NUMBER(6, 0, 0)
 				Facet_vector_3_map normal_map = mesh.property_map<face_descriptor, Kernel::Vector_3>("f:norm").value();
 #else
-				Facet_vector_3_map segmentation_map = mesh.property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
+				Facet_vector_3_map normal_map = mesh.property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
 #endif
 				for (Surface_mesh_3_double::Face_index fd : mesh.faces()) {
 					CGAL::Vertex_around_face_iterator<Surface_mesh_3_double> vbegin, vend;
@@ -1062,6 +1072,7 @@ namespace poca::geometry {
 
 	void ObjectListMesh::computeSkeletons()
 	{
+		static_cast<const ObjectListMesh&>(*this).getMeshes();
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		
 		std::vector <poca::core::Vec3mf> skeletons, links;
@@ -1123,6 +1134,7 @@ namespace poca::geometry {
 
 	void ObjectListMesh::saveAsOBJ(const std::string& _filename) const
 	{
+		getMeshes();
 		/*std::ofstream fs(_filename);
 
 		uint32_t curMesh = 0, countPoints = 0;
@@ -1178,12 +1190,14 @@ namespace poca::geometry {
 
 	void ObjectListMesh::remesh(const float _target_edge_length, const uint32_t _nb_iter)
 	{
+		getMeshes();
 		for(auto& mesh : m_meshes)
 			PMP::isotropic_remeshing(faces(mesh), _target_edge_length, mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
 
 	void ObjectListMesh::subdivide(const uint32_t _nb_iter)
 	{
+		getMeshes();
 		for (auto& mesh : m_meshes)
 			CGAL::Subdivision_method_3::Sqrt3_subdivision(mesh, CGAL::parameters::number_of_iterations(_nb_iter));
 	}
@@ -1192,6 +1206,7 @@ namespace poca::geometry {
 	{
 		std::vector <Surface_mesh_3_double> meshesSelected;
 
+		getMeshes();
 		for (auto idx : _selection)
 			meshesSelected.push_back(m_meshes[idx]);
 

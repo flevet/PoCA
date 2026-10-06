@@ -37,6 +37,8 @@
 #include <map>
 #include <any>
 #include <memory>
+#include <optional>
+#include <set>
 
 #include "../Interfaces/BasicComponentInterface.hpp"
 #include "../DesignPatterns/Subject.hpp"
@@ -117,9 +119,14 @@ namespace poca::core {
 		virtual void addFeature(const std::string&, MyData*);
 		MyData* getMyData(const std::string&);
 		MyData* getCurrentMyData();
+		bool hasPersistedFeature(const std::string& _name) const { return m_persistedFeatures.count(_name) != 0; }
 		void deleteFeature(const std::string&);
 		// Takes ownership; replaces a persisted feature without leaking the old MyData.
 		void replaceFeature(const std::string&, std::unique_ptr<MyData>);
+		// Install normal PoCA data without reading values or regenerating selection.
+		// nullopt preserves the component's existing selection domain (e.g. image pixels).
+		void adoptPersistedFeatures(std::map<std::string,std::unique_ptr<MyData>>,
+			std::optional<size_t>, const std::string&);
 		const std::map <std::string, MyData*>& getData() const;
 		std::map <std::string, MyData*>& getData();
 		virtual const unsigned int memorySize() const;
@@ -149,6 +156,7 @@ namespace poca::core {
 		BoundingBox m_bbox;
 
 		std::map <std::string, MyData*> m_data;
+		std::set<std::string> m_persistedFeatures;
 
 		std::string m_currentHistogram;
 		bool m_log, m_selected, m_hilow;

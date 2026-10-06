@@ -99,6 +99,9 @@ namespace poca::core {
 
 		void computeStats();
 		void initializeStorageBacked(std::size_t, const std::vector<T>&, bool, float, float, bool = false);
+		PersistedHistogramState persistedState() const override;
+		void restorePersistedState(const PersistedHistogramState&) override;
+		void adoptPersistedValues(std::vector<T>);
 		HistogramStatisticsSource statisticsSource() const override { return m_statisticsSource; }
 		std::size_t statisticsSampleCount() const override {
 			return m_statisticsSource == HistogramStatisticsSource::FullResolution ? m_nbValues : m_statisticsSample.size();
@@ -496,6 +499,73 @@ namespace poca::core {
 		m_currentMin = m_minDefined;
 		m_currentMax = m_maxDefined;
 		setNbBins(100);
+	}
+
+	template <class T>
+	PersistedHistogramState Histogram<T>::persistedState() const
+	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
+		PersistedHistogramState state;
+		state.count = m_nbValues; state.source = m_statisticsSource;
+		for (size_t i = 0; i < state.statistics.size(); ++i) state.statistics[i] = m_stats.getData(static_cast<int>(i));
+		state.bins = m_bins; state.ts = m_ts;
+		for (T value : m_statisticsSample) state.sample.push_back(static_cast<double>(value));
+		state.minimum = getMin(); state.maximum = getMax();
+		state.currentMin = m_currentMin; state.currentMax = m_currentMax;
+		state.step = m_stepX; state.maxY = m_maxY;
+		state.interaction = m_hasInteraction; state.scaleLUT = m_scaleLUT;
+		return state;
+	}
+
+	template <class T>
+	void Histogram<T>::restorePersistedState(const PersistedHistogramState& _state)
+	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
+		if (!_state.count || (m_nbValues && m_nbValues != _state.count) ||
+			(!m_values.empty() && m_values.size() != _state.count) || _state.bins.size() < 2 ||
+			_state.ts.size() != _state.bins.size() || _state.sample.size() > _state.count ||
+			!std::isfinite(_state.minimum) || !std::isfinite(_state.maximum) || _state.minimum > _state.maximum ||
+			!std::isfinite(_state.currentMin) || !std::isfinite(_state.currentMax) || _state.currentMin > _state.currentMax ||
+			!std::isfinite(_state.step) || _state.step < 0.f || !std::isfinite(_state.maxY) || _state.maxY < 0.f)
+			throw std::invalid_argument("Invalid persisted histogram state");
+		if (_state.source != HistogramStatisticsSource::FullResolution &&
+			_state.source != HistogramStatisticsSource::NativeSample && _state.source != HistogramStatisticsSource::DisplayMetadata)
+			throw std::invalid_argument("Invalid persisted histogram statistics source");
+		for (float value : _state.statistics)
+			if (std::isinf(value)) throw std::invalid_argument("Infinite persisted histogram statistic");
+		for (size_t i = 0; i < _state.bins.size(); ++i)
+			if (!std::isfinite(_state.bins[i]) || _state.bins[i] < 0.f || !std::isfinite(_state.ts[i]))
+				throw std::invalid_argument("Invalid persisted histogram bins");
+		std::vector<T> sample;
+		for (double value : _state.sample) {
+			if (!std::isfinite(value) || value < static_cast<double>((std::numeric_limits<T>::lowest)()) ||
+				value > static_cast<double>((std::numeric_limits<T>::max)()) || static_cast<double>(static_cast<T>(value)) != value)
+				throw std::invalid_argument("Persisted histogram sample differs from scalar type");
+			sample.push_back(static_cast<T>(value));
+		}
+		if ((_state.source == HistogramStatisticsSource::NativeSample && sample.empty()) ||
+			(_state.source != HistogramStatisticsSource::NativeSample && !sample.empty()))
+			throw std::invalid_argument("Persisted histogram statistics provenance mismatch");
+		auto bins = _state.bins, ts = _state.ts;
+		for (size_t i = 0; i < _state.statistics.size(); ++i)
+			m_stats.setData(static_cast<int>(i),_state.statistics[i]);
+		m_bins.swap(bins); m_ts.swap(ts); m_statisticsSample.swap(sample);
+		m_nbValues = _state.count; m_nbBins = m_bins.size();
+		m_statisticsSource = _state.source; m_storageBacked = true;
+		m_isMinDefined = m_isMaxDefined = true;
+		m_minDefined = _state.minimum; m_maxDefined = _state.maximum;
+		m_currentMin = _state.currentMin; m_currentMax = _state.currentMax;
+		m_stepX = _state.step; m_maxY = _state.maxY;
+		m_hasInteraction = _state.interaction; m_scaleLUT = _state.scaleLUT;
+	}
+
+	template <class T>
+	void Histogram<T>::adoptPersistedValues(std::vector<T> _values)
+	{
+		std::lock_guard<std::mutex> lock(m_valuesMutex);
+		if (!m_storageBacked || _values.size() != m_nbValues)
+			throw std::invalid_argument("Persisted values differ from restored histogram count");
+		m_values.swap(_values);
 	}
 
 	template <class T>

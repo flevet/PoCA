@@ -16,12 +16,7 @@ namespace poca::geometry {
 		for (const auto& feature : _features)
 			if (!feature.second || feature.second->nbElements() != _count)
 				throw std::invalid_argument("DetectionSet feature count mismatch: " + feature.first);
-		// Allocate before transferring any owning pointer.
-		m_selection.assign(_count, true);
-		std::map<std::string, poca::core::MyData*> data;
-		for (auto& feature : _features) data.emplace(feature.first, feature.second.get());
-		m_data.swap(data);
-		for (auto& feature : _features) feature.second.release();
+		adoptPersistedFeatures(std::move(_features),_count,"x");
 		m_nbPoints = _count;
 		m_nbSlices = _slices;
 		m_nbSelection = static_cast<unsigned int>(_count);

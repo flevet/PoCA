@@ -33,11 +33,24 @@
 #ifndef HistogramInterface_h__
 #define HistogramInterface_h__
 
+#include <array>
+
 #include <vector>
 
 namespace poca::core {
 	// Display metadata supplies bounds only; native samples are approximate.
 	enum class HistogramStatisticsSource { FullResolution, NativeSample, DisplayMetadata };
+
+	// Histogram measurements/display only; values remain in the existing storage/reader.
+	struct PersistedHistogramState {
+		size_t count{0};
+		HistogramStatisticsSource source{HistogramStatisticsSource::DisplayMetadata};
+		std::array<float,5> statistics{};
+		std::vector<float> bins, ts;
+		std::vector<double> sample;
+		float minimum{0.f}, maximum{0.f}, currentMin{0.f}, currentMax{0.f}, step{0.f}, maxY{0.f};
+		bool interaction{true}, scaleLUT{false};
+	};
 
 	class HistogramInterface {
 	public:
@@ -78,6 +91,8 @@ namespace poca::core {
 		virtual void saveValues(std::ofstream&) const = 0;
 		virtual HistogramInterface* computeLogHistogram() const = 0;
 		virtual HistogramInterface* clone() const = 0;
+		virtual PersistedHistogramState persistedState() const = 0;
+		virtual void restorePersistedState(const PersistedHistogramState&) = 0;
 		virtual bool valuesUnloaded() const { return false; }
 		virtual const size_t memorySize() const = 0;
 		virtual const size_t nbElements() const = 0;

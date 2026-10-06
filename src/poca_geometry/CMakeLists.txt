@@ -74,6 +74,7 @@ set(GEOMETRY_SOURCE_FILES
   Geometry/ObjectListDelaunay.cpp
   Geometry/ObjectListMesh.cpp
   Geometry/ObjectListMeshPersistence.cpp
+  Geometry/ObjectListMeshIndexedGeometry.cpp
   Geometry/ObjectListPolygon.cpp
   Geometry/StraightLine.cpp
   Geometry/Skeleton.cpp

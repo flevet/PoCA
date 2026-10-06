@@ -1,5 +1,46 @@
 # PoCA quantitative data alongside OME-NGFF
 
+## Persistence-aware components (2026-10-06)
+
+This section supersedes the eager mesh reconstruction and histogram sampling descriptions in earlier milestones below. These changes are source-only; runtime behavior was not verified.
+
+Persisted scientific data, display representation and heavy analysis representation have separate lifetimes. A saved feature is restored as authoritative data; only absent state follows the existing compatibility computation. BasicComponent previously owned features/selection rather than scientific calculation; it now centralizes adoption of normal MyData ownership and current-feature/selection metadata, without backend knowledge. DetectionSet retains its coordinate readers and first-query KD-tree boundary.
+
+ObjectListMesh now owns backend-independent IndexedMeshGeometry: resident double vertices, global uint64 triangle indices and object offsets. Its explicit persistence constructor creates existing float display arrays, vertex/face normals, bounds, centroids and triangle-corner z directly from those arrays. It does not construct Surface_mesh, repair topology, measure volumes or run PCA. Normal constructors retain their existing scientific processing. Direct smooth normals reuse the installed CGAL most-visible-normal solver with indexed incidence; CGAL 5.3 and 6.0.1 header signatures were inspected. No Surface_mesh instance is needed for that solver.
+
+Immutable indexed backing is shared by lazy copies. Const getMeshes builds and caches all analysis meshes once, preserving double coordinates, face winding/start corner and required normal properties; a failed conversion publishes nothing. First conversion is mutex-protected. Mutable getMeshes permanently invalidates indexed authority because a returned reference can mutate again after an export. Subsequent indexedGeometry access snapshots current CGAL geometry. As with existing APIs, mutation must be serialized against display/copy/export, and existing processing commands own rebuilding display/features after edits. Copy assignment is explicitly unavailable; copy() and the copy constructor retain safe feature ownership and do not force conversion.
+
+nbObjects uses indexed offsets before conversion. Eight count/existence callers in Organograph/VMAS now use it; feature availability also uses histogram metadata count. Actual CGAL analysis remains on getMeshes. The ordinary and multiple-object renderer consume existing display arrays. Loading or switching children preserves hierarchy, names, order, transforms and current-child semantics without building their CGAL caches. Legacy binary mesh export and genuine processing/geometry-copy operations still use the CGAL interface.
+
+Zarr export uses indexedGeometry once: unchanged persisted meshes reuse the exact immutable backing without CGAL; normal or writable meshes serialize a fresh snapshot of current topology/coordinates. Existing geometry schema, root 0.1/0.2 dispatch, commands/macros, transaction and backend ABI remain unchanged. Object features stay storage-backed; no scientific measurements are recomputed. Triangle-z retains its separate corner domain, noninteractive policy and saved histogram/display state.
+
+Histogram now snapshots/restores count, bins, statistics/provenance, bounded statistics sample and display state without reading feature values. New feature metadata optionally embeds this state. Old feature metadata retains bounded compatibility sampling. PocaZarrImagePersistence groups image feature serialization/restoration in the existing feature files; optional image-group poca_image metadata works for RAW, direct/orphan LABEL and associated LABEL images. Image::initializeFromPersistence restores intensity state without native-level sampling; values remain in the OME pixel array, with no duplicate intensity array. Independent float32 features have explicit individual counts and existing lazy readers. Saved label/volume features survive addFeatureLabels; missing features use available legacy volume data. Old images without this metadata retain their native-sample/display-window path. Feature-less legacy meshes receive an ordinal id display feature; absent quantitative measurements are not invented.
+
+One cohesive geometry implementation file was added and registered in poca_geometry/CMakeLists.txt. BasicComponent, Histogram/HistogramInterface, Image, DetectionSet and ObjectListMesh were extended; IndexedMeshGeometry belongs to ObjectListMesh, and PocaZarrImagePersistence owns the backend-specific image workflow. No new dependency, GUI workflow or image-streaming framework was introduced.
+
+### Source fixtures and audit coverage
+
+The existing optional fixtures were extended, not executed:
+
+| Requested coverage | Source evidence |
+| --- | --- |
+| 1–4, 12: lazy load/count, direct triangles/normals | PocaZarrMeshTests and DatasetContainerFixture::lazyMesh |
+| 5: triangle-z display/state/export without CGAL | PocaZarrMeshTests derived mesh round trip |
+| 6–7: authoritative lazy measurements, no recomputation | Open-triangle volumes 123.25/456.75; tetra volume 999; throw-on-read histogram restoration in PocaZarrLazyTests |
+| 8–10: first/repeated CGAL cache, exact coordinates/topology | Const cache address reuse, float64 vertices and uint64 face/start-corner comparisons |
+| 11, 17: real processing and normal creation | Subdivision fixture; ordinary diagnostic constructor area feature |
+| 13: count-only callers | Source search/audit of Organograph/VMAS and feature availability |
+| 14–16: direct export, round trip, modified/retained mutable geometry | Unmaterialized export and two exports through a retained writable reference |
+| 18: multiple children/current switching | Existing 1/4/133-child fixture with lazy checks per child and loaded-dataset re-export |
+| 19–20: image and LABEL restoration | Saved independent measurements, mean 1.5 vs constant-2 pixels, label/volume pointer/state preservation |
+| 21: legacy compatibility | Missing mesh features; missing image poca_image metadata; supplied legacy LABEL volumes |
+| 22: DetectionSet unchanged laziness | Existing no-coordinate/no-KD load/copy/default selection and first-query cache checks |
+| Ownership and malformed geometry | Clone after source destruction; invalid offsets/cross-object indices, disconnected fans, directed-edge conflicts and polygon rejection |
+
+Static inspection verifies loader/display/export boundaries, counts, authoritative features, lazy image/KD paths, ownership, source registration and unchanged backend/streaming/hierarchy boundaries. Whitespace, strict UTF-8, consistent CRLF and lexical source checks are recorded in CONTINUITY.md. These checks establish no compilation or runtime result.
+
+Remaining limits: indexed geometry and display arrays are resident (not out-of-core); a fresh snapshot adds temporary memory for normal/writable export. Independent persisted features remain float32, matching the existing quantitative writer. Internal CGAL normal-solver calls require review when changing CGAL versions. The raw mutable mesh API retains its existing external synchronization/display-rebuild responsibility; stale triangle-z is explicitly rejected during export. Exact persistence restores measured histogram state, but explicit later rebin/log/filter/materialization operations retain existing Histogram semantics. Resident-memory reporting remains a lower bound and may count shared indexed backing per component.
+
 ## Compact storage keys (2026-10-06)
 
 Logical names and physical keys are separate. ZarrStorageKeys in the existing ZarrSafeNames.hpp/.cpp owns deterministic typed ordinal keys: objects o000005, image components c000004, images i000002, associated labels l000003, points p000001, meshes m000002 and features f000017. Six decimal digits are a minimum width; larger indices retain every digit. Keys never accept logical names. Duplicate names cannot collide through this policy.

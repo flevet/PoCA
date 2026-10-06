@@ -72,6 +72,9 @@ namespace poca::core {
 		// Metadata-only RAW image; _sample contains a coarse native level, never level zero.
 		void initializeStorageBacked(const uint32_t, const uint32_t, const uint32_t,
 			const std::vector<T>&, bool = false, float = 0.f, float = 0.f);
+		// Restores histogram state directly; scientific pixels retain their reload callback.
+		void initializeFromPersistence(const uint32_t, const uint32_t, const uint32_t, const PersistedHistogramState&);
+		const size_t nbElements() const override { return static_cast<size_t>(m_width)*m_height*m_depth; }
 		void addFeatureLabels();
 
 		void uint8_normalisedData(std::vector <unsigned char>&) const;
@@ -306,6 +309,26 @@ namespace poca::core {
 		m_selection.clear();
 		setCurrentHistogramType("intensity");
 		m_min = histogram->getMin(); m_max = histogram->getMax();
+		m_outOfCoreEnabled = m_pyramidalRenderingEnabled = true;
+		invalidatePyramidCache();
+	}
+
+	template <class T>
+	void Image<T>::initializeFromPersistence(const uint32_t _w, const uint32_t _h, const uint32_t _d,
+		const PersistedHistogramState& _intensity)
+	{
+		std::lock_guard<std::recursive_mutex> lock(m_pyramidMutex);
+		if ((!isRawImage() && !isLabelImage()) || (isLabelImage() && !std::is_integral_v<T>) || m_width || !canReloadPixels())
+			throw std::invalid_argument("Persisted image requires a new scalar image with a reload callback");
+		const auto count = checkedPyramidElementCount(0,"persistence/initialization",_w,_h,_d);
+		checkedPyramidByteCount(0,"persistence/initialization",_w,_h,_d,sizeof(T));
+		if (_intensity.count != count) throw std::invalid_argument("Persisted intensity count differs from image dimensions");
+		getOriginalHistogram("intensity")->restorePersistedState(_intensity);
+		m_width = _w; m_height = _h; m_depth = _d;
+		m_bbox.set(0,0,0,_w,_h,_d);
+		m_selection.clear();
+		setCurrentHistogramType("intensity");
+		m_min = _intensity.minimum; m_max = _intensity.maximum;
 		m_outOfCoreEnabled = m_pyramidalRenderingEnabled = true;
 		invalidatePyramidCache();
 	}
@@ -763,11 +786,15 @@ namespace poca::core {
 		
 		if (engine->verbose())
 			std::cout << __LINE__ << std::endl;
-		std::vector <float> labels(m_volumes.size());
-		std::iota(std::begin(labels), std::end(labels), 1);
-		addFeature("label", poca::core::generateDataWithLog(labels));
-		addFeature("volume", poca::core::generateDataWithLog(m_volumes));
-		setCurrentHistogramType("label");
+		if (!hasPersistedFeature("label")) {
+			const size_t count = hasPersistedFeature("volume") ? getMyData("volume")->nbElements() : m_volumes.size();
+			std::vector<float> labels(count);
+			std::iota(std::begin(labels),std::end(labels),1);
+			if (!labels.empty()) replaceFeature("label",std::unique_ptr<MyData>(poca::core::generateDataWithLog(labels)));
+		}
+		if (!hasPersistedFeature("volume") && !m_volumes.empty())
+			replaceFeature("volume",std::unique_ptr<MyData>(poca::core::generateDataWithLog(m_volumes)));
+		if (hasData("label")) setCurrentHistogramType("label");
 		if (engine->verbose())
 			std::cout << __LINE__ << std::endl;
 	}
