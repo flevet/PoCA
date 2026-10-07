@@ -1,5 +1,87 @@
 # PoCA quantitative data alongside OME-NGFF
 
+## Command characteristics, load report and statistics repair (2026-10-06)
+
+Source-only change; no configure, build, application, Python/helper or test execution. Runtime behavior was not verified.
+
+### Statistics regression
+
+The vector constructor means five **precomputed statistics**, not raw samples. Its guard incorrectly tested the default-empty destination `m_data`, so even a valid five-element input failed. The reused-Voronoi path is `organoComputeSample -> organoPrepareVoronoi` (existing cut with topology requested) `-> DetectionSet(coordinates) -> BasicComponent::setData -> MyData/Histogram::setHistogram -> generateArrayStatistics -> computeStats -> vector<float>(5) -> ArrayStatistics`. Publication through `generateDataWithLog` reaches the same path. Current callers already compute the five entries correctly; no raw-feature caller needed changing.
+
+`ArrayStatistics` now holds `std::array<float, STATS_NB_PARAMS>`, initializes all five default/scalar entries by construction, validates `_vals.size()` and copies valid precomputed statistics. The guard stays strict, the public API stays stable, and copying/moving cannot produce empty internal storage. Numerical algorithms and scientific calculations are unchanged.
+
+### Load diagnostics
+
+`PocaZarrLoadReport` owns steady-clock stages/dataset timing, output, counts and generic characteristic status. `PocaZarrDatasetLoader` passes one report through image, quantitative component and feature restoration. It reports root/child manifests, multiple reconstruction, ImagesList/RAW/LABEL, ObjectLists/points/meshes, persisted features, assembly and command restoration. Component phases print start/completion; no per-chunk output is added. Each child prints count deltas and elapsed reconstruction time. One summary follows completed root reconstruction, before Engine registration and GUI refresh.
+
+Illustrative output; timings below are not measurements:
+
+```text
+[PoCA][Zarr][Load] Dataset 1/19: sample_0
+[PoCA][Zarr][Load]   Reconstructing ObjectListMesh
+[PoCA][Zarr][Load]   ObjectListMesh restored in 0.018 s
+[PoCA][Zarr][Load]   Components: ImagesList=1 RAW images=2 LABEL images=1 ObjectLists=1 ObjectListMesh=2 Mesh objects=73 Persisted feature arrays=37
+[PoCA][Zarr][Load]   Dataset reconstruction restored in 0.066 s
+...
+[PoCA][Zarr][Load]   OrganoGraph: restored (19 samples, 55 base features, 4 embedding coordinates), 0.041 s
+[PoCA][Zarr][Load] ===== Load summary: MyMultipleObject =====
+[PoCA][Zarr][Load] Datasets reconstructed: 19
+[PoCA][Zarr][Load] CGAL mesh collections materialized: 0
+```
+
+Counts inspect `hasPixels`, `valuesUnloaded`, `nbObjects` and `meshesMaterialized`; they never call pixel/value/CGAL accessors. Persisted feature-array counts come from restored descriptors; feature records also include intensity and derived/native display features. Lazy-state counts describe components at reconstruction completion, not lifetime chunk traffic or temporary sampling. Nested timings are inclusive and must not be summed.
+
+### Ownership and layout
+
+`Command` gains storage-neutral `saveState/restoreState/characteristicName/discardState` hooks and `CommandStateStorage` double-array access. Default state delegates to existing `saveCommands/loadParameters`; restoration never executes a processing command. `PocaZarrCommandState` matches owner indices and exact owner/command names to installed commands, and implements array access with existing ZarrArrayWriter/ZarrArrayAccess. Neither core nor OrganoGraph sees TensorStore/backend types.
+
+The optional manifest `characteristics` field changes neither dataset version nor backend ABI. Each object saves only its own commands/components; child objects use their existing individual serializer. Typed ordinal physical keys do not derive from logical names. Export remains under the existing staging transaction.
+
+```text
+collection.ome.zarr/
+  objects/o000000/...                       # child geometry and MyData arrays
+  poca/zarr.json                           # manifest + characteristic metadata
+  poca/characteristics/q000000/zarr.json    # generic command group
+  poca/characteristics/q000000/a000000/...  # float64 [successful samples, 55]
+  poca/characteristics/q000000/a000001/...  # optional [samples, embedding coordinates]
+  poca/characteristics/q000000/a000002/...  # optional flattened spatial edges
+  poca/characteristics/q000000/a000003/...  # optional pair-correlation values
+  poca/characteristics/q000000/a000004/...  # optional Ripley deviations
+```
+
+Numbers are illustrative; descriptors carry explicit paths. Numeric arrays use row chunks; curve offsets/counts remain small per-sample metadata. Float64 preserves float features, double curves and undefined NaNs.
+
+Collection-owned OrganoGraph state includes all 55 base slots, PCA/UMAP coordinates, curves, mapping, configuration (including small embedding-method metadata), successful source indices, signatures, selected-feature sets and nucleus-feature availability, plus plot display/identification. Hierarchy remains dataset-owned and is checked against the saved signature.
+
+Computed/custom nucleus outputs and cell-derived outputs published onto nucleus `MyData` belong to child components. Cell outputs additionally published onto the Voronoi mesh remain in its normal storage. The root stores references/names/availability, never second copies of these vectors or standalone archive `nuclei/cells` arrays. Reference validation checks existence and feature lengths using metadata; components retain normal ownership/lifetimes.
+
+### Restoration and compatibility
+
+Engine assembly installs plugin commands before returning the object. After components/features and hierarchy are restored, the generic adapter calls `OrganoGraphCommand::restoreState`. `OrganoGraphPersistence` reuses existing domain structures and spatial-curve validation; it checks identities, shapes, offsets, feature references, embeddings and view state before publishing the normal command-owned graph. Its explicit already-restored path skips feature publication, full fingerprint recalculation and duplicate debug snapshots. It never runs scientific preflight, morphology, intensities, Voronoi, spatial computation or dimensionality reduction, and does not replace child `MyData`.
+
+MainWindow subsequently attaches observers and sends existing `LoadObjCharacteristicsAllWidgets`. OrganoGraphWidget reads its normal command and repopulates selectors, categories, embeddings and plots. Its only added refresh behavior restores stable source/nucleus identification; it has no Zarr parsing or storage dependency. Drawing a selected plot may subsequently read needed child features as usual.
+
+Malformed optional command state produces a clear failure/timing and leaves OrganoGraph unavailable while retaining core data. Missing plugins are reported; bad allocation remains fatal. Legacy 0.2 manifests without characteristics and 0.1/external image paths remain supported. Selected-child export omits the parent analysis. Standalone version-1/version-2 parsing and streamed format remain intact; explicit standalone operations retain existing full fingerprint checks. Debug streamed comparison uses the legacy snapshot when present; lazy restoration intentionally does not create that duplicate archive.
+
+Limits: structural validation retains historical fingerprints without rehashing content, so matching names/counts do not detect same-shape edits. Only currently accepted PCA/UMAP coordinate names are supported. Root numeric results are resident, rather than lazy. Legacy graph/data plot identification is retained in command state but not automatically highlighted on generic refresh because it depends on the original view. Lazy-state counters are snapshots, not read-traffic instrumentation.
+
+### Source coverage (not executed)
+
+Loader fixtures use existing `POCA_ZARR_EXPORT_SOURCE_TESTS`. New opt-in `ORGANO_PERSISTENCE_SOURCE_TESTS` registers OrganoGraph fixtures; when Zarr is enabled its manual integration branch requires installed LoaderZarr/OrganoGraph plugins, exports through the existing command and reopens through Engine without a plugin link dependency. Widget fixtures require normal Qt application context.
+
+| Requested cases | Source coverage |
+| --- | --- |
+| 1–6 | `LoadCharacteristicFixture::statistics`: defaults/scalars/precomputed five values, rejected invalid vector, seven raw samples, MyData/Histogram and reused-Voronoi seed DetectionSet path; strict guard retained |
+| 7–12 | Report/plain/three-child fixtures: counts, deterministic phase accumulation, dataset timing, storage-backed images and no CGAL conversion |
+| 13–14, 23, 29, 31 | Root real-array manifest; plugin integration root export, no root nucleus/cell copies, selected-child omission/no-analysis reopen, erased-characteristics legacy manifest |
+| 15–22, 26 | Codec/command: partial reordered source indices, mapping/config/signatures, base NaNs, PCA/UMAP, double curves/NaNs, selected features/availability and normal graph ownership |
+| 24–25 | Explicit restored path, unchanged MyData pointer/read probes, reopened lazy features/meshes; no scientific dispatch/publication |
+| 27–28 | Generic observer and actual widget probe: graph, selectors, hierarchy, embeddings, nucleus names, stable identification; no Zarr widget code |
+| 30 | Standalone streamed save/load fixture with referenced nucleus features; existing formats retained |
+| Corruption | Duplicate indices, missing feature/component, wrong identity/offsets, malformed plot/configuration, generic array-shape failure isolation and missing plugin reporting |
+
+Static source audits cover declarations, includes/registration, ownership/refresh order, backend boundaries, unchanged scientific paths, delimiters, whitespace, UTF-8/BOM and CRLF. Fixtures describe intended coverage; they are not evidence of runtime success.
+
 ## Persistence-aware components (2026-10-06)
 
 This section supersedes the eager mesh reconstruction and histogram sampling descriptions in earlier milestones below. These changes are source-only; runtime behavior was not verified.

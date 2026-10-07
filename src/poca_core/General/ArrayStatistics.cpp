@@ -33,25 +33,25 @@
 #include <vector>
 #include <algorithm>
 #include <execution>
+#include <stdexcept>
 
 #include "ArrayStatistics.hpp"
 
 namespace poca::core {
 
-	ArrayStatistics::ArrayStatistics()
-	{ 
-		m_data.resize(STATS_NB_PARAMS, 0.f);
+	ArrayStatistics::ArrayStatistics() : m_data{}
+	{
 	}
 
 	ArrayStatistics::ArrayStatistics(const float _mean, const float _median, const float _stdDev, const float _min, const float _max) : m_data{ _mean, _median, _stdDev, _min, _max }
 	{
 	}
 
-	ArrayStatistics::ArrayStatistics(const std::vector<float>& _vals) 
-	{ 
-		if (m_data.size() != STATS_NB_PARAMS)
+	ArrayStatistics::ArrayStatistics(const std::vector<float>& _vals) : m_data{}
+	{
+		if (_vals.size() != STATS_NB_PARAMS)
 			throw std::invalid_argument("ArrayStatistics requires exactly five values");
-		std::copy(_vals.begin(), _vals.end(), std::back_inserter(m_data));
+		std::copy(_vals.begin(), _vals.end(), m_data.begin());
 	}
 
 	/*ArrayStatistics ArrayStatistics::generateArrayStatistics(const float* _data, const size_t _nb)

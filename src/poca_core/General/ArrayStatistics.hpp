@@ -35,6 +35,7 @@
 
 #include <iostream>
 #include <vector>
+#include <array>
 
 #include "../Cuda/CoreMisc.h"
 
@@ -47,6 +48,7 @@ namespace poca::core {
 		enum StatsParam { Mean = 0, Median = 1, StdDev = 2, Min = 3, Max = 4 };
 		ArrayStatistics();
 		ArrayStatistics(const float, const float, const float, const float, const float);
+		// Precomputed Mean, Median, StdDev, Min, Max; raw samples use generateArrayStatistics.
 		ArrayStatistics(const std::vector<float>&);
 
 		inline void setData(const int _type, const float _val) { m_data[_type] = _val; }
@@ -61,7 +63,7 @@ namespace poca::core {
 		friend std::ostream& operator<<(std::ostream&, const ArrayStatistics&);
 
 	private:
-		std::vector <float> m_data;
+		std::array<float, STATS_NB_PARAMS> m_data;
 	};
 
 	template <class T>

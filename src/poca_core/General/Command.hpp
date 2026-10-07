@@ -50,6 +50,13 @@
 namespace poca::core {
 
 	class CommandableObject;
+	// Storage-neutral command characteristics. Numeric payloads never enter CommandInfo JSON.
+	class CommandStateStorage {
+	public:
+		virtual ~CommandStateStorage() = default;
+		virtual nlohmann::json writeArray(const std::vector<double>&, const std::vector<uint64_t>&) = 0;
+		virtual std::vector<double> readArray(const nlohmann::json&, const std::vector<uint64_t>&) const = 0;
+	};
 	template<typename T>
 	struct is_c_string_pointer : std::false_type {};
 
@@ -634,6 +641,22 @@ namespace poca::core {
 					_json[it->first] = params;
 			}
 		}
+
+		// Restore characteristics, never execute processing commands.
+		virtual nlohmann::json saveState(CommandStateStorage&) {
+			nlohmann::json state = nlohmann::json::object();
+			saveCommands(state);
+			return state.empty() ? nlohmann::json(nullptr) : state;
+		}
+		virtual std::string restoreState(const nlohmann::json& _state, const CommandStateStorage&) {
+			if (!_state.is_object()) throw std::runtime_error("Command characteristics must be an object");
+			for (const auto& entry : _state.items())
+				loadParameters(CommandInfo::fromJson(entry.key(), entry.value()));
+			return "parameters restored";
+		}
+		// Nonempty for optional analysis commands that should also report absence.
+		virtual std::string characteristicName() const { return {}; }
+		virtual void discardState() {}
 
 	protected:
 		Command(const std::string& _name): m_name(_name) {}
