@@ -1,158 +1,152 @@
 # Inspector sizing in the current PoCA GUI
 
-2026-10-08. Source-only change; runtime behavior was not verified.
+2026-10-08. Source-only horizontal milestone and vertical follow-up.
+Runtime behavior was not verified.
 
-## Static audit and causes
+## Current architecture and horizontal milestone
 
-The Objects dock keeps its existing 300 logical-pixel minimum. It contains
-ObjectsDockTabs, a vertical Objects/inspector splitter, Properties/Controls/
-Camera/ROI Manager tabs, and the existing Controls and Camera scroll areas.
-Both scroll areas already use setWidgetResizable(true).
+The Objects dock retains its 300 logical-pixel minimum, ObjectsDockTabs,
+vertical Objects/inspector splitter, Properties/Controls/Camera/ROI tabs and
+resizable Controls/Camera scroll areas. Core plugin insertion still creates
+nested tabs; MainWindow applies InspectorSizing after Engine::addGUI.
+No docking framework, polling, ownership or command dispatch changes.
 
-Plugin insertion in poca::core::utils::addWidget/addSingleTabWidget creates
-nested QTabWidgets; addWidget may put a vertical layout directly on a tab
-container. OrganoGraph also creates its own nested tabs. MainWindow applies
-the sizing policy after Engine::addGUI, covering those existing containers
-without changing core insertion APIs or introducing a Core -> Qt dependency.
+Horizontal milestone aff1894 made labels/combos/plots/containers shrinkable.
+QCustomPlot's preferred and minimum hints both derive from its internal layout;
+QCPHistogram additionally advertises a 400-pixel preferred width. Long combo
+names, labels and inactive tab/stack pages previously propagated large widths.
+OrganoGraph's component form wraps long rows; X/Y/Z selectors have separate
+rows; category/plot-mode/distribution/transfer/action controls use compact rows.
+Full names, model data, tooltips, zoom and selection behavior are preserved.
 
-The main sources of excessive horizontal requirements were:
+InspectorSizing.hpp/.cpp remains the only sizing utility in poca_qt:
 
-- QCustomPlot::minimumSizeHint and sizeHint both return its plot layout's
-  minimum outer size. Expanding horizontal policies retain that minimum.
-- PoCA's QCPHistogram additionally advertises a 400-pixel preferred width;
-  FilterHistogramWidget previously reapplied an Expanding policy.
-- OrganoFeatureSelector inherited QComboBox's content sizing. X/Y/Z selectors
-  sat in one horizontal row and could each advertise a long feature name.
-- Dataset path/name labels used Preferred sizing without clipping or wrapping.
-- Tabs and stacked pages aggregate content hints, including inactive pages.
-  Inspector tab bars disabled scroll buttons.
-- OrganoGraph's centroid/Voronoi options, category choices, LUT/plot-mode
-  controls, distribution controls and transfer targets were crowded into
-  long rows. Plot actions also summed several button minima.
+- makeHorizontallyShrinkable sets horizontal Ignored and minimumWidth(0),
+  preserving vertical policy/stretch and height-for-width flags.
+- configureInspectorCombo uses AdjustToMinimumContentsLengthWithIcon with
+  a shared 12-character hint; full names and item data are unchanged.
+- configureInspectorLabel shrinks identifiers and optionally wraps explanations.
+- configureInspectorTabs applies horizontal shrinking to tab/stack containers,
+  enables tab scroll buttons and elides captions after plugin insertion.
+- configureInspectorPlot, added in this follow-up, accepts QWidget only and
+  reuses horizontal shrinking. It sets vertical Preferred, zero vertical policy
+  stretch and one shared 200-pixel minimum. Preferred retains GrowFlag/ShrinkFlag;
+  natural sizeHint remains in effect, with no fixed or maximum height added.
+  Parent layouts assign spare height to a spacer below the controls.
 
-The audit inspected size policies, explicit sizes, hints, layouts, scroll
-areas and plugin selectors/plots in both repositories. Fixed icon sizes and
-vertical plot minimum heights remain useful constraints.
+poca_qt has no QCustomPlot, QtDataVisualization or OrganoGraph dependency.
+QCPHistogram owns its local Ignored/Preferred policy because poca_qt already
+links poca_plot; a reverse dependency would create a cycle. FilterHistogramWidget
+retains its QHBoxLayout plot stretch: that stretch is horizontal. Its existing
+caller-supplied maximum for compact feature histogram rows is unchanged.
 
-## Minimal reusable policy
+## Confirmed vertical causes and fix
 
-poca_qt/Widgets/InspectorSizing.hpp/.cpp is the only new production source
-pair. The existing ButtonLayer, CustomColorDialog and PerformanceWidget own
-other responsibilities; none was an appropriate owner for inspector sizing.
+OrganoGraph's QCustomPlot had a 350-pixel minimum and vertical Expanding;
+the stack also used vertical Expanding. The optional 3D page had a 350-pixel
+minimum; its page/native container used vertical Expanding. In addition,
+addWidget(m_plotStack, 1) made the plot stack the sole positive-stretch child,
+taking spare height ahead of the trailing empty filler widget.
 
-The poca::qt functions configure existing Qt objects:
+The 2D plot, stack, optional EmbeddingScatter3DWidget and native window container
+now use configureInspectorPlot. Both pages and the stack have compatible
+Ignored/Preferred policies and 200-pixel minima. QCustomPlot's ordinary natural
+height hint is below this floor; the effective preferred height is 200 pixels.
+The stack still aggregates its pages' hints, but no inactive 350-pixel page
+remains. No global stack subclass or preferred-height cap was introduced.
 
-- makeHorizontallyShrinkable: horizontal Ignored policy and minimumWidth(0),
-  preserving the complete vertical policy, stretch and height-for-width flags.
-- configureInspectorCombo: AdjustToMinimumContentsLengthWithIcon with a
-  shared 12-character hint, followed by horizontal shrinking. This offers
-  useful text beside an inspector row label without scanning the longest
-  feature name. The hint is not a fixed pixel minimum.
-- configureInspectorLabel: horizontal shrinking with optional word wrapping.
-  Identifier labels clip and callers maintain dynamic tooltips.
-- configureInspectorTabs: shrink existing tab/tab-bar/stack containers,
-  enable tab scroll buttons and elide tab captions. The traversal is limited
-  to these container types; it does not change every descendant's policy.
+The stack is inserted with zero layout stretch. The empty filler is replaced
+by addStretch(1) after identification, transfer and plot-action controls. Thus
+normal spare panel height goes below the content. A parent can still explicitly
+allocate more height to the plot: Preferred permits growth without a maximum.
+The native window container keeps its ownership and zero-margin filling layout.
+No axes/ranges/data/LUT/scatter/embedding/selection/command algorithms changed.
 
-Callers opt in explicitly. No event filter, polling, subclass framework,
-fixed sidebar maximum, ownership change or QCustomPlot dependency was added
-to this policy. Apply configureInspectorTabs after inserting plugin widgets.
+## Other exact sites audited
 
-## OrganoGraph and plot changes
+The shared 200-pixel minimum follows existing K-Ripley, TrackSet and NanoSynAtlas
+one-region plot sizing; it provides a usable inspector plot without a 350+ floor.
 
-X/Y/Z now have one selector per row. The component form uses WrapLongRows;
-centroid and Voronoi controls stack. Category and plot-mode controls use
-small grids, distributions and transfer choices stack, and plot actions
-use two rows. The symbol selector has explicit stretch so a spacer cannot
-consume the space freed by ignoring its size hint.
+| Plot site | Vertical follow-up |
+| --- | --- |
+| Voronoi characteristics | Expanding and minimum 400 become shared Preferred/200; spare grid row stretch 1 and existing outer filler stretch 1. |
+| ClusterVisu Monte Carlo | Expanding becomes shared Preferred/200; local empty filler becomes trailing stretch 1. |
+| LatentSpace plot | Expanding and minimum 420 become shared Preferred/200; plot stretch 1 removed, trailing stretch 1 after status. |
+| K-Ripley | Existing Preferred/200 now uses helper; expanding spare-space filler retained. |
+| TrackSet MSD | Existing Preferred/200 now uses helper; expanding spare-space filler retained. |
+| NanoSynAtlas one-region | Existing Preferred/200 now uses helper; expanding spare-space filler retained. |
+| DetectionSet cleaner plots | Already Ignored/Preferred with 150-pixel minima; expanding statistics widget/filler; source audited, unchanged. |
+| QCPHistogram / feature histogram rows | Already Preferred vertically; 30-pixel preferred hint and horizontal stretch; source audited, unchanged. |
 
-All OrganoGraph combo boxes use the policy, with feature selectors configured
-by their existing subclass. Full item labels/data/category menus are preserved.
-The selected feature tooltip now includes the full name and description.
-Coverage/symbol labels wrap; identity/color labels shrink. Existing plot
-identity tooltips remain managed by the identification code.
+Horizontal combo/label/name/feature-selector policies are unchanged. TransferFeature
+selectors, wrapped K-Ripley results and LatentSpace status remain as in aff1894.
 
-The QCustomPlot, plot stack, optional EmbeddingScatter3DWidget and its native
-window container shrink horizontally. The main plot/stack retain vertical
-expansion and plot-height constraints. The plot gets explicit layout stretch.
-Axes, interactions, selection, commands and scientific/rendering algorithms
-are unchanged.
+## Manual source fixtures (updated, not run)
 
-Other exact plot-policy cases were adjusted in DetectionSet (three cleaner
-plots), Voronoi, K-Ripley, ClusterVisu, TrackSet, NanoSynAtlas and LatentSpace.
-K-Ripley result and LatentSpace status labels wrap. TransferFeature component
-selectors use compact sizing. Number-only selectors were left alone.
+OrganoGraphSizingTests.cpp remains registered through the existing TestRegistry
+and ORGANO_GUI_SOURCE_TESTS option, default OFF. No framework/files were added.
 
-QCPHistogram owns its plot-specific policy so all its PoCA instances benefit.
-FilterHistogramWidget stops overwriting that policy and gives the plot stretch.
-This remains in poca_plot because poca_qt already links poca_plot; linking back
-would create a cycle. Third-party qcustomplot.cpp/.h are unchanged.
+The previous fixture incorrectly required OrganoGraph vertical Expanding. It now
+requires Preferred for plot, stack, optional 3D page and native container; zoom
+interaction is asserted separately. Its artificial 1400-pixel width hint retains
+horizontal coverage while its vertical hint is reduced from 350 to 200.
 
-## Manual source fixtures
+Coverage:
 
-OrganoGraphSizingTests.cpp uses the existing plugin TestRegistry with the new
-ORGANO_GUI_SOURCE_TESTS option, default OFF. Its manual GUI action covers:
+1. OrganoGraph QCustomPlot and stack remain horizontally shrinkable; long names,
+   combo model values/tooltips, dynamic labels and hidden wide tabs retain coverage.
+2. Plot/stack vertical Preferred, zero policy stretch and compact 200-pixel minima.
+3. Usable nonzero minimum/effective preferred heights, with no maximum height.
+4. Optional 3D page/native container have matching compact policies/minima.
+5. OrganoGraph plot layout stretch zero; only the final spacer gets stretch 1.
+6. Taller dock keeps the plot compact instead of assigning all spare height.
+7. Fixture-only parent stretch makes 2D/3D pages grow and return to compact height;
+   GrowFlag/ShrinkFlag and native container geometry remain checked.
+8. Shared QCustomPlot fixture resets a legacy 420-pixel minimum, stays compact
+   beside a spacer and permits explicit growth/shrinking; histogram stays Preferred.
+9. Static source audit verifies the six other plugin sites use the same helper;
+   DetectionSet and histogram source already use compatible vertical policies.
 
-1. Compact combo minimum hint after inserting a 512-character item; resetting
-   a previous explicit 1200-pixel minimum.
-2. Exact feature/item labels, current data and full feature tooltip.
-3. Long label shrinking in a real parent layout, with unchanged text.
-4. A 1400-pixel plot layout hint accepted by a narrow plot/stack.
-5. Combo/label and plot/container growth when parent width increases.
-6. OrganoGraph's layout minimum and hidden 1600-pixel tab-page isolation from
-   the dock, with tab navigation available and the dock minimum still 300.
-7. Vertical policy preservation, existing plot zoom interaction, and the
-   QCPHistogram 400-pixel hint remaining preferred rather than required.
+The fixture shows a temporary dock and delivers resize/layout events only when
+explicitly run by the user. It was not configured, compiled or executed here.
 
-These fixtures are source only. They were not configured, compiled or run.
-The manual hierarchy fixture shows a temporary dock and delivers layout events
-only when a user explicitly runs that registered test.
+## Vertical follow-up working set
 
-## Files
+No new classes/files/dependencies or CMake registration changes.
 
-Added:
-- poca/src/poca_qt/Widgets/InspectorSizing.hpp
-- poca/src/poca_qt/Widgets/InspectorSizing.cpp
-- poca_extra/src/poca_organographplugin/OrganoGraphSizingTests.cpp
-- poca/docs/GUI_INSPECTOR_SIZING.md
-
-Modified:
-- poca/src/poca/Widgets/MainWindow.cpp
-- poca/src/poca/Widgets/MainFilterWidget.cpp
-- poca/src/poca_qt/CMakeLists.txt
-- poca/src/poca_plot/Plot/QCPHistogram.cpp
-- poca/src/poca_plot/Plot/FilterHistogramWidget.cpp
-- poca/src/poca_detectionsetplugin/DetectionSetWidget.cpp
+- poca/src/poca_qt/Widgets/InspectorSizing.hpp and InspectorSizing.cpp
+- poca_extra/src/poca_organographplugin/OrganoGraphWidget.cpp,
+  EmbeddingScatter3DWidget.cpp and OrganoGraphSizingTests.cpp
 - poca/src/poca_voronoidiagramplugin/VoronoiDiagramWidget.cpp
-- poca/src/poca_kripleyplugin/KRipleyWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_clustervisuplugin/ClusterVisuWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_tracksetplugin/TrackSetWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_nanosynatlasplugin/NanoSynAtlasWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_latentspaceexplorationplugin/LatentSpaceExplorationWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_transferfeatureplugin/TransferFeatureWidget.cpp and CMakeLists.txt
-- poca_extra/src/poca_organographplugin/OrganoFeatureSelector.cpp
-- poca_extra/src/poca_organographplugin/OrganoGraphWidget.cpp
-- poca_extra/src/poca_organographplugin/EmbeddingScatter3DWidget.cpp
-- poca_extra/src/poca_organographplugin/OrganoGraphPlugin.cpp
-- poca_extra/src/poca_organographplugin/CMakeLists.txt
-- CONTINUITY.md
+- poca/src/poca_kripleyplugin/KRipleyWidget.cpp
+- poca_extra/src/poca_clustervisuplugin/ClusterVisuWidget.cpp
+- poca_extra/src/poca_tracksetplugin/TrackSetWidget.cpp
+- poca_extra/src/poca_nanosynatlasplugin/NanoSynAtlasWidget.cpp
+- poca_extra/src/poca_latentspaceexplorationplugin/LatentSpaceExplorationWidget.cpp
+- poca/docs/GUI_INSPECTOR_SIZING.md and CONTINUITY.md
 
-## Deliberate limitations and verification
+The full horizontal milestone working set is available in commit aff1894.
 
-This is not a complete GUI rewrite. Some legacy plugin/Camera/ROI controls
-still have wide multi-column rows or long button/check-box captions. Existing
-scroll areas retain AsNeeded horizontal scrolling for those genuine child
-constraints. Long OrganoGraph controls use more vertical space, served by
-the existing Controls scroll area. Plot heights are unchanged.
+## Limitations and source verification
 
-QCustomPlot's internal layout still calculates its natural minimum, so axes,
-legends or long in-plot text may clip at very narrow sizes. No axis/legend
-algorithm was changed. Native 3D context/platform behavior and font/DPI/style
-effects require later runtime inspection. Tab/stack traversal runs at current
-GUI assembly points; later dynamically inserted tabs need the same policy.
+Shrinking stops at the explicit minimum; the existing Controls scroll area
+serves smaller available heights and tall control lists. Plot growth requires
+the containing layout to deliberately allocate height; making the normal panel
+taller primarily grows the bottom spacer. Natural hints can exceed 200 for
+unusual plot content/fonts/DPI; there is no cap or active-page stack subclass.
+QCustomPlot axes/legends can still clip at narrow sizes; no plot layout algorithm
+was changed. Native 3D platform/context behavior and font/style effects need
+later runtime verification. Some legacy plugin/Camera/ROI rows and captions
+remain wide, using existing AsNeeded horizontal scrolling where required.
+Later dynamically inserted tabs need the same existing horizontal policy call.
 
-Static checks cover source registration, PoCA::Qt include/link availability,
-unchanged command/scientific/storage paths, quoting artifacts, diff whitespace,
-UTF-8, BOM preservation and CRLF. The completed audit verified 29 files, 25 retained HEAD BOM statuses, 53 quoted includes and 10 Qt consumer links; diff and artifact checks are clean. No ADS or new external dependency was introduced.
-No CMake configuration, build, application, test, Python or helper executable
-was run. Runtime behavior was not verified.
+Static checks cover helper declarations/call sites, retained PoCA::Qt links,
+zero plot stretch/spare-space allocation, fixture assertions, unchanged scientific
+and storage/loading paths, diff/quoting artifacts, UTF-8/BOM preservation and CRLF.
+The vertical follow-up verified 13 changed files: strict UTF-8, consistent CRLF,
+unchanged HEAD BOM status and clean diff/artifact checks; all seven plugin Qt
+consumer links and existing helper/manual-fixture registrations remain valid.
+The prior horizontal audit covered 29 files, 53 quoted includes and 10 Qt links.
+No ADS, external dependency, dock/tab architecture or command/macro changes.
+No CMake, build, application, tests, Python or helper executable was run.
+Runtime behavior was not verified.

@@ -10,6 +10,9 @@ class QTabWidget;
 namespace poca::qt {
 	// Inspector content may be narrower than its hint; vertical policy is preserved.
 	void makeHorizontallyShrinkable(QWidget*);
+	// Compact inspector plots: 200px minimum, natural preferred hint, no vertical greed.
+	// Preferred keeps shrink/grow flags; callers put spare-space stretch after controls.
+	void configureInspectorPlot(QWidget*);
 	// Twelve characters leave useful text beside an inspector row label.
 	void configureInspectorCombo(QComboBox*);
 	// Identifiers clip; explanatory text may wrap. Callers maintain dynamic tooltips.

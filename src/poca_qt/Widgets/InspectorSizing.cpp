@@ -16,6 +16,16 @@ namespace poca::qt {
 		widget->setMinimumWidth(0);
 	}
 
+	void configureInspectorPlot(QWidget* widget)
+	{
+		makeHorizontallyShrinkable(widget);
+		QSizePolicy policy = widget->sizePolicy();
+		policy.setVerticalPolicy(QSizePolicy::Preferred);
+		policy.setVerticalStretch(0);
+		widget->setSizePolicy(policy);
+		widget->setMinimumHeight(200);
+	}
+
 	void configureInspectorCombo(QComboBox* combo)
 	{
 		combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);

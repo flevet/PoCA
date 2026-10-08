@@ -209,9 +209,7 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	m_leditDegreePolynome->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	m_leditDegreePolynome->setValidator(validator2);
 	m_customPlotVoronoiCharacteristics = new QCustomPlot();
-	m_customPlotVoronoiCharacteristics->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-	poca::qt::makeHorizontallyShrinkable(m_customPlotVoronoiCharacteristics);
-	m_customPlotVoronoiCharacteristics->setMinimumHeight(400);
+	poca::qt::configureInspectorPlot(m_customPlotVoronoiCharacteristics);
 	QGridLayout* layoutVoronoiCharacteristics = new QGridLayout;
 	layoutVoronoiCharacteristics->addWidget(m_btnApplyCharacteristics, 0, 0, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_cboxCumulativeCurves, 0, 1, 1, 1);
@@ -224,6 +222,7 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	layoutVoronoiCharacteristics->addWidget(lblBinsCharac, 2, 0, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_leditNbBinsCharacteristics, 2, 1, 1, 1);
 	layoutVoronoiCharacteristics->addWidget(m_customPlotVoronoiCharacteristics, 3, 0, 1, 4);
+	layoutVoronoiCharacteristics->setRowStretch(4, 1);
 	QWidget* vcharacteristicsDW = new QWidget;
 	vcharacteristicsDW->setLayout(layoutVoronoiCharacteristics);
 	m_dockVoronoiCharateristics->setWidget(vcharacteristicsDW);
@@ -235,7 +234,7 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	layout->addWidget(m_voronoiFilteringWidget);
 	layout->addWidget(widgetFilter);
 	layout->addWidget(m_dockVoronoiCharateristics);
-	layout->addWidget(m_emptyWidget);
+	layout->addWidget(m_emptyWidget, 1);
 	this->setLayout(layout);
 }
 

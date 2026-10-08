@@ -85,9 +85,7 @@ KRipleyWidget::KRipleyWidget(poca::core::MediatorWObjectFWidgetInterface* _media
 	m_buttonKRipley->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
 	QObject::connect(m_buttonKRipley, SIGNAL(pressed()), this, SLOT(actionNeeded()));
 	m_customPlotKRipley = new QCustomPlot();
-	m_customPlotKRipley->setMinimumHeight(200);
-	m_customPlotKRipley->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-	poca::qt::makeHorizontallyShrinkable(m_customPlotKRipley);
+	poca::qt::configureInspectorPlot(m_customPlotKRipley);
 	m_customPlotKRipley->xAxis->setUpperEnding(QCPLineEnding::esSpikeArrow);
 	m_customPlotKRipley->yAxis->setUpperEnding(QCPLineEnding::esSpikeArrow);
 	m_customPlotKRipley->moveLayer(m_customPlotKRipley->layer("grid"), m_customPlotKRipley->layer("main"), QCustomPlot::limAbove);
