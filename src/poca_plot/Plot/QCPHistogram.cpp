@@ -135,7 +135,7 @@ namespace poca::plot {
 					m_currentMin = x;
 
 				float minH = m_histogram->getMin(), maxH = m_histogram->getMax();
-				float inter = maxH - minH, minC = (m_currentMin - minH) / inter, maxC = (m_currentMax - minH) / inter;
+				float inter = maxH - minH, minC = inter > 0.f ? (m_currentMin - minH) / inter : 0.f, maxC = inter > 0.f ? (m_currentMax - minH) / inter : 1.f;
 				if(m_palette != NULL)
 					m_palette->setFilterMinMax(minC, maxC);
 				emit(actionNeededSignal("changeBoundsCustom"));
@@ -159,7 +159,7 @@ namespace poca::plot {
 				m_currentMax = xo;
 
 				float minH = m_histogram->getMin(), maxH = m_histogram->getMax();
-				float inter = maxH - minH, minC = (m_currentMin - minH) / inter, maxC = (m_currentMax - minH) / inter;
+				float inter = maxH - minH, minC = inter > 0.f ? (m_currentMin - minH) / inter : 0.f, maxC = inter > 0.f ? (m_currentMax - minH) / inter : 1.f;
 				if (m_palette != NULL)
 					m_palette->setFilterMinMax(minC, maxC);
 				emit(actionNeededSignal("changeBoundsCustom"));
@@ -180,7 +180,7 @@ namespace poca::plot {
 					m_currentMax = x;
 
 				float minH = m_histogram->getMin(), maxH = m_histogram->getMax();
-				float inter = maxH - minH, minC = (m_currentMin - minH) / inter, maxC = (m_currentMax - minH) / inter;
+				float inter = maxH - minH, minC = inter > 0.f ? (m_currentMin - minH) / inter : 0.f, maxC = inter > 0.f ? (m_currentMax - minH) / inter : 1.f;
 				if (m_palette != NULL)
 					m_palette->setFilterMinMax(minC, maxC);
 				emit(actionNeededSignal("changeBoundsCustom"));
@@ -197,6 +197,16 @@ namespace poca::plot {
 	void QCPHistogram::update()
 	{
 		if (m_histogram == NULL) return;
+		if (!m_histogram->hasDisplayBounds() || m_histogram->getBins().empty()) {
+			clearGraphs(); clearPlottables(); clearItems();
+			m_currentMin = m_histogram->getCurrentMin(); m_currentMax = m_histogram->getCurrentMax();
+			auto label = new QCPItemText(this);
+			label->position->setType(QCPItemPosition::ptViewportRatio);
+			label->position->setCoords(0.5, 0.5);
+			label->setText(m_name + tr(" — no finite display bounds"));
+			replot();
+			return;
+		}
 
 		const std::vector <float>& ts = m_histogram->getTs();
 		const std::vector <float>& bins = m_histogram->getBins();
@@ -249,7 +259,7 @@ namespace poca::plot {
 
 		if (m_palette != NULL) {
 			float minH = m_histogram->getMin(), maxH = m_histogram->getMax();
-			float inter = maxH - minH, minC = (m_currentMin - minH) / inter, maxC = (m_currentMax - minH) / inter;
+			float inter = maxH - minH, minC = inter > 0.f ? (m_currentMin - minH) / inter : 0.f, maxC = inter > 0.f ? (m_currentMax - minH) / inter : 1.f;
 			m_palette->setFilterMinMax(minC, maxC);
 		}
 		

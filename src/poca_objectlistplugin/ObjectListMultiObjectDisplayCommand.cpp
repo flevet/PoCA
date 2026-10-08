@@ -10,6 +10,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -526,6 +527,14 @@ namespace {
 		poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
 		if (histogram == nullptr)
 			return false;
+		if (!histogram->hasDisplayBounds()) {
+			_features.points.assign(_pointCount,poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			_features.outlinePoints.assign(_outlinePointCount,poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			_features.triangles.assign(_triangleCount,poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			_features.lines.assign(_lineCount,poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			_features.ellipsoids.assign(_ellipsoidCount,poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			return true;
+		}
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = _objects->getSelection();
 		const bool hiLow = _objects->isHiLow();
@@ -569,7 +578,7 @@ namespace {
 			_features.ellipsoids.resize(_ellipsoidCount);
 			for (size_t idx = 0; idx < _ellipsoidCount; idx++)
 				_features.ellipsoids[idx] = hiLow ? (selection[idx] ? selectedValue : notSelectedValue) :
-					(selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+					(selection[idx] && std::isfinite(values[idx]) ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 			if (!_objects->isSelected())
 				std::fill(_features.ellipsoids.begin(), _features.ellipsoids.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 		}
@@ -757,7 +766,8 @@ bool ObjectListMultiObjectDisplayCommand::rebuildEllipsoidBuffers()
 				poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
 				if (histogram == nullptr)
 					return;
-				const std::vector<float>& values = histogram->getValues();
+				const std::vector<float> unavailableValues;
+				const std::vector<float>& values = histogram->hasDisplayBounds() ? histogram->getValues() : unavailableValues;
 				const std::vector<bool>& selection = objs->getSelection();
 				const std::vector<std::array<poca::core::Vec3mf, 3>>& axisPCA = objs->getAxisObjects();
 				const std::vector<float>& major = objs->getMyData("major")->getData<float>();
@@ -765,7 +775,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuildEllipsoidBuffers()
 				const std::vector<float>& minor2 = objs->getMyData("minor2")->getData<float>();
 
 				std::vector<float> localEllipsoidFeatures(objs->nbElements());
-				if (objs->isHiLow()) {
+				if (!histogram->hasDisplayBounds())
+					std::fill(localEllipsoidFeatures.begin(),localEllipsoidFeatures.end(),poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				else if (objs->isHiLow()) {
 					float inter = histInterface->getMax() - histInterface->getMin();
 					float selectedValue = histInterface->getMin() + inter / 4.f;
 					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
@@ -774,7 +786,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuildEllipsoidBuffers()
 				}
 				else {
 					for (size_t idx = 0; idx < objs->nbElements(); idx++)
-						localEllipsoidFeatures[idx] = selection[idx] ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+						localEllipsoidFeatures[idx] = selection[idx] && std::isfinite(values[idx]) ? values[idx] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
 				}
 				if (!objs->isSelected())
 					std::fill(localEllipsoidFeatures.begin(), localEllipsoidFeatures.end(), poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
@@ -861,7 +873,8 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 			poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(histInterface);
 			if (histogram == nullptr)
 				return;
-			const std::vector<float>& values = histogram->getValues();
+			const std::vector<float> unavailableValues;
+			const std::vector<float>& values = histogram->hasDisplayBounds() ? histogram->getValues() : unavailableValues;
 			const std::vector<bool>& selection = objs->getSelection();
 
 			range.is3D = objs->dimension() == 3;
@@ -876,7 +889,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 			points.insert(points.end(), localPoints.begin(), localPoints.end());
 			pointObjectIndices.insert(pointObjectIndices.end(), localPoints.size(), (float)objectIndex);
 			std::vector<float> localPointFeatures;
-			if (objs->isHiLow()) {
+			if (!histogram->hasDisplayBounds())
+				localPointFeatures.assign(localPoints.size(),poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			else if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
@@ -897,7 +912,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 				outlinePoints.insert(outlinePoints.end(), localOutlinePoints.begin(), localOutlinePoints.end());
 				outlinePointObjectIndices.insert(outlinePointObjectIndices.end(), localOutlinePoints.size(), (float)objectIndex);
 				std::vector<float> localOutlinePointFeatures;
-				if (objs->isHiLow()) {
+				if (!histogram->hasDisplayBounds())
+					localOutlinePointFeatures.assign(localOutlinePoints.size(),poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+				else if (objs->isHiLow()) {
 					float inter = histInterface->getMax() - histInterface->getMin();
 					float selectedValue = histInterface->getMin() + inter / 4.f;
 					float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
@@ -925,7 +942,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 			objs->generateNormals(localNormals);
 			triangleNormals.insert(triangleNormals.end(), localNormals.begin(), localNormals.end());
 			std::vector<float> localTriangleFeatures;
-			if (objs->isHiLow()) {
+			if (!histogram->hasDisplayBounds())
+				localTriangleFeatures.assign(localTriangles.size(),poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			else if (objs->isHiLow()) {
 				float inter = histInterface->getMax() - histInterface->getMin();
 				float selectedValue = histInterface->getMin() + inter / 4.f;
 				float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);
@@ -945,7 +964,9 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 					lines.insert(lines.end(), localLines.begin(), localLines.end());
 					lineObjectIndices.insert(lineObjectIndices.end(), localLines.size(), (float)objectIndex);
 					std::vector<float> localLineFeatures;
-					if (objs->isHiLow()) {
+					if (!histogram->hasDisplayBounds())
+						localLineFeatures.assign(localLines.size(),poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+					else if (objs->isHiLow()) {
 						float inter = histInterface->getMax() - histInterface->getMin();
 						float selectedValue = histInterface->getMin() + inter / 4.f;
 						float notSelectedValue = histInterface->getMin() + inter * (3.f / 4.f);

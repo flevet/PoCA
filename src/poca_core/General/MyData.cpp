@@ -93,12 +93,13 @@ namespace poca::core {
 		HistogramInterface* current = m_log ? m_logHistogram : m_histogram;
 		HistogramInterface* other = !m_log ? m_logHistogram : m_histogram;
 		if (current == NULL) return;
-		float minV = current->getCurrentMin(), maxV = current->getCurrentMax();
-		float modified_min = (float)(m_log ? pow(10, minV) : log10(minV));
-		float modified_max = (float)(m_log ? pow(10, maxV) : log10(maxV));
-		if (other != NULL) {
-			other->setCurrentMin(modified_min);
-			other->setCurrentMax(modified_max);
+		if (other && other->hasDisplayBounds() && current->hasDisplayBounds()) {
+			const float minV = current->getCurrentMin(), maxV = current->getCurrentMax();
+			const float low = static_cast<float>(m_log ? std::pow(10., minV) : std::log10(minV));
+			const float high = static_cast<float>(m_log ? std::pow(10., maxV) : std::log10(maxV));
+			// A linear interval crossing zero maps to the available positive logarithmic domain.
+			other->setCurrentMin(std::isfinite(low) ? low : other->getMin());
+			other->setCurrentMax(std::isfinite(high) ? high : other->getMax());
 		}
 		m_log = _val;
 	}

@@ -31,6 +31,7 @@
 */
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <execution>
 #include <CGAL/Polygon_mesh_processing/measure.h>
@@ -816,7 +817,7 @@ namespace poca::geometry {
 		int i = 0;
 		for (const auto& mesh : m_meshes) {
 			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _values[i] : _notSelectedValue);
+				_features.push_back(_selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue);
 			i++;
 		}*/
 		_features.resize(m_locs.nbData());
@@ -824,7 +825,7 @@ namespace poca::geometry {
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_locs.nbElements(); i++) {
 			for (size_t j = 0; j < m_locs.nbElementsObject(i); j++) {
-				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
+				_features[cpt++] = _selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue;
 			}
 
 		}
@@ -856,7 +857,7 @@ namespace poca::geometry {
 		int i = 0;
 		for (const auto& mesh : m_meshes) {
 			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _values[i] : _notSelectedValue);
+				_features.push_back(_selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue);
 			i++;
 		}*/
 		_features.resize(m_locs.nbData());
@@ -864,7 +865,7 @@ namespace poca::geometry {
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_locs.nbElements(); i++) {
 			for (size_t j = 0; j < m_locs.nbElementsObject(i); j++) {
-				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
+				_features[cpt++] = _selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue;
 			}
 
 		}
@@ -986,7 +987,7 @@ namespace poca::geometry {
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_triangles.nbElements(); i++) {
 			for (size_t j = 0; j < m_triangles.nbElementsObject(i); j++) {
-				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
+				_features[cpt++] = _selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue;
 			}
 
 		}
@@ -1036,7 +1037,7 @@ namespace poca::geometry {
 		int i = 0;
 		for (const auto& mesh : m_meshes) {
 			for (const auto& point : mesh.points())
-				_features.push_back(_selection[i] ? _values[i] : _notSelectedValue);
+				_features.push_back(_selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue);
 			i++;
 		}*/
 		_features.resize(m_locs.nbData());
@@ -1044,7 +1045,7 @@ namespace poca::geometry {
 		size_t cpt = 0;
 		for (size_t i = 0; i < m_locs.nbElements(); i++) {
 			for (size_t j = 0; j < m_locs.nbElementsObject(i); j++) {
-				_features[cpt++] = _selection[i] ? _values[i] : _notSelectedValue;
+				_features[cpt++] = _selection[i] && std::isfinite(_values[i]) ? _values[i] : _notSelectedValue;
 			}
 
 		}

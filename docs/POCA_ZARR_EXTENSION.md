@@ -598,3 +598,67 @@ This inventory separates new files from modified files. CMake files were edited 
 Suggested commit: `feat(zarr): persist PoCA points meshes and lazy features`.
 
 No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
+
+## 2026-10-07: finite feature statistics and undefined-value diagnostics
+
+This source-only update supersedes the earlier non-finite-sample rejection policy. It does not change scientific feature equations, neighborhood sizes, geometry criteria, thresholds, floating array payloads, the dataset version, or the Zarr backend ABI.
+
+### Statistics and display
+
+The CPU statistics body was empty, floating CUDA reduction/sort accepted non-finite input, and histogram bin conversion used non-finite values. The CUDA reduction identity initialized its maximum with `numeric_limits<T>::min()`, which is positive for float. These paths could leave reversed or unusable bounds. `eraseBounds()` also used positive `FLT_MIN` for its lower bound.
+
+`ArrayStatistics` retains its fixed `std::array<float, STATS_NB_PARAMS>` and strict five-value vector constructor. Floating reductions now collect finite values into a separate CPU work buffer, calculate mean/population standard deviation with double Welford accumulation, sort only that buffer for median/extrema, and leave the scientific array unchanged. Resident upper-middle even medians and storage averaged-middle even medians retain their respective prior conventions. Integer device routing and the existing CPU integer -1 sentinel comparison remain in place. Negative floating -1 is a scientific value and is counted.
+
+No finite samples means five NaN statistics. `nbElements()` remains the original scientific row count; a native storage sample retains its original sampled count, including non-finite samples. Floating bins omit NaN and both infinities. A resident or sampled feature with no measured finite values and no supplied display interval exposes NaN minimum, maximum, current minimum and current maximum, empty bins/positions, zero step/maxY, and no effective histogram interaction. Filtering such a feature contributes nothing to component selection. Histogram widgets show an unavailable message and disable bounds/LUT/log controls. Rendering hides an unavailable component and maps non-finite values only in temporary shader feature buffers to the existing hidden-value sentinel.
+
+An explicit finite display interval with unavailable measured statistics remains valid for metadata-only images. It does not manufacture statistics. Existing finite constant-feature bounds remain exact for quantitative features; the established storage-image constant interval expansion remains. Explicit recomputation rebuilds statistics and bins, and updates provenance; loading valid saved statistics does not recompute them.
+
+### Persistence and validation
+
+Display and histogram metadata now include `displayAvailable`. Missing flags in older finite metadata mean available. An unavailable display requires four JSON null bounds, five null statistics, empty bins/positions, zero step/maxY, and matching availability. JSON null encodes unavailable measured statistics. Native floating display samples encode NaN as null and infinities as "+inf"/"-inf"; this metadata conversion never touches scientific Zarr arrays.
+
+Validation still rejects reversed statistical bounds, reversed display extents, reversed current bounds, non-finite finite-display bounds, partial/unexpected non-finite statistics, negative standard deviation/bins, malformed bins/count/provenance, and inconsistent histogram/display extents or unavailable states. Failures include persisted statistics and actual min/max/currentMin/currentMax values. Saved histogram restoration is metadata-only with callbacks installed afterward. Legacy display-only stores retain their bounded compatibility sample. Sample unavailability describes the sample, not a claim that every unseen storage value is NaN.
+
+Long complete-export errors use `OmeZarrDiagnosticDialog` in the existing export GUI module: a normal resizable 900 x 600 QDialog, read-only no-wrap QPlainTextEdit with scrollbars and selection, complete-text Copy, and Close. Small errors keep QMessageBox. Export logic remains in commands and preflight. The complete preflight report prints the root dataset name once and groups child index/name, component/ObjectLists entry, feature, and detailed issue.
+
+### OrganoGraph report
+
+`OrganoFeatureDiagnostics` owns one collector per computed sample. Producers aggregate a feature/cause count under a mutex and retain at most five lowest example row indices per cause. No per-NaN string/index archive is created. Result objects and the collection share the collector, so the final report retains computed features even when publication of a sample fails.
+
+Current and legacy computation constructors print the report at completion. Loading saved graph results does not rerun diagnostics. Requested canonical output rows are counted once even when a value is published to both nuclei ObjectLists and DetectionSet or projected to retained cells. Categories identify existing nucleus features, nucleus/cell outputs and their mapped components, organoid-level results, and spatial/global curves. Dataset identities retain original source indices. The summary includes NaN/total/percentage, per-cause counts/example indices, ALL VALUES UNDEFINED highlights, affected datasets/features, and global counts across all computed datasets for each feature. The no-undefined case is a single line. Infinities are counted separately and excluded from display statistics.
+
+Recorded source branches include insufficient neighborhood ellipsoid points, a non-full-dimensional ellipsoid, missing ranked neighbors, no other radius neighbor, non-positive accessible volume, covariance solver failure/non-positive eigenvalue, nuclei outside the valid organoid, insufficient finite reference replicates or zero reference variance, undefined pair-shell scores/domain agreement, empty mesh intensity sampling regions, zero intensity mean, non-finite covariance-root/bounding-box arithmetic, zero normalization denominators, and absent finite whole-organoid summary inputs. Existing warnings and dataset failures remain. Voronoi core geometry keeps its existing zero-valued degenerate cases; this task does not turn them into NaNs. Non-finite intensity voxels still trigger the existing scientific-computation failure rather than silently changing its sampling policy.
+
+Existing source nucleus features have no producing computation in this run. Their NaNs are counted using bounded region reads (65,536 floats) and explicitly report the upstream scientific cause as UNCONFIRMED. Unexpected count/cause mismatches are also printed as UNCONFIRMED. A feature computation that fails before returning a result continues to be described by the existing dataset failure report; the NaN report covers completed sample results, including publication failures.
+
+### Source fixtures: requested case coverage (never executed)
+
+The existing optional manual source-test switches stay OFF by default. `POCA_ZARR_EXPORT_SOURCE_TESTS` registers `PocaZarrNaNTests.cpp` through the existing export source-test menu. `ORGANO_PERSISTENCE_SOURCE_TESTS` registers `OrganoFeatureDiagnosticsTests.cpp` through the existing TestRegistry. `OmeZarrExportGuiTests.cpp` extends the existing GUI fixture.
+
+| Requested cases | Source fixture |
+| --- | --- |
+| 1, 2, 3: positive, negative, mixed sign | NaNFeatureFixture::statistics |
+| 4, 5, 6: one NaN, many NaNs, all NaNs | NaNFeatureFixture::statistics |
+| 7, 8, 9: first/last NaN and negative-only extrema | NaNFeatureFixture::statistics |
+| 10: finite-only mean/median/population stddev | NaNFeatureFixture::statistics, including [1,2,NaN,5] explicit expectations |
+| 11, 12, 13: all five slots, scalar constructor, strict vector constructor | NaNFeatureFixture::statistics |
+| 14, 15, 16, 17: ordered finite/mixed and explicit unavailable bounds | NaNFeatureFixture::statistics / display / storage |
+| 18: valid unavailable metadata and complete preflight | NaNFeatureFixture::display / preflight |
+| 19, 20: reject reversed bounds with actual values | NaNFeatureFixture::display / preflight |
+| 21, 22, 23: mixed/all-NaN float Zarr roundtrip and lazy coherent restore | NaNFeatureFixture::roundTrip / storage |
+| 24: integer semantics, including unsigned maximum not a -1 sentinel | NaNFeatureFixture::statistics |
+| 25, 26: omit finite output, identify one NaN/dataset/feature/count | OrganoDiagnosticsFixture::aggregation |
+| 27, 28, 29: separate causes, all-NaN highlight, multiple dataset totals | OrganoDiagnosticsFixture::aggregation |
+| 30: scientific values unchanged | OrganoDiagnosticsFixture::aggregation; NaNFeatureFixture::statistics / roundTrip |
+| 31: actual neighborhood/covariance/reference producing branches | OrganoDiagnosticsFixture::producingPaths |
+| 32: exact concise no-undefined line | OrganoDiagnosticsFixture::noUndefined |
+| 33, 34, 35: resizing, scroll/select, complete Copy | checkOmeZarrExportGuiSource |
+| 36: root name once with child/feature context | NaNFeatureFixture::preflight |
+
+Additional source cases cover infinities, bounded/parallel-arrival-independent examples, sample counts, uint32 samples beyond exact float integers, metadata-only finite display with unavailable measured statistics, inconsistent null bounds, statistical reversal, histogram/display mismatch, and negative bins.
+
+### Deliberate limits and verification
+
+Floating resident median computation uses an O(finite rows) double work buffer and sort on CPU, even with CUDA available. Native storage samples stay bounded; valid saved metadata stays lazy. Stored scientific NaN values are preserved by the unchanged float-array writer; payload bit preservation is asserted by source fixtures, not established by execution. Statistics/display fields remain float, so values/statistics outside that representation cannot be made finite by this change. No effort is made to repair already corrupted saved bounds or retrospectively invent historical scientific causes.
+
+Static checks inspect declarations/call sites, command routing, ownership, source registration, scientific expressions, diff whitespace, UTF-8/BOM and CRLF. No CMake configure/generate, compilation, linking, installation, application/backend execution, Python/helper executable, test, or benchmark was run. Runtime behavior was not verified.

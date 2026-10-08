@@ -141,7 +141,7 @@ namespace poca::core {
 		inline const bool isMaxDefined() const { return m_isMaxDefined; }
 
 		void setInteraction(const bool _val) { m_hasInteraction = _val; }
-		virtual bool hasInteraction() const { return m_hasInteraction; }
+		virtual bool hasInteraction() const { return m_hasInteraction && hasDisplayBounds(); }
 
 		void setScaleLUT(const bool _val) { m_scaleLUT = _val; }
 		virtual bool scaleLUT() const { return m_scaleLUT; }
@@ -256,7 +256,8 @@ namespace poca::core {
 			m_minDefined = _isMinDefined ? _minDefined : m_stats.getData(ArrayStatistics::Min);
 			m_maxDefined = _isMaxDefined ? _maxDefined : m_stats.getData(ArrayStatistics::Max);
 			m_isLog = _isLog;
-			storageDisplayInterval(m_minDefined, m_maxDefined);
+			if (m_stats.unavailable()) m_isMinDefined = m_isMaxDefined = false;
+			else storageDisplayInterval(m_minDefined,m_maxDefined);
 			resetBounds();
 			setNbBins(_nbBins);
 			return;
@@ -269,8 +270,8 @@ namespace poca::core {
 		clock_t t1 = clock(), t2;
 
 		m_stats = ArrayStatistics::generateArrayStatistics(m_values, m_nbValues);
-		m_currentMin = m_stats.getData(ArrayStatistics::Min);
-		m_currentMax = m_stats.getData(ArrayStatistics::Max);
+		if (m_stats.unavailable()) m_isMinDefined = m_isMaxDefined = false;
+		resetBounds();
 		t2 = clock();
 		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
 		//std::cout << "Time for array statistics " << elapsed << std::endl;
@@ -282,8 +283,9 @@ namespace poca::core {
 	void Histogram<T>::changeHistogramBounds(const float _min, const float _max)
 	{
 		m_isMinDefined = _min != FLT_MAX;
-		m_isMaxDefined = _min != FLT_MAX;
-		if (m_minDefined || m_isMaxDefined) {
+		m_isMaxDefined = _max != FLT_MAX;
+		if (!hasDisplayBounds() && m_stats.unavailable()) { resetBounds(); return; }
+		if (m_isMinDefined || m_isMaxDefined) {
 			m_minDefined = m_isMinDefined ? _min : m_minDefined;
 			m_maxDefined = m_isMaxDefined ? _max : m_maxDefined;
 			setNbBins(m_nbBins);
@@ -293,7 +295,8 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::eraseBounds()
 	{
-		m_currentMin = FLT_MIN;
+		if (!hasDisplayBounds()) { resetBounds(); return; }
+		m_currentMin = -FLT_MAX;
 		m_currentMax = FLT_MAX;
 	}
 
@@ -301,13 +304,19 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::resetBounds()
 	{
-		m_currentMin = m_storageBacked ? getMin() : m_stats.getData(ArrayStatistics::Min);
-		m_currentMax = m_storageBacked ? getMax() : m_stats.getData(ArrayStatistics::Max);
+		m_currentMin = getMin();
+		m_currentMax = getMax();
 	}
 
 	template <class T>
 	void Histogram<T>::setNbBins(const std::size_t _nbBins)
 	{
+		if (_nbBins < 2) throw std::invalid_argument("Histogram requires at least two bins");
+		if (!hasDisplayBounds()) {
+			if (!m_stats.unavailable()) throw std::invalid_argument("Invalid histogram display bounds");
+			m_nbBins = _nbBins; m_bins.clear(); m_ts.clear(); m_stepX = m_maxY = 0.f;
+			return;
+		}
 		if (m_storageBacked && m_statisticsSource != HistogramStatisticsSource::FullResolution) {
 			m_nbBins = _nbBins;
 			storageSampleBins(m_statisticsSample, m_bins, m_ts, _nbBins, getMin(), getMax(), m_stepX, m_maxY);
@@ -325,35 +334,23 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::setNbBins(const std::size_t _nbBins, const std::vector <T>& _values)
 	{
-		//setNbBins(_nbBins, m_values.data(), m_values.size());
-
-		clock_t t1 = clock(), t2;
+		if (_nbBins < 2) throw std::invalid_argument("Histogram requires at least two bins");
 		m_nbBins = _nbBins;
-
-		m_bins.resize(m_nbBins, 0.);
-		m_ts.resize(m_nbBins);
-
-		float minTemp = (m_isMinDefined) ? m_minDefined : m_stats.getData(ArrayStatistics::Min);
-		float maxTemp = (m_isMaxDefined) ? m_maxDefined : m_stats.getData(ArrayStatistics::Max);
-		m_stepX = (maxTemp - minTemp) / (float)(m_nbBins - 1);
-
-		computeHistogram(_values, m_bins, minTemp, maxTemp);
-
-		/*for (unsigned int i = 0; i < _nbValues; i++) {
-			if (_values[i] == -1) continue;
-			unsigned short index = (unsigned short)floor((_values[i] - minTemp) / m_stepX);
-			if (index < m_nbBins)
-				m_bins[index]++;
-		}*/
-		m_maxY = 0.;
-		for (int i = 0; i < m_nbBins; i++) {
-			m_ts[i] = minTemp + (float)i * m_stepX + 0.5f * m_stepX;
-			if (m_bins[i] > m_maxY)
-				m_maxY = m_bins[i];
+		if (!hasDisplayBounds()) {
+			if (!m_stats.unavailable()) throw std::invalid_argument("Invalid histogram display bounds");
+			m_bins.clear(); m_ts.clear(); m_stepX = m_maxY = 0.f;
+			return;
 		}
-		t2 = clock();
-		long elapsed = ((double)t2 - t1) / CLOCKS_PER_SEC * 1000;
-		//std::cout << "Time for histogram " << elapsed << std::endl;
+		// The floating CPU path excludes nonfinite values before bin conversion.
+		m_bins.assign(m_nbBins, 0.f);
+		computeHistogram(_values, m_bins, getMin(), getMax());
+		m_ts.resize(m_nbBins);
+		const double step = (static_cast<double>(getMax()) - getMin()) / (m_nbBins - 1);
+		m_stepX = static_cast<float>(step); m_maxY = 0.f;
+		for (size_t i = 0; i < m_nbBins; ++i) {
+			m_ts[i] = static_cast<float>(std::min(static_cast<double>(getMax()), getMin() + i * step + 0.5 * step));
+			m_maxY = std::max(m_maxY, m_bins[i]);
+		}
 	}
 
 	/*void Histogram<T>::setNbBins(const std::size_t _nbBins, const float* _values, const std::size_t _nbValues)
@@ -412,6 +409,7 @@ namespace poca::core {
 	template <class T>
 	void Histogram<T>::setSelection(std::vector <bool>& _selection)
 	{
+		if (!hasDisplayBounds()) return; // Undefined measurements do not filter out the whole component.
 		// An inactive full-range lazy filter contributes nothing to selection.
 		if (valuesUnloaded() && (!m_hasInteraction ||
 			(getCurrentMin() <= getMin() && getCurrentMax() >= getMax()))) return;
@@ -459,20 +457,23 @@ namespace poca::core {
 			std::lock_guard<std::mutex> lock(m_valuesMutex);
 			if (m_values.size() != m_nbValues || m_values.empty())
 				throw std::runtime_error("Storage-backed statistics require complete intensity values");
-			const auto stats = storageSampleStatistics(m_values);
-			float min = stats.getData(ArrayStatistics::Min), max = stats.getData(ArrayStatistics::Max);
-			storageDisplayInterval(min, max);
-			storageSampleBins(m_values, m_bins, m_ts, m_nbBins, min, max, m_stepX, m_maxY);
-			m_stats = stats;
-			m_isMinDefined = m_isMaxDefined = true;
-			m_minDefined = min; m_maxDefined = max;
+			m_stats = storageSampleStatistics(m_values);
+			m_isMinDefined = m_isMaxDefined = !m_stats.unavailable();
+			if (m_isMinDefined) {
+				m_minDefined = m_stats.getData(ArrayStatistics::Min); m_maxDefined = m_stats.getData(ArrayStatistics::Max);
+				storageDisplayInterval(m_minDefined,m_maxDefined);
+				storageSampleBins(m_values,m_bins,m_ts,m_nbBins,m_minDefined,m_maxDefined,m_stepX,m_maxY);
+			}
+			else setNbBins(m_nbBins,m_values);
 			m_statisticsSource = HistogramStatisticsSource::FullResolution;
 			m_statisticsSample.clear();
 			resetBounds();
 			return;
 		}
 		m_stats = ArrayStatistics::generateArrayStatistics(m_values, m_nbValues);
+		m_isMinDefined = m_isMaxDefined = false;
 		resetBounds();
+		setNbBins(m_nbBins);
 	}
 
 	template <class T>
@@ -495,9 +496,9 @@ namespace poca::core {
 		m_minDefined = _hasDisplayBounds ? _displayMin : m_stats.getData(ArrayStatistics::Min);
 		m_maxDefined = _hasDisplayBounds ? _displayMax : m_stats.getData(ArrayStatistics::Max);
 		// Images retain a finite display interval; quantitative features may preserve exact constant bounds.
-		if (!_preserveBounds) storageDisplayInterval(m_minDefined, m_maxDefined);
-		m_currentMin = m_minDefined;
-		m_currentMax = m_maxDefined;
+		if (!_hasDisplayBounds && m_stats.unavailable()) m_isMinDefined = m_isMaxDefined = false;
+		else if (!_preserveBounds) storageDisplayInterval(m_minDefined, m_maxDefined);
+		resetBounds();
 		setNbBins(100);
 	}
 
@@ -510,6 +511,7 @@ namespace poca::core {
 		for (size_t i = 0; i < state.statistics.size(); ++i) state.statistics[i] = m_stats.getData(static_cast<int>(i));
 		state.bins = m_bins; state.ts = m_ts;
 		for (T value : m_statisticsSample) state.sample.push_back(static_cast<double>(value));
+		state.displayAvailable = hasDisplayBounds();
 		state.minimum = getMin(); state.maximum = getMax();
 		state.currentMin = m_currentMin; state.currentMax = m_currentMax;
 		state.step = m_stepX; state.maxY = m_maxY;
@@ -522,15 +524,25 @@ namespace poca::core {
 	{
 		std::lock_guard<std::mutex> lock(m_valuesMutex);
 		if (!_state.count || (m_nbValues && m_nbValues != _state.count) ||
-			(!m_values.empty() && m_values.size() != _state.count) || _state.bins.size() < 2 ||
+			(!m_values.empty() && m_values.size() != _state.count) ||
+			(_state.displayAvailable && _state.bins.size() < 2) ||
 			_state.ts.size() != _state.bins.size() || _state.sample.size() > _state.count ||
-			!std::isfinite(_state.minimum) || !std::isfinite(_state.maximum) || _state.minimum > _state.maximum ||
-			!std::isfinite(_state.currentMin) || !std::isfinite(_state.currentMax) || _state.currentMin > _state.currentMax ||
+			(_state.displayAvailable && (!std::isfinite(_state.minimum) || !std::isfinite(_state.maximum) || _state.minimum > _state.maximum ||
+			!std::isfinite(_state.currentMin) || !std::isfinite(_state.currentMax) || _state.currentMin > _state.currentMax)) ||
 			!std::isfinite(_state.step) || _state.step < 0.f || !std::isfinite(_state.maxY) || _state.maxY < 0.f)
 			throw std::invalid_argument("Invalid persisted histogram state");
 		if (_state.source != HistogramStatisticsSource::FullResolution &&
 			_state.source != HistogramStatisticsSource::NativeSample && _state.source != HistogramStatisticsSource::DisplayMetadata)
 			throw std::invalid_argument("Invalid persisted histogram statistics source");
+		const ArrayStatistics restored(std::vector<float>(_state.statistics.begin(), _state.statistics.end()));
+		if (!_state.displayAvailable && (!restored.unavailable() || !_state.bins.empty() || !_state.ts.empty() ||
+			!std::isnan(_state.minimum) || !std::isnan(_state.maximum) ||
+			!std::isnan(_state.currentMin) || !std::isnan(_state.currentMax) || _state.step != 0.f || _state.maxY != 0.f))
+			throw std::invalid_argument("Inconsistent unavailable histogram display state");
+		if (!restored.unavailable() && (!restored.hasFiniteStatistics() ||
+			restored.getData(ArrayStatistics::Min) > restored.getData(ArrayStatistics::Max) ||
+			restored.getData(ArrayStatistics::StdDev) < 0.f))
+			throw std::invalid_argument("Inconsistent persisted finite statistics");
 		for (float value : _state.statistics)
 			if (std::isinf(value)) throw std::invalid_argument("Infinite persisted histogram statistic");
 		for (size_t i = 0; i < _state.bins.size(); ++i)
@@ -538,6 +550,9 @@ namespace poca::core {
 				throw std::invalid_argument("Invalid persisted histogram bins");
 		std::vector<T> sample;
 		for (double value : _state.sample) {
+			if constexpr (std::is_floating_point_v<T>) {
+				if (!std::isfinite(value)) { sample.push_back(static_cast<T>(value)); continue; }
+			}
 			if (!std::isfinite(value) || value < static_cast<double>((std::numeric_limits<T>::lowest)()) ||
 				value > static_cast<double>((std::numeric_limits<T>::max)()) || static_cast<double>(static_cast<T>(value)) != value)
 				throw std::invalid_argument("Persisted histogram sample differs from scalar type");
@@ -550,7 +565,7 @@ namespace poca::core {
 		for (size_t i = 0; i < _state.statistics.size(); ++i)
 			m_stats.setData(static_cast<int>(i),_state.statistics[i]);
 		m_bins.swap(bins); m_ts.swap(ts); m_statisticsSample.swap(sample);
-		m_nbValues = _state.count; m_nbBins = m_bins.size();
+		m_nbValues = _state.count; m_nbBins = m_bins.empty() ? 100 : m_bins.size();
 		m_statisticsSource = _state.source; m_storageBacked = true;
 		m_isMinDefined = m_isMaxDefined = true;
 		m_minDefined = _state.minimum; m_maxDefined = _state.maximum;

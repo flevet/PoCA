@@ -26,31 +26,10 @@ namespace poca::core {
 	template <class T>
 	ArrayStatistics storageSampleStatistics(const std::vector<T>& _sample)
 	{
-		const float unknown = std::numeric_limits<float>::quiet_NaN();
-		if (_sample.empty())
-			return ArrayStatistics(unknown, unknown, unknown, unknown, unknown);
-		std::vector<double> sorted;
-		sorted.reserve(_sample.size());
-		double mean = 0., m2 = 0.;
-		for (T value : _sample) {
-			const double v = static_cast<double>(value);
-			if (!std::isfinite(v))
-				throw std::invalid_argument("Statistics sample contains non-finite values");
-			sorted.push_back(v);
-			const double delta = v - mean;
-			mean += delta / static_cast<double>(sorted.size());
-			m2 += delta * (v - mean);
-		}
-		std::sort(sorted.begin(), sorted.end());
-		const std::size_t middle = sorted.size() / 2;
-		const double median = sorted.size() % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2.;
-		ArrayStatistics stats;
-		stats.setData(ArrayStatistics::Mean, static_cast<float>(mean));
-		stats.setData(ArrayStatistics::Median, static_cast<float>(median));
-		stats.setData(ArrayStatistics::StdDev, static_cast<float>(std::sqrt(std::max(0., m2 / sorted.size()))));
-		stats.setData(ArrayStatistics::Min, static_cast<float>(sorted.front()));
-		stats.setData(ArrayStatistics::Max, static_cast<float>(sorted.back()));
-		return stats;
+		std::vector<float> values(STATS_NB_PARAMS);
+		// Preserve the existing storage-sample even-median convention.
+		computeStats_CPU(_sample, values, true);
+		return ArrayStatistics(values);
 	}
 
 	template <class T>
@@ -65,7 +44,7 @@ namespace poca::core {
 		_step = static_cast<float>(step);
 		for (T value : _sample) {
 			const double v = static_cast<double>(value);
-			if (!std::isfinite(v)) throw std::invalid_argument("Histogram values contain non-finite intensities");
+			if (!std::isfinite(v)) continue;
 			if (v < _min || v > _max) continue;
 			const std::size_t bin = step == 0. ? 0 : std::min(_count - 1, static_cast<std::size_t>((v - _min) / step));
 			_bins[bin] += 1.f;

@@ -38,6 +38,9 @@
 #include <numeric>
 #include <algorithm>
 #include <iostream>
+#include <cmath>
+#include <limits>
+#include <type_traits>
 #ifndef NO_CUDA
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -73,7 +76,7 @@ struct summary_stats_data
 	{
 		n = mean = M2 = M3 = M4 = 0;
 		min = std::numeric_limits<T>::max();
-		max = std::numeric_limits<T>::min();
+		max = (std::numeric_limits<T>::lowest)();
 	}
 
 	T variance() { return M2 / (n - 1); }
@@ -164,18 +167,26 @@ struct summary_stats_binary_op
 	template <class T>
 	void computeHistogram_CPU(const std::vector<T>& values, std::vector<float>& histo, const float _min, const float _max)
 	{
-		std::size_t nbValues = values.size(), nbBins = histo.size();
-		float stepX = (_max - _min) / (float)(nbBins - 1);
-		for (unsigned int i = 0; i < nbValues; i++) {
-			if (values[i] == -1) continue;
-			unsigned short index = (unsigned short)floor((values[i] - _min) / stepX);
-			if (index < nbBins)
-				histo[index]++;
+		const size_t nbBins = histo.size();
+		if (nbBins < 2 || !std::isfinite(_min) || !std::isfinite(_max) || _min > _max)
+			throw std::invalid_argument("Invalid histogram bounds/bin count");
+		std::fill(histo.begin(), histo.end(), 0.f);
+		const double step = (static_cast<double>(_max) - _min) / (nbBins - 1);
+		for (T value : values) {
+			const double v = static_cast<double>(value);
+			if (!std::isfinite(v) || v < _min || v > _max) continue;
+			if constexpr (!std::is_floating_point_v<T>) { if (value == -1) continue; }
+			const size_t index = step == 0. ? 0 : std::min(nbBins - 1, static_cast<size_t>((v - _min) / step));
+			histo[index]++;
 		}
 	}
 
 	template <class T>
 	void computeHistogram(const std::vector<T>& values, std::vector<float>& histo, const float _min, const float _max) {
+		if constexpr (std::is_floating_point_v<T>) {
+			computeHistogram_CPU(values, histo, _min, _max);
+			return;
+		}
 #ifndef NO_CUDA
 		int devCount; // Number of CUDA devices
 		cudaError_t err = cudaGetDeviceCount(&devCount);
@@ -217,20 +228,41 @@ struct summary_stats_binary_op
 	}
 
 	template <class T>
-	void computeStats_CPU(const std::vector<T>& values, std::vector<float>& stats)
+	void computeStats_CPU(const std::vector<T>& values, std::vector<float>& stats, bool averageEvenMedian = false)
 	{
-		/*_values.resize(_keys.size());
-		std::iota(std::begin(_values), std::end(_values), 0);
-
-		//Sort wrt the distance to the camera position
-		std::sort(_values.begin(), _values.end(),
-			[&](int A, int B) -> bool {
-				return _keys[A] < _keys[B];
-			});*/
+		if (stats.size() != 5) throw std::invalid_argument("Statistics require five slots");
+		std::fill(stats.begin(), stats.end(), std::numeric_limits<float>::quiet_NaN());
+		std::vector<double> finite;
+		finite.reserve(values.size());
+		double mean = 0., m2 = 0.;
+		for (T value : values) {
+			const double v = static_cast<double>(value);
+			if (!std::isfinite(v)) continue;
+			finite.push_back(v);
+			const double delta = v - mean;
+			mean += delta / static_cast<double>(finite.size());
+			m2 += delta * (v - mean);
+		}
+		if (finite.empty()) return;
+		std::sort(finite.begin(), finite.end());
+		const size_t middle = finite.size() / 2;
+		const double median = averageEvenMedian && finite.size() % 2 == 0 ?
+			finite[middle - 1] / 2. + finite[middle] / 2. : finite[middle];
+		stats[0] = static_cast<float>(mean);
+		stats[1] = static_cast<float>(median);
+		stats[2] = static_cast<float>(std::sqrt(std::max(0., m2 / finite.size())));
+		stats[3] = static_cast<float>(finite.front());
+		stats[4] = static_cast<float>(finite.back());
 	}
 	
 	template <class T>
 	void computeStats(const std::vector<T>& values, std::vector<float>& stats) {
+		// Floating feature reductions are finite-only on every device configuration.
+		if constexpr (std::is_floating_point_v<T>) {
+			computeStats_CPU(values, stats);
+			return;
+		}
+		if (values.empty()) { computeStats_CPU(values, stats); return; }
 #ifndef NO_CUDA
 		int devCount; // Number of CUDA devices
 		cudaError_t err = cudaGetDeviceCount(&devCount);

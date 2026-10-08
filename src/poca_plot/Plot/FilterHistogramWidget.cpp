@@ -140,6 +140,15 @@ namespace poca::plot {
 				.arg(static_cast<qulonglong>(_hist->statisticsSampleCount())));
 		m_customPlot->setEnabled(_hist->hasInteraction());
 		m_customPlot->update();
+		const bool available = _hist->hasDisplayBounds();
+		m_minLEdit->setEnabled(available); m_maxLEdit->setEnabled(available);
+		m_buttonScaleLUT->setEnabled(available);
+		m_cboxLog->setEnabled(available);
+		if (!available) {
+			m_minLEdit->setText(tr("unavailable")); m_maxLEdit->setText(tr("unavailable"));
+			m_cboxLog->blockSignals(true); m_cboxLog->setChecked(_log); m_cboxLog->blockSignals(false);
+			return;
+		}
 		double minV = m_customPlot->getCurrentMin();
 		double maxV = m_customPlot->getCurrentMax();
 		int precision = (minV < -10. || minV > 10.) ? 0 : 3;

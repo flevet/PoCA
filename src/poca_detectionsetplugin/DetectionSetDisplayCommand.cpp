@@ -206,6 +206,7 @@ void DetectionSetDisplayCommand::display(poca::opengl::Camera* _cam, const bool 
 
 void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
+	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	GL_CHECK_ERRORS();
 	if (m_pointBuffer.empty())
 		createDisplay();
@@ -242,6 +243,7 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 
 void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	GL_CHECK_ERRORS();
 	if (m_pickFBO == NULL) return;
 
@@ -371,7 +373,7 @@ void DetectionSetDisplayCommand::generateFeatureBuffer(poca::core::HistogramInte
 
 		std::vector <float> feature(values.size());
 		for (size_t n = 0; n < values.size(); n++)
-			feature[n] = selection[n] ? values[n] : -10000.f;
+			feature[n] = selection[n] && std::isfinite(values[n]) ? values[n] : -10000.f;
 		m_featureBuffer.updateBuffer(feature);
 	}
 	else {

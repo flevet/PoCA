@@ -369,6 +369,7 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 
 void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
+	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	if (m_triangleBuffer.empty())
 		createDisplay();
 	if (m_pickFBO == NULL)
@@ -616,6 +617,7 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 
 void ObjectListDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	if (m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
@@ -969,7 +971,7 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 				m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 
 			for (auto n = 0; n < values.size(); n++)
-				featureEllipsoid[n] = selection[n] ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
+				featureEllipsoid[n] = selection[n] && std::isfinite(values[n]) ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
 		}
 		m_locsFeatureBuffer.updateBuffer(featureLocs.data());
 		m_triangleFeatureBuffer.updateBuffer(featureValues.data());

@@ -34,6 +34,7 @@
 #define HistogramInterface_h__
 
 #include <array>
+#include <cmath>
 
 #include <vector>
 
@@ -49,7 +50,7 @@ namespace poca::core {
 		std::vector<float> bins, ts;
 		std::vector<double> sample;
 		float minimum{0.f}, maximum{0.f}, currentMin{0.f}, currentMax{0.f}, step{0.f}, maxY{0.f};
-		bool interaction{true}, scaleLUT{false};
+		bool interaction{true}, scaleLUT{false}, displayAvailable{true};
 	};
 
 	class HistogramInterface {
@@ -78,6 +79,9 @@ namespace poca::core {
 		virtual const float getMax() const = 0;
 		virtual const float getStepX() const = 0;
 		virtual const float getMaxY() const = 0;
+		virtual bool hasDisplayBounds() const {
+			return std::isfinite(getMin()) && std::isfinite(getMax()) && getMin() <= getMax();
+		}
 
 		virtual float* valuesf() = 0;
 		virtual uint8_t* valuesui8() = 0;

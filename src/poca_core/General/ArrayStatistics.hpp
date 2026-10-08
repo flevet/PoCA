@@ -53,6 +53,12 @@ namespace poca::core {
 
 		inline void setData(const int _type, const float _val) { m_data[_type] = _val; }
 		inline const float getData(const int _type) const { return m_data[_type]; }
+		bool hasFiniteStatistics() const {
+			return std::all_of(m_data.begin(), m_data.end(), [](float value) { return std::isfinite(value); });
+		}
+		bool unavailable() const {
+			return std::all_of(m_data.begin(), m_data.end(), [](float value) { return std::isnan(value); });
+		}
 
 		template <class T>
 		static ArrayStatistics generateArrayStatistics(std::vector<T>&, const size_t);
@@ -69,14 +75,21 @@ namespace poca::core {
 	template <class T>
 	ArrayStatistics ArrayStatistics::generateArrayStatistics(std::vector <T>& _data, const size_t _nb)
 	{
-		float nb = (float)_nb;
-		if (_nb == 0) return ArrayStatistics();
+		if (_nb > _data.size()) throw std::invalid_argument("Statistics sample count exceeds array length");
+		if (_nb == 0) {
+			const float unknown = std::numeric_limits<float>::quiet_NaN();
+			return ArrayStatistics(unknown, unknown, unknown, unknown, unknown);
+		}
 		std::vector <float> vals(STATS_NB_PARAMS);
 		vals[ArrayStatistics::Mean] = vals[ArrayStatistics::Median] = vals[ArrayStatistics::StdDev] = 0.;
 		vals[ArrayStatistics::Min] = FLT_MAX;
 		vals[ArrayStatistics::Max] = -FLT_MAX;
 
-		computeStats(_data, vals);
+		if (_nb == _data.size()) computeStats(_data, vals);
+		else {
+			const std::vector<T> samples(_data.begin(), _data.begin() + _nb);
+			computeStats(samples, vals);
+		}
 
 		ArrayStatistics stats(vals);
 		return stats;

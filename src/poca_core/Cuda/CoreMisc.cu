@@ -170,19 +170,9 @@ void computeHistogram_GPUI32(const int32_t* values, const size_t nbValues, std::
 
 void computeHistogram_GPUF(const float* values, const size_t nbValues, std::vector<float>& histo, const float _min, const float _max)
 {
-    JustGPUBuffer<float> out_array(values, nbValues);
-    GPUBuffer<float> out_histo(histo);
-
-    std::size_t nbBins = histo.size();
-
-    float stepX = (_max - _min) / (float)(nbBins - 1);
-
-    dim3 block(32);
-    dim3 grid((nbValues + block.x - 1) / block.x);
-
-    kernel_getHist <<<grid, block>>> (out_array.gpu_data, nbValues, out_histo.gpu_data, nbBins, _min, stepX);
-
-    out_histo.gpu2cpu();
+    std::vector<float> samples;
+    if (nbValues) samples.assign(values, values + nbValues);
+    computeHistogram_CPU(samples, histo, _min, _max);
 }
 
 template <typename Iterator>
@@ -344,30 +334,10 @@ void computeStats_GPUU32(const uint32_t* values, const size_t nbValues, std::vec
 
 void computeStats_GPUF(const float* values, const size_t nbValues, std::vector<float>& stats)
 {
-    std::vector <float> copied(values, values + nbValues);
-    GPUBuffer<float> out_array(copied);
-    GPUBuffer<float> out_stats(stats);
-
-    // setup arguments
-    summary_stats_unary_op<float> unary_op;
-    summary_stats_binary_op<float> binary_op;
-    summary_stats_data<float> init;
-
-    init.initialize();
-
-    // compute summary statistics
-    summary_stats_data<float> result = thrust::transform_reduce(thrust::device_pointer_cast(out_array.gpu_data), thrust::device_pointer_cast(out_array.gpu_data) + nbValues, unary_op, init, binary_op);
-    thrust::sort(thrust::device_pointer_cast(out_array.gpu_data), thrust::device_pointer_cast(out_array.gpu_data) + nbValues);
-
-    out_array.gpu2cpu();
-
-    stats[0] = result.mean;
-    stats[1] = out_array.cpu_data[int(out_array.size / 2)];
-    stats[2] = std::sqrt(result.variance_n());
-    stats[3] = result.min;
-    stats[4] = result.max;
+    // Keep the public CUDA entrypoint consistent with generic floating feature statistics.
+    std::vector<float> samples;
+    if (nbValues) samples.assign(values, values + nbValues);
+    computeStats_CPU(samples, stats);
 }
-
-
 #endif
 

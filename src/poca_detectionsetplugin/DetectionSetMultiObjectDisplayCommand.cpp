@@ -10,6 +10,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <map>
 
@@ -410,7 +411,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		for (size_t idx = 0; idx < xs.size(); idx++) {
 			const float z = zs != nullptr ? (*zs)[idx] : 0.f;
 			points.push_back(transformPosition(model, poca::core::Vec3mf(xs[idx], ys[idx], z)));
-			features.push_back(selection[idx] ? values[idx] : -10000.f);
+			features.push_back(histogram->hasDisplayBounds() && selection[idx] && std::isfinite(values[idx]) ? values[idx] : -10000.f);
 		}
 
 		if (dset->hasData("nx") && dset->hasData("ny") && dset->hasData("nz")) {
@@ -614,7 +615,7 @@ bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer()
 		if (values.size() != range.count || selection.size() != range.count)
 			return false;
 		for (size_t idx = 0; idx < range.count; idx++)
-			features[range.first + idx] = selection[idx] ? values[idx] : -10000.f;
+			features[range.first + idx] = histogram->hasDisplayBounds() && selection[idx] && std::isfinite(values[idx]) ? values[idx] : -10000.f;
 	}
 
 	if (!updateHistogramState())
@@ -654,7 +655,7 @@ bool DetectionSetMultiObjectDisplayCommand::updateFeatureBuffer(const std::vecto
 			return false;
 		std::vector<float> features(range.count);
 		for (size_t idx = 0; idx < range.count; idx++)
-			features[idx] = selection[idx] ? values[idx] : -10000.f;
+			features[idx] = histogram->hasDisplayBounds() && selection[idx] && std::isfinite(values[idx]) ? values[idx] : -10000.f;
 		m_featureBuffer.updateSubBuffer(range.first, features.data(), range.count);
 	}
 	return updateHistogramState();
