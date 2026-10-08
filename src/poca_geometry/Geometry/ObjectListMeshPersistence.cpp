@@ -2,16 +2,26 @@
 #include "ObjectListMesh.hpp"
 #include <General/Misc.h>
 #include <limits>
+#include <chrono>
 #include <stdexcept>
 
 namespace poca::geometry {
 	ObjectListMesh::ObjectListMesh(PersistedIndexedMeshes, IndexedMeshGeometry&& _geometry,
 		std::map<std::string, std::unique_ptr<poca::core::MyData>> _features, bool _triangleZ,
 		std::vector<std::array<poca::core::Vec3mf,3>> _axes,
-		std::optional<poca::core::PersistedHistogramState> _triangleState)
+		std::optional<poca::core::PersistedHistogramState> _triangleState, PersistedConstructionTiming* _timing)
 		:ObjectListInterface("ObjectListMesh"), m_meshesMaterialized(false), m_repair(false), m_applyRemeshing(false)
 	{
+		using Clock = std::chrono::steady_clock;
+		auto start = _timing ? Clock::now() : Clock::time_point{};
+		const auto checkpoint = [&](PersistedConstructionTiming::Phase phase) {
+			if (!_timing) return;
+			const auto now = Clock::now();
+			_timing->seconds[phase] += std::chrono::duration<double>(now-start).count();
+			start = now;
+		};
 		_geometry.validate();
+		checkpoint(PersistedConstructionTiming::Validation);
 		const auto objects = _geometry.nbObjects();
 		for (const auto& feature : _features)
 			if (!feature.second || feature.second->nbElements() != objects)
@@ -24,6 +34,7 @@ namespace poca::geometry {
 		if (!_axes.empty() && _axes.size() != objects)
 			throw std::invalid_argument("Persisted mesh rendering axis count mismatch");
 		m_axis = std::move(_axes);
+		checkpoint(PersistedConstructionTiming::Auxiliary);
 		for (size_t object = 0; object < objects; ++object) {
 			auto bbox = poca::core::BoundingBox::initBBox();
 			poca::core::Vec3md sum(0.,0.,0.);
@@ -38,16 +49,21 @@ namespace poca::geometry {
 			m_centroids.emplace_back(center.x(),center.y(),center.z());
 			m_bboxMeshes.push_back(bbox);
 			firstLocs.push_back(static_cast<uint32_t>(locs.size()));
+			checkpoint(PersistedConstructionTiming::Auxiliary);
 			for (uint64_t f = _geometry.faceOffsets[object]; f < _geometry.faceOffsets[object+1]; ++f)
 				for (const auto vertex : _geometry.faces[f]) {
 					const auto& xyz = _geometry.vertices[vertex];
 					triangles.emplace_back(xyz[0],xyz[1],xyz[2]);
 				}
 			firstTriangles.push_back(static_cast<uint32_t>(triangles.size()));
+			checkpoint(PersistedConstructionTiming::Triangles);
 		}
 		m_locs.initialize(locs,firstLocs); m_outlineLocs = m_locs;
+		checkpoint(PersistedConstructionTiming::Auxiliary);
 		m_triangles.initialize(triangles,firstTriangles);
+		checkpoint(PersistedConstructionTiming::Triangles);
 		_geometry.generateNormals(m_indexedVertexNormals,m_indexedFaceNormals);
+		checkpoint(PersistedConstructionTiming::Normals);
 		if (_features.empty()) {
 			// Older payloads with no quantitative features still need one object-level display feature.
 			std::vector<float> ids(objects);
@@ -59,6 +75,7 @@ namespace poca::geometry {
 			hist.release();
 			_features.emplace("id",std::move(data));
 		}
+		checkpoint(PersistedConstructionTiming::Adoption);
 		if (_triangleZ) {
 			if (_features.count("z")) throw std::invalid_argument("Duplicate persisted object/triangle z feature");
 			std::vector<float> zs;
@@ -80,10 +97,12 @@ namespace poca::geometry {
 			histogram.release();
 			_features.emplace("z",std::move(data));
 		}
+		checkpoint(PersistedConstructionTiming::TriangleZ);
 		const auto current = _features.count("volume") ? "volume" : _features.begin()->first;
 		adoptPersistedFeatures(std::move(_features),objects,current);
 		m_centroid = m_bbox.centroid();
 		m_indexedGeometry = std::make_shared<const IndexedMeshGeometry>(std::move(_geometry));
+		checkpoint(PersistedConstructionTiming::Adoption);
 	}
 
 	ObjectListMesh::ObjectListMesh(const ObjectListMesh& _other) : ObjectListInterface(_other)

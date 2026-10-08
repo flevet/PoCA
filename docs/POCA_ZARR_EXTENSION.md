@@ -29,7 +29,7 @@ Illustrative output; timings below are not measurements:
 [PoCA][Zarr][Load] CGAL mesh collections materialized: 0
 ```
 
-Counts inspect `hasPixels`, `valuesUnloaded`, `nbObjects` and `meshesMaterialized`; they never call pixel/value/CGAL accessors. Persisted feature-array counts come from restored descriptors; feature records also include intensity and derived/native display features. Lazy-state counts describe components at reconstruction completion, not lifetime chunk traffic or temporary sampling. Nested timings are inclusive and must not be summed.
+Counts inspect `hasPixels`, `valuesUnloaded`, `nbObjects` and `meshesMaterialized`; they never call pixel/value/CGAL accessors. Persisted feature-array counts come from restored descriptors; feature records also include intensity and derived/native display features. Lazy-state counts describe components at reconstruction completion, not lifetime chunk traffic or temporary sampling. Nested timings are inclusive and must not be summed. The 2026-10-08 diagnostic extension below adds direct-child/self accounting and detailed cost groups, superseding the former inclusive-only report.
 
 ### Ownership and layout
 
@@ -662,3 +662,113 @@ Additional source cases cover infinities, bounded/parallel-arrival-independent e
 Floating resident median computation uses an O(finite rows) double work buffer and sort on CPU, even with CUDA available. Native storage samples stay bounded; valid saved metadata stays lazy. Stored scientific NaN values are preserved by the unchanged float-array writer; payload bit preservation is asserted by source fixtures, not established by execution. Statistics/display fields remain float, so values/statistics outside that representation cannot be made finite by this change. No effort is made to repair already corrupted saved bounds or retrospectively invent historical scientific causes.
 
 Static checks inspect declarations/call sites, command routing, ownership, source registration, scientific expressions, diff whitespace, UTF-8/BOM and CRLF. No CMake configure/generate, compilation, linking, installation, application/backend execution, Python/helper executable, test, or benchmark was run. Runtime behavior was not verified.
+
+## 2026-10-08: diagnostic-only load-cost profiling
+
+This update extends the existing PocaZarrLoadReport. No loading optimization, parallelization, extra data cache, feature batching, validation removal, scientific change, additional laziness, persistence-format change, TensorStore setting change, or backend ABI change was implemented. No new files or independent profiler classes were added.
+
+### Current call graph and ownership
+
+LoaderZarr -> PocaZarrDatasetLoader::load -> reconstruct -> root manifest -> sequential loadMultipleObject children (child manifest -> loadObject) -> loadComponents -> loadPocaZarrExtension -> loadPocaZarrMeshes/loadPocaZarrPoints -> loadPocaZarrFeatures -> pocaZarrOpenArray -> ZarrArrayAccess::open -> unchanged C backend. Images use loadImagesList/loadImage -> ZarrImageStorage::open -> ZarrArrayAccess::open -> createStorageBackedZarrImage. Component reconstruction precedes Engine::assembleObject, saved state and PocaZarrCommandState::restore. The multiple-object root is assembled/restored after its children. The summary precedes the existing single root Engine registration and GUI refresh.
+
+Existing unique ownership transfers, immutable indexed geometry and shared backend-array ownership are retained. Lazy callbacks capture their existing arrays/readers by value; they never retain a load-report pointer. The core ObjectListMesh constructor optionally fills a six-entry PersistedConstructionTiming result owned by its caller. It has no dependency on the Zarr plugin. The core-dependent PocaZarrLoadReport::countComponent definition sits in the existing dataset loader so the reporter and array wrapper remain usable by independent adapter mocks without Qt/PoCA geometry dependencies.
+
+### Actual measured boundaries
+
+| Path | Boundaries observed without changing operations |
+| --- | --- |
+| ObjectListMesh metadata | Existing group JSON parse, mesh properties/counts/path declarations; separate derived triangle-z metadata/display restoration |
+| Indexed geometry setup | Existing vertices/faces/vertex-offset/face-offset opens and shape/type validation |
+| Indexed geometry values | Existing offset reads and resident vertices/faces reads, allocation, copies and packing; actual generic read time is nested separately |
+| Geometry validation | Existing loader offset validation; existing full IndexedMeshGeometry::validate topology/index/range/fan validation in the constructor |
+| Mesh display | Existing triangle flattening/ranges and MyArray initialization; existing combined face/vertex normal generation; existing xs/ys/zs, locs/ranges, bounds/centroids and axes installation; render-axis open/read/validation has its own phase |
+| Mesh triangle-z | Existing z-vector, histogram initialization/state adoption and MyData creation, separate from persisted object-feature array loading |
+| Mesh construction/adoption | Constructor total, measured internal phases, existing legacy id feature creation, feature/selection adoption and immutable backing installation |
+| DetectionSet | Existing component metadata, spatial bounding-box metadata, positions array setup, coordinate Histogram/MyData setup, persisted-feature restoration and constructor/feature validation/selection/bookkeeping |
+| Persisted features | Existing feature-group/manifest checks; path/name locating and array JSON reads; generic array initialization; display/statistics parse/validate/restore; storage-backed Histogram/MyData and reader setup; legacy bounded samples; full feature/coordinate materialization callback only if normally invoked |
+| Images | Existing image metadata parse, reader/native-array initialization, feature/display state, generic image read time, level-0 region reads and full level-0 loading callback if normally invoked |
+
+The constructor's existing per-object vertex and face loops remain interleaved and in the same order. Two clock checkpoints per object separate auxiliary work from triangle work without restructuring either algorithm. Other constructor checkpoints are per phase. When no report is supplied, the optional core clock checkpoints do no work.
+
+### Accounting, counters and output
+
+Every synchronous scope uses steady_clock. Inclusive time is the scope duration; children is the sum of immediate child durations; self/unclassified is max(0, inclusive - children). Grandchildren are not subtracted again. The loader imports the six disjoint constructor intervals as measured children of Mesh construction. That existing constructor path does not read lazy scientific feature arrays. Unaccounted reconstruction time sums self at structural boundaries (reconstruction/aggregate/component/feature/mesh-constructor/image containers) plus time outside the outer reconstruction scope. Coarse explicitly measured leaf phases are accounted work, even when their internal allocation/validation details are not further split. Summary output itself is excluded from the captured total.
+
+Per-component output keeps completion plus three concise lines: identity/cost categories, structural counts/open/read counters, and feature setup costs. Detailed final groups show ObjectListMesh and DetectionSet feature subtotals independently, as well as global feature and generic array costs. Top five meshes and top five DetectionSets retain child index/name and persisted component path/name, total seconds, object/detection count, vertex/face count, and actual restored feature-record count. The rankings store only five entries per kind. There is no per-feature timing log or retained per-feature timing record.
+
+Counts use already parsed counts, existing vector lengths, successful PoCA array initializations and successful region reads. Mesh bytes cover resident vertex/face/offset payloads; render axes remain separately timed and are included in generic array/read bytes. Numeric array identities distinguish temporary readers even when allocator addresses are reused. Distinct arrays-read sets contain only arrays that were actually read, not every opened lazy feature array. Failed initialization attempts remain timed and separately counted; failed reads do not increment successful-read bytes/counters.
+
+Feature records visited are persisted manifest entries. Feature arrays initialized are ordinary persisted feature arrays; native coordinate arrays are reported separately. Component/ranking feature counts include generated/native records such as triangle-z and coordinates. Feature records/storage-backed/materialized counts remain completion snapshots across all component MyData, including image intensity and native/derived records. Arrays with values read is distinct from full materialization: legacy samples and region reads count as reads while the histogram can remain storage-backed. Feature/coordinate materialization callbacks and image level-0 full-load/region-read timers observe existing calls only. Display/statistics setup totals include reuse by coordinate features; statistics metadata reads count actual parser invocations (including repeated existing validation), not filesystem reads. Embedded feature-manifest JSON parsing is part of the enclosing component metadata phase; the feature group/manifest phase covers subsequent existing checks/group reads.
+
+The lazy-state summary inspects hasPixels, valuesUnloaded, nbObjects, meshesMaterialized and hasSpatialIndex only. It never calls getMeshes, getKdTree, getOriginalData or pixel getters. Normal persisted DetectionSet initialization does not construct a KD-tree, so zero observed indices prints 0.000 s. If an installed command unexpectedly constructs an index, its flag is reported and the tree construction is explicitly UNCLASSIFIED rather than assigned a fabricated duration. Report binding is scoped/thread_local, restored on exit, and unavailable after reconstruction; later lazy reads cannot update an expired reporter.
+
+The build label is Debug for _DEBUG or absence of NDEBUG, otherwise Release, following the existing image diagnostic convention. One cache note states that filesystem caching affects timings; no cache state is probed or changed.
+
+### Static pre-audit for a later threading phase
+
+Independent child paths/manifests, geometry vectors, feature maps and read-only array handles have local ownership. Component metadata/array setup, resident geometry reads/validation and CPU display preparation are candidates for a future worker stage, after auditing their constructor and image-sampling dependencies. Whole-child loadObject is not currently established as worker-safe.
+
+- MyObject.cpp increments the header-static poca::core::NbObjects counter from Misc.h without synchronization. Creating MyObjects concurrently would race on that counter in the translation unit.
+- Engine::instance reads/writes application properties and a singleton pointer. assembleObject installs display/component/object commands through shared plugin instances. registerObject mutates m_datasets and m_currentDataset; children are currently unregistered, and only the root is registered.
+- PluginList::addCommands iterates shared Qt plugin instances with no synchronization. Command constructors may read Engine global parameters; a representative DetectionSet display constructor does so. The Engine/plugin registry, parameters, mediator, macro recorder, Python interpreter and OpenGL helper singletons have no worker-safety guarantee from this audit. Command-state restore delegates into installed plugins, so each participating plugin must be qualified separately.
+- GUI/widget creation, notifications, dataset registration/publication and all Qt/OpenGL resource work must remain on the GUI/main thread with the required GL context. Pending plugin/command installation and object creation should also stay there until separately qualified; QObject thread affinity and command lifetime must be respected.
+- ZarrImageStorage's existing Release readRegion diagnostic path consults Engine verbose settings; therefore even compatibility image sampling cannot simply be assumed independent of shared application state.
+- PocaZarrLoadReport maps, active scope, dataset identity, output and rankings are unsynchronized. thread_local observation binds a reporter; it does not make sharing one report safe. A future worker design would need independent reports and controlled merging/output. The diagnostic array identity counter alone is atomic.
+- Backend API version 1 explicitly documents synchronous operations, operation-local read state and no global error state; close must not overlap an operation. BackendOpen uses independent local handles/specs; BackendIO uses operation-local transforms/decode buffers and const handle metadata. This supports concurrent independent reads according to current API usage, with retained handles and separate output buffers. It is a static assessment, not a runtime guarantee for the installed TensorStore/backend binary. Overlapping writes/external metadata mutation remain unsupported without caller coordination.
+- No additional mutable global cache was identified in the inspected open/read implementation; Palette::getStaticLutPtr creates an owned palette. This is not an exhaustive audit of every installed plugin's caches.
+
+No threading or synchronization changes were implemented.
+
+### Source fixtures and static checks
+
+The existing POCA_ZARR_EXPORT_SOURCE_TESTS flag stays OFF by default. A separate manual TestRegistry action calls checkPocaZarrLoadReportSource in the existing PocaZarrLazyTests.cpp; no new framework/file is needed. The independent backend adapter mock target now includes the core-independent report implementation. Its CMake source list was edited, never configured or built.
+
+| Requested case | Source coverage, not executed |
+| --- | --- |
+| 1: nested total/subphase/self | Exact recordTiming reducer arithmetic plus actual parent/child/grandchild/sibling scopes; idempotent stop and nested reporter restoration |
+| 2: counter aggregation | Multiple component snapshots and component-type feature totals in checkPocaZarrLoadReportSource |
+| 3: mesh subphases | Synthetic scope recording and real mesh round-trip instrumentation/counts in PocaZarrMeshTests.cpp |
+| 4: DetectionSet subphases | Synthetic scopes and positions/feature setup counts in PocaZarrPointsTests.cpp |
+| 5: open/read distinction | Synthetic unique-array/region counts and adapter mock real opens/readRaw/post-load read checks |
+| 6: lazy feature counting | Throwing lazy readers with saved state; flags and counts observed without reads |
+| 7: CGAL stays lazy | Real mesh snapshot/round-trip diagnostics assert zero materialized CGAL collections |
+| 8: KD-tree stays lazy | Storage-backed snapshots assert zero; an explicitly indexed manual fixture is observed as one |
+| 9: bounded top-N | Unsorted synthetic costs assert descending top five and structural snapshots |
+| 10: build configuration | Compile-time conditional expected Debug/Release label in the source fixture |
+
+Existing characteristic source-test output assertions were updated for the detailed lazy-state line. No fixture was run. Static review checks scopes/definitions/call sites, optional constructor compatibility, ownership, source registration, unchanged loops/backend ABI/scientific payloads, quoting/whitespace and UTF-8/BOM/CRLF.
+
+### Remaining timing limits
+
+PoCA array initialization aggregates backend open plus rank/shape/type/name queries; it cannot distinguish individual TensorStore metadata/file/cache/decode operations or physical disk bytes. Generic read bytes are logical requested payload bytes, not chunk traffic. Geometry-value phases include allocation/packing, normal generation stays one combined face/vertex phase, auxiliary geometry stays a combined bounds/centroids/coordinate/range phase, and axes include their existing validation. Completion flags do not record transient materialization followed by release, and the LoaderZarr initial format/version probe, post-summary GUI/Engine registration and later lazy reads are outside this reconstruction profiler. Failed root reconstruction retains existing exception behavior and has no success summary; completed failure scopes still record durations. Debug per-image native-region logging remains the pre-existing behavior and can affect comparisons. Profiler overhead itself has not been benchmarked.
+
+### Files modified (no new files)
+
+- poca/src/poca_geometry/Geometry/ObjectListMesh.hpp
+- poca/src/poca_geometry/Geometry/ObjectListMeshPersistence.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrLoadReport.hpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrLoadReport.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrDatasetLoader.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrExtensionLoad.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrMeshLoad.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrPoints.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrFeatures.hpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrFeatures.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrFeatureDisplay.cpp
+- poca_extra/src/poca_loaderZarrFile/ZarrArrayAccess.cpp
+- poca_extra/src/poca_loaderZarrFile/ZarrImageFactory.hpp
+- poca_extra/src/poca_loaderZarrFile/ZarrImageStorage.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrLazyTests.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrMeshTests.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrPointsTests.cpp
+- poca_extra/src/poca_loaderZarrFile/PocaZarrCharacteristicTests.cpp
+- poca_extra/src/poca_loaderZarrFile/OmeZarrExportMetadataTests.cpp
+- poca_extra/src/poca_loaderZarrFile/OmeZarrExportTests.hpp
+- poca_extra/src/poca_loaderZarrFile/backend_tests/ZarrArrayAccessMockTests.cpp
+- poca_extra/src/poca_loaderZarrFile/backend_tests/CMakeLists.txt
+- poca/docs/POCA_ZARR_EXTENSION.md
+- CONTINUITY.md
+
+No CMake configure/generate, compilation, linking, installation, PoCA/backend execution, Python/helper executable, benchmark or test was run. Runtime behavior was not verified.
+
+Suggested commit: feat(zarr): add detailed diagnostic load-cost profiling.

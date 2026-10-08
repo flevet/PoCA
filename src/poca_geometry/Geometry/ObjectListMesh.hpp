@@ -69,10 +69,15 @@ namespace poca::geometry {
 		};
 		// Persistence-only path: no repair, stitching, PCA, remeshing or CGAL construction.
 		struct PersistedIndexedMeshes {};
+		// Optional diagnostic output; no plugin/backend dependency or retained observer.
+		struct PersistedConstructionTiming {
+			enum Phase { Validation, Triangles, Normals, Auxiliary, TriangleZ, Adoption, Count };
+			std::array<double,Count> seconds{};
+		};
 		ObjectListMesh(PersistedIndexedMeshes, IndexedMeshGeometry&&,
 			std::map<std::string, std::unique_ptr<poca::core::MyData>>, bool = false,
 			std::vector<std::array<poca::core::Vec3mf,3>> = {},
-			std::optional<poca::core::PersistedHistogramState> = std::nullopt);
+			std::optional<poca::core::PersistedHistogramState> = std::nullopt, PersistedConstructionTiming* = nullptr);
 		ObjectListMesh(const ObjectListMesh&);
 		ObjectListMesh& operator=(const ObjectListMesh&) = delete;
 		const unsigned int memorySize() const override;
