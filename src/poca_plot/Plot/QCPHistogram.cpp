@@ -37,6 +37,9 @@ namespace poca::plot {
 
 	QCPHistogram::QCPHistogram(QWidget* _parent) :QCustomPlot(_parent), m_buttonLeft(false), m_buttonRight(false), m_buttonMiddle(false), m_histogram(NULL)
 	{
+		// PoCA::Qt depends on PoCA::Plot; keep this plot-specific configuration here.
+		setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+		setMinimumWidth(0);
 	}
 
 	QCPHistogram::~QCPHistogram()

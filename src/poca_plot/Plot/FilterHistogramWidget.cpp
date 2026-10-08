@@ -45,7 +45,6 @@ namespace poca::plot {
 
 		m_customPlot = new QCPHistogram(this);
 		m_customPlot->setMaximumHeight(_maxHeight);
-		m_customPlot->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 		m_customPlot->legend->setTextColor(Qt::black);
 		QFont fontLegend("Helvetica", 9);
 		fontLegend.setBold(true);
@@ -101,7 +100,7 @@ namespace poca::plot {
 		layout->addWidget(m_buttonSave);
 		layout->addWidget(m_cboxLog);
 		layout->addWidget(m_minLEdit);
-		layout->addWidget(m_customPlot);
+		layout->addWidget(m_customPlot, 1);
 		layout->addWidget(m_maxLEdit);
 		layout->addWidget(m_buttonDelete);
 		layout->addWidget(m_buttonScaleLUT);

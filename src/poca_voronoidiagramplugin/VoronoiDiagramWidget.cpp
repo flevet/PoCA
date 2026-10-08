@@ -31,6 +31,7 @@
 */
 
 #include <QtWidgets/QDockWidget>
+#include <Widgets/InspectorSizing.hpp>
 #include <QtWidgets/QVBoxLayout>
 #include <iostream>
 #include <CGAL/boost/graph/copy_face_graph.h>
@@ -209,6 +210,7 @@ VoronoiDiagramWidget::VoronoiDiagramWidget(poca::core::MediatorWObjectFWidgetInt
 	m_leditDegreePolynome->setValidator(validator2);
 	m_customPlotVoronoiCharacteristics = new QCustomPlot();
 	m_customPlotVoronoiCharacteristics->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	poca::qt::makeHorizontallyShrinkable(m_customPlotVoronoiCharacteristics);
 	m_customPlotVoronoiCharacteristics->setMinimumHeight(400);
 	QGridLayout* layoutVoronoiCharacteristics = new QGridLayout;
 	layoutVoronoiCharacteristics->addWidget(m_btnApplyCharacteristics, 0, 0, 1, 1);

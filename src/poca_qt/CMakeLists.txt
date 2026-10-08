@@ -4,12 +4,14 @@ set(QT_WIDGET_HEADER_FILES
   Widgets/ButtonLayer.hpp
   Widgets/CustomColorDialog.hpp
   Widgets/PerformanceWidget.hpp
+  Widgets/InspectorSizing.hpp
   )
 
 set(QT_WIDGET_SOURCE_FILES
   Widgets/ButtonLayer.cpp
   Widgets/CustomColorDialog.cpp
   Widgets/PerformanceWidget.cpp
+  Widgets/InspectorSizing.cpp
   )
 
 set(header_list

@@ -71,6 +71,7 @@
 #include <QtWidgets/QTreeWidgetItem>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QTabBar>
+#include <Widgets/InspectorSizing.hpp>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
@@ -1031,11 +1032,14 @@ void MainWindow::createDesignDock()
 	m_toolsPanel->setObjectName("ToolsPanel");
 	m_toolsPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	m_toolsPanel->setLayout(layoutAll);
+	poca::qt::makeHorizontallyShrinkable(m_toolsPanel);
+	configureInspectorTabWidget(m_tabWidget);
 
 	QScrollArea* toolsArea = new QScrollArea;
 	toolsArea->setObjectName("ControlsScrollArea");
 	toolsArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	toolsArea->setWidgetResizable(true);
+	poca::qt::makeHorizontallyShrinkable(toolsArea);
 	toolsArea->setFrameShape(QFrame::NoFrame);
 	toolsArea->setWidget(m_toolsPanel);
 
@@ -1142,6 +1146,7 @@ void MainWindow::createDesignDock()
 	objectsSplitter->setStretchFactor(0, 1);
 	objectsSplitter->setStretchFactor(1, 2);
 	objectsSplitter->setChildrenCollapsible(false);
+	poca::qt::makeHorizontallyShrinkable(objectsSplitter);
 
 	QWidget* cameraPanel = new QWidget(this);
 	QVBoxLayout* cameraLayout = new QVBoxLayout;
@@ -1150,7 +1155,9 @@ void MainWindow::createDesignDock()
 	QGroupBox* cameraPathGroup = new QGroupBox(tr("Camera path"), cameraPanel);
 	QVBoxLayout* cameraPathLayout = new QVBoxLayout;
 	cameraPathLayout->setContentsMargins(4, 4, 4, 4);
-	cameraPathLayout->addWidget(new QLabel(tr("Camera path controls are not available in this build."), cameraPathGroup));
+	QLabel* cameraPathNotice = new QLabel(tr("Camera path controls are not available in this build."), cameraPathGroup);
+	poca::qt::configureInspectorLabel(cameraPathNotice, true);
+	cameraPathLayout->addWidget(cameraPathNotice);
 	cameraPathGroup->setLayout(cameraPathLayout);
 	cameraLayout->addWidget(cameraPathGroup);
 	if (m_mfw != NULL && m_mfw->cameraPositionDockWidget() != NULL)
@@ -1163,11 +1170,13 @@ void MainWindow::createDesignDock()
 	cameraSpacer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 	cameraLayout->addWidget(cameraSpacer);
 	cameraPanel->setLayout(cameraLayout);
+	poca::qt::makeHorizontallyShrinkable(cameraPanel);
 
 	QScrollArea* cameraArea = new QScrollArea;
 	cameraArea->setObjectName("CameraScrollArea");
 	cameraArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 	cameraArea->setWidgetResizable(true);
+	poca::qt::makeHorizontallyShrinkable(cameraArea);
 	cameraArea->setFrameShape(QFrame::NoFrame);
 	cameraArea->setWidget(cameraPanel);
 	m_leftInspectorTabs->addTab(cameraArea, tr("Camera"));
@@ -1223,7 +1232,7 @@ void MainWindow::configureInspectorTabWidget(QTabWidget* _tabWidget)
 		return;
 	_tabWidget->tabBar()->setExpanding(false);
 	_tabWidget->tabBar()->setMovable(false);
-	_tabWidget->tabBar()->setUsesScrollButtons(false);
+	poca::qt::configureInspectorTabs(_tabWidget);
 	_tabWidget->setElideMode(Qt::ElideRight);
 }
 

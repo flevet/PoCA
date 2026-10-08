@@ -33,6 +33,7 @@ poca_add_plugin(${targetname}
         PoCA::Geometry
         PoCA::OpenGL
         PoCA::Plot
+        PoCA::Qt
         Qt5::Core
         Qt5::Gui
         Qt5::Widgets

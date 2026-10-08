@@ -31,6 +31,7 @@
 */
 
 #include <QtWidgets/QDockWidget>
+#include <Widgets/InspectorSizing.hpp>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QPlainTextEdit>
@@ -341,6 +342,7 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	blinksPlotLbl->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_plotBlinks = new QCustomPlot(this);
 	m_plotBlinks->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	poca::qt::makeHorizontallyShrinkable(m_plotBlinks);
 	m_plotBlinks->setMinimumHeight(150);
 	m_plotBlinks->legend->setTextColor(Qt::black);
 	m_plotBlinks->legend->setFont(fontLegend);
@@ -351,6 +353,7 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	tonsPlotLbl->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_plotTOns = new QCustomPlot(this);
 	m_plotTOns->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	poca::qt::makeHorizontallyShrinkable(m_plotTOns);
 	m_plotTOns->setMinimumHeight(150);
 	m_plotTOns->legend->setTextColor(Qt::black);
 	m_plotTOns->legend->setFont(fontLegend);
@@ -361,6 +364,7 @@ DetectionSetWidget::DetectionSetWidget(poca::core::MediatorWObjectFWidgetInterfa
 	toffsPlotLbl->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_plotToffs = new QCustomPlot(this);
 	m_plotToffs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	poca::qt::makeHorizontallyShrinkable(m_plotToffs);
 	m_plotToffs->setMinimumHeight(150);
 	m_plotToffs->legend->setTextColor(Qt::black);
 	m_plotToffs->legend->setFont(fontLegend);

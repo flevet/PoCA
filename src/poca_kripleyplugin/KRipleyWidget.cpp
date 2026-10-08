@@ -31,6 +31,7 @@
 */
 
 #include <QtWidgets/QDockWidget>
+#include <Widgets/InspectorSizing.hpp>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QCheckBox>
@@ -86,6 +87,7 @@ KRipleyWidget::KRipleyWidget(poca::core::MediatorWObjectFWidgetInterface* _media
 	m_customPlotKRipley = new QCustomPlot();
 	m_customPlotKRipley->setMinimumHeight(200);
 	m_customPlotKRipley->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	poca::qt::makeHorizontallyShrinkable(m_customPlotKRipley);
 	m_customPlotKRipley->xAxis->setUpperEnding(QCPLineEnding::esSpikeArrow);
 	m_customPlotKRipley->yAxis->setUpperEnding(QCPLineEnding::esSpikeArrow);
 	m_customPlotKRipley->moveLayer(m_customPlotKRipley->layer("grid"), m_customPlotKRipley->layer("main"), QCustomPlot::limAbove);
@@ -97,6 +99,7 @@ KRipleyWidget::KRipleyWidget(poca::core::MediatorWObjectFWidgetInterface* _media
 	m_customPlotKRipley->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
 	m_resKRipleyLbl = new QLabel("");
 	m_resKRipleyLbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+	poca::qt::configureInspectorLabel(m_resKRipleyLbl, true);
 	m_buttonExportKRipleyRes = new QPushButton("Export results");
 	m_buttonExportKRipleyRes->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
 	QObject::connect(m_buttonExportKRipleyRes, SIGNAL(pressed()), this, SLOT(exportKRipleyResults()));

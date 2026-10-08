@@ -36,6 +36,7 @@
 #include <QtGui/QRegExpValidator>
 #include <QtWidgets/QPlainTextEdit>
 #include <QtWidgets/QDockWidget>
+#include <Widgets/InspectorSizing.hpp>
 #include <QtWidgets/QOpenGLWidget>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QFileDialog>
@@ -146,6 +147,8 @@ MainFilterWidget::MainFilterWidget(poca::core::MediatorWObjectFWidget * _mediato
 	m_dockInfoDataset->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 	m_nameDatasetLbl = new QLabel("Name:");
 	m_nameDatasetLbl->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+	m_nameDatasetLbl->setTextFormat(Qt::PlainText);
+	poca::qt::configureInspectorLabel(m_nameDatasetLbl);
 	QLabel* widthDatasetLbl = new QLabel("Width:");
 	widthDatasetLbl->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 	m_lineEditWidthData = new QLineEdit;
@@ -789,6 +792,7 @@ void MainFilterWidget::update(poca::core::SubjectInterface* _subject, const poca
 		QString nameDataset("Name: ");
 		nameDataset.append(obj->getDir().c_str());
 		m_nameDatasetLbl->setText(nameDataset);
+		m_nameDatasetLbl->setToolTip(nameDataset);
 		m_lineEditWidthData->setText(QString::number(obj->getWidth()));
 		m_lineEditHeightData->setText(QString::number(obj->getHeight()));
 		m_idDatasetLbl->setText("Id: " + QString::number(obj->currentInternalId()));
