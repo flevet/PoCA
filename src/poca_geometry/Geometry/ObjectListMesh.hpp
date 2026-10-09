@@ -81,6 +81,7 @@ namespace poca::geometry {
 			std::vector<Surface_mesh_3_double> materialize() const;
 			// The optional level describes prior validation of these exact unchanged input meshes.
 			static IndexedMeshGeometry fromMeshes(const std::vector<Surface_mesh_3_double>&, MeshValidationLevel = MeshValidationLevel::Unknown);
+			static IndexedMeshGeometry fromMeshes(const std::vector<Surface_mesh_3_double>&, MeshValidationLevel, double*);
 			size_t memorySize() const;
 		private:
 			friend class ObjectListMesh;
@@ -157,10 +158,13 @@ namespace poca::geometry {
 		const std::vector <Surface_mesh_3_double>& getMeshes() const;
 		std::vector <Surface_mesh_3_double>& getMeshes();
 		bool meshesMaterialized() const;
+		bool hasIndexedGeometry() const;
 		std::shared_ptr<const IndexedMeshGeometry> indexedGeometry() const;
+		std::shared_ptr<const IndexedMeshGeometry> indexedGeometry(double*) const;
 		MeshValidationLevel meshValidationLevel() const;
 		MeshInspection inspectMesh(size_t) const;
 		void normalsForGeometry(const std::shared_ptr<const IndexedMeshGeometry>&, PersistedNormals&) const;
+		void normalsForGeometry(const std::shared_ptr<const IndexedMeshGeometry>&, PersistedNormals&, bool*) const;
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 		inline const std::vector <poca::core::BoundingBox>& getBBoxMeshes() const { return m_bboxMeshes; }
 		inline bool useVertexNormals() const { return m_useVertexNormals; }

@@ -1,5 +1,6 @@
 /* Software: PoCA; Copyright: Florian Levet (2026); License: LGPL v3 */
 #include "ObjectListMesh.hpp"
+#include <chrono>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <boost/property_map/property_map.hpp>
@@ -96,6 +97,12 @@ namespace poca::geometry {
 	ObjectListMesh::IndexedMeshGeometry ObjectListMesh::IndexedMeshGeometry::fromMeshes(
 		const std::vector<Surface_mesh_3_double>& _meshes, MeshValidationLevel _validation)
 	{
+		return fromMeshes(_meshes,_validation,nullptr);
+	}
+
+	ObjectListMesh::IndexedMeshGeometry ObjectListMesh::IndexedMeshGeometry::fromMeshes(
+		const std::vector<Surface_mesh_3_double>& _meshes, MeshValidationLevel _validation, double* _validationSeconds)
+	{
 		IndexedMeshGeometry result;
 		result.m_vertexOffsets.push_back(0); result.m_faceOffsets.push_back(0);
 		for (const auto& mesh : _meshes) {
@@ -119,8 +126,10 @@ namespace poca::geometry {
 			result.m_faceOffsets.push_back(result.m_faces.size());
 		}
 		result.restoreValidation(_validation,MeshValidationVersion);
+		const auto started = _validationSeconds ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 		if (result.validationLevel() == MeshValidationLevel::Unknown) result.validate();
 		else result.validateStorage();
+		if (_validationSeconds) *_validationSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
 		return result;
 	}
 

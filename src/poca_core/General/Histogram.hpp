@@ -115,6 +115,7 @@ namespace poca::core {
 		bool canReadValuesRegion() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty() || static_cast<bool>(m_valuesRegionReader); }
 		bool readValuesRegion(std::size_t, std::size_t, T*) const;
 		bool valuesUnloaded() const override { return m_storageBacked && !hasValues(); }
+		bool storageBacked() const { return m_storageBacked; }
 		HistogramInterface* clone() const override { return new Histogram<T>(*this); }
 		void copyValues(std::vector<T>& _out) const;
 		void ensureValuesLoaded() const;

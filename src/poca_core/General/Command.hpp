@@ -54,6 +54,9 @@ namespace poca::core {
 	class CommandStateStorage {
 	public:
 		virtual ~CommandStateStorage() = default;
+		// Optional synchronous persistence observation. Empty name closes the prior phase.
+		// Other storage adapters do not need to collect diagnostics; no dataset metadata changes.
+		virtual void persistencePhase(const std::string&) {}
 		virtual nlohmann::json writeArray(const std::vector<double>&, const std::vector<uint64_t>&) = 0;
 		virtual std::vector<double> readArray(const nlohmann::json&, const std::vector<uint64_t>&) const = 0;
 	};

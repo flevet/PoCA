@@ -174,13 +174,25 @@ namespace poca::geometry {
 		return m_meshesMaterialized;
 	}
 
-	std::shared_ptr<const ObjectListMesh::IndexedMeshGeometry> ObjectListMesh::indexedGeometry() const
+	bool ObjectListMesh::hasIndexedGeometry() const
 	{
 		std::lock_guard<std::mutex> lock(m_meshMutex);
+		return static_cast<bool>(m_indexedGeometry);
+	}
+
+	std::shared_ptr<const ObjectListMesh::IndexedMeshGeometry> ObjectListMesh::indexedGeometry() const
+	{
+		return indexedGeometry(nullptr);
+	}
+
+	std::shared_ptr<const ObjectListMesh::IndexedMeshGeometry> ObjectListMesh::indexedGeometry(double* validationSeconds) const
+	{
+		std::lock_guard<std::mutex> lock(m_meshMutex);
+		if (validationSeconds) *validationSeconds = 0.;
 		if (m_indexedGeometry) return m_indexedGeometry;
 		const bool certified = !m_mutableMeshesExposed && m_cgalValidatedObjects.size() == m_meshes.size() &&
 			std::all_of(m_cgalValidatedObjects.begin(),m_cgalValidatedObjects.end(),[](bool value) { return value; });
-		auto geometry = IndexedMeshGeometry::fromMeshes(m_meshes,certified ? MeshValidationLevel::CgalValidated : MeshValidationLevel::Unknown);
+		auto geometry = IndexedMeshGeometry::fromMeshes(m_meshes,certified ? MeshValidationLevel::CgalValidated : MeshValidationLevel::Unknown,validationSeconds);
 		return std::make_shared<const IndexedMeshGeometry>(std::move(geometry));
 	}
 
@@ -212,7 +224,13 @@ namespace poca::geometry {
 
 	void ObjectListMesh::normalsForGeometry(const std::shared_ptr<const IndexedMeshGeometry>& geometry, PersistedNormals& normals) const
 	{
+		normalsForGeometry(geometry,normals,nullptr);
+	}
+
+	void ObjectListMesh::normalsForGeometry(const std::shared_ptr<const IndexedMeshGeometry>& geometry, PersistedNormals& normals, bool* regenerated) const
+	{
 		std::lock_guard<std::mutex> lock(m_meshMutex);
+		if (regenerated) *regenerated = false;
 		if (geometry && geometry == m_indexedGeometry) {
 			normals.vertex = m_indexedVertexNormals; normals.face = m_indexedFaceNormals;
 			return;
@@ -239,6 +257,7 @@ namespace poca::geometry {
 			if (complete && normals.vertex.size() == geometry->vertices().size() && normals.face.size() == geometry->faces().size()) return;
 		}
 		// Mutable CGAL references can outlive an export: old normal properties are not authoritative.
+		if (regenerated) *regenerated = true;
 		geometry->generateNormals(normals.vertex,normals.face);
 	}
 
