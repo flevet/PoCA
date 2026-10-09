@@ -231,7 +231,7 @@ namespace {
 
 		std::ostringstream report;
 		report << std::setprecision(17);
-		const auto& meshes = objectList->getMeshes();
+		const auto& meshes = static_cast<const poca::geometry::ObjectListMesh&>(*objectList).getMeshes();
 		report << "Object: " << (owner ? owner->getName() : std::string("<unknown>")) << "\n";
 		if (owner) report << "Folder: " << owner->getDir() << "\n";
 		report << "Meshes: " << meshes.size() << "\n\n";
@@ -246,7 +246,7 @@ namespace {
 			report << "--------------------------------------------------\n";
 			report << "Mesh " << meshIndex << "\n";
 			try {
-				const auto inspection = poca::geometry::MeshRepair::inspect(meshes[meshIndex]);
+				const auto inspection = objectList->inspectMesh(meshIndex);
 				reportInspection(report, inspection);
 				std::vector<std::string> errors, warnings;
 				collectDiagnosticMessages(inspection, errors, warnings);
@@ -414,8 +414,9 @@ namespace {
 			return;
 		}
 
-		const auto& sources = objectList->getMeshes();
+		const auto& sources = static_cast<const poca::geometry::ObjectListMesh&>(*objectList).getMeshes();
 		std::vector<Mesh> outputMeshes;
+		std::vector<poca::geometry::MeshInspection> outputInspections;
 		std::vector<float> sourceMeshIndices, repairStatuses, repairMasks, attemptedRepairMasks;
 		outputMeshes.reserve(sources.size());
 		sourceMeshIndices.reserve(sources.size());
@@ -479,6 +480,9 @@ namespace {
 				if (!silent) reportRepairDetails(report, result);
 			}
 
+			// Retain only complete inspections of the exact accepted output, never rejected candidates.
+			outputInspections.push_back(result.status == poca::geometry::MeshRepairStatus::Clean ? result.before :
+				result.status == poca::geometry::MeshRepairStatus::Repaired ? result.after : poca::geometry::MeshInspection{});
 			sourceMeshIndices.push_back(static_cast<float>(meshIndex));
 			repairStatuses.push_back(result.status == poca::geometry::MeshRepairStatus::Clean ? 0.f
 				: result.status == poca::geometry::MeshRepairStatus::Repaired ? 1.f : 2.f);
@@ -531,7 +535,7 @@ namespace {
 			auto* lists = dynamic_cast<poca::geometry::ObjectLists*>(owner->getBasicComponent("ObjectLists"));
 			if (lists) {
 				try {
-					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(outputMeshes, false, 0.f, 0, false));
+					std::unique_ptr<poca::geometry::ObjectListMesh> repaired(new poca::geometry::ObjectListMesh(outputMeshes, false, 0.f, 0, false, outputInspections));
 					if (repaired->nbObjects() != sources.size()) {
 						if (!silent) report << "\nNo repaired ObjectListMesh created: ObjectListMesh construction did not preserve the exact source mesh count.\n";
 					}

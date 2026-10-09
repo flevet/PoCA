@@ -411,7 +411,7 @@ namespace poca::geometry {
 		m_centroid = m_bbox.centroid();
 }
 
-	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations, const bool _repair) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(_repair), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
+	ObjectListMesh::ObjectListMesh(const std::vector < Surface_mesh_3_double>& _meshes, const bool _remesh, const float _target, const uint32_t _iterations, const bool _repair, const std::vector<MeshInspection>& _inspections) :ObjectListInterface("ObjectListMesh"), m_meshes(_meshes), m_repair(_repair), m_applyRemeshing(_remesh), m_targetLength(_target), m_iterations(_iterations)
 	{
 		clock_t t1 = clock();
 		std::vector <poca::core::Vec3mf> triPoCA, edges, links;
@@ -419,10 +419,15 @@ namespace poca::geometry {
 		std::vector <float> volumes;
 		std::vector <Surface_mesh_3_double> validMeshes;
 		validMeshes.reserve(m_meshes.size());
+		const bool unchanged = !_repair && !_remesh && _inspections.size() == m_meshes.size();
+		size_t sourceIndex = 0;
 		for (auto& mesh : m_meshes) {
 			bool res = processSurfaceMesh(mesh, triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
-			if (res)
+			if (res) {
 				validMeshes.push_back(mesh);
+				m_cgalValidatedObjects.push_back(unchanged && MeshRepair::isStrictlyValid(_inspections[sourceIndex]));
+			}
+			++sourceIndex;
 		}
 		m_meshes.swap(validMeshes);
 
@@ -925,9 +930,9 @@ namespace poca::geometry {
 	{
 		_normals.clear();
 		if (m_indexedGeometry) {
-			_normals.reserve(m_indexedGeometry->faces.size()*3);
-			for (size_t f = 0; f < m_indexedGeometry->faces.size(); ++f)
-				for (const auto v : m_indexedGeometry->faces[f])
+			_normals.reserve(m_indexedGeometry->faces().size()*3);
+			for (size_t f = 0; f < m_indexedGeometry->faces().size(); ++f)
+				for (const auto v : m_indexedGeometry->faces()[f])
 					_normals.push_back(m_useVertexNormals ? m_indexedVertexNormals[v] : m_indexedFaceNormals[f]);
 			return;
 		}

@@ -35,6 +35,7 @@
 
 #include <any>
 #include <tuple>
+#include <utility>
 #include <mutex>
 
 #include <General/BasicComponentList.hpp>
@@ -43,41 +44,66 @@
 #include <General/Vec3.hpp>
 #include <Interfaces/ObjectListInterface.hpp>
 #include <Geometry/CGAL_includes.hpp>
+#include <Geometry/MeshRepair.hpp>
 
 namespace poca::geometry {
 	class ObjectListMesh : public poca::geometry::ObjectListInterface {
 	public:
 		ObjectListMesh(std::vector <std::vector <poca::core::Vec3mf>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const std::vector <poca::core::ROIInterface*>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
 		ObjectListMesh(std::vector <std::vector <Point_3_double>>&, std::vector <std::vector <std::vector <std::size_t>>>&, const bool = true, const bool = false, const double = 1., const uint32_t = 1);
-		ObjectListMesh(const std::vector < Surface_mesh_3_double>&, const bool = false, const float = 0.f, const uint32_t = 0, const bool = true);
+		// Optional complete inspections describe the corresponding unchanged input meshes.
+		ObjectListMesh(const std::vector < Surface_mesh_3_double>&, const bool = false, const float = 0.f, const uint32_t = 0,
+			const bool = true, const std::vector<MeshInspection>& = {});
 		// Lightweight constructor used by diagnostics: one open triangle per object.
 		// It intentionally bypasses closed-surface volume/repair assumptions.
 		ObjectListMesh(const std::vector < std::array<poca::core::Vec3mf, 3> >&);
-		// Backend-independent scientific topology; double coordinates and global face indices.
+		enum class MeshValidationLevel { Unknown, IndexedValidated, CgalValidated };
+		static constexpr uint32_t MeshValidationVersion = 1;
+		// Backend-independent scientific topology; geometry writes invalidate certification.
 		class IndexedMeshGeometry {
 		public:
-			std::vector<std::array<double,3>> vertices;
-			std::vector<std::array<uint64_t,3>> faces;
-			std::vector<uint64_t> vertexOffsets, faceOffsets;
-
-			size_t nbObjects() const { return vertexOffsets.empty() ? 0 : vertexOffsets.size()-1; }
+			const std::vector<std::array<double,3>>& vertices() const { return m_vertices; }
+			const std::vector<std::array<uint64_t,3>>& faces() const { return m_faces; }
+			const std::vector<uint64_t>& vertexOffsets() const { return m_vertexOffsets; }
+			const std::vector<uint64_t>& faceOffsets() const { return m_faceOffsets; }
+			void setVertices(std::vector<std::array<double,3>> values) { m_validation = MeshValidationLevel::Unknown; m_vertices = std::move(values); }
+			void setFaces(std::vector<std::array<uint64_t,3>> values) { m_validation = MeshValidationLevel::Unknown; m_faces = std::move(values); }
+			void setVertexOffsets(std::vector<uint64_t> values) { m_validation = MeshValidationLevel::Unknown; m_vertexOffsets = std::move(values); }
+			void setFaceOffsets(std::vector<uint64_t> values) { m_validation = MeshValidationLevel::Unknown; m_faceOffsets = std::move(values); }
+			MeshValidationLevel validationLevel() const { return m_validation; }
+			// Persistence boundary only; storage checks still run before adoption.
+			void restoreValidation(MeshValidationLevel, uint32_t);
+			size_t nbObjects() const { return m_vertexOffsets.empty() ? 0 : m_vertexOffsets.size()-1; }
+			void validateStorage() const;
 			void validate() const;
+			void validateCgal() const;
 			void generateNormals(std::vector<poca::core::Vec3mf>&, std::vector<poca::core::Vec3mf>&) const;
 			std::vector<Surface_mesh_3_double> materialize() const;
-			static IndexedMeshGeometry fromMeshes(const std::vector<Surface_mesh_3_double>&);
+			// The optional level describes prior validation of these exact unchanged input meshes.
+			static IndexedMeshGeometry fromMeshes(const std::vector<Surface_mesh_3_double>&, MeshValidationLevel = MeshValidationLevel::Unknown);
 			size_t memorySize() const;
+		private:
+			friend class ObjectListMesh;
+			std::vector<std::array<double,3>> m_vertices;
+			std::vector<std::array<uint64_t,3>> m_faces;
+			std::vector<uint64_t> m_vertexOffsets, m_faceOffsets;
+			mutable MeshValidationLevel m_validation = MeshValidationLevel::Unknown;
 		};
 		// Persistence-only path: no repair, stitching, PCA, remeshing or CGAL construction.
 		struct PersistedIndexedMeshes {};
 		// Optional diagnostic output; no plugin/backend dependency or retained observer.
 		struct PersistedConstructionTiming {
-			enum Phase { Validation, Triangles, Normals, Auxiliary, TriangleZ, Adoption, Count };
+			enum Phase { Safety, Validation, Triangles, Normals, Auxiliary, TriangleZ, Adoption, Count };
 			std::array<double,Count> seconds{};
+			bool validationExecuted = false, normalsRestored = false;
+		};
+		struct PersistedNormals {
+			std::vector<poca::core::Vec3mf> vertex, face;
 		};
 		ObjectListMesh(PersistedIndexedMeshes, IndexedMeshGeometry&&,
 			std::map<std::string, std::unique_ptr<poca::core::MyData>>, bool = false,
 			std::vector<std::array<poca::core::Vec3mf,3>> = {},
-			std::optional<poca::core::PersistedHistogramState> = std::nullopt, PersistedConstructionTiming* = nullptr);
+			std::optional<poca::core::PersistedHistogramState> = std::nullopt, PersistedConstructionTiming* = nullptr, PersistedNormals = {});
 		ObjectListMesh(const ObjectListMesh&);
 		ObjectListMesh& operator=(const ObjectListMesh&) = delete;
 		const unsigned int memorySize() const override;
@@ -132,6 +158,9 @@ namespace poca::geometry {
 		std::vector <Surface_mesh_3_double>& getMeshes();
 		bool meshesMaterialized() const;
 		std::shared_ptr<const IndexedMeshGeometry> indexedGeometry() const;
+		MeshValidationLevel meshValidationLevel() const;
+		MeshInspection inspectMesh(size_t) const;
+		void normalsForGeometry(const std::shared_ptr<const IndexedMeshGeometry>&, PersistedNormals&) const;
 		inline const std::vector <poca::core::Vec3mf>& getCentroids() const { return m_centroids; }
 		inline const std::vector <poca::core::BoundingBox>& getBBoxMeshes() const { return m_bboxMeshes; }
 		inline bool useVertexNormals() const { return m_useVertexNormals; }
@@ -154,6 +183,8 @@ namespace poca::geometry {
 		mutable std::mutex m_meshMutex;
 		mutable std::vector < Surface_mesh_3_double> m_meshes;
 		mutable bool m_meshesMaterialized{ true };
+		bool m_mutableMeshesExposed = false;
+		mutable std::vector<bool> m_cgalValidatedObjects;
 		std::shared_ptr<const IndexedMeshGeometry> m_indexedGeometry;
 		std::vector<poca::core::Vec3mf> m_indexedVertexNormals, m_indexedFaceNormals;
 		std::vector <poca::core::Vec3mf> m_centroids;

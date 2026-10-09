@@ -1,5 +1,7 @@
 # PoCA quantitative data alongside OME-NGFF
 
+Current reopening policy: see **Reusing persisted features, normals and mesh certification (2026-10-08)** at the end. Earlier dated sections describe previous milestones.
+
 ## Command characteristics, load report and statistics repair (2026-10-06)
 
 Source-only change; no configure, build, application, Python/helper or test execution. Runtime behavior was not verified.
@@ -772,3 +774,133 @@ PoCA array initialization aggregates backend open plus rank/shape/type/name quer
 No CMake configure/generate, compilation, linking, installation, PoCA/backend execution, Python/helper executable, benchmark or test was run. Runtime behavior was not verified.
 
 Suggested commit: feat(zarr): add detailed diagnostic load-cost profiling.
+
+## Reusing persisted features, normals and mesh certification (2026-10-08)
+
+Source-only implementation. No configure/generate, compilation, application/backend execution, Python/helper executable, test or benchmark was run. Runtime behavior was not verified. This section supersedes the preceding descriptions of eager feature-array initialization and unconditional indexed topology validation/normal generation.
+
+### Lightweight features and first opening
+
+Previously `loadPocaZarrFeatures` called `pocaZarrOpenArray` and read every feature's `zarr.json` before installing a value callback. The callback was lazy about values, but dtype/shape/dimension/name verification opened every physical array during reconstruction. The small manifest additions below remove that dependency for new stores:
+
+```json
+{
+  "name": "measurement/name",
+  "path": "object_features/f000001",
+  "array_descriptor": {
+    "version": 1,
+    "dtype": "float32",
+    "shape": [73],
+    "dimension_names": ["object"]
+  },
+  "display": "existing complete display/histogram metadata"
+}
+```
+
+The physical ordinal key above is illustrative; `path` remains authoritative. Point features use `point`, object features use `object`, image extras use `element`; extras with independent lengths retain their existing per-record `count`. Logical feature names, lengths, original histogram statistics, bins, interaction, LUT and deferred log choice are restored into normal `Histogram<float>`/`MyData` immediately. JSON contains descriptors and existing bounded display metadata, never a second scientific value vector.
+
+`ZarrArrayAccess::deferred` extends the existing array boundary, with metadata-only getters, an `opened()` flag and an owned factory. It makes no backend call and reads no array JSON. First `readRaw`/`read` opens through the normal adapter, verifies physical shape/type/element width/dimension names/original logical name, then publishes one retained read-only handle with `call_once`. Failed opening publishes nothing and propagates the contextual failure; a later explicit read can retry. Histogram region/full materialization checks remain unchanged. Copies share the descriptor/handle through their existing value callbacks but own independent histogram/display state. No callback retains a report pointer or Qt object.
+
+Manifest name/path uniqueness, reserved names, path containment/link checks, descriptor contract and saved histogram consistency still run during restoration. Physical existence/metadata/chunk corruption can now be detected later at first actual access. Selecting a feature for a workflow that actually requests values opens it; listing/counting and reading saved statistics do not. A new descriptor with legacy display metadata lacking the complete saved histogram still needs the existing bounded compatibility sample, so such a partial payload can open/read during restoration.
+
+Missing `array_descriptor` retains the old eager metadata/name check. Complete old histogram state remains value-lazy; old display-only state uses the existing finite bounded sample. Present malformed/unsupported descriptors reject rather than silently switching to a different interpretation. Missing physical storage on the descriptor path is a first-read error. Coordinate/image readers and generic command-state arrays retain their previous opening policy. No backend C ABI change was made; only PoCA wrapper signatures gained an optional explicit feature-role argument so post-load opens retain diagnostic identity.
+
+### Normal arrays and adoption
+
+Mesh groups add ordinary Zarr numeric arrays:
+
+| Relative array | Shape | Dtype | Dimensions | Meaning |
+| --- | --- | --- | --- | --- |
+| `vertex_normals` | `[vertex_count, 3]` | `float32` | `vertex, coordinate` | One cached display normal per indexed vertex, in persisted vertex order |
+| `face_normals` | `[face_count, 3]` | `float32` | `face, coordinate` | One cached display normal per triangle, in persisted face order |
+
+```json
+"normals": {"version": 1, "vertex": "vertex_normals", "face": "face_normals"}
+```
+
+Normals are not placed in JSON and are not expanded into three copies per triangle. Float32 is the existing `Vec3mf` cached/rendering representation. Export copies the immutable backing's cached vertex/face buffers, or reads the corresponding existing CGAL normal properties for unchanged resident meshes. The two arrays use normal row-chunk writers and explicit component packing, without assuming `Vec3mf` binary layout. Untouched indexed export invokes neither normal generation nor CGAL materialization.
+
+The loader opens/reads these required numeric arrays eagerly and passes `PersistedNormals` into the existing persistence constructor. Counts, shapes, domains and finite components are checked; valid buffers are moved into normal mesh ownership without normalization or recomputation. Existing `use_vertex_normals` selection still selects vertex versus face normals and expands them through the same rendering code/equations.
+
+An absent normal descriptor recomputes both buffers using the existing indexed/CGAL most-visible-normal equations. Present malformed paths/version, missing referenced arrays, wrong sizes/type/domain or nonfinite components reject the component; corruption is not hidden by a recomputation fallback. A mutable CGAL reference invalidates both indexed normal buffers. Re-export then regenerates normals for the fresh geometry snapshot instead of trusting possibly stale CGAL normal properties. A copy of such a mutable source inherits invalidation. No renderer redesign or scientific feature/geometry value changes were introduced.
+
+### Validation model and persisted contract
+
+`ObjectListMesh::MeshValidationLevel` has `Unknown`, `IndexedValidated` and `CgalValidated`. The state belongs to core `IndexedMeshGeometry`, rather than a Zarr-only flag. Resident CGAL collections track complete per-object inspection results; the collection is CGAL-certified only when every object passed and no mutable reference has escaped.
+
+```json
+"topology_validation": {
+  "level": "indexed",
+  "validator_version": 1,
+  "contract": "poca-indexed-topology"
+}
+```
+
+The stronger form uses `level: "cgal"` and `contract: "poca-cgal-meshrepair"`, also version 1. These fields are PoCA-specific extension metadata, not OME-NGFF standard fields. They are optional additions to the existing payload/dataset versions; no migration or backend format change is required. Missing, incomplete, unknown-level, unknown-contract or incompatible-version certification becomes `Unknown` and runs current indexed validation.
+
+**Indexed validation is not CGAL validation.** `validate()` preserves the existing index/directed-edge/orientation-conflict/connected-vertex-fan checks using maps/sets, after linear storage checks, and records `IndexedValidated` only after success. It does not certify closedness, global connectedness, degeneracy, self-intersections, outward orientation or positive bounded volume. `fromMeshes` normally records indexed validation of the exact converted snapshot; when the owner supplies already-established certification for the exact unchanged inputs, conversion preserves it after linear safety checks. Mere conversion does not certify CGAL semantics.
+
+`validateCgal()` explicitly runs indexed validation, materializes a temporary collection and requires `MeshRepair::isStrictlyValid(MeshRepair::inspect(mesh))` for every object before recording `CgalValidated`. The strict version-1 contract requires nonempty finite valid triangular polygon meshes, no degenerate triangles, closed/no-border topology, one connected component per object, no self-intersections/nonmanifold vertices, finite vertex/face normals, completed outward orientation/bounded-volume checks and finite positive volume, with no inspection errors. Existing CGAL/MeshRepair equations, thresholds, repair choices and acceptance checks are unchanged.
+
+The existing object mesh-quality command now uses `ObjectListMesh::inspectMesh` and const geometry access: its full inspection establishes collection certification once every object passes. The repair command retains the complete successful before/after inspection for each exact accepted output, passes those inspections to the existing mesh constructor, and records the stronger state only when construction does no orientation/repair/remeshing. Rejected or partial results do not grant CGAL certification. This reuses completed repair inspections rather than repeating the heavy contract at persistence time. Inspections of rescaled/transformed temporary meshes elsewhere do not certify the original geometry.
+
+### Certified loading and remaining linear checks
+
+Required geometry array shape/dtype/domain and object/render index limits are checked by the existing loader. Offsets still have O+1 entries, start at zero, are non-decreasing and end at the declared totals. The constructor always runs `validateStorage`: nonempty per-object vertex intervals, valid face intervals, finite float-renderable coordinates, each face index inside its object's vertex interval (therefore below the total vertex count), and distinct triangle indices. Normal array shape/count/finite checks remain separate. These passes allocate no adjacency structures, maps, sets or fan graphs.
+
+Compatible indexed or CGAL certification skips the expensive indexed topology pass. Restoring the CGAL label does not construct a `Surface_mesh` or re-run CGAL. Unknown certification runs the unchanged full indexed contract and records its current level. The optimized path remains resident required geometry/display data, lazy analysis CGAL cache, and unopened scientific feature arrays. Existing bounds, centroids, triangles, rendering axes, derived triangle-z and normal MyData ownership are retained.
+
+### Mutation and certification lifetime audit
+
+| Actual mutation boundary | Certification / normal policy |
+| --- | --- |
+| `IndexedMeshGeometry::setVertices`, `setFaces`, `setVertexOffsets`, `setFaceOffsets` | Private arrays replaced by value; certification becomes `Unknown`. No mutable array getter is exposed. New object adoption recomputes normals unless explicitly supplied valid persisted buffers. |
+| Nonconst `ObjectListMesh::getMeshes` | Materializes if needed, drops indexed backing and normal buffers, clears inspections, permanently marks escaped mutable authority for this instance. |
+| `remesh`, `subdivide` | Already enter through mutable `getMeshes`, so topology changes invalidate reusable certification and persisted normals before the operation. |
+| External smoothing/scaling/transforms/repair via `getMeshes` | Same conservative invalidation, including retained references mutated again after export. Fresh export snapshot is indexed-validated and its normals recomputed. |
+| Normal import/generation/orientation/remeshing constructors | Start uncertified unless exact complete inspections were supplied and no geometry-changing processing occurs. Conversion/export establishes indexed state, never infers CGAL from existence. |
+| Full quality check or accepted unchanged repair output | Can establish strict CGAL state for the owned exact geometry. Escaped mutable objects require a newly owned/revalidated result for reusable certification. |
+| Immutable lazy copy / const analysis materialization | Geometry unchanged; backing/cached normals/provenance retained. Dirty-source copies inherit invalidation rather than resurrecting stale inspection/property data. |
+
+Even pure coordinate changes conservatively clear both levels: indexed version 1 includes finite/renderable coordinates, while the strict CGAL contract also depends on geometry, normals, self-intersection and volume. Setters invalidate before assignment, so a failed write cannot leave a false certificate. Filtering/import constructs a new owned object; no arbitrary inherited source certificate is attached.
+
+No fingerprint was added. Provenance assumes the manifest and exact serialized geometry remain together under the existing export staging transaction. Same-shape in-bounds externally edited geometry/normals can evade these cheap checks; they are storage safety checks, not an authenticity or external-modification detector. External writers/edits must omit/invalidate certification to request full current validation. Normals are checked for shape and finiteness, not rederived to prove correspondence, which would defeat the optimization.
+
+### Aggregate profiler changes
+
+Existing detailed summaries, direct-child/self timing, top-five lists and metadata-only lazy-state counts remain. Added counts distinguish descriptors restored/still unopened, physical feature opening during loading/on demand, legacy eager opening, on-demand value read calls/bytes, cheap mesh checks, executed/skipped indexed validation, restored Unknown/IndexedValidated/CgalValidated provenance, restored/recomputed normals and vertex/face normal bytes read. Existing physical array/value counters still describe actual synchronous backend operations.
+
+`FeatureActivity` is a small shared atomic diagnostic record inside `PocaZarrLoadReport`; callbacks retain only this record, never the report/output/scopes. `count()` can inspect retained demand activity while a report still exists, and `featureActivity()` permits an explicit retained snapshot after report destruction. No automatic per-feature/on-demand printing is added. The initial success summary is a snapshot, normally showing zero post-load demand; it does not update retroactively. First demand reads include opening time, so demand-open and demand-read inclusive totals overlap. Demand timers are flat lifetime aggregates outside the reconstruction scope tree; their self field equals the flat total. Successful opens/reads contribute totals; failures propagate without fabricated success counters.
+
+Added timings cover mesh provenance, linear storage checks, normal-array reads/adoption, and on-demand feature opening/value reads. `Mesh topology validation` is zero-duration work when skipped, while the separate skip counter explains why. Existing normal-generation/adoption timing remains `Mesh display normals`, interpreted alongside restored/recomputed counts. Required normal reads count in generic Zarr traffic; bytes remain logical payload bytes, not decoded chunk/disk traffic. No measurement has been performed.
+
+### Source fixture coverage (34 requested cases, not run)
+
+| Cases | Existing source fixture coverage |
+| --- | --- |
+| 1-3 | `PocaZarrFeatureTests`: complete descriptor restoration, named MyData/count/mean/bins/bounds before opening, zero physical opens/reads; point/mesh fixtures check visible feature names and metadata-only reconstruction. |
+| 4-6 | Feature first region read, reuse and exact signed-zero/scientific values; adapter mock checks factory/open counts, regions, descriptor getters and retained handle ownership. |
+| 7-8 | Descriptor-less complete histogram opens without value reads; legacy display-only fixture retains sample path; new mesh/points have zero feature opens/reads during reconstruction. |
+| 9-12 | Mesh vertex/face normal round-trip; exact restored/recomputed counters, legacy missing normals and unchanged equations. |
+| 13-14 | Wrong vertex/face normal row count rejects; nonfinite supplied normal payload rejects. |
+| 15-16 | Existing flat/smooth mode selection plus nonplanar distinction; deliberately supplied finite custom buffers survive untouched save/load/save, proving no regeneration. |
+| 17-20 | Unknown/imported state, indexed-only promotion, complete strict tetrahedron CGAL promotion; open triangle fails strict contract and retains indexed level. |
+| 21-25 | Real numeric stores persist/restore indexed/CGAL contracts; execute versus skip counters; missing certification, future version and unknown contract execute indexed validation. |
+| 26-27 | Certified loads still report safety checks; existing certified corruption fixtures reject nonmonotonic offsets, cross-object and out-of-range face indices. |
+| 28-30 | Face/vertex/offset setters invalidate; mutable CGAL access/subdivision invalidate; revalidation regains state; complete clean/repaired MeshRepair inspection survives unchanged output adoption; dirty copies retain invalidation. |
+| 31-33 | Feature descriptor/open/read/demand counters and demand bytes; executed/skipped validation and restored/recomputed normals plus byte counts. |
+| 34 | Existing throwing-reader lazy-state counting and real mesh/point completion snapshots stay nonmaterializing. |
+
+Additional fixtures check invalid lightweight metadata, physical rank/count/type/domain/original-name mismatch deferred until first read, missing array first-read error/retry, reporter destruction, CGAL stronger contract failure, nonfinite normals and mutable-source normal-property invalidation. Existing manual flags/source registrations stay unchanged and OFF by default; the independent mock source project is neither configured nor built. OrganoGraph's existing persistence fixture uses the new invalidating geometry setters.
+
+### Static audit and limits
+
+Source review covers declarations/definitions/default-call compatibility, every indexed geometry use site, both repositories' mutable mesh access paths, command dispatch/ownership, existing registrations, complete CGAL acceptance, preserved indexed/normal equations and no backend ABI/scientific feature/rendering equation/child loading changes. No new files, manager classes, libraries or GUI actions were added. Static verification found 21 modified tracked files (no new files), all strict UTF-8/consistent CRLF with HEAD BOM status retained; 19 balanced C++ delimiter streams and 50 resolved quoted includes. Existing source/test registrations and default-call compatibility were inspected. git diff --check and added-line quote/include-artifact checks were clean. Normal-generation/materialization algorithms match HEAD after private-member renaming. These are source-only checks.
+
+Normal buffers are copied temporarily for export, increasing peak memory by the cached float normal payload; mesh geometry/display remains resident. Missing normal metadata still uses the original CPU algorithm. Physical feature failures occur at demand time. Certification has no external tamper detector. Escaped mutable references conservatively prevent reusing certification and require fresh export normals. Existing low-level geometry mutation/render rebuilding conventions remain; no new renderer lifecycle was introduced. Validation-state updates/shared mesh inspection and other core/plugin state are not qualified for concurrent reconstruction.
+
+The deferred handle initialization and diagnostic counters are individually synchronized, and required data/descriptor ownership stays local/shared immutable, which helps a later worker phase. Whole-child MyObject loading is still not worker-safe: the preceding NbObjects, Engine/plugin command installation, Qt/OpenGL, image diagnostic and report-map audit remains applicable. No MyMultipleObject parallelism, thread pool, general cache, compression/chunk redesign or GPU normal calculation was implemented.
+
+Implementation files: existing ObjectListMesh header/main/indexed/persistence files; ObjectListBasicCommands; ZarrArrayAccess header/implementation; PocaZarrSchema header/implementation; PocaZarrFeatures; PocaZarrMeshExport/Load; PocaZarrLoadReport header/implementation. Fixture files: PocaZarrFeatureTests, PocaZarrMeshTests, PocaZarrPointsTests, backend_tests/ZarrArrayAccessMockTests and OrganoGraphPersistenceTests. Documentation: this file and CONTINUITY.md.
+
+Suggested commit: perf(zarr): defer feature opening and reuse persisted mesh normals and validation.
