@@ -113,6 +113,7 @@ namespace poca::core {
 		using ValuesRegionReader = std::function<bool(std::size_t, std::size_t, T*)>;
 		void setValuesRegionReader(ValuesRegionReader _reader) { std::lock_guard<std::mutex> lock(m_valuesMutex); m_valuesRegionReader = std::move(_reader); }
 		bool canReadValuesRegion() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return !m_values.empty() || static_cast<bool>(m_valuesRegionReader); }
+		ValuesRegionReader valuesRegionReader() const { std::lock_guard<std::mutex> lock(m_valuesMutex); return m_valuesRegionReader; }
 		bool readValuesRegion(std::size_t, std::size_t, T*) const;
 		bool valuesUnloaded() const override { return m_storageBacked && !hasValues(); }
 		bool storageBacked() const { return m_storageBacked; }

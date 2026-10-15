@@ -1,6 +1,6 @@
 # Complete OME-Zarr dataset export profiling
 
-2026-10-09. Diagnostic-only, SOURCE-ONLY implementation. No export-performance optimization was intentionally implemented. Runtime behavior was not verified. No CMake/configuration/build, PoCA/backend application, tests, benchmarks, Python or helper executable was run.
+2026-10-09. The initial diagnostic milestone described below is superseded for quantitative feature storage by the packed-table optimization documented at the end and in POCA_ZARR_EXTENSION.md. SOURCE ONLY. Runtime behavior was not verified. No CMake/configuration/build, PoCA/backend application, tests, benchmarks, Python or helper executable was run.
 
 ## Current call flow
 
@@ -174,3 +174,15 @@ Documentation:
 Values/metadata fields, array shape/dtype/dimensions, source access calls, loop/order/association, existing RAW/LABEL algorithms, codecs/chunks, transaction rename/rollback/delete sequence and command dispatch remain unchanged. Changes consist of observation scopes/counters, optional diagnostic outputs, delegating overloads, progress and source fixtures. No backend ABI implementation, schema, scientific computation, rendering, GUI layout or generated/external build directory was edited. No parallelism or new data materialization path was introduced.
 
 Static verification covers declarations/definitions/call sites, independent mock dependencies and existing source registration, added include resolution, lexical delimiters, CRLF/UTF-8/BOM preservation, git diff --check and targeted quoting-artifact checks. This is source evidence only and cannot establish runtime correctness or overhead. See CONTINUITY.md for final audit receipts.
+
+## Packed feature profiling update (2026-10-09)
+
+The feature writer now groups compatible columns in component-local `[rows,features]` arrays. Feature arrays is a physical array count; Feature columns is the number of persisted scalar feature records. Packed feature groups counts planned groups, Packed feature arrays created counts successful creations, Packed feature blocks written counts successful bulk writes, and Packed feature data chunks derives the chunk count from successful aligned regions. Actual Array setup attempts/Feature array setup and Write calls/Feature value writes retain their existing backend observation points.
+
+Feature block packing includes source access as a direct child; its self time excludes source access. Packed source batch reads and Packed source columns read describe coalesced, adjacent untouched source columns and may count a column again in another row block. Feature sources read from Zarr counts each observed source feature once per group export. Feature bytes remains typed bytes submitted, excluding source reads. Metadata writing time still includes the feature-folder document and enclosing component/image document scopes; no per-column disk write is introduced.
+
+Load distinguishes restored Feature descriptors and Persisted feature columns from Packed feature groups discovered/Feature arrays described but not opened. A metadata-only load must initialize/read zero physical feature arrays. Feature arrays opened on demand and Feature columns materialized on demand describe later user reads/materializations; Feature arrays opened during export is separate. Existing per-demand read calls, requested decoded bytes and opening/reading times remain available through shared atomic activity. Backend cache hits and compressed disk traffic are not exposed and are not estimated. Backend write time combines encoding/compression and storage I/O.
+
+DatasetContainerFixture::checkExportProfile now expects nine packed arrays for twenty-three columns instead of twenty-three feature arrays, with unchanged 55 values/220 payload bytes. PackedFeatureFixture checks one physical setup/write for eight compatible columns, one shared source region for unchanged re-export, and aligned bulk blocks for a larger table. These are source assertions, not measured results; none was executed. The schema, ownership, types, chunk/memory bounds, strict packed payload handling, lazy access, source inventory and full 37-case coverage mapping are in [POCA_ZARR_EXTENSION.md](POCA_ZARR_EXTENSION.md#canonical-packed-quantitative-features-2026-10-09).
+
+Runtime behavior was not verified. No compilation/configuration/test/application/backend execution occurred.

@@ -1,6 +1,6 @@
 # PoCA quantitative data alongside OME-NGFF
 
-Current reopening policy: see **Reusing persisted features, normals and mesh certification (2026-10-08)** at the end. Earlier dated sections describe previous milestones.
+Current feature contract: see **Canonical packed quantitative features (2026-10-09)** at the end. It supersedes every earlier per-feature-array/legacy-feature-reader description. Mesh normals/certification retain the 2026-10-08 policy. Earlier dated sections describe historical milestones.
 
 ## Command characteristics, load report and statistics repair (2026-10-06)
 
@@ -904,3 +904,87 @@ The deferred handle initialization and diagnostic counters are individually sync
 Implementation files: existing ObjectListMesh header/main/indexed/persistence files; ObjectListBasicCommands; ZarrArrayAccess header/implementation; PocaZarrSchema header/implementation; PocaZarrFeatures; PocaZarrMeshExport/Load; PocaZarrLoadReport header/implementation. Fixture files: PocaZarrFeatureTests, PocaZarrMeshTests, PocaZarrPointsTests, backend_tests/ZarrArrayAccessMockTests and OrganoGraphPersistenceTests. Documentation: this file and CONTINUITY.md.
 
 Suggested commit: perf(zarr): defer feature opening and reuse persisted mesh normals and validation.
+
+## Canonical packed quantitative features (2026-10-09)
+
+SOURCE ONLY. Runtime behavior was not verified. No compilation, CMake, application, test, benchmark, Python or helper executable was run.
+
+The previous writer created one float32 Zarr array per scalar feature and one independent deferred array descriptor per loaded feature. The new sole feature contract is `packed-columns`; old PoCA feature manifest arrays are rejected with a diagnostic asking the user to regenerate the dataset. There is no old feature reader, migration, schema-version dispatcher or per-feature fallback. Existing root dataset versions remain unchanged. Standard external OME-Zarr without PoCA quantitative metadata retains its existing path. TIFF/OBJ readers are untouched. Geometry-only mesh handling without any feature manifest is unchanged; it is not a reader for old feature arrays.
+
+### Schema, grouping and chunking
+
+`PocaZarrFeaturePersistence`, in the existing PocaZarrFeatures.hpp/.cpp, owns the component-local collect/group/write/restore workflow. Existing writePocaZarrFeatures/loadPocaZarrFeatures entrypoints delegate to it. No new production file, DLL or plugin is introduced. A private Group holds one compatible dtype/row-domain; a private typed ColumnReader carries shared read-only array ownership and one column index. MyData ownership still transfers through the normal BasicComponent/DetectionSet/ObjectListMesh APIs.
+
+A component's existing `features` field now contains:
+
+```json
+{
+  "layout": "packed-columns",
+  "groups": [{
+    "path": "features/f000000",
+    "dtype": "float32",
+    "shape": [400, 200],
+    "dimension_names": ["point", "feature"],
+    "chunks": [400, 16],
+    "columns": [{"name": "exact original name", "column": 0, "display": "existing complete display/histogram object"}]
+  }]
+}
+```
+
+The example shows one column record; the actual columns array has exactly 200 records. Display is the existing JSON object, not a string. It retains five measured statistics, provenance, bounded statistics sample, bins, bin positions, step/maxY, display availability, original/current bounds, interaction, scaleLUT and deferred log preference. Component current-feature state remains in the existing component document. Physical array attributes contain `poca_features: {layout: packed-columns, columns: [exact names...]}`; first-open validation compares this mapping and chunks against the component manifest.
+
+Each owning component is independent. Groups sort by `(dtype, value count)`; columns sort by exact original feature name through BasicComponent's ordered map. Explicit zero-based column indices must be contiguous. Duplicate/reserved/empty names, repeated compatible groups, malformed types/counts/axes/chunks, noncanonical paths and missing saved histogram state fail. Physical table paths reuse compact ordinal fNNNNNN keys, never user feature names. object_features and image_features retain their existing folder names. Image scalar domains of different lengths receive separate groups. Point/object feature lengths must match the component count, preserving the previous owner contract. Empty scientific features and zero-object DetectionSets remain rejected; a component with no nonreserved features produces an empty groups array.
+
+Supported payload types are float32/float64, uint8/16/32/64 and int8/16/32/64. Values are read/packed/written in their original type, with no numerical conversion, sanitization, reduction or scientific recomputation. Logical row order, negative values, signed zero, NaNs and signed infinities survive the typed copy path. Display statistics retain PoCA's existing float-valued interface and sample representability rules; packing does not widen or redefine display statistics. Unsupported histogram classes fail rather than being omitted or downcast.
+
+For N rows, F columns and B bytes/value:
+
+- columnChunk = min(F,16).
+- rowChunk = min(N, componentChunkRows, floor(128 KiB / (columnChunk * B))).
+- chunks are `[rowChunk,columnChunk]`; maximum decoded full chunk is 128 KiB.
+- packing width is at most floor(4 MiB / (rowChunk * B)), rounded down to a complete column chunk, then capped at F.
+
+The writer allocates at most 4 MiB for packed data and 4 MiB for source scratch, scoped to the current table, plus descriptors/histogram metadata. Backend operation-local buffers and its cache are additional bounded storage; this is not a claim about total process memory. Blocks align with chunk boundaries, including clipped final rows/columns. A typical 400 x 200 float matrix uses 13 data chunks and one backend write. Very small componentChunkRows can deliberately increase writes/chunks. No dataset-wide dense matrix is allocated.
+
+### Lazy access, concurrency and re-export
+
+Loading reads one compact component manifest and feature-folder group metadata, performs safe-path resolution once per packed table, restores typed Histogram/MyData state and creates one shared ZarrArrayAccess::deferred descriptor per group. It does not open the physical array, read numeric samples, compute bins or materialize feature values. The canonical reader requires saved histogram state, so the metadata-only sampling initializer used by existing in-memory/coordinate callers cannot serve as a feature-format fallback.
+
+A selected feature reads origin `[start,column]`, shape `[count,1]`, into a typed contiguous feature buffer. The backend may decode up to 16 neighboring columns inside a chunk; those columns do not become other Histogram objects' resident values. Full access materializes only the requested feature through the existing bounded region callback. Repeated full access uses the Histogram resident cache. Region-only access leaves the feature unloaded.
+
+Every column shares the same deferred descriptor and eventual physical handle. Existing call_once initializes it once and retries a failed open only after a later request. The backend's readRegion uses operation-local transforms and decoded buffers around immutable TensorStore handles; concurrent independent columns therefore do not share writable scratch. Histogram locks protect each feature's materialization. Lazy closures retain array/shared atomic activity ownership, never the persistence owner, loader, component or report pointer. Normal PoCA rules still require mutations to be serialized against export/copy.
+
+Histogram's new valuesRegionReader getter copies its existing callback under its mutex without accessing values. The packed exporter recognizes the private typed source functor and coalesces adjacent unloaded columns from the identical source into a single N-D region read. Edited/materialized resident features use readValuesRegion, which prioritizes current resident values; replaced features use their new histogram. Mixed blocks scatter those runs alongside resident columns. Untouched packed-to-packed re-export remains bounded and does not materialize features. There is no filesystem copy-through or new dirty/versioning system, and no change to the staging/rollback/publication transaction.
+
+### Integration and strict payload handling
+
+DetectionSet x/y/z remain in positions with the existing coordinate validation and lazy KD-tree behavior. Only its additional features enter packed tables. ObjectListMesh features use the same tables without requesting CGAL, recomputing normals, validating geometry again or modifying indexed/mesh/rendering ownership. Image intensity remains in the OME pixel array; additional scalar feature tables change without modifying pixels, multiscales, calibration, labels, interpolation or ROI/LOD access.
+
+OrganoGraph child features, including dynamic rank/source outputs, restore through the generic component tables. Root command characteristics, float64 scalar tables, source indices, groups/configuration, spatial curves, embeddings and plot state retain their existing separate paths. Selected-child export still uses its own component ownership and excludes the root collection command state.
+
+BackendOpen.cpp adds packed-table-only TensorStore options, recognized through physical `attributes.poca_features`: store_data_equal_to_fill_value=true and fill_missing_data_reads=false. Thus explicitly written zero/signed-zero chunks are retained and missing chunks fail on access instead of silently becoming zeros. It enables a 1 MiB built-in cache per opened packed handle; neighboring columns reuse this handle/cache. No custom cache/thread pool or C ABI change is introduced. Ordinary image/geometry arrays keep their existing driver options. Read-only v3 open additionally reads its array metadata to identify this contract. No backend binary was rebuilt in this source-only task; the modified backend source must be included in a later authorized build. These driver options are documented in the [TensorStore Zarr v3 driver](https://google.github.io/tensorstore/driver/zarr3/index.html).
+
+### Profiling, source fixtures and static audit
+
+The existing reports now distinguish logical columns from physical feature arrays. Export adds Packed feature groups, Packed feature arrays created, Feature columns, Packed feature blocks written, Packed feature data chunks, Packed source batch reads and Packed source columns read. Common Array setup attempts/Feature array setup and Write calls/Feature value writes still observe actual backend operations. Feature block packing is inclusive of source access; use its self time for packing-only cost. Feature bytes count submitted typed payload only. Packed chunk counts are derived from successfully written aligned regions, not filesystem scans or codec traffic. Feature-group metadata writing and final component documents remain separately timed through the existing scopes.
+
+Load adds Packed feature groups discovered and Feature columns materialized on demand, retains descriptor/open/read/byte/timing counters, and separates arrays opened during export from user demand. Persisted feature columns replaces the old misleading Persisted feature arrays logical-record counter. Demand bytes are requested decoded region bytes, not physical/compressed disk traffic. Cache hits are not exposed, so no cache-hit estimate is invented. Backend write time still combines encoding/compression and filesystem I/O.
+
+| Requested cases | Existing manual fixture/source evidence |
+| --- | --- |
+| 1-6, 9-12, 28, 36-37 | PackedFeatureFixture::grouping/lazyColumns: one physical array/write, explicit deterministic columns, exact float bits/NaNs/infinities/signed zero, scientific names and complete display/statistics |
+| 7-8, 24-26 | numericTypes/componentRoundTrips: original numeric types, distinct length groups, fixed-count mismatch, one-row group/one-point component, safe rejection of unsupported empty feature/zero-point component |
+| 13-19 | lazyColumns: zero descriptor-time opens/reads, selected region byte count, untouched neighbors, shared first-open and concurrent reads, resident cache, callbacks surviving report destruction |
+| 20-21 | reexport: one unchanged-source batch read/write, resident edit and replaced feature persisted, untouched NaNs retained |
+| 22-23, 35 | componentRoundTrips: 240 generated features in each real DetectionSet/ObjectListMesh, original row values, one array/type/domain and no CGAL/KD materialization |
+| 27 | boundedBlocks plus writer control-flow audit: 20,000 x 96 table streamed in aligned row blocks, bounded input readers, one array, ten bulk writes, sixty chunks; 2048 x 600 additionally forces two column tiles/38 chunks |
+| 29-30 | corruption: malformed/duplicate/reserved/count/mapping/physical metadata, malformed chunk bytes, missing table/chunk and explicit all-zero payload failures at the correct lazy boundary |
+| 31-32 | Existing OrganoGraphPersistenceTests::zarr extended with lazy dynamic rank/source child features and NaNs; existing root-state/selected-child assertions retained |
+| 33-34 | Existing external OME-Zarr/image/label fixtures retained; TIFF/OBJ loader source paths untouched (static source evidence only) |
+| transaction failure | Existing DatasetContainerFixture/checkRollback and PocaZarrDatasetTests failure/previous-destination/staging assertions retained |
+
+Fixtures remain in the existing optional manual test registration; none was executed. Point/mesh/profile/path fixtures now expect grouped descriptors, and old per-feature path rewriting was removed. Tests for historical object/image container paths keep canonical feature tables and do not restore the retired feature format.
+
+Changed files: core Histogram.hpp; loader PocaZarrFeatures.hpp/.cpp, PocaZarrFeatureDisplay.cpp, PocaZarrSchema.hpp/.cpp, PocaZarrDatasetExporter.cpp, PocaZarrExportReport.cpp, PocaZarrLoadReport.hpp/.cpp, PocaZarrFeatureTests.cpp, PocaZarrPointsTests.cpp, PocaZarrMeshTests.cpp, PocaZarrDatasetContainerTests.cpp; OrganoGraphPersistenceTests.cpp; backend BackendOpen.cpp; this document, POCA_ZARR_EXPORT_PROFILING.md and CONTINUITY.md. No new files; one coherent production persistence class and its private table/column descriptors replace the former procedural per-feature workflow.
+
+Expected improvement is structural: physical feature array setup/metadata operations scale with compatible component groups rather than individual feature names; writes scale with bounded table tiles rather than one feature at a time. Metadata parsing/safe-path checks scale with tables, while lightweight per-feature state still scales with feature count. Remaining costs include restoring histogram metadata, packing/copying values, backend I/O/encoding, additional source runs around edited/gapped/reordered columns, and demand-time decoding of neighboring chunk columns. No measured speedup is claimed. Runtime behavior was not verified.
