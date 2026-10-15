@@ -25,7 +25,11 @@
 in vec4 a_position;
 
 uniform mat4 ModelViewProjectionMatrix;
+// Multi-volume batches reuse one unit cube. Other programs keep world-space vertices.
+uniform bool unitCubeGeometry = false;
+uniform vec3 bottom;
+uniform vec3 top;
 
 void main() {
-    gl_Position = ModelViewProjectionMatrix * a_position;
+    gl_Position = ModelViewProjectionMatrix * (unitCubeGeometry ? vec4(mix(bottom, top, a_position.xyz), 1.0) : a_position);
 }

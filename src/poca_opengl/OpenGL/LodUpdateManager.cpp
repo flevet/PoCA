@@ -23,6 +23,7 @@
 #include "Camera.hpp"
 
 namespace poca::opengl {
+	using ImageMetric = poca::core::PerformanceProfiler::ImageMetric;
 	namespace {
 		bool lodDebugEnabled()
 		{
@@ -384,20 +385,61 @@ namespace poca::opengl {
 		return !_ready.obsolete && it != m_states.end() && it->second.latestVersion == _ready.requestVersion;
 	}
 
+	void LodUpdateManager::acknowledgeRedraw()
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_redrawPending = false;
+	}
+
+	void LodUpdateManager::requestRedrawUnsafe()
+	{
+		if (!m_camera || m_stopWorker) return;
+		if (m_redrawPending) {
+			poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::RedrawRequests);
+			return;
+		}
+		m_redrawPending = true;
+		QMetaObject::invokeMethod(m_camera, [camera = m_camera]() { camera->requestImageStreamRedraw(); }, Qt::QueuedConnection);
+	}
+
 	bool LodUpdateManager::uploadReadyForFrame()
 	{
+		poca::core::PerformanceProfiler::ImageTimer imageTimer(ImageMetric::UploadUs);
+		auto& profiler = poca::core::PerformanceProfiler::instance();
+		profiler.addImageMetric(ImageMetric::UploadFrames);
 		bool uploaded = false;
-		const auto readyUploads = drainReadyUploads(4, imageStreamPolicy().uploadBytes);
-		for (const auto& ready : readyUploads) {
+		const auto start = std::chrono::steady_clock::now();
+		auto readyUploads = drainReadyUploads(4, imageStreamPolicy().uploadBytes);
+		std::size_t processed = 0;
+		for (; processed < readyUploads.size(); ++processed) {
+			// A single GL upload cannot be preempted. Always permit one, then retain
+			// unprocessed results/reservations for a later GUI frame.
+			if (processed && std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= imageStreamPolicy().uploadFrameMs) break;
+			const auto& ready = readyUploads[processed];
 			if (!isCurrent(ready) || !m_residency.visible(ready.imageId)) continue;
 			if (!ready.uploadCallback) throw std::logic_error("Image stream has no render-thread upload callback");
 			const bool changed = ready.uploadCallback(ready);
+			if (changed) profiler.addImageMetric(ImageMetric::Uploads);
 			{ std::lock_guard<std::mutex> lock(m_mutex); auto it = m_states.find(ready.imageId);
 				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) it->second.failed = !changed; }
 			ImageLodState current;
 			if (state(ready.imageId, current))
 				markUploaded(ready.imageId, changed ? ready.requestedLevel : current.currentDisplayedLevel, ready.requestVersion);
 			uploaded = uploaded || changed;
+		}
+		if (processed < readyUploads.size()) {
+			std::lock_guard<std::mutex> lock(m_mutex);
+			for (; processed < readyUploads.size(); ++processed) {
+				auto& ready = readyUploads[processed];
+				const auto state = m_states.find(ready.imageId);
+				if (state != m_states.end() && state->second.latestVersion == ready.requestVersion)
+					m_ready.push_back(std::move(ready));
+			}
+		}
+		if (profiler.imageMetricsEnabled()) {
+			std::size_t queued, ready, preparing;
+			{ std::lock_guard<std::mutex> lock(m_mutex); queued = m_requests.size(); ready = m_ready.size(); preparing = m_inFlight.size(); }
+			profiler.reportImageMetrics(queued, ready, preparing);
 		}
 		return uploaded;
 	}
@@ -449,6 +491,9 @@ namespace poca::opengl {
 			ready.requestVersion = request.requestVersion; ready.viewGeneration = request.viewGeneration; ready.visible = request.visible;
 			ready.role = request.role; ready.navigationClass = request.navigationClass;
 			ready.uploadCallback = request.uploadCallback;
+			poca::core::PerformanceProfiler::ImageTimer preparationTimer(ImageMetric::PreparationUs, int(request.role));
+			poca::core::PerformanceProfiler::instance().addImageMetric(request.role == ImageStreamRole::EmergencyPreview ?
+				ImageMetric::PreviewPreparations : (request.role == ImageStreamRole::Navigation ? ImageMetric::NavigationPreparations : ImageMetric::DetailPreparations));
 			bool success = false;
 			try {
 				if (request.prepareCallback) success = request.prepareCallback(request, ready);
@@ -473,12 +518,16 @@ namespace poca::opengl {
 				if (current) {
 					state->second.status = success ? LodRequestStatus::Ready : LodRequestStatus::Idle;
 					state->second.failed = !success && !ready.obsolete;
-					if (success) m_ready.push_back(std::move(ready));
+					if (success) {
+						poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::Completions);
+						m_ready.push_back(std::move(ready));
+					}
+					else if (state->second.failed) poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::Failures);
 				}
 				auto flight = m_inFlight.find(request.imageId);
 				if (--flight->second == 0) m_inFlight.erase(flight);
 				m_condition.notify_all();
-				if (m_camera != nullptr) QMetaObject::invokeMethod(m_camera, "update", Qt::QueuedConnection);
+				if (current) requestRedrawUnsafe();
 			}
 		}
 	}

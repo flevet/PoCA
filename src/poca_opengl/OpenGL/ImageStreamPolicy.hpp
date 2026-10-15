@@ -33,6 +33,7 @@ namespace poca::opengl {
 		double zoomInReuseTolerance{ 1.25 }, zoomOutReuseTolerance{ .88 };
 		double displayOversampling{ 1.5 };
 		uint32_t interactionSettleMs{ 150 };
+		uint32_t streamingRedrawMs{ 16 }, uploadFrameMs{ 4 }; // Soft GUI budgets; camera interaction updates remain immediate.
 	};
 	inline const ImageStreamPolicy& imageStreamPolicy() { static const ImageStreamPolicy policy; return policy; }
 	inline std::size_t streamMultiply(std::size_t _a, std::size_t _b) {

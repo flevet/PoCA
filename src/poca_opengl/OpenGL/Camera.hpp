@@ -219,6 +219,7 @@ namespace poca::opengl {
 		void setPickingEnabled(const bool);
 		bool pickingEnabled() const;
 		bool interactiveRendering() const { return m_interactiveRendering || m_buttonOn; }
+		void requestImageStreamRedraw();
 		void toggleFontDisplay();
 
 		int getWidth() const { return this->width(); }
@@ -425,6 +426,8 @@ namespace poca::opengl {
 		float m_translationX, m_translationY, m_translationZ;
 		bool m_scaling, m_buttonOn, m_leftButtonOn, m_middleButtonOn, m_rightButtonOn, m_displayBoundingBox, m_displayGrid, m_interactiveRendering;
 		QTimer m_imageStreamSettleTimer;
+		QTimer m_imageStreamRedrawTimer;
+		bool m_imageStreamRedrawDue{ false };
 		void beginImageStreamInteraction();
 		bool m_alreadyInitialized;
 		bool m_openGLContextInitializedNotified;

@@ -139,6 +139,7 @@ namespace poca::opengl {
 		bool hasQueuedRequests() const;
 		bool hasReadyUploads() const;
 		bool uploadReadyForFrame();
+		void acknowledgeRedraw();
 
 		bool popNextQueuedRequest(ImageLodRequest&);
 		std::vector<ImageLodRequest> drainQueuedRequests();
@@ -154,6 +155,7 @@ namespace poca::opengl {
 
 	private:
 		void workerLoop();
+		void requestRedrawUnsafe(); // m_mutex held; receiver lifetime is Camera-owned.
 		bool takeAdmittedRequestUnsafe(ImageLodRequest&, std::shared_ptr<ImageStreamMemory::Reservation>&);
 		bool popNextQueuedRequestUnsafe(ImageLodRequest&);
 		void removeQueuedRequestsForImageUnsafe(uint64_t imageId);
@@ -171,6 +173,7 @@ namespace poca::opengl {
 		std::condition_variable m_condition;
 		std::vector<std::thread> m_workers;
 		bool m_stopWorker{ false };
+		bool m_redrawPending{ false };
 	};
 }
 

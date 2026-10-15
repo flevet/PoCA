@@ -581,6 +581,9 @@ namespace poca::opengl {
 		this->addActionToObserve("updateDisplay");
 		this->setWindowTitle(_obj->getName().c_str());
 		m_lodUpdateManager = std::make_shared<poca::opengl::LodUpdateManager>(this);
+		m_imageStreamRedrawTimer.setSingleShot(true);
+		m_imageStreamRedrawTimer.setInterval(int(imageStreamPolicy().streamingRedrawMs));
+		connect(&m_imageStreamRedrawTimer, &QTimer::timeout, this, [this]() { m_imageStreamRedrawDue = true; update(); });
 		m_imageStreamSettleTimer.setSingleShot(true);
 		m_imageStreamSettleTimer.setInterval(int(imageStreamPolicy().interactionSettleMs));
 		connect(&m_imageStreamSettleTimer, &QTimer::timeout, this, [this]() {
@@ -859,8 +862,26 @@ namespace poca::opengl {
 		}
 	}
 
+	void Camera::requestImageStreamRedraw()
+	{
+		// GUI thread only. Workers enter through one gated, camera-bound queued call.
+		auto& profiler = poca::core::PerformanceProfiler::instance();
+		profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawRequests);
+		if (!m_imageStreamRedrawDue && !m_imageStreamRedrawTimer.isActive()) {
+			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawScheduled);
+			m_imageStreamRedrawTimer.start();
+		}
+	}
+
 	void Camera::drawElements(QOpenGLFramebufferObject * _buffOffscreen)
 	{
+		auto& profiler = poca::core::PerformanceProfiler::instance();
+		auto* engine = poca::core::Engine::instance();
+		profiler.setImageMetricsEnabled(engine->verboseEnabled() && engine->hasVerboseType("imagePerformance"));
+		if (m_imageStreamRedrawDue || m_imageStreamRedrawTimer.isActive())
+			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::StreamingFrames);
+		m_imageStreamRedrawTimer.stop(); m_imageStreamRedrawDue = false;
+		m_lodUpdateManager->acknowledgeRedraw();
 		poca::core::PerformanceProfiler::ScopedTimer timer("Rendering", _buffOffscreen == NULL ? "Camera::drawElements onscreen" : "Camera::drawElements offscreen");
 		auto start = std::chrono::high_resolution_clock::now();
 		GL_CHECK_ERRORS();
@@ -870,7 +891,7 @@ namespace poca::opengl {
 		ImageResidencyFrame imageResidencyFrame(m_lodUpdateManager->residency(), [this]() {
 			m_lodUpdateManager->cancelInvisible();
 			const bool uploaded = m_lodUpdateManager->uploadReadyForFrame();
-			if (uploaded || m_lodUpdateManager->hasReadyUploads() || m_lodUpdateManager->residency().needsGraceFrames()) update();
+			if (uploaded || m_lodUpdateManager->hasReadyUploads() || m_lodUpdateManager->residency().needsGraceFrames()) requestImageStreamRedraw();
 		});
 		clock_t beginFrame = clock();
 

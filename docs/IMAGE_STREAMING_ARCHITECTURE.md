@@ -2,6 +2,110 @@
 
 Source implementation dated 2026-10-02. Compilation, shader validation and runtime performance are **UNCONFIRMED**. No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
 
+## Hundreds-of-organoids optimization (2026-10-15)
+
+This section supersedes the earlier unconditional picking pass and the rule that a tiny or budget-limited image must always advance to Detail. Implementation and regression fixtures are source-only. Compilation, shader linking, visual correctness and measured performance remain **UNCONFIRMED**. No application, build, configure step, benchmark or test was executed.
+
+### Verified causes and source changes
+
+- ImagesListMultiObjectDisplayCommand::ensureSharedGeometry previously called glBufferData for both cube vertices and indices whenever the last batch bounding box changed. Multiple spatially separated batches repeated those allocations every frame. The command now owns one persistent unit cube/VAO/index buffer. The two existing vertex shaders expand it using bottom/top only when unitCubeGeometry is enabled. Other shader programs retain their world-space vertex path. Fragment MVP, invMVP, depth writes, image descriptors, inverse child transforms, bounds and voxel coordinates retain their original meanings. Ship the modified shader files with the executable.
+- The descriptor SSBO previously called glBufferData per batch. It now grows geometrically only when capacity is insufficient, then updates the active prefix with glBufferSubData. Descriptors still refresh per batch; no per-organoid geometry buffer or extra persistent texture is added.
+- A visible image could undergo three identical convex-polytope intersections in the visibility/render/request path. ImageDisplayCommand now caches the exact geometric result and buildVolumeLodRequest reuses it. Inputs include MVP, viewport, crop bounds/local transform, image bounds, dimensions, calibration/origin, source/frame/mode identity and current clip-plane state. Selection/residency remain live checks. Each image command owns its cache, so hierarchy removal has no global cache cleanup requirement. Arbitrary clip planes retain existing shader-side conservative visibility semantics.
+- ImageViewRegion now checks whether all eight image corners lie inside all normalized frustum/crop planes. If so, it projects those corners directly. Partial intersections, camera-inside/near-plane cases and conservative numerical handling retain the original algorithm.
+- Normal multi-object display previously rendered a complete picking FBO after every paint. It now renders immediately before a pick readback. The existing CPU geometry snapshot is refreshed at that point, and geometry buffers rebuild only if that snapshot changed. ImagePickingScope makes the active camera context current on its GUI thread, uses the latest camera view/translation plus parent model, and restores caller context, framebuffer, viewport, shader/VAO/buffer, texture, pixel alignment, depth/color/polygon and affected enable state. IDs and selected-image bounding-box semantics remain unchanged. Hover identification is still a pick operation and can render a picking pass.
+- The progression planner already used projected footprint for Detail, but still offered Detail after an adequate preview. Before submission, the command now checks actual preview coverage and all three physical voxel pitches against the planned Detail pitch with the existing zoom-in reuse tolerance. This handles reduced native levels, anisotropy, fixed frames and tiny visible ROIs without assuming every 64-edge texture suffices. Adequate previews suppress new Navigation/Detail work and invalidate redundant pending Detail. Once interaction settles, a redundant Detail texture is retired only while the sufficient, source-current 3D preview remains resident. Larger views resume the existing progressive workflow.
+- TIFF regional preparation already opened one reader session per preparation, rather than synchronously materializing a full scientific volume. Without native pyramids, another whole-image preparation still decodes full-resolution planes again. Suppressing redundant preparation avoids that repeated traversal; the initial preview can still require a full TIFF scan. OME-Zarr native-level selection and both formats' readers/serialization remain unchanged.
+- Every worker completion previously queued Camera::update. The manager now permits one outstanding completion notification until the next frame; obsolete completions do not request a paint. Camera owns one single-shot streaming redraw timer shared by completion, continuation-upload and initialization/submission-budget requests. Ordinary interaction updates remain immediate. Deferred results keep their CPU reservations, versions and priority for a later frame. Closing a camera still joins workers before destroying its queued-call receiver.
+- DatasetAssemblerWidget no longer unconditionally adds debugPyramidalRendering. Explicit detailed logging remains available through the existing verbose controls.
+
+### Streaming budgets
+
+Existing ImageStreamPolicy now also contains streamingRedrawMs=16 and uploadFrameMs=4. These are centralized source policy values, not new GUI preferences or serialized settings. Uploads retain the existing limit of four drained results and uploadBytes per frame. The time limit is soft: one upload is always allowed, and a driver call cannot be preempted. Unprocessed current results are put back into the existing ready queue with their reservations. A paint already requested for interaction can consume pending streaming work and cancel the timer. There is no recurring idle redraw timer.
+
+### Optional aggregate diagnostics
+
+Enable global verbose output and add the exact verbose type **imagePerformance** using the existing **Add verbose type** control. Enable it before opening images to count startup allocations/reads. Disabling verbose output or removing/clearing the type disables collection on the next camera frame. The existing detailed debugPyramidalRendering/lodDebug categories are independent; leave them off for timing comparisons.
+
+PerformanceProfiler owns bounded atomic counters through its existing process-wide application property, shared by the executable and statically linked plugins. No new process-global singleton is introduced. Role attribution uses the shared profiler's preparation-thread map only while diagnostics are enabled. Reports appear as one [PoCA][ImagePerformance] line after at least one second of rendering activity; counters reset after reporting. No extra frame is requested merely to print a report. Therefore a final partial interval can remain unprinted until another paint.
+
+| Fields | Meaning |
+| --- | --- |
+| seconds | Actual reporting interval; compare rates using this value. |
+| displays, display_us, batches | Multi-object ImagesList command calls, CPU-side elapsed display time, and actual raw-volume batch draws. Average display milliseconds = display_us / displays / 1000. |
+| geometry_allocations | Two cube glBufferData calls at initialization, plus three calls on a dirty picking-geometry rebuild. Expect zero on steady normal redraws, regardless of batch bounding boxes. |
+| descriptor_allocations, descriptor_uploads | SSBO capacity growth calls versus active-prefix uploads. Uploads remain proportional to batch draws; steady capacity growth should stop. |
+| visibility_hits, visibility_misses, visibility_us | Cache lookup reuse versus actual intersections, and their elapsed microseconds. Streaming redraws with unchanged inputs should predominantly hit. |
+| picking_passes, picking_us | Multi-object picking renders and elapsed time including context/state setup and FBO readback. Normal streaming-only paints should have zero passes; hover/click requests still count. |
+| upload_frames, uploads, upload_us | Upload-processing invocations, successful publications and GUI processing microseconds. Average upload milliseconds = upload_us / upload_frames / 1000. Counts aggregate across frames. |
+| preview_preparations, navigation_preparations, detail_preparations, preparation_us | Worker starts by role, including failed/canceled attempts, and summed worker elapsed microseconds (including I/O). Concurrent workers can exceed one second of summed time per wall-clock second. |
+| completions, failures | Current successful worker results and current failed preparation results; obsolete/canceled results are excluded. Upload rejection is still exposed through existing detailed logs/state, not this failure counter. |
+| refinements_avoided, detail_retirements | Planning decisions finding the existing preview sufficient, and redundant Detail textures released. The former counts replans, not bytes or proven avoided disk reads. |
+| redraw_requests, redraw_scheduled, streaming_frames | Eligible completion/GUI streaming requests including coalesced requests, timers started, and paints consuming pending streaming work (including interaction piggyback). These are scheduling counters, not OS-presented frames. |
+| tiff_preview_sessions, tiff_navigation_sessions, tiff_detail_sessions | Reader sessions first used by each display-preparation role. Session count normally matches preparation starts; resident sources need no TIFF session. |
+| tiff_planes, tiff_stack_equivalents | Actual decoded full-resolution TIFF planes from regional reader metrics, and session-local whole-stack equivalents (decoded planes divided by source depth). Equivalents can include repeated planes; they do not prove distinct full-volume reads. Scientific/opening region reads can contribute planes without a display role. |
+| queued, ready, preparing | Instantaneous queue/result/in-flight-image gauges for the manager emitting this report. Other counters aggregate process-wide; use one camera for comparisons. |
+
+These are CPU-side elapsed timings and logical call counts, not GPU timer queries, physical disk traffic or measured speedup. Instrumentation is disabled by default; disabled aggregate calls do not start clocks, modify counters or lock the role map. Existing PerformanceProfiler samples and detailed log gates remain independently available.
+
+### Static review, limitations and risks
+
+The source audit covers shader depth conventions, exact cache inputs, live selection/residency, camera pick context/readback order, snapshot invalidation, deferred-result ownership and receiver lifetime. Existing CMake registration covers all changed production/fixture files; no new files or dependencies are required. Modified text uses consistent CRLF and retains its UTF-8/BOM convention.
+
+The remaining overlap-based batch grouping and per-image command/residency traversal are unchanged. This work does not promise a fixed frame time for 900 volumes. Descriptor updates may still incur driver synchronization; no persistent mapping/fence framework is introduced. The four-millisecond budget cannot bound one expensive driver upload or the rest of a full scene draw. Whole Navigation textures retain their existing monotonic quality and eviction policy; sufficient previews can retire Detail, but this patch does not decode a smaller Navigation texture just to reclaim memory. Picking still uses selected-image aggregate bounding boxes rather than opacity-aware voxel identification. No persistent TIFF cache, MIP thumbnail substitute, scientific resampling change or serialization change is introduced.
+
+Primary runtime risks to check are deploying shaders together with source, driver behavior of SSBO subdata, direct/isosurface depth alignment, near-plane/cropped visibility, preview-to-Detail quality transitions, immediate picks between paints, multi-window context behavior and retained upload results during dataset closure/hiding. None is claimed verified by compilation or execution.
+
+### Manual checklist after the user's build
+
+Use the same datasets, viewport, camera positions, rendering settings and verbose configuration for comparisons. Record reporting intervals, display_ms averages, cache misses/time, batch/geometry/descriptor counts, TIFF plane/session totals, uploads and redraw ratios. Capture both initial loading and settled navigation. Existing PerformanceProfiler can provide timing context for an uninstrumented older revision; do not treat new counters as measured before/after speedup.
+
+1. Open one out-of-core TIFF 3D volume without native pyramids; rotate, zoom and pan in orthographic and perspective modes. Also check a resident TIFF, single-plane image and anisotropic spacing.
+2. Open one multilevel OME-Zarr volume; confirm coarse native reads first, correctly aligned refinement, source/frame identity and unchanged scientific dimensions.
+3. Assemble about 300 organoids with three image channels plus meshes/localizations. Confirm complete loading, stable positions and eventual visible fallback volumes.
+4. Keep all organoids at roughly 20-50 pixels. After initial preparation, check that adequate previews cause refinements_avoided, Detail/TIFF decoding settles, visibility hits dominate and cube/descriptor allocation counts stay flat.
+5. Zoom gradually into one organoid. Confirm finer regional/native requests resume, genuine 3D detail appears progressively, channels composite correctly and the previous valid texture remains visible throughout.
+6. Zoom out and let interaction settle. Check that sufficient previews suppress further Detail reads and redundant Detail textures retire. Higher-quality Navigation may remain resident under the existing policy.
+7. Rotate continuously while images are loading; check camera responsiveness, fallback coverage, eventual refinement after settle and no flashing/disappearance on cancellation.
+8. Hover/click-select after zoom, rotation, pan, parent/child transforms and resize, including immediately before a normal repaint. Check IDs, selection, highlights and bounded picking passes. Repeat with picking disabled and multiple camera windows.
+9. Hide/show ImagesList and individual datasets during queued/ready work. Close a loading dataset/window. Check canceled invisible work, return-to-view loading, no dangling callbacks and balanced memory.
+10. Apply cropping and arbitrary clipping planes, including a volume crossing the near plane or surrounding the camera. Check visible ROI, selection and fallback continuity.
+11. Compare images against associated meshes/localizations in all five batch rendering modes, especially direct/isosurface depth, multichannel opacity/compositing, fixed frames, 2D data and calibrated child transforms.
+12. Leave the camera stationary until streaming finishes. Check queues drain, deferred uploads publish, no periodic idle redraws remain, and redraw_scheduled/streaming_frames are lower than redundant redraw_requests during bursts. A single upload may exceed the soft time budget.
+
+### Complete modified-file inventory
+
+Production source:
+
+- poca/src/poca/Widgets/DatasetAssemblerWidget.cpp
+- poca/src/poca_core/General/PerformanceProfiler.hpp
+- poca/src/poca_core/General/PerformanceProfiler.cpp
+- poca/src/poca_opengl/OpenGL/Camera.hpp
+- poca/src/poca_opengl/OpenGL/Camera.cpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.hpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.cpp
+- poca/src/poca_opengl/OpenGL/ImageStreamPolicy.hpp
+- poca/src/shaders/maximum_intensity_projection_all.vert
+- poca/src/shaders/alpha_blending.vert
+- poca_extra/src/poca_imageplugin/ImagesListMultiObjectDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImagesListMultiObjectDisplayCommand.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreaming.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreamView.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamView.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamTarget.hpp
+- poca_extra/src/poca_imageplugin/ImageViewRegion.cpp
+- poca_extra/src/poca_loaderTiffFile/TiffStorageImage.hpp
+
+Unexecuted regression fixtures:
+
+- poca_extra/src/poca_imageplugin/ImageStreamingGeometryTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingResponsivenessTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingSchedulingTests.cpp
+
+Documentation/continuity:
+
+- poca/docs/IMAGE_STREAMING_ARCHITECTURE.md
+- CONTINUITY.md
 ## Phase 5.3: persistent whole-image navigation (2026-10-05)
 
 This section supersedes Phase 5.2's permanent 64-edge fallback. Phase 5.2's separation of spatial renderability from settled quality, guarded Detail reuse, debounce, and regional level-zero reads remains applicable. Source changes are implemented; compilation, runtime visual behavior, GL/shader execution and performance remain **UNCONFIRMED**.
