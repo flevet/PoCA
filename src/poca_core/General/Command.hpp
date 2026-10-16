@@ -59,6 +59,13 @@ namespace poca::core {
 		virtual void persistencePhase(const std::string&) {}
 		virtual nlohmann::json writeArray(const std::vector<double>&, const std::vector<uint64_t>&) = 0;
 		virtual std::vector<double> readArray(const nlohmann::json&, const std::vector<uint64_t>&) const = 0;
+		// Exact integer payloads; adapters without this capability fail explicitly.
+		virtual nlohmann::json writeUnsignedArray(const std::vector<uint64_t>&, const std::vector<uint64_t>&) {
+			throw std::runtime_error("Command storage does not support uint64 arrays");
+		}
+		virtual std::vector<uint64_t> readUnsignedArray(const nlohmann::json&, const std::vector<uint64_t>&) const {
+			throw std::runtime_error("Command storage does not support uint64 arrays");
+		}
 	};
 	template<typename T>
 	struct is_c_string_pointer : std::false_type {};
