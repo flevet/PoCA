@@ -51,6 +51,7 @@ set(GEOMETRY_HEADER_FILES
   Geometry/Skeleton.hpp
   Geometry/VoronoiDiagram.hpp
   Geometry/Voronoi3DCellFeatures.hpp
+  Geometry/CGAL_fwd.hpp
   Geometry/CGAL_includes.hpp
   Geometry/CGAL_helpers.hpp
   Geometry/delaunator.hpp

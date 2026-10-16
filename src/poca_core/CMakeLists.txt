@@ -37,6 +37,7 @@ set(GENERAL_HEADER_FILES
   General/ArrayStatistics.hpp
   General/BasicComponent.hpp
   General/BasicComponentList.hpp
+  General/json_fwd.hpp
   General/Command.hpp
   General/CommandableObject.hpp
   General/EquationFit.hpp
