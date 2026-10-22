@@ -82,7 +82,7 @@ namespace poca::opengl {
 			state.requestedLevel == _request.requestedLevel &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
-			state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
+			state.forceLevelZero == _request.forceLevelZero && state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
 
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
 			const bool queuedPriorityIncreased = state.status == LodRequestStatus::Queued && _request.priority > state.priority;
@@ -106,6 +106,7 @@ namespace poca::opengl {
 		state.targetDims = _request.targetDims;
 		state.downsampleFactors = _request.downsampleFactors;
 		state.visible = _request.visible;
+		state.forceLevelZero = _request.forceLevelZero;
 		state.sourceRegion = _request.sourceRegion; state.role = _request.role; state.navigationClass = _request.navigationClass; state.failed = false; state.residentSource = _request.residentSource; state.reductionMode = _request.reductionMode;
 		state.currentFrame = _request.currentFrame; state.sourceDims = _request.sourceDims;
 		state.residentBottom = _request.residentBottom; state.residentTop = _request.residentTop; state.imageBottom = _request.imageBottom; state.imageTop = _request.imageTop;

@@ -58,7 +58,8 @@ namespace poca::opengl {
 		glm::uvec3 sourceDims{ 1u };
 		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
 		std::size_t estimatedPreparedBytes{ 0 }, textureBytes{ 0 }, readerScratchBytes{ 0 };
-		bool regional{ false }, residentSource{ false };
+		bool regional{ false }, residentSource{ false }, forceLevelZero{ false };
+		std::string planFailure; // Planning refusal only; never a reduced forced Detail.
 		ImageStreamRole role{ ImageStreamRole::Detail };
 		uint32_t navigationClass{ 0 };
 		int currentFrame{ -1 };
@@ -106,7 +107,7 @@ namespace poca::opengl {
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		poca::core::Region3D sourceRegion;
-		bool residentSource{ false }, failed{ false };
+		bool residentSource{ false }, failed{ false }, forceLevelZero{ false };
 		ImageStreamRole role{ ImageStreamRole::Detail };
 		uint32_t navigationClass{ 0 };
 		int currentFrame{ -1 };

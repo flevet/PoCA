@@ -971,7 +971,8 @@ namespace poca::core {
 				_com->addParameter("dir", object->getDir());
 		}
 
-		if (object != NULL && object->nbColors() > 1 && m_globalCommands) {
+		// Native-resolution display policy always targets the selected image, including assembled datasets.
+		if (object != NULL && object->nbColors() > 1 && m_globalCommands && _com->nameCommand != "forceLevelZero") {
 			if (object->nbColors() > 1) {
 				std::vector<size_t> indices;
 				MyMultipleObject* multipleObject = dynamic_cast<MyMultipleObject*>(object);

@@ -493,3 +493,28 @@ Future evolution may replace the one-detail tier with a bounded brick cache or s
 - poca/src/poca_opengl/OpenGL/LodUpdateManager.cpp
 - poca/src/poca_opengl/OpenGL/LodUpdateManager.hpp
 - poca/src/shaders/image_stream_sampling.glsl
+
+## Per-image forced native resolution (2026-10-22)
+
+The Image display group exposes **Force full resolution (L0)** immediately below interpolation. It defaults off. The recordable boolean command is `forceLevelZero`; its characteristic lives on each `ImageDisplayCommand`. Normal command-state persistence restores it per image. It is deliberately ignored as a global last-used preference. `ImagesListCommands` forwards the action only to its current image, and Engine excludes this action from global assembled-object broadcasting. Assembled rendering uses the same image-owned planner and setting.
+
+For Detail only, the regional planner selects source level 0 and retains the exact native `sourceRegion` dimensions as `targetDims`. Screen footprint, interactive/display edge caps, and GPU/CPU reduction loops cannot lower this quality. Existing scientific bounding boxes, XYZ calibration/origin, guarded/cropped regions, child transforms and selected scientific Z-frame mapping remain authoritative. Preparation rejects reduced or nonregional forced requests and copies native samples through existing byte-bounded source slabs. Existing signed-int32-to-float GPU display conversion is unchanged; native sampling describes spatial resolution, not a new scalar-format guarantee.
+
+Texture-size, per-texture and per-image GPU share, source-reader scratch, CPU preparation leases, residency admission, and upload limits remain enforced. The renderer has one regional Detail texture per image and does not support multiple GPU bricks for one image. It refuses oversized native regions without allocating/downsampling them, keeps safe emergency/navigation rendering, and displays a reason below the checkbox. Crop or zoom into a smaller region to fit. A reduced texture is never labeled native L0 merely because its source was L0. An already resident genuine native whole-image fallback can satisfy the view without redundant Detail work.
+
+Policy changes cancel incompatible Detail versions in every attached manager, invalidate desired plans, and notify redraw immediately without touching scientific pixels or pyramid caches. Compatible preview/navigation work survives. Immutable request/state policy and upload checks prevent stale results from overriding a newer mode, including ON/OFF/ON sequences. Failed forced preparation/upload is latched against its native region/target; redraw and rotation over the same region do not repeatedly resubmit it. A different region, source, per-image budget, or explicit toggle permits another attempt. Unchecking restores the existing adaptive planner.
+
+With `debugPyramidalRendering` or `lodDebug`, plan/upload output includes source level, target dimensions and `activeNative1to1`. The status label reports preparing, unavailable, or confirmed native sampling and refreshes with image selection/state notifications; no polling timer is added.
+
+Source fixtures registered under `image_regional_streaming` cover:
+
+- Existing auto source/target reduction versus forced native dimensions beyond screen/display/interactive caps.
+- Five scalar types, four reduction settings, every prepared XYZ sample and reads spanning bounded slabs; rejected reduced/positive-level/canceled forced requests.
+- Cropped calibrated 3D regions, selected Z-frame geometry, 2D and 2D-frame depth.
+- GPU axis/per-image/texture limits, reader scratch and total CPU preparation refusal, unchanged native target dimensions, and emergency/navigation plans.
+- Exact native reuse versus adaptive tolerance, policy-only generation changes without changing scientific identity, incompatible pending target rejection.
+- Independent image defaults, current-image forwarding, boolean validation, typed characteristic save/restore.
+- Noninterruptible asynchronous ON/OFF/ON requests: final-version publication, invalidated drained results, released CPU leases.
+- Lazy TIFF forced frame preparation/layout; optional `POCA_ZARR_SOURCE_TESTS` factory-backed OME-Zarr forced frame/calibration preparation for all types.
+
+Manual GPU validation still needs single/assembled TIFF/OME-Zarr views: toggle during reads/interaction, switch images/Z-frames, crop/zoom/rotate, exceed resource limits, and check status/logs and restored adaptive behavior. Full configure in a separate visualization directory found MSVC/Qt but initially could not discover GLEW and then TinySpline after dependency roots were supplied. Direct MSVC syntax checks reached the rendering/UI units but were incomplete due to missing CGAL target definitions and compiler heap exhaustion in template-heavy units; a GLEW/Qt include-order issue found in the new widget include was repaired. No application linking, runtime fixtures, GPU validation, dependency installation, backend rebuild, or existing build-tree modification occurred.
