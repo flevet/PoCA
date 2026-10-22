@@ -2,6 +2,110 @@
 
 Source implementation dated 2026-10-02. Compilation, shader validation and runtime performance are **UNCONFIRMED**. No CMake configure/generate, compilation, linking, installation, application executable, Python script, benchmark, or test was run.
 
+## Resource-aware native Detail and bounded uploads (2026-10-22)
+
+This section supersedes older fixed Detail edge/texture/CPU limits and the original per-image forced-resolution upload implementation below. This change is **source-only**: no configuration, compilation, linking, tests, application execution, benchmark, dependency installation or backend rebuild was performed. All runtime behavior and performance are **UNCONFIRMED**. The reported volume and screenshots were not supplied for measurement.
+
+### Diagnosis and quality policy
+
+The prior source admitted at most a 64 MiB display texture and two complete destination CPU buffers, capped settled Detail at 512 samples, assigned Detail one quarter of each image share, and limited the image GPU pool to min(512 MiB, dedicated VRAM/8). These independent constraints explain why toggling forced L0 could refuse a 1700 x 890 x 321 uint16 ROI even on a GPU with ample free memory. Source level zero only identifies where reads originate; it never establishes the resolution actually uploaded to the GPU.
+
+The per-image recordable/persisted `forceLevelZero` setting remains unchanged and defaults off. EmergencyPreview remains 64-edge; whole-image Navigation remains screen-classed at 128/256 with its existing 64 MiB texture cap and quality hysteresis. Detail retains the existing interaction debounce, regional/guarded ROI, visibility checks and native source reuse. Settled Detail now uses 1.5 times projected screen demand, capped by scientific samples and queried GL_MAX_3D_TEXTURE_SIZE, rather than a fixed 512 edge. A 770-pixel-wide view can request about 1155 X samples when physical aspect and budgets permit. Zoom-in recomputes regional samples and native level sufficiency in XYZ. The per-image memory target is applied before native source selection as well as final texture admission, avoiding unnecessarily fine native reads in assemblies.
+
+Calibrated spatial extent determines sampling pitch and memory-pressure reduction: the finest physical pitch is reduced first. Detail retains native Z when its sample count fits the XY demand (or its calibrated depth independently demands more samples), preventing a 321-plane anisotropic stack from needlessly becoming a very shallow texture. Thumbnail-scale views can still reuse a sufficient 3D preview. Scientific dimensions, source bytes, histograms, calibration, palette, rendering equations and persistence are unchanged.
+
+### Runtime resource admission and assemblies
+
+`LodUpdateManager` queries memory in the current rendering context, at initialization, at most once per second during ordinary visibility checks, and immediately before allocation. NVX uses dedicated and currently available VRAM; the image pool is bounded by half of total dedicated VRAM and current image residency plus three quarters of currently free VRAM. ATI texture-pool hints use half the initial resident-plus-free pool as a stable ceiling, further constrained by current availability. The cap is stable across allocations so counting this manager's own textures cannot recursively inflate it. Other meshes, palettes, contexts, applications and the OS retain headroom.
+
+The extension specifications explicitly describe approximate hints, not allocation guarantees: [NVX_gpu_memory_info](https://registry.khronos.org/OpenGL/extensions/NVX/NVX_gpu_memory_info.txt), [ATI_meminfo](https://registry.khronos.org/OpenGL/extensions/ATI/ATI_meminfo.txt). No memory-query extension means an explicitly reported conservative 512 MiB image pool; this device path does not claim to support the complete 926 MiB texture. No speculative adapter matching, driver installation or global constant increase is used. Hardware dimensions and actual GL allocation/bindless errors remain authoritative.
+
+Automatic images receive fair shares. When forced images are visible, half the image pool is reserved across those images and the other half is shared across all visible images. Detail reserves min(64 MiB, one quarter of its image share) for previews/replacement rather than permanently sacrificing a quarter of a large allocation; preview/navigation retain their existing smaller share. Multiple forced images divide the reserve. Existing previous-frame visibility stabilizes allocation during traversal. Global residency admission counts existing Detail, previews and private in-progress destinations, including the old texture during replacement. Offscreen eviction/grace remains first; an explicitly forced request can then retire lower-priority visible Detail/private uploads through the owning command while preserving their valid previews. Other forced images are protected. Their source pixels, selections, commands and features survive. A changed per-image share invalidates an oversized pending Detail before publication.
+
+Both ordinary rendering and `ImagesListMultiObjectDisplayCommand` already call the same image-owned visibility/planning/publication path, so no second renderer or unmanaged texture cache was added.
+
+### Bounded preparation and atomic publication
+
+`ImageVolumeLodPreparationSession` owns one serial scientific region-reader session per immutable target. Large Detail textures (more than 4 MiB) use destination bricks no larger than the existing 4 MiB scratch target. Source reads remain separately byte-bounded and use resident-authoritative reads, TIFF sessions or OME-Zarr native/full-resolution region readers. Each preparation holds only its brick output, its prepared byte copy, source scratch, optional brick-local reduction accumulators and declared reader scratch. There are no two complete large-volume CPU buffers.
+
+Reduction uses global source-to-destination bins even when a brick splits XYZ at non-divisible boundaries. Nearest, MIP, Average and integral Majority retain their previous equations/tie order. Forced Detail uses source level 0, exact native XYZ dimensions and native samples independent of the chosen reduction mode. uint16 remains GL_R16UI/GL_UNSIGNED_SHORT without normalization. Existing signed-int32 display conversion remains unchanged.
+
+`ImageStreamMemory::Reservation::splitPreparing` keeps reader-session scratch reserved across queued continuations, ready ownership and cancellation. A worker admits the first complete peak lease, then separates the persistent reader lease. Later bricks reserve only their transient preparation peak. CPU reservations remain process-shared. Request versions and a single live brick per image provide backpressure; preparation of the next brick is queued only after successful render-thread consumption of the previous brick. There is no new worker pool, scientific-data cache or independent texture owner. The original four-argument preparation entrypoint remains stable.
+
+`ImageDisplayCommand` owns a private pending texture. Its render-thread upload methods allocate storage once with null glTexImage3D data, then upload prepared bricks with glTexSubImage3D. The private destination counts in `ImageVolumeResidency` immediately after allocation and never appears in a render descriptor or bindless handle before completion. `ImageVolumeUploadProgress` verifies exact version, destination geometry, brick sequence and final coverage. Only the final successful transfer/bindless admission replaces the public Detail handle. A valid preview/current Detail remains available throughout. If overlap with old Detail prevents admission, its command may retire that old Detail while retaining its valid preview and retry allocation. Pixel unpack PBO/binding, alignment, row/image strides, skips and byte-swap state are scoped and restored.
+
+Camera/source/policy changes invalidate obsolete versions; useful guarded regions can survive a small move. Deselecting/hiding cancels preparation and retires pending state through visibility or existing eviction grace. Transfer rejection, GL_OUT_OF_MEMORY, read errors, out-of-order results and stale/canceled targets never publish incomplete Detail. Failures retain available display, report their reason, request the status/cleanup redraw and are latched against the failed region/target. Source, region, share or policy changes allow a retry. No scientific buffers or histogram values are changed by failure handling. Command teardown waits for readers and releases pending/public textures with the existing GL ownership conventions.
+
+For the reported 1700 x 890 x 321 uint16 volume: exact destination storage is **971,346,000 bytes (926.35 MiB)**. Current brick geometry is 1700 x 890 x 1 (321 bricks, about 2.89 MiB each). With the TIFF reader's existing conservative eight-plane scratch declaration, the planned CPU preparation peak is about **32.86 MiB**, excluding unrelated application/backend memory. These are source-policy calculations, not observed working-set or speed measurements.
+
+### Resolution diagnostics and comparison settings
+
+ImageWidget shows a compact resolution label in both automatic and forced modes. Its tooltip and explicit lodDebug/debugPyramidalRendering logs distinguish scientific dimensions/type, displayed role, actual native source level, displayed source ROI, GPU dimensions, physical/render extent, effective scientific XYZ reduction, requested source/ROI/target, GL size limit, required bytes, per-image/total/current-available GPU budgets, private allocation, CPU leases, selected frame and exact reduction/refusal reason. Texture source L0 with reduced GPU dimensions is never reported as native 1:1 sampling. Widget updates use existing notifications, with no status-polling timer; tooltip-only counter changes do not broadcast widget refreshes on every brick.
+
+Diagnostics also report shader, current intensity window, gamma, interpolation and ray steps. **Fiji slice 1/321 corresponds to scientific Z frame 0**, while PoCA's 3D Maximum projection combines samples along rays. Those images are not interchangeable references. Compare the same scientific Z slice first, with identical window, grayscale/palette, gamma, nearest/linear interpolation, calibrated geometry and orthographic view. Then compare an axis-aligned maximum projection over exactly the same Z interval. Existing shaders/ray-marching equations were not changed; native texture residency alone does not establish that a finite ray-step count visited every voxel or that two applications use identical transfer functions.
+
+For aggregate imagePerformance logs, preparation/completion/upload counts now include **brick continuations**; `uploads` counts successful transfers, not only final texture publication. One TIFF session can serve many Detail preparation starts. Existing profiling timers provide CPU-side I/O/preparation/upload durations and decoded-plane/session counts, not GPU completion times or physical disk traffic.
+
+### Regression sources and remaining runtime checks
+
+| Requirement | Added/extended source coverage | Runtime status |
+| --- | --- | --- |
+| 926 MiB L0 resource planning | Metadata-only reported dimensions; simulated 8 GiB dedicated/4 GiB free; exact bytes; no 1 GiB fixture allocation | Not run |
+| Automatic quality above 512, anisotropy, deep zoom | Large projected view and existing responsiveness/native/guard fixtures | Not run |
+| Original 1700 x 890 frame | Every prepared uint16 pixel checked, depth one and native Z selection | Not run |
+| XYZ values/calibration, four reduction modes | Five-type existing forced fixture adapted for bricks; small independent scalar references split at non-divisible XYZ bins | Not run |
+| TIFF and OME-Zarr reads | Single TIFF session across native bricks, exact plane count/order/values; optional factory-backed OME-Zarr brick/geometry checks | Not run |
+| Incremental order/completion | Shared upload-progress validator rejects early-final, out-of-order, stale and duplicate bricks | Not run |
+| Cancellation and allocation rejection | Actual manager continuation pipeline retains preview level until completion; simulated GL_OUT_OF_MEMORY and mid-upload invalidation release leases | Not run |
+| Hundreds of images | 300-entry fair/forced sharing and admission trims Detail while preserving visible previews | Not run |
+| Slice versus MIP reference | Independent CPU nearest/voxel-centre, grayscale window [0,1008], gamma=1 slice/MIP references | Not run; GLSL/readback not certified |
+| Optional real volume | Separate Images Tests action chooses a real unsigned single-channel TIFF; actual async manager/reader/brick/progress path, cancellation, byte count, FNV1a brick-order checksum and elapsed CPU MiB/s | Not run; simulated GPU admission, no GL rendering |
+
+All deterministic cases are registered under `image_regional_streaming`. OME-Zarr factory coverage remains behind the existing POCA_ZARR_SOURCE_TESTS option. The optional real-TIFF action is `image_real_tiff_streaming` and is never part of the lightweight suite. It neither stores a complete fixture nor silently falls back to scientific materialization. No measured performance is available from this source-only task.
+
+After the user's build, verify real GL allocation/readback and render comparisons on supported NVIDIA/AMD devices and the explicit no-query device path. Record first-preview latency, full-L0 completion, peak CPU/VRAM, longest allocation/brick call and navigation frame latency for one image and a 300-image assembly. Inject allocation/transfer failure and cancel after several bricks; repeat frame/policy/source changes, pan outside/inside the guard, crop/zoom, selection removal, and camera/dataset teardown. Compare fixed-frame and axis-aligned MIP GPU pixels to the CPU references with the settings above, then extend to matched non-unit gamma/linear interpolation. No rendered-pixel equivalence is claimed without those checks.
+
+A single regional texture must still fit GL dimensions and current residency; replacement requires overlap headroom or a current preview that allows old Detail to be retired first. If a full volume cannot fit, crop/zoom selects a smaller guarded ROI, or the safe preview/current display remains with a precise refusal. Bricks bound **transfer/preparation**, not draw-time GPU residency: there is no sparse texture, atlas, multi-brick raycaster, PBO/fence framework or persistent TIFF cache. Allocation and one driver upload remain uninterruptible; the 4 ms/four-result/16 MiB frame limits are soft. Scientific I/O is asynchronous and may finish an already-entered reader call before observing cancellation. Actual storage/backend allocations rely on their existing declared scratch/cache contracts.
+
+### Changed files for this task
+
+- CONTINUITY.md
+- poca_extra/src/poca_imageplugin/CMakeLists.txt
+- poca_extra/src/poca_imageplugin/ImageDisplayCommand.hpp
+- poca_extra/src/poca_imageplugin/ImageDisplayResolution.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreaming.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreamUpload.cpp
+- poca_extra/src/poca_imageplugin/ImageDisplayStreamView.cpp
+- poca_extra/src/poca_imageplugin/ImageRegionalLodPlanner.cpp
+- poca_extra/src/poca_imageplugin/ImageRegionalLodPreparation.hpp
+- poca_extra/src/poca_imageplugin/ImageRegionalMajority.hpp
+- poca_extra/src/poca_imageplugin/ImageRegionalReduction.hpp
+- poca_extra/src/poca_imageplugin/ImageSourceSlab.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamingBudgetTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingForceLevelZeroTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingHighResolutionTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingIntegrationTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingNavigationPlanningTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingPreparationTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingResponsivenessTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingSchedulingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTests.hpp
+- poca_extra/src/poca_imageplugin/ImageStreamingTiffTests.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamProgression.cpp
+- poca_extra/src/poca_imageplugin/ImageStreamTarget.hpp
+- poca_extra/src/poca_imageplugin/ImageVolumeLodPreparation.cpp
+- poca_extra/src/poca_imageplugin/ImageVolumeLodPreparation.hpp
+- poca_extra/src/poca_imageplugin/ImageWidget.cpp
+- poca_extra/src/poca_loaderZarrFile/OmeZarrImageTests.cpp
+- poca/docs/IMAGE_STREAMING_ARCHITECTURE.md
+- poca/src/poca_opengl/OpenGL/Camera.cpp
+- poca/src/poca_opengl/OpenGL/ImageStreamMemory.hpp
+- poca/src/poca_opengl/OpenGL/ImageStreamPolicy.hpp
+- poca/src/poca_opengl/OpenGL/ImageVolumeResidency.hpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.cpp
+- poca/src/poca_opengl/OpenGL/LodUpdateManager.hpp
+
 ## Hundreds-of-organoids optimization (2026-10-15)
 
 This section supersedes the earlier unconditional picking pass and the rule that a tiny or budget-limited image must always advance to Detail. Implementation and regression fixtures are source-only. Compilation, shader linking, visual correctness and measured performance remain **UNCONFIRMED**. No application, build, configure step, benchmark or test was executed.
@@ -495,6 +599,8 @@ Future evolution may replace the one-detail tier with a bounded brick cache or s
 - poca/src/shaders/image_stream_sampling.glsl
 
 ## Per-image forced native resolution (2026-10-22)
+
+Historical baseline: fixed texture/CPU refusal and whole-volume upload statements in this section are superseded by the resource-aware Detail section at the top of this document. Its per-image command/persistence and scientific-identity contracts remain active.
 
 The Image display group exposes **Force full resolution (L0)** immediately below interpolation. It defaults off. The recordable boolean command is `forceLevelZero`; its characteristic lives on each `ImageDisplayCommand`. Normal command-state persistence restores it per image. It is deliberately ignored as a global last-used preference. `ImagesListCommands` forwards the action only to its current image, and Engine excludes this action from global assembled-object broadcasting. Assembled rendering uses the same image-owned planner and setting.
 

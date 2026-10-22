@@ -22,11 +22,11 @@ namespace poca::opengl {
 	struct ImageStreamPolicy {
 		std::size_t gpuBytes{ 512ull * 1024 * 1024 };
 		std::size_t cpuBytes{ 256ull * 1024 * 1024 };
-		std::size_t textureBytes{ 64ull * 1024 * 1024 };
+		std::size_t textureBytes{ 64ull * 1024 * 1024 }; // Preview/navigation and legacy-reader ceiling only.
 		std::size_t scratchBytes{ 4ull * 1024 * 1024 }; // Target source slab bytes; included in each CPU lease.
 		std::size_t residentCopyBytes{ 1024ull * 1024 }; // Preserve the small resident whole-preview fast path.
 		std::size_t uploadBytes{ 16ull * 1024 * 1024 };
-		uint32_t previewEdge{ 64 }, navigationMinEdge{ 128 }, navigationEdge{ 256 }, displayEdge{ 512 }, interactiveEdge{ 128 };
+		uint32_t previewEdge{ 64 }, navigationMinEdge{ 128 }, navigationEdge{ 256 }, interactiveEdge{ 128 };
 		double navigationOversampling{ 1.25 }, navigationUpgradeRatio{ 1.5 };
 		uint32_t regionQuantum{ 16 }, offscreenGraceFrames{ 12 };
 		double guardFraction{ .25 }, safeFraction{ .10 };
@@ -36,6 +36,9 @@ namespace poca::opengl {
 		uint32_t streamingRedrawMs{ 16 }, uploadFrameMs{ 4 }; // Soft GUI budgets; camera interaction updates remain immediate.
 	};
 	inline const ImageStreamPolicy& imageStreamPolicy() { static const ImageStreamPolicy policy; return policy; }
+	inline std::size_t imageDetailTextureBudget(std::size_t share) {
+		return share - std::min(imageStreamPolicy().textureBytes, share / 4);
+	}
 	inline std::size_t streamMultiply(std::size_t _a, std::size_t _b) {
 		if (_b && _a > (std::numeric_limits<std::size_t>::max)() / _b)
 			throw std::overflow_error("Image stream byte/element count overflow");
@@ -49,6 +52,13 @@ namespace poca::opengl {
 	inline std::size_t streamBytes(const glm::uvec3& _dims, std::size_t _elementBytes) {
 		if (!_dims.x || !_dims.y || !_dims.z || !_elementBytes) throw std::invalid_argument("Empty image stream dimensions");
 		return streamMultiply(streamMultiply(streamMultiply(_dims.x, _dims.y), _dims.z), _elementBytes);
+	}
+	// Memory hints never guarantee allocation. Leave at least half of total VRAM and
+	// one quarter of currently available memory to meshes, other contexts/apps and OS.
+	inline std::size_t imageRuntimeGpuBudget(std::size_t dedicated, std::size_t available, std::size_t resident) {
+		const auto availableShare = available - available / 4;
+		const auto ceiling = dedicated ? dedicated / 2 : streamAdd(resident, available / 2);
+		return std::min(ceiling, streamAdd(resident, availableShare));
 	}
 	inline bool sameRegion(const poca::core::Region3D& _a, const poca::core::Region3D& _b) {
 		return _a.x == _b.x && _a.y == _b.y && _a.z == _b.z &&

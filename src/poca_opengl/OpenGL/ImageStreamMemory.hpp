@@ -24,6 +24,13 @@ namespace poca::opengl {
 				m_owner->m_usage.ready += m_bytes;
 				m_ready = true;
 			}
+			std::shared_ptr<Reservation> splitPreparing(std::size_t bytes) {
+				std::lock_guard<std::mutex> lock(m_owner->m_mutex);
+				if (m_ready || !bytes || bytes >= m_bytes) throw std::logic_error("Invalid persistent reader reservation split");
+				auto reader = std::make_shared<Reservation>(m_owner, bytes);
+				m_bytes -= bytes; // Aggregate preparing usage is unchanged.
+				return reader;
+			}
 			Reservation(const Reservation&) = delete;
 			Reservation& operator=(const Reservation&) = delete;
 		private:

@@ -643,10 +643,7 @@ namespace poca::opengl {
 		}
 
 //#ifdef DEBUG
-		if (GLEW_NVX_gpu_memory_info) {
-			GLint dedicatedKiB = 0; glGetIntegerv(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, &dedicatedKiB);
-			if (dedicatedKiB > 0) m_lodUpdateManager->residency().setBudget(std::min(imageStreamPolicy().gpuBytes, std::size_t(dedicatedKiB) * 1024 / 8));
-		}
+		m_lodUpdateManager->refreshGpuBudget();
 		const unsigned char* glvendor = glGetString(GL_VENDOR);
 		const unsigned char* glrend = glGetString(GL_RENDERER);
 		const unsigned char* glver = glGetString(GL_VERSION);

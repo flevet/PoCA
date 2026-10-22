@@ -14,6 +14,7 @@
 #define LodUpdateManager_h__
 
 #include <cstdint>
+#include <chrono>
 #include <ostream>
 #include <string>
 #include <condition_variable>
@@ -58,7 +59,12 @@ namespace poca::opengl {
 		glm::uvec3 sourceDims{ 1u };
 		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
 		std::size_t estimatedPreparedBytes{ 0 }, textureBytes{ 0 }, readerScratchBytes{ 0 };
-		bool regional{ false }, residentSource{ false }, forceLevelZero{ false };
+		bool regional{ false }, residentSource{ false }, forceLevelZero{ false }, incremental{ false };
+		uint64_t chunkIndex{ 0 };
+		std::shared_ptr<ImageStreamMemory::Reservation> readerReservation;
+		poca::core::Region3D outputRegion; // Internal bounded destination brick; empty means whole target.
+		std::size_t textureBudgetBytes{ 0 };
+		std::string qualityReason;
 		std::string planFailure; // Planning refusal only; never a reduced forced Detail.
 		ImageStreamRole role{ ImageStreamRole::Detail };
 		uint32_t navigationClass{ 0 };
@@ -88,7 +94,9 @@ namespace poca::opengl {
 		ImageStreamRole role{ ImageStreamRole::Detail };
 		uint32_t navigationClass{ 0 };
 		std::size_t preparedBytes{ 0 };
-		std::shared_ptr<ImageStreamMemory::Reservation> memoryReservation;
+		bool moreChunks{ false };
+		std::shared_ptr<ImageLodRequest> continuation; // Same immutable version, next brick; no payload cycle.
+		std::shared_ptr<ImageStreamMemory::Reservation> memoryReservation, readerReservation;
 		std::shared_ptr<void> payload;
 		std::function<bool(const ImageLodReady&)> uploadCallback;
 	
@@ -107,13 +115,15 @@ namespace poca::opengl {
 		glm::uvec3 targetDims{ 1u, 1u, 1u };
 		glm::uvec3 downsampleFactors{ 1u, 1u, 1u };
 		poca::core::Region3D sourceRegion;
-		bool residentSource{ false }, failed{ false }, forceLevelZero{ false };
+		bool residentSource{ false }, failed{ false }, forceLevelZero{ false }, incremental{ false };
+		std::size_t textureBytes{ 0 };
 		ImageStreamRole role{ ImageStreamRole::Detail };
 		uint32_t navigationClass{ 0 };
 		int currentFrame{ -1 };
 		glm::uvec3 sourceDims{ 1u };
 		glm::vec3 residentBottom{ 0.f }, residentTop{ 1.f }, imageBottom{ 0.f }, imageTop{ 1.f };
 		std::string reductionMode;
+		std::string failureReason;
 		bool visible{ true };
 	
 		friend std::ostream& operator<<(std::ostream&, const ImageLodState&);
@@ -134,6 +144,12 @@ namespace poca::opengl {
 		void cancelInvisible();
 		bool isCurrent(const ImageLodReady&) const;
 		ImageVolumeResidency& residency() { return m_residency; }
+		void refreshGpuBudget(); // Current rendering context only; throttled outside allocation admission.
+		void refreshGpuBudgetForAllocation();
+		const std::string& gpuBudgetSource() const { return m_gpuBudgetSource; }
+		std::size_t availableGpuBytes() const { return m_availableGpuBytes; }
+		bool gpuMemoryHintAvailable() const { return m_gpuMemoryHintAvailable; }
+		void reportFailure(uint64_t, uint32_t, const std::string&);
 		ImageStreamMemory::Usage memoryUsage() const { return m_memory->usage(); }
 		void clear();
 
@@ -164,6 +180,10 @@ namespace poca::opengl {
 
 		std::shared_ptr<ImageStreamMemory> m_memory;
 		ImageVolumeResidency m_residency;
+		std::string m_gpuBudgetSource{ "unqueried" };
+		bool m_gpuMemoryHintAvailable{ false };
+		std::size_t m_availableGpuBytes{ 0 }, m_gpuCapacityCeiling{ 0 };
+		std::chrono::steady_clock::time_point m_lastGpuQuery{};
 		std::unordered_map<uint64_t, unsigned int> m_inFlight;
 		uint32_t m_nextVersion{ 0 };
 		Camera* m_camera{ nullptr };

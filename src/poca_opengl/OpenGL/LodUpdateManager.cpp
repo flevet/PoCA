@@ -16,6 +16,8 @@
 #include <chrono>
 #include <iostream>
 #include <QtCore/QMetaObject>
+#include <QtCore/QByteArray>
+#include <QtGui/QOpenGLContext>
 
 #include <General/Engine.hpp>
 #include <General/PerformanceProfiler.hpp>
@@ -66,6 +68,57 @@ namespace poca::opengl {
 				worker.join();
 	}
 
+	void LodUpdateManager::refreshGpuBudget()
+	{
+		const auto now = std::chrono::steady_clock::now();
+		if (now - m_lastGpuQuery < std::chrono::seconds(1)) return;
+		refreshGpuBudgetForAllocation();
+	}
+
+	void LodUpdateManager::refreshGpuBudgetForAllocation()
+	{
+		m_lastGpuQuery = std::chrono::steady_clock::now();
+		std::size_t dedicated = 0, available = 0;
+		bool measured = false;
+		// Check extensions against the currently bound OpenGL context instead of
+		// using optional GLEW_NVX_*/GLEW_ATI_* compile-time symbols. This is the
+		// same Qt-based extension test already used by DatasetAssemblerWidget.
+		QOpenGLContext* context = QOpenGLContext::currentContext();
+		if (context && context->hasExtension(QByteArrayLiteral("GL_NVX_gpu_memory_info"))) {
+			GLint totalKiB = 0, freeKiB = 0;
+			glGetIntegerv(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, &totalKiB);
+			glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &freeKiB);
+			if (totalKiB > 0 && freeKiB >= 0) {
+				dedicated = streamMultiply(std::size_t(totalKiB), 1024); available = streamMultiply(std::size_t(freeKiB), 1024);
+				measured = true; m_gpuBudgetSource = "NVX dedicated/current-available VRAM";
+			}
+		}
+		else if (context && context->hasExtension(QByteArrayLiteral("GL_ATI_meminfo"))) {
+			GLint freeKiB[4]{ 0, 0, 0, 0 }; glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, freeKiB);
+			if (freeKiB[0] >= 0) {
+				available = streamMultiply(std::size_t(freeKiB[0]), 1024);
+				measured = true; m_gpuBudgetSource = "ATI current-free texture pool; total VRAM unknown";
+			}
+		}
+		m_availableGpuBytes = available; m_gpuMemoryHintAvailable = measured;
+		if (measured) {
+			const auto dynamic = imageRuntimeGpuBudget(dedicated, available, m_residency.bytes());
+			if (!m_gpuCapacityCeiling) m_gpuCapacityCeiling = dedicated ? dedicated / 2 : streamAdd(m_residency.bytes(), available) / 2;
+			m_residency.setBudget(std::min(dynamic, m_gpuCapacityCeiling));
+		}
+		else {
+			m_gpuBudgetSource = "VRAM query unavailable; conservative 512 MiB image residency policy";
+			m_residency.setBudget(imageStreamPolicy().gpuBytes);
+		}
+	}
+
+	void LodUpdateManager::reportFailure(uint64_t id, uint32_t version, const std::string& reason)
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_states.find(id);
+		if (it != m_states.end() && it->second.latestVersion == version) it->second.failureReason = reason;
+	}
+
 	void LodUpdateManager::setCamera(Camera* _camera)
 	{
 		m_camera = _camera;
@@ -82,7 +135,7 @@ namespace poca::opengl {
 			state.requestedLevel == _request.requestedLevel &&
 			state.targetDims == _request.targetDims &&
 			state.downsampleFactors == _request.downsampleFactors &&
-			state.forceLevelZero == _request.forceLevelZero && state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
+			state.forceLevelZero == _request.forceLevelZero && state.incremental == _request.incremental && state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
 
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
 			const bool queuedPriorityIncreased = state.status == LodRequestStatus::Queued && _request.priority > state.priority;
@@ -101,12 +154,12 @@ namespace poca::opengl {
 			return state.latestVersion;
 		}
 
-		state.requestedLevel = _request.requestedLevel; state.viewGeneration = _request.viewGeneration;
+		state.failureReason.clear(); state.requestedLevel = _request.requestedLevel; state.viewGeneration = _request.viewGeneration;
 		state.priority = _request.priority; state.effectiveTarget = _request.effectiveTarget;
 		state.targetDims = _request.targetDims;
 		state.downsampleFactors = _request.downsampleFactors;
 		state.visible = _request.visible;
-		state.forceLevelZero = _request.forceLevelZero;
+		state.forceLevelZero = _request.forceLevelZero; state.incremental = _request.incremental; state.textureBytes = _request.textureBytes;
 		state.sourceRegion = _request.sourceRegion; state.role = _request.role; state.navigationClass = _request.navigationClass; state.failed = false; state.residentSource = _request.residentSource; state.reductionMode = _request.reductionMode;
 		state.currentFrame = _request.currentFrame; state.sourceDims = _request.sourceDims;
 		state.residentBottom = _request.residentBottom; state.residentTop = _request.residentTop; state.imageBottom = _request.imageBottom; state.imageTop = _request.imageTop;
@@ -416,16 +469,36 @@ namespace poca::opengl {
 			// A single GL upload cannot be preempted. Always permit one, then retain
 			// unprocessed results/reservations for a later GUI frame.
 			if (processed && std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= imageStreamPolicy().uploadFrameMs) break;
-			const auto& ready = readyUploads[processed];
+			auto& ready = readyUploads[processed];
 			if (!isCurrent(ready) || !m_residency.visible(ready.imageId)) continue;
 			if (!ready.uploadCallback) throw std::logic_error("Image stream has no render-thread upload callback");
 			const bool changed = ready.uploadCallback(ready);
 			if (changed) profiler.addImageMetric(ImageMetric::Uploads);
 			{ std::lock_guard<std::mutex> lock(m_mutex); auto it = m_states.find(ready.imageId);
-				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) it->second.failed = !changed; }
-			ImageLodState current;
-			if (state(ready.imageId, current))
-				markUploaded(ready.imageId, changed ? ready.requestedLevel : current.currentDisplayedLevel, ready.requestVersion);
+				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) {
+					it->second.failed = !changed;
+					if (!changed) {
+						if (it->second.failureReason.empty()) it->second.failureReason = "Render-thread publication rejected this target";
+						requestRedrawUnsafe();
+					}
+				}
+			}
+			if (changed && ready.moreChunks) {
+				if (!ready.continuation) throw std::logic_error("Incremental upload has no continuation");
+				// One live brick per image. Release its bytes/lease before admitting its successor.
+				ready.payload.reset(); ready.memoryReservation.reset();
+				std::lock_guard<std::mutex> lock(m_mutex);
+				auto it = m_states.find(ready.imageId);
+				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) {
+					it->second.status = LodRequestStatus::Queued;
+					m_requests.push(std::move(*ready.continuation)); m_condition.notify_all();
+				}
+			}
+			else {
+				ImageLodState current;
+				if (state(ready.imageId, current))
+					markUploaded(ready.imageId, changed ? ready.requestedLevel : current.currentDisplayedLevel, ready.requestVersion);
+			}
 			uploaded = uploaded || changed;
 		}
 		if (processed < readyUploads.size()) {
@@ -453,15 +526,19 @@ namespace poca::opengl {
 			auto next = m_requests.top(); m_requests.pop();
 			auto state = m_states.find(next.imageId);
 			if (state == m_states.end() || state->second.latestVersion != next.requestVersion) continue;
-			if (!next.estimatedPreparedBytes || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes) {
+			if (!next.estimatedPreparedBytes || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes || (next.incremental && next.readerScratchBytes >= next.estimatedPreparedBytes)) {
 				state->second.status = LodRequestStatus::Idle;
 				std::cerr << "[PoCA][ImageStream] Rejected unbounded CPU preparation" << std::endl;
 				continue;
 			}
 			// A canceled reader can still be inside an uninterruptible call. Keep only
 			// its latest queued successor, and let other images obtain first pixels.
-			if (m_inFlight.find(next.imageId) == m_inFlight.end()) _reservation = m_memory->reserve(next.estimatedPreparedBytes);
-			if (_reservation) { _request = std::move(next); found = true; break; }
+			if (m_inFlight.find(next.imageId) == m_inFlight.end()) _reservation = m_memory->reserve(next.estimatedPreparedBytes - (next.readerReservation ? next.readerScratchBytes : 0));
+			if (_reservation) {
+				if (next.incremental && next.readerScratchBytes && !next.readerReservation)
+					next.readerReservation = _reservation->splitPreparing(next.readerScratchBytes);
+				_request = std::move(next); found = true; break;
+			}
 			deferred.push_back(std::move(next));
 		}
 		for (auto& queued : deferred) m_requests.push(std::move(queued));
@@ -491,20 +568,27 @@ namespace poca::opengl {
 			ready.imageId = request.imageId; ready.requestedLevel = request.requestedLevel;
 			ready.requestVersion = request.requestVersion; ready.viewGeneration = request.viewGeneration; ready.visible = request.visible;
 			ready.role = request.role; ready.navigationClass = request.navigationClass;
-			ready.uploadCallback = request.uploadCallback;
+			ready.uploadCallback = request.uploadCallback; ready.readerReservation = request.readerReservation;
 			poca::core::PerformanceProfiler::ImageTimer preparationTimer(ImageMetric::PreparationUs, int(request.role));
 			poca::core::PerformanceProfiler::instance().addImageMetric(request.role == ImageStreamRole::EmergencyPreview ?
 				ImageMetric::PreviewPreparations : (request.role == ImageStreamRole::Navigation ? ImageMetric::NavigationPreparations : ImageMetric::DetailPreparations));
 			bool success = false;
+			std::string failureReason;
 			try {
 				if (request.prepareCallback) success = request.prepareCallback(request, ready);
+				if (!success) failureReason = "Source preparation returned no payload";
 				if (success) {
+					if (ready.moreChunks) {
+						ready.continuation = std::make_shared<ImageLodRequest>(request);
+						++ready.continuation->chunkIndex;
+					}
 					reservation->ready(ready.preparedBytes);
 					ready.memoryReservation = std::move(reservation);
 				}
 			}
 			catch (const ImageStreamCanceled&) { ready.obsolete = true; }
 			catch (const std::exception& error) {
+				failureReason = error.what();
 				std::cerr << "[PoCA][ImageStream][read] image=" << request.imageId << " level=" << request.requestedLevel << ": " << error.what() << std::endl;
 			}
 			{
@@ -519,12 +603,16 @@ namespace poca::opengl {
 				if (current) {
 					state->second.status = success ? LodRequestStatus::Ready : LodRequestStatus::Idle;
 					state->second.failed = !success && !ready.obsolete;
+					state->second.failureReason = failureReason;
 					if (success) {
 						poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::Completions);
 						m_ready.push_back(std::move(ready));
 					}
 					else if (state->second.failed) poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::Failures);
 				}
+				// Release this worker's reader/session ownership before forget() can return.
+				// A successful continuation already owns its own copy in m_ready.
+				request.prepareCallback = {}; request.readerReservation.reset(); ready.readerReservation.reset(); ready.continuation.reset();
 				auto flight = m_inFlight.find(request.imageId);
 				if (--flight->second == 0) m_inFlight.erase(flight);
 				m_condition.notify_all();
