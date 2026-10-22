@@ -213,6 +213,19 @@ MyMultipleObject::~MyMultipleObject()
 		delete obj;
 }
 
+std::vector<std::unique_ptr<poca::core::MyObjectInterface>> MyMultipleObject::releaseObjects()
+{
+	std::vector<std::unique_ptr<poca::core::MyObjectInterface>> children;
+	children.reserve(m_colors.size()); // If allocation fails, this object retains ownership.
+	for (auto* child : m_colors) children.emplace_back(child);
+	m_colors.clear();
+	m_gridBBoxes.clear();
+	m_hierarchy.clear();
+	m_selectedObjectIndices.clear();
+	m_currentColor = 0;
+	return children;
+}
+
 float MyMultipleObject::getX() const
 {
 	float x = FLT_MAX;

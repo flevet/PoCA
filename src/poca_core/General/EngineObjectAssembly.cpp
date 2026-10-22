@@ -36,6 +36,12 @@ namespace poca::core {
 	std::unique_ptr<MyObjectInterface> Engine::assembleMultipleObject(std::vector<std::unique_ptr<MyObjectInterface>> _children,
 		std::vector<std::unique_ptr<BasicComponentInterface>> _components)
 	{
+		return assembleMultipleObject(std::move(_children),std::move(_components),false);
+	}
+
+	std::unique_ptr<MyObjectInterface> Engine::assembleMultipleObject(std::vector<std::unique_ptr<MyObjectInterface>> _children,
+		std::vector<std::unique_ptr<BasicComponentInterface>> _components, bool _batchComponentRendering)
+	{
 		if (_children.empty()) throw std::invalid_argument("Multiple dataset has no children");
 		std::vector<MyObjectInterface*> children;
 		for (const auto& child : _children) {
@@ -45,7 +51,7 @@ namespace poca::core {
 		}
 		// Constructor success is the ownership handoff; failure retains all owners.
 		// No grid recomputation: the loader restores the persisted arrangement.
-		auto object = std::make_unique<MyMultipleObject>(children,false,false);
+		auto object = std::make_unique<MyMultipleObject>(children,_batchComponentRendering,false);
 		for (auto& child : _children) child.release();
 		std::set<std::string> names;
 		for (const auto& component : _components)

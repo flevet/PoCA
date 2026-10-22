@@ -40,6 +40,7 @@
 #include "OpenGL/Camera.hpp"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -113,6 +114,8 @@ public:
 	bool hasSelectedObjectIndices() const { return !m_selectedObjectIndices.empty(); }
 	void setBatchComponentRendering(const bool _batch) { m_batchComponentRendering = _batch; }
 	bool batchComponentRendering() const { return m_batchComponentRendering; }
+	// Move out all owned children, leaving a safely destructible empty container.
+	std::vector<std::unique_ptr<poca::core::MyObjectInterface>> releaseObjects();
 
 protected:
 	std::vector <poca::core::MyObjectInterface*> m_colors;

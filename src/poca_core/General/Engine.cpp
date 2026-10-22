@@ -33,6 +33,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 #include <QtCore/QDir>
 #include <QtWidgets/QApplication>
 #include <QtCore/QPluginLoader>
@@ -448,6 +449,19 @@ namespace poca::core {
 		m_currentDataset = &m_datasets.back();
 
 		return wobj;
+	}
+
+	std::unique_ptr<MyObjectInterface> Engine::reconstructDataObject(const QString& _filename, poca::core::CommandInfo* _command)
+	{
+		const QFileInfo file(_filename);
+		if (!file.exists()) throw std::runtime_error("Dataset path does not exist: " + _filename.toStdString());
+		for (LoaderInterface* loader : m_loadersFile) {
+			if (!poca::core::utils::isExtensionInList(file.suffix(), loader->extensions())) continue;
+			auto* extension = qobject_cast<UnregisteredObjectLoaderInterface*>(dynamic_cast<QObject*>(loader));
+			if (extension) if (auto* object = extension->reconstructObject(_filename, _command))
+				return std::unique_ptr<MyObjectInterface>(object);
+		}
+		throw std::runtime_error("No installed loader supports unregistered reconstruction of " + _filename.toStdString());
 	}
 
 	const bool Engine::loadDataAndAddToObject(const QString& _filename, poca::core::MyObjectInterface* _obj, poca::core::CommandInfo* _command)

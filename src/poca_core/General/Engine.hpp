@@ -93,6 +93,7 @@ namespace poca::core {
 		void addGUI(QTabWidget*);
 
 		MyObjectInterface* loadDataAndCreateObject(const QString&, poca::core::CommandInfo* = NULL);
+		std::unique_ptr<MyObjectInterface> reconstructDataObject(const QString&, poca::core::CommandInfo* = NULL);
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);
 		MyObjectInterface* createObject(const std::string&, const std::string&, BasicComponentInterface* = NULL);
 		// Whole-dataset assembly: owned components are ready before one registration.
@@ -100,6 +101,9 @@ namespace poca::core {
 		std::unique_ptr<MyObjectInterface> assembleObject(const std::string&, const std::string&, std::vector<std::unique_ptr<BasicComponentInterface>>);
 		std::unique_ptr<MyObjectInterface> assembleMultipleObject(std::vector<std::unique_ptr<MyObjectInterface>>,
 			std::vector<std::unique_ptr<BasicComponentInterface>> = {});
+		// Configure batch renderers before plugins install their display commands.
+		std::unique_ptr<MyObjectInterface> assembleMultipleObject(std::vector<std::unique_ptr<MyObjectInterface>>,
+			std::vector<std::unique_ptr<BasicComponentInterface>>, bool batchComponentRendering);
 		MyObjectInterface* registerObject(std::unique_ptr<MyObjectInterface>);
 		MyObjectInterface* createObjectFromImages(const std::string&, const std::string&, const std::vector<std::pair<ImageInterface*, std::string>>&);
 		const bool addComponentToObject(MyObjectInterface*, BasicComponentInterface*);

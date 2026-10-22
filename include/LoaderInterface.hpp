@@ -58,12 +58,25 @@ public:
 	virtual poca::core::MyObjectInterface* loadObject(const QString&, poca::core::CommandInfo* = NULL) { return nullptr; }
 };
 
+// An optional extension interface, not a new LoaderInterface virtual method:
+// existing binary loader plugins keep their original ABI/vtable.
+class UnregisteredObjectLoaderInterface
+{
+public:
+    virtual ~UnregisteredObjectLoaderInterface() = default;
+    // Transfers ownership to the caller. Must NOT register with Engine.
+    virtual poca::core::MyObjectInterface* reconstructObject(const QString&, poca::core::CommandInfo* = NULL) = 0;
+};
+
+
 
 QT_BEGIN_NAMESPACE
 
 #define LoaderInterface_iid "POCA.LoaderInterface_iid"
 
 Q_DECLARE_INTERFACE(LoaderInterface, LoaderInterface_iid)
+#define UnregisteredObjectLoaderInterface_iid "POCA.UnregisteredObjectLoaderInterface_iid"
+Q_DECLARE_INTERFACE(UnregisteredObjectLoaderInterface, UnregisteredObjectLoaderInterface_iid)
 QT_END_NAMESPACE
 
 //! [0]
