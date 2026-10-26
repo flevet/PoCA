@@ -30,6 +30,7 @@
 * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QImage>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -164,14 +165,19 @@ namespace poca::opengl {
 	BasicDisplayCommand::BasicDisplayCommand(poca::core::BasicComponentInterface* _component, const std::string& _name) : poca::core::Command(_name), m_pickFBO(NULL), m_wImage(0), m_hImage(0), m_idSelection(-1), m_pickingEnabled(true)
 	{
 		m_component = _component;
+		if (_name == "ObjectListDisplayCommand") m_pickProfileFamily = PickProfiler::PickFamily::ObjectList;
+		else if (_name == "DetectionSetDisplayCommand") m_pickProfileFamily = PickProfiler::PickFamily::DetectionSet;
 	}
 
 	BasicDisplayCommand::BasicDisplayCommand(const BasicDisplayCommand& _o) :Command(_o), m_component(_o.m_component), m_pickFBO(NULL), m_wImage(0), m_hImage(0), m_idSelection(_o.m_idSelection), m_pickingEnabled(_o.m_pickingEnabled)
 	{
+		m_pickProfileFamily = _o.m_pickProfileFamily;
 	}
 
 	BasicDisplayCommand::~BasicDisplayCommand()
 	{
+		releasePickingGpuProfile();
+		releasePickingProfile();
 		if (m_pickFBO != NULL)
 			delete m_pickFBO;
 		m_pickFBO = NULL;
@@ -188,6 +194,7 @@ namespace poca::opengl {
 			updatePickingFBO(w, h);
 		}
 		else if (_infos->nameCommand == "pick") {
+			PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::ComponentsVisited);
 			if (!m_pickingEnabled) return;
 			if (!_infos->hasParameter("x") || !_infos->hasParameter("y"))
 				return;
@@ -196,6 +203,8 @@ namespace poca::opengl {
 			pick(x, y, saveImage);
 		}
 		else if (_infos->nameCommand == "freeGPU") {
+			releasePickingGpuProfile();
+			releasePickingProfile();
 			if (m_pickFBO != NULL)
 				delete m_pickFBO;
 			m_pickFBO = NULL;
@@ -226,19 +235,31 @@ namespace poca::opengl {
 	{
 		int sizeImage = m_wImage * m_hImage;
 		if (m_pickFBO == NULL) return;
-		m_pickFBO->bind();
+		const bool profile = m_pickProfileFamily != PickProfiler::PickFamily::None && PickProfiler::renderInstance().renderMetricsEnabled();
+		const bool bound = m_pickFBO->bind();
+		if (profile) {
+			PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::FboBindAttempts);
+			PickProfiler::pickCount(m_pickProfileFamily, bound ? PickProfiler::PickMetric::FboBinds : PickProfiler::PickMetric::FboBindFailures);
+		}
 		glReadBuffer(GL_COLOR_ATTACHMENT0);
 		float pixel, * pixs = NULL;
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glReadPixels(_x, m_hImage - _y - 1, 1, 1, GL_RED, GL_FLOAT, &pixel);
+		{
+			PickProfiler::RenderTimer timer(PickProfiler::pickMetric(m_pickProfileFamily, PickProfiler::PickMetric::ReadpixelsUs), profile);
+			if (profile) PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::ReadpixelsCalls);
+			glReadPixels(_x, m_hImage - _y - 1, 1, 1, GL_RED, GL_FLOAT, &pixel);
+		}
 		if (_saveImage) {
 			pixs = new float[sizeImage];
+			PickProfiler::RenderTimer timer(PickProfiler::pickMetric(m_pickProfileFamily, PickProfiler::PickMetric::ReadpixelsUs), profile);
+			if (profile) PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::ReadpixelsCalls);
 			glReadPixels(0, 0, m_wImage, m_hImage, GL_RED, GL_FLOAT, pixs);
 		}
 		glReadBuffer(GL_NONE);
 		m_pickFBO->release();
 
 		m_idSelection = (int)(pixel - 1);
+		if (profile) PickProfiler::pickCount(m_pickProfileFamily, m_idSelection >= 0 ? PickProfiler::PickMetric::ReadHits : PickProfiler::PickMetric::ReadMisses);
 
 		if (_saveImage) {
 			QImage image2 = QImage(m_wImage, m_hImage, QImage::Format_Grayscale16);
@@ -336,12 +357,40 @@ namespace poca::opengl {
 		return new BasicDisplayCommand(*this);
 	}
 
+	void BasicDisplayCommand::profilePickingCamera(Camera* camera)
+	{
+		if (!PickProfiler::renderInstance().renderMetricsEnabled()) return;
+		for (const auto& existing : m_pickProfileCameras) if (existing.data() == camera) return;
+		m_pickProfileCameras.erase(std::remove_if(m_pickProfileCameras.begin(), m_pickProfileCameras.end(), [](const auto& value) { return value.isNull(); }), m_pickProfileCameras.end());
+		m_pickProfileCameras.emplace_back(camera);
+	}
+	void BasicDisplayCommand::releasePickingGpuProfile()
+	{
+		for (auto& camera : m_pickProfileCameras) if (camera) camera->releasePickingGpuTimers();
+		m_pickProfileCameras.clear();
+	}
+
+	void BasicDisplayCommand::releasePickingProfile()
+	{
+		if (!m_pickProfileLive) return;
+		PickProfiler::RenderFrame resource(0, false, false, false, 0, m_wImage, m_hImage, false, "pick_resource",
+			!PickProfiler::renderInstance().hasRenderRecord());
+		PickProfiler::pickFboChange(m_pickProfileFamily, -1, m_pickProfileBytes, m_pickProfileKnown);
+		m_pickProfileLive = m_pickProfileKnown = false; m_pickProfileBytes = 0;
+	}
+
 	void BasicDisplayCommand::updatePickingFBO(const int _w, const int _h)
 	{
 		if (_w <= 0 || _h <= 0)
 			return;
 		if (m_pickFBO != NULL && m_wImage == _w && m_hImage == _h)
 			return;
+		const bool targeted = m_pickProfileFamily != PickProfiler::PickFamily::None;
+		const bool profile = targeted && PickProfiler::renderInstance().renderMetricsEnabled();
+		PickProfiler::RenderFrame resource(0, false, false, false, 0, _w, _h, false, "pick_resource", profile && !PickProfiler::renderInstance().hasRenderRecord());
+		PickProfiler::RenderTimer timer(PickProfiler::pickMetric(m_pickProfileFamily, PickProfiler::PickMetric::FboOutsideDrawCpuUs), profile && !PickProfiler::renderInstance().inPickScope(m_pickProfileFamily));
+		const bool reallocation = m_pickProfileLive;
+		releasePickingProfile();
 		m_wImage = _w;
 		m_hImage = _h;
 		if (m_pickFBO != NULL)
@@ -352,6 +401,21 @@ namespace poca::opengl {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glBindTexture(GL_TEXTURE_2D, 0);
+		if (targeted && m_pickFBO->isValid()) {
+			m_pickProfileLive = true;
+			if (profile && QOpenGLContext::currentContext()) {
+				GLint previous = 0, depthBits = 0;
+				glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous);
+				glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_pickFBO->handle());
+				glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE, &depthBits);
+				glBindFramebuffer(GL_DRAW_FRAMEBUFFER, previous);
+				m_pickProfileKnown = depthBits > 0;
+				if (m_pickProfileKnown) m_pickProfileBytes = uint64_t(_w) * uint64_t(_h) * (4 + (uint64_t(depthBits) + 7) / 8);
+				PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::FboAllocations);
+				if (reallocation) PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::FboReallocations);
+			}
+			PickProfiler::pickFboChange(m_pickProfileFamily, 1, m_pickProfileBytes, m_pickProfileKnown);
+		}
 	}
 }
 

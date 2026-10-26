@@ -614,8 +614,129 @@ namespace poca::opengl {
 		this->setFocusPolicy(Qt::StrongFocus);
 	}
 
+	Camera::PickingGpuScope::PickingGpuScope(Camera* camera, PickProfiler::PickFamily family) : m_camera(camera)
+	{
+		if (PickProfiler::renderInstance().renderMetricsEnabled()) m_slot = camera->beginPickingGpuTimer(family);
+	}
+	Camera::PickingGpuScope::~PickingGpuScope() { stop(); }
+	void Camera::PickingGpuScope::stop() { if (m_slot >= 0) { m_camera->endPickingGpuTimer(m_slot); m_slot = -1; } }
+
+	int Camera::beginPickingGpuTimer(PickProfiler::PickFamily family)
+	{
+		auto* current = QOpenGLContext::currentContext();
+		const auto format = current ? current->format() : QSurfaceFormat{};
+		const bool coreTimer = format.majorVersion() > 3 || (format.majorVersion() == 3 && format.minorVersion() >= 3);
+		if (QThread::currentThread() != thread() || !current || current != context() || current->isOpenGLES() ||
+			!(coreTimer || current->hasExtension(QByteArrayLiteral("GL_ARB_timer_query"))) ||
+			!glGenQueries || !glQueryCounter || !glGetQueryiv || !glGetQueryObjectiv || !glGetQueryObjectui64v || !glDeleteQueries) {
+			PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuUnavailable); return -1;
+		}
+		if (!m_pickingGpuContext) {
+			for (auto& sample : m_pickingGpuSamples) sample = PickingGpuSample{};
+			m_pickingGpuCounterBits = -1;
+		}
+		if (m_pickingGpuContext && m_pickingGpuContext.data() != current) {
+			PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuUnavailable); return -1;
+		}
+		m_pickingGpuContext = current;
+		if (m_pickingGpuCounterBits < 0) glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &m_pickingGpuCounterBits);
+		if (!m_pickingGpuCounterBits) { PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuUnavailable); return -1; }
+		PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuSupported);
+		pollPickingGpuTimers();
+		const auto source = PickProfiler::renderInstance().currentRenderId();
+		if (m_pickingGpuSampleRecord != source) { m_pickingGpuSampleRecord = source; m_pickingGpuInRecord.fill(0); }
+		// Fixed lifetime budget; at most two component intervals on every thirtieth record.
+		if (!source || source % 30 || m_pickingGpuSubmitted >= 128 || m_pickingGpuInRecord[size_t(family)] >= 1) {
+			PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuSkipped); return -1;
+		}
+		for (size_t i = 0; i < m_pickingGpuSamples.size(); ++i) {
+			auto& sample = m_pickingGpuSamples[i];
+			if (sample.pending) continue;
+			if (!sample.queries[0]) glGenQueries(2, sample.queries);
+			if (!sample.queries[0] || !sample.queries[1]) { PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuUnavailable); return -1; }
+			sample.source = source; sample.family = family; sample.session = PickProfiler::renderInstance().renderSessionId();
+			glQueryCounter(sample.queries[0], GL_TIMESTAMP);
+			++m_pickingGpuSubmitted; ++m_pickingGpuInRecord[size_t(family)];
+			PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuQueries);
+			return int(i);
+		}
+		PickProfiler::pickCount(family, PickProfiler::PickMetric::GpuSkipped); return -1;
+	}
+	void Camera::endPickingGpuTimer(int slot)
+	{
+		auto& sample = m_pickingGpuSamples[size_t(slot)];
+		if (QOpenGLContext::currentContext() != m_pickingGpuContext.data()) return;
+		glQueryCounter(sample.queries[1], GL_TIMESTAMP); sample.pending = true;
+		PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuQueries);
+	}
+	void Camera::pollPickingGpuTimers()
+	{
+		const auto record = PickProfiler::renderInstance().currentRenderId();
+		if (!record || record == m_pickingGpuPollRecord || QOpenGLContext::currentContext() != m_pickingGpuContext.data()) return;
+		m_pickingGpuPollRecord = record;
+		for (auto& sample : m_pickingGpuSamples) {
+			if (!sample.pending) continue;
+			GLint firstReady = GL_FALSE, lastReady = GL_FALSE;
+			glGetQueryObjectiv(sample.queries[0], GL_QUERY_RESULT_AVAILABLE, &firstReady);
+			glGetQueryObjectiv(sample.queries[1], GL_QUERY_RESULT_AVAILABLE, &lastReady);
+			if (!firstReady || !lastReady) continue;
+			if (sample.session != PickProfiler::renderInstance().renderSessionId()) {
+				PickProfiler::RenderFrame discarded(m_renderCameraId, false, false, false, 0, getWidth(), getHeight(), false, "gpu_discarded");
+				PickProfiler::renderSource(sample.source);
+				PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuSkipped);
+				sample.pending = false; continue;
+			}
+			GLuint64 first = 0, last = 0;
+			glGetQueryObjectui64v(sample.queries[0], GL_QUERY_RESULT, &first);
+			glGetQueryObjectui64v(sample.queries[1], GL_QUERY_RESULT, &last);
+			PickProfiler::RenderFrame result(m_renderCameraId, false, false, false, 0, getWidth(), getHeight(), false, "gpu_sample");
+			PickProfiler::renderSource(sample.source);
+			if (last >= first) {
+				PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuSamples);
+				PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuElapsedNs, last - first);
+			}
+			else PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuUnavailable);
+			sample.pending = false;
+		}
+	}
+	void Camera::releasePickingGpuTimers()
+	{
+		if (QThread::currentThread() != thread()) return;
+		if (!m_pickingGpuContext) { for (auto& sample : m_pickingGpuSamples) sample = PickingGpuSample{}; return; }
+		if (m_pickingGpuContext.data() != context()) return;
+		auto* previous = QOpenGLContext::currentContext();
+		auto* surface = previous ? previous->surface() : nullptr;
+		if (previous != context()) makeCurrent();
+		if (QOpenGLContext::currentContext() == m_pickingGpuContext.data()) {
+			for (auto& sample : m_pickingGpuSamples) {
+				if (sample.pending && PickProfiler::renderInstance().renderMetricsEnabled()) {
+					PickProfiler::RenderFrame discarded(m_renderCameraId, false, false, false, 0, getWidth(), getHeight(), false, "gpu_discarded");
+					PickProfiler::renderSource(sample.source);
+					PickProfiler::pickCount(sample.family, PickProfiler::PickMetric::GpuSkipped);
+				}
+				if (sample.queries[0] || sample.queries[1]) glDeleteQueries(2, sample.queries);
+				sample = PickingGpuSample{};
+			}
+			m_pickingGpuContext.clear();
+		}
+		if (previous != context()) {
+			if (previous) { if (!previous->makeCurrent(surface)) std::cerr << "Cannot restore OpenGL context after picking profiler cleanup" << std::endl; }
+			else doneCurrent();
+		}
+	}
+	void Camera::dispatchProfiledPick(poca::core::CommandInfo* info, const poca::core::CommandExecutionContext& context,
+		poca::core::CommandExecutionResult& result, PickProfiler::RenderMetric input)
+	{
+		auto* multiple = dynamic_cast<poca::core::MyMultipleObject*>(m_object);
+		PickProfiler::RenderFrame event(m_renderCameraId, false, false, multiple != nullptr, multiple ? multiple->nbColors() : 1,
+			getWidth(), getHeight(), true, "pick_event");
+		PickProfiler::renderCount(input);
+		m_object->executeGlobalCommand(info, context, result);
+	}
+
 	Camera::~Camera()
 	{
+		releasePickingGpuTimers();
 		releaseFrameGeometry();
 		m_lodUpdateManager.reset(); // Join readers before destroying the camera's update receiver.
 		for (std::map <std::string, Shader*>::iterator it = m_shaders.begin(); it != m_shaders.end(); it++)
@@ -631,6 +752,7 @@ namespace poca::opengl {
 	{
 		if (m_alreadyInitialized) return;
 		connect(context(), &QOpenGLContext::aboutToBeDestroyed, this, [this]() {
+			releasePickingGpuTimers();
 			releaseFrameGeometry();
 		}, Qt::DirectConnection);
 
@@ -2273,7 +2395,7 @@ namespace poca::opengl {
 				poca::core::CommandExecutionResult result;
 				poca::core::CommandExecutionContext pickContext;
 				pickContext.set(poca::opengl::ActiveCamera{ this });
-				m_object->executeGlobalCommand(&ci, pickContext, result);
+				dispatchProfiledPick(&ci, pickContext, result, PickProfiler::RenderMetric::PickHoverDispatches);
 				m_infoPicking.clear();
 				poca::core::stringList listInfos;
 				if (result.has<poca::opengl::PickedInfoListResult>())
@@ -2607,7 +2729,7 @@ namespace poca::opengl {
 			poca::core::CommandExecutionResult result;
 			poca::core::CommandExecutionContext pickContext;
 			pickContext.set(poca::opengl::ActiveCamera{ this });
-			m_object->executeGlobalCommand(&ci, pickContext, result);
+			dispatchProfiledPick(&ci, pickContext, result, PickProfiler::RenderMetric::PickLeftDispatches);
 			m_infoPicking.clear();
 			poca::core::stringList listInfos;
 			if (result.has<poca::opengl::PickedInfoListResult>())
@@ -2638,7 +2760,7 @@ namespace poca::opengl {
 			poca::core::CommandExecutionResult pickResult;
 			poca::core::CommandExecutionContext pickContext;
 			pickContext.set(poca::opengl::ActiveCamera{ this });
-			m_object->executeGlobalCommand(&ci, pickContext, pickResult);
+			dispatchProfiledPick(&ci, pickContext, pickResult, PickProfiler::RenderMetric::PickRightDispatches);
 			m_infoPicking.clear();
 			poca::core::stringList listInfos;
 			if (pickResult.has<poca::opengl::PickedInfoListResult>())
@@ -2810,6 +2932,7 @@ namespace poca::opengl {
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 		{
+			PickProfiler::RenderFrame resize(m_renderCameraId, false, false, dynamic_cast<poca::core::MyMultipleObject*>(m_object) != nullptr, m_object->nbColors(), this->width(), this->height(), true, "pick_resize");
 			poca::core::PerformanceProfiler::ScopedTimer timer("Picking buffer resize", "Camera::resizeEvent updatePickingBuffer");
 			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
 		}

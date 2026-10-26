@@ -10,6 +10,7 @@
 
 #include "PerformanceProfiler.hpp"
 
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -123,7 +124,63 @@ namespace poca::core {
 			"texture3d_uploaded_bytes", "stream_redraw_requests", "stream_redraw_scheduled", "depth_clears", "frame_cache_hits", "frame_cache_misses",
 			"frame_cache_entries", "frame_cache_bytes", "multi_batch_fallback_incompatible_settings", "multi_batch_fallback_overlays", "multi_batch_fallback_limit",
 			"draw_elements_us", "grid_preparation_us", "grid_draw_us", "child_dispatch_us", "visibility_us", "lod_planning_us", "images_list_us",
-			"multi_display_us", "overlap_us", "texture_upload_us", "picking_us", "scene_preparation_us", "object_display_us", "lod_requests_deferred", "texture3d_submitted_bytes", "render_frame_stack_spills"
+			"multi_display_us", "overlap_us", "texture_upload_us", "picking_us", "scene_preparation_us", "object_display_us", "lod_requests_deferred", "texture3d_submitted_bytes", "render_frame_stack_spills",
+			"objectlist_pick_draw_invocations",
+			"objectlist_pick_gl_draws",
+			"objectlist_pick_cpu_us",
+			"objectlist_pick_fbo_allocations",
+			"objectlist_pick_fbo_reallocations",
+			"objectlist_pick_fbo_live",
+			"objectlist_pick_fbo_peak_live",
+			"objectlist_pick_fbo_requested_bytes",
+			"objectlist_pick_fbo_unknown_payloads",
+			"objectlist_pick_fbo_bind_attempts",
+			"objectlist_pick_fbo_binds",
+			"objectlist_pick_fbo_bind_failures",
+			"objectlist_pick_fbo_clears",
+			"objectlist_pick_readpixels_calls",
+			"objectlist_pick_readpixels_us",
+			"objectlist_pick_components_visited",
+			"objectlist_pick_components_rendered",
+			"objectlist_pick_read_hits",
+			"objectlist_pick_read_misses",
+			"objectlist_pick_fbo_outside_draw_cpu_us",
+			"objectlist_pick_gpu_supported",
+			"objectlist_pick_gpu_unavailable",
+			"objectlist_pick_gpu_query_count",
+			"objectlist_pick_gpu_sample_count",
+			"objectlist_pick_gpu_elapsed_ns",
+			"objectlist_pick_gpu_skipped",
+			"detectionset_pick_draw_invocations",
+			"detectionset_pick_gl_draws",
+			"detectionset_pick_cpu_us",
+			"detectionset_pick_fbo_allocations",
+			"detectionset_pick_fbo_reallocations",
+			"detectionset_pick_fbo_live",
+			"detectionset_pick_fbo_peak_live",
+			"detectionset_pick_fbo_requested_bytes",
+			"detectionset_pick_fbo_unknown_payloads",
+			"detectionset_pick_fbo_bind_attempts",
+			"detectionset_pick_fbo_binds",
+			"detectionset_pick_fbo_bind_failures",
+			"detectionset_pick_fbo_clears",
+			"detectionset_pick_readpixels_calls",
+			"detectionset_pick_readpixels_us",
+			"detectionset_pick_components_visited",
+			"detectionset_pick_components_rendered",
+			"detectionset_pick_read_hits",
+			"detectionset_pick_read_misses",
+			"detectionset_pick_fbo_outside_draw_cpu_us",
+			"detectionset_pick_gpu_supported",
+			"detectionset_pick_gpu_unavailable",
+			"detectionset_pick_gpu_query_count",
+			"detectionset_pick_gpu_sample_count",
+			"detectionset_pick_gpu_elapsed_ns",
+			"detectionset_pick_gpu_skipped",
+			"pick_hover_dispatches",
+			"pick_left_dispatches",
+			"pick_right_dispatches",
+			"pick_other_dispatches"
 		};
 		return names.at(size_t(metric));
 	}
@@ -144,6 +201,7 @@ namespace poca::core {
 		m_renderCsvDropped.store(0, std::memory_order_relaxed);
 		m_renderReportStart = std::chrono::steady_clock::now();
 		if (enabled) {
+			++m_renderSession;
 			const QByteArray path = qgetenv("POCA_RENDER_PROFILE_CSV");
 			if (!path.isEmpty()) {
 				if (!QFileInfo(QString::fromLocal8Bit(path)).isAbsolute())
@@ -157,13 +215,13 @@ namespace poca::core {
 		m_renderEnabled.store(enabled, std::memory_order_release);
 	}
 
-	PerformanceProfiler::RenderFrame::RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive)
+	PerformanceProfiler::RenderFrame::RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive, const char* kind, bool active)
 	{
 		auto& profiler = renderInstance();
-		if (!profiler.renderMetricsEnabled()) return;
+		if (!active || !profiler.renderMetricsEnabled()) return;
 		if (std::this_thread::get_id() != profiler.m_renderThread) return;
 		// Only a same-camera onscreen draw inside paint is part of that paint record.
-		if (!paint && !offscreen && profiler.m_activeRender && profiler.m_activeRender->paint && profiler.m_activeRender->cameraId == camera) {
+		if (!kind && !paint && !offscreen && profiler.m_activeRender && profiler.m_activeRender->paint && profiler.m_activeRender->cameraId == camera) {
 			++profiler.m_activeRender->values[size_t(RenderMetric::DrawElementsOnscreen)];
 			return;
 		}
@@ -177,8 +235,9 @@ namespace poca::core {
 		*m_record = RenderRecord{};
 		m_record->frameId = ++profiler.m_renderSequence; m_record->cameraId = camera; m_record->children = children;
 		m_record->paint = paint; m_record->offscreen = offscreen; m_record->multiple = multiple; m_record->interactive = interactive;
-		m_record->width = width; m_record->height = height;
-		++m_record->values[size_t(paint ? RenderMetric::PaintGLCalls : (offscreen ? RenderMetric::DrawElementsOffscreen : RenderMetric::DrawElementsOnscreen))];
+		m_record->width = width; m_record->height = height; m_record->kind = kind;
+		m_record->timestampUs = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+		if (!kind) ++m_record->values[size_t(paint ? RenderMetric::PaintGLCalls : (offscreen ? RenderMetric::DrawElementsOffscreen : RenderMetric::DrawElementsOnscreen))];
 		profiler.m_activeRender = m_record;
 		m_start = std::chrono::steady_clock::now();
 	}
@@ -237,6 +296,58 @@ namespace poca::core {
 		auto& values = profiler.m_activeRender ? profiler.m_activeRender->values : profiler.m_renderBetweenFrames;
 		values[size_t(metric)] = std::max(values[size_t(metric)], value);
 	}
+	PerformanceProfiler::RenderMetric PerformanceProfiler::pickMetric(PickFamily family, PickMetric metric)
+	{
+		return RenderMetric(size_t(RenderMetric::ObjectPickDrawInvocations) + size_t(family) * size_t(PickMetric::Count) + size_t(metric));
+	}
+	void PerformanceProfiler::pickCount(PickFamily family, PickMetric metric, uint64_t value)
+	{
+		if (family != PickFamily::None) renderCount(pickMetric(family, metric), value);
+	}
+	void PerformanceProfiler::pickingDraw()
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled() || std::this_thread::get_id() != profiler.m_renderThread) return;
+		auto& values = profiler.m_activeRender ? profiler.m_activeRender->values : profiler.m_renderBetweenFrames;
+		++values[size_t(RenderMetric::PickingDraws)];
+		if (profiler.m_activePickFamily != PickFamily::None) ++values[size_t(pickMetric(profiler.m_activePickFamily, PickMetric::GlDraws))];
+	}
+	void PerformanceProfiler::pickFboChange(PickFamily family, int delta, uint64_t bytes, bool known)
+	{
+		if (family == PickFamily::None) return;
+		auto& profiler = renderInstance();
+		const auto i = size_t(family);
+		// Resource census persists while disabled: fixed scalar bookkeeping only, no GL/locks/allocation.
+		if (delta > 0) {
+			++profiler.m_pickLive[i]; profiler.m_pickBytes[i] += bytes;
+			if (!known) ++profiler.m_pickUnknown[i];
+			profiler.m_pickPeak[i] = std::max(profiler.m_pickPeak[i], profiler.m_pickLive[i]);
+		}
+		else {
+			--profiler.m_pickLive[i]; profiler.m_pickBytes[i] -= bytes;
+			if (!known) --profiler.m_pickUnknown[i];
+		}
+	}
+	bool PerformanceProfiler::hasPickEvent() const { return m_activeRender && m_activeRender->kind && std::strcmp(m_activeRender->kind, "pick_event") == 0; }
+	uint64_t PerformanceProfiler::currentRenderId() const { return m_activeRender ? m_activeRender->frameId : 0; }
+	void PerformanceProfiler::renderSource(uint64_t id) { auto& profiler = renderInstance(); if (profiler.m_activeRender) profiler.m_activeRender->sourceRecordId = id; }
+	PerformanceProfiler::PickScope::PickScope(PickFamily family) : m_family(family)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled() || std::this_thread::get_id() != profiler.m_renderThread) return;
+		m_profiler = &profiler; m_previous = profiler.m_activePickFamily; profiler.m_activePickFamily = family;
+		pickCount(family, PickMetric::DrawInvocations);
+		m_draws = profiler.m_activeRender ? profiler.m_activeRender->values[size_t(pickMetric(family, PickMetric::GlDraws))] : 0;
+		m_timer.emplace(pickMetric(family, PickMetric::CpuUs));
+	}
+	PerformanceProfiler::PickScope::~PickScope()
+	{
+		if (!m_profiler) return;
+		if (m_profiler->m_activeRender && m_profiler->m_activeRender->values[size_t(pickMetric(m_family, PickMetric::GlDraws))] > m_draws)
+			pickCount(m_family, PickMetric::ComponentsRendered);
+		m_profiler->m_activePickFamily = m_previous;
+	}
+
 	void PerformanceProfiler::renderWorkerCount(RenderWorkerMetric metric, uint64_t value)
 	{
 		auto& profiler = renderInstance();
@@ -259,26 +370,43 @@ namespace poca::core {
 		std::ostringstream out;
 		out << "schema,frame_id,camera_id,kind,offscreen,object_kind,children,width,height,interactive,cpu_ms,queued,ready,preparing,gpu_timing_available";
 		for (size_t i = 0; i < size_t(RenderMetric::Count); ++i) out << ',' << renderMetricName(RenderMetric(i));
+		out << ",timestamp_unix_us,gpu_source_record_id,gpu_pick_timing_status";
 		return out.str();
 	}
 	std::string PerformanceProfiler::renderCsvRow(const RenderRecord& record)
 	{
 		std::ostringstream out; out.imbue(std::locale::classic());
-		out << "1," << record.frameId << ',' << record.cameraId << ',' << (record.paint ? "paint" : "draw") << ',' << record.offscreen << ','
+		out << "2," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
 			<< (record.multiple ? "MyMultipleObject" : "MyObject") << ',' << record.children << ',' << record.width << ',' << record.height << ','
 			<< record.interactive << ',' << record.cpuMs << ',' << record.queued << ',' << record.ready << ',' << record.preparing << ",0";
 		for (const auto value : record.values) out << ',' << value;
+		const auto unavailable = record.values[size_t(RenderMetric::ObjectPickGpuUnavailable)] + record.values[size_t(RenderMetric::DetectionPickGpuUnavailable)];
+		const auto sampled = record.values[size_t(RenderMetric::ObjectPickGpuSamples)] + record.values[size_t(RenderMetric::DetectionPickGpuSamples)];
+		const auto supported = record.values[size_t(RenderMetric::ObjectPickGpuSupported)] + record.values[size_t(RenderMetric::DetectionPickGpuSupported)];
+		out << ',' << record.timestampUs << ',' << record.sourceRecordId << ',' << (sampled ? "SAMPLED" : (unavailable ? "GPU_PICK_TIMING_UNAVAILABLE" : (supported ? "SUPPORTED_NOT_SAMPLED" : "NOT_OBSERVED")));
 		return out.str();
 	}
-	void PerformanceProfiler::finishRenderRecord(const RenderRecord& record)
+	void PerformanceProfiler::finishRenderRecord(const RenderRecord& completed)
 	{
 		if (!renderMetricsEnabled()) return;
+		RenderRecord record = completed;
+		for (size_t family = 0; family < 2; ++family) {
+			const auto type = PickFamily(family);
+			record.values[size_t(pickMetric(type, PickMetric::FboLive))] = m_pickLive[family];
+			record.values[size_t(pickMetric(type, PickMetric::FboPeakLive))] = m_pickPeak[family];
+			record.values[size_t(pickMetric(type, PickMetric::FboRequestedBytes))] = m_pickBytes[family];
+			record.values[size_t(pickMetric(type, PickMetric::FboUnknownPayloads))] = m_pickUnknown[family];
+		}
 		m_renderRing[m_renderRingNext] = record;
 		m_renderRingNext = (m_renderRingNext + 1) % m_renderRing.size();
 		m_renderRingSize = std::min(m_renderRingSize + 1, m_renderRing.size()); ++m_renderWindowFrames;
 		for (size_t i = 0; i < record.values.size(); ++i) {
 			const bool maximum = i == size_t(RenderMetric::BatchMaxImages) || i == size_t(RenderMetric::FrameCacheEntries) || i == size_t(RenderMetric::FrameCacheBytes);
 			if (maximum) m_renderTotals[i] = std::max(m_renderTotals[i], record.values[i]);
+			else if (i >= size_t(RenderMetric::ObjectPickDrawInvocations) && i < size_t(RenderMetric::PickHoverDispatches) &&
+				((i - size_t(RenderMetric::ObjectPickDrawInvocations)) % size_t(PickMetric::Count) >= size_t(PickMetric::FboLive)) &&
+				((i - size_t(RenderMetric::ObjectPickDrawInvocations)) % size_t(PickMetric::Count) <= size_t(PickMetric::FboUnknownPayloads)))
+				m_renderTotals[i] = std::max(m_renderTotals[i], record.values[i]);
 			else m_renderTotals[i] += record.values[i];
 		}
 		{

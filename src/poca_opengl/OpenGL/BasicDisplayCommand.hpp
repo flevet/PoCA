@@ -33,7 +33,9 @@
 #ifndef BasicDisplayCommand_h__
 #define BasicDisplayCommand_h__
 
+#include <QtCore/QPointer>
 #include <General/Command.hpp>
+#include <General/PerformanceProfiler.hpp>
 #include <General/Vec6.hpp>
 
 class QOpenGLFramebufferObject;
@@ -46,6 +48,7 @@ namespace poca::core {
 
 namespace poca::opengl {
 
+	class Camera;
 	class BasicDisplayCommand : public poca::core::Command {
 	public:
 		BasicDisplayCommand(poca::core::BasicComponentInterface*, const std::string&);
@@ -63,6 +66,14 @@ namespace poca::opengl {
 		void pick(const int, const int, const bool);
 
 	protected:
+		using PickProfiler = poca::core::PerformanceProfiler;
+		void profilePickingCamera(Camera*);
+		void releasePickingGpuProfile();
+		std::vector<QPointer<Camera>> m_pickProfileCameras; // Enabled diagnostics only; never owns cameras.
+		void releasePickingProfile(); // Census only; legacy FBO deletion stays at its original sites.
+		PickProfiler::PickFamily m_pickProfileFamily{ PickProfiler::PickFamily::None };
+		bool m_pickProfileLive{ false }, m_pickProfileKnown{ false };
+		uint64_t m_pickProfileBytes{ 0 };
 		poca::core::BoundingBox childObjectBoundingBox(poca::core::MyObjectInterface*, poca::core::MyObjectInterface*) const;
 		bool pickObjectBoundingBox(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::MyObjectInterface*, int&) const;
 

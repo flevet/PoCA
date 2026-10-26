@@ -20,6 +20,7 @@
 #include <condition_variable>
 #include <map>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -86,7 +87,21 @@ namespace poca::core {
 			DepthClears, FrameCacheHits, FrameCacheMisses, FrameCacheEntries, FrameCacheBytes,
 			MultiFallbackIncompatible, MultiFallbackOverlays, MultiFallbackLimit,
 			DrawElementsUs, GridPreparationUs, GridDrawUs, ChildDispatchUs, VisibilityUs, LodPlanningUs,
-			ImagesListUs, MultiDisplayUs, OverlapUs, TextureUploadUs, PickingUs, ScenePreparationUs, ObjectDisplayUs, LodRequestsDeferred, Texture3DSubmittedBytes, FrameStackSpills, Count
+			ImagesListUs, MultiDisplayUs, OverlapUs, TextureUploadUs, PickingUs, ScenePreparationUs, ObjectDisplayUs, LodRequestsDeferred, Texture3DSubmittedBytes, FrameStackSpills,
+			ObjectPickDrawInvocations, ObjectPickGlDraws, ObjectPickCpuUs, ObjectPickFboAllocations,
+			ObjectPickFboReallocations, ObjectPickFboLive, ObjectPickFboPeakLive, ObjectPickFboRequestedBytes,
+			ObjectPickFboUnknownPayloads, ObjectPickFboBindAttempts, ObjectPickFboBinds, ObjectPickFboBindFailures,
+			ObjectPickFboClears, ObjectPickReadpixelsCalls, ObjectPickReadpixelsUs, ObjectPickComponentsVisited,
+			ObjectPickComponentsRendered, ObjectPickReadHits, ObjectPickReadMisses, ObjectPickFboOutsideDrawCpuUs,
+			ObjectPickGpuSupported, ObjectPickGpuUnavailable, ObjectPickGpuQueries, ObjectPickGpuSamples,
+			ObjectPickGpuElapsedNs, ObjectPickGpuSkipped, DetectionPickDrawInvocations, DetectionPickGlDraws,
+			DetectionPickCpuUs, DetectionPickFboAllocations, DetectionPickFboReallocations, DetectionPickFboLive,
+			DetectionPickFboPeakLive, DetectionPickFboRequestedBytes, DetectionPickFboUnknownPayloads, DetectionPickFboBindAttempts,
+			DetectionPickFboBinds, DetectionPickFboBindFailures, DetectionPickFboClears, DetectionPickReadpixelsCalls,
+			DetectionPickReadpixelsUs, DetectionPickComponentsVisited, DetectionPickComponentsRendered, DetectionPickReadHits,
+			DetectionPickReadMisses, DetectionPickFboOutsideDrawCpuUs, DetectionPickGpuSupported, DetectionPickGpuUnavailable,
+			DetectionPickGpuQueries, DetectionPickGpuSamples, DetectionPickGpuElapsedNs, DetectionPickGpuSkipped,
+			PickHoverDispatches, PickLeftDispatches, PickRightDispatches, PickOtherDispatches, Count
 		};
 		enum class RenderWorkerMetric : size_t { Preparations, PreparationUs, AdmissionDeferred, AdmissionRejected, RedrawRequests, Count };
 		struct RenderRecord {
@@ -94,13 +109,15 @@ namespace poca::core {
 			int width{ 0 }, height{ 0 };
 			bool paint{ false }, offscreen{ false }, multiple{ false }, interactive{ false };
 			double cpuMs{ 0. };
+			const char* kind{ nullptr }; // Static labels only; legacy paint/draw classification remains intact.
+			uint64_t timestampUs{ 0 }, sourceRecordId{ 0 };
 			int64_t queued{ -1 }, ready{ -1 }, preparing{ -1 };
 			std::array<uint64_t, size_t(RenderMetric::Count)> values{};
 			std::array<bool, size_t(RenderMetric::Count)> activeTimers{}; // Same-metric nested scopes count only their outer interval.
 		};
 		class RenderFrame {
 		public:
-			RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive);
+			RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive, const char* kind = nullptr, bool active = true);
 			~RenderFrame();
 			RenderFrame(const RenderFrame&) = delete;
 			RenderFrame& operator=(const RenderFrame&) = delete;
@@ -124,9 +141,40 @@ namespace poca::core {
 			RenderMetric m_metric;
 			std::chrono::steady_clock::time_point m_start;
 		};
+		enum class PickFamily : size_t { ObjectList, DetectionSet, None };
+		enum class PickMetric : size_t {
+			DrawInvocations, GlDraws, CpuUs, FboAllocations, FboReallocations,
+			FboLive, FboPeakLive, FboRequestedBytes, FboUnknownPayloads, FboBindAttempts,
+			FboBinds, FboBindFailures, FboClears, ReadpixelsCalls, ReadpixelsUs,
+			ComponentsVisited, ComponentsRendered, ReadHits, ReadMisses, FboOutsideDrawCpuUs,
+			GpuSupported, GpuUnavailable, GpuQueries, GpuSamples, GpuElapsedNs,
+			GpuSkipped, Count
+		};
+		static RenderMetric pickMetric(PickFamily, PickMetric);
+		static void pickCount(PickFamily, PickMetric, uint64_t value = 1);
+		static void pickingDraw(); // Retains the existing global count; classifies only a targeted PickScope.
+		static void pickFboChange(PickFamily, int delta, uint64_t bytes, bool known);
+		bool hasRenderRecord() const { return m_activeRender != nullptr; }
+		bool inPickScope(PickFamily family) const { return m_activePickFamily == family; }
+		bool hasPickEvent() const;
+		uint64_t currentRenderId() const;
+		static void renderSource(uint64_t);
+		class PickScope {
+		public:
+			explicit PickScope(PickFamily);
+			~PickScope();
+			PickScope(const PickScope&) = delete;
+			PickScope& operator=(const PickScope&) = delete;
+		private:
+			PerformanceProfiler* m_profiler{ nullptr };
+			PickFamily m_family, m_previous{ PickFamily::None };
+			uint64_t m_draws{ 0 };
+			std::optional<RenderTimer> m_timer;
+		};
 		void setRenderMetricsEnabled(bool); // GUI thread, before starting a frame.
 		bool renderMetricsEnabled() const { return m_renderEnabled.load(std::memory_order_acquire); }
 		static PerformanceProfiler& renderInstance(); // Cached pointer to the existing process-wide instance.
+		uint64_t renderSessionId() const { return m_renderSession; }
 		uint64_t allocateRenderIdentity() { return ++m_renderIdentitySequence; }
 		static void renderCount(RenderMetric, uint64_t value = 1);
 		static void renderMaximum(RenderMetric, uint64_t);
@@ -156,9 +204,11 @@ namespace poca::core {
 		std::atomic<bool> m_renderEnabled{ false };
 		std::thread::id m_renderThread;
 		RenderRecord* m_activeRender{ nullptr };
+		PickFamily m_activePickFamily{ PickFamily::None };
+		std::array<uint64_t, 2> m_pickLive{}, m_pickPeak{}, m_pickBytes{}, m_pickUnknown{};
 		std::array<RenderRecord, 16> m_renderStack{};
 		size_t m_renderDepth{ 0 };
-		uint64_t m_renderSequence{ 0 };
+		uint64_t m_renderSequence{ 0 }, m_renderSession{ 0 };
 		std::atomic<uint64_t> m_renderIdentitySequence{ 0 };
 		std::array<RenderRecord, 512> m_renderRing{};
 		size_t m_renderRingNext{ 0 }, m_renderRingSize{ 0 }, m_renderWindowFrames{ 0 };

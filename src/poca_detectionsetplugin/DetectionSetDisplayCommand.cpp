@@ -93,6 +93,13 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	std::optional<PickProfiler::RenderFrame> pickEvent;
+	if (_infos && _infos->nameCommand == "pick" && PickProfiler::renderInstance().renderMetricsEnabled() && !PickProfiler::renderInstance().hasPickEvent()) {
+		auto* camera = _context.has<poca::opengl::ActiveCamera>() ? _context.get<poca::opengl::ActiveCamera>().camera : nullptr;
+		pickEvent.emplace(camera ? camera->renderCameraId() : 0, false, false, false, 1,
+			camera ? camera->getWidth() : 0, camera ? camera->getHeight() : 0, true, "pick_event");
+		PickProfiler::renderCount(PickProfiler::RenderMetric::PickOtherDispatches);
+	}
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
@@ -243,6 +250,8 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 
 void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	PickProfiler::PickScope pickingProfile(PickProfiler::PickFamily::DetectionSet);
+	profilePickingCamera(_cam);
 	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	GL_CHECK_ERRORS();
 	if (m_pickFBO == NULL) return;
@@ -261,9 +270,15 @@ void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 	GL_CHECK_ERRORS();
 	if (!success) std::cout << "Problem with binding" << std::endl;
 	GL_CHECK_ERRORS();
+	PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::FboBindAttempts);
+	PickProfiler::pickCount(m_pickProfileFamily, success ? PickProfiler::PickMetric::FboBinds : PickProfiler::PickMetric::FboBindFailures);
+	PickProfiler::pickCount(m_pickProfileFamily, PickProfiler::PickMetric::FboClears);
+	// GPU interval includes the legacy clear and shader draw, excludes release/readback.
+	poca::opengl::Camera::PickingGpuScope gpuTimer(_cam, m_pickProfileFamily);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	GL_CHECK_ERRORS();
 	_cam->drawPickingShader<poca::core::Vec3mf, float>(m_pointBuffer, m_idBuffer, m_featureBuffer, m_minOriginalFeature);
+	gpuTimer.stop();
 	success = m_pickFBO->release();
 	if (!success) std::cout << "Problem with releasing" << std::endl;
 	GL_CHECK_ERRORS();

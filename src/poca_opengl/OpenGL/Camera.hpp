@@ -34,6 +34,7 @@
 #define Camera_hpp__
 
 #include <QtWidgets/QOpenGLWidget>
+#include <QtCore/QPointer>
 #include <QtCore/QTimer>
 
 #include <array>
@@ -169,6 +170,20 @@ namespace poca::opengl {
 		};
 
 		Camera(poca::core::MyObjectInterface*, const size_t, QWidget* = 0, Qt::WindowFlags = 0);
+		using PickProfiler = poca::core::PerformanceProfiler;
+		uint64_t renderCameraId() const { return m_renderCameraId; }
+		class PickingGpuScope {
+		public:
+			PickingGpuScope(Camera*, PickProfiler::PickFamily);
+			~PickingGpuScope();
+			void stop();
+			PickingGpuScope(const PickingGpuScope&) = delete;
+			PickingGpuScope& operator=(const PickingGpuScope&) = delete;
+		private:
+			Camera* m_camera;
+			int m_slot{ -1 };
+		};
+		void releasePickingGpuTimers();
 		~Camera();
 
 		virtual const glm::mat4& getProjectionMatrix() const { return m_matrixProjection; }
@@ -475,6 +490,22 @@ namespace poca::opengl {
 		std::map<poca::core::MyObjectInterface*, std::unique_ptr<ChildFrameGeometry>> m_childFrameGeometry;
 		size_t m_childFrameGeometryBytes{ 0 };
 		bool m_cacheChildFrameGeometry{ false };
+		struct PickingGpuSample {
+			GLuint queries[2]{ 0, 0 };
+			uint64_t source{ 0 }, session{ 0 };
+			PickProfiler::PickFamily family{ PickProfiler::PickFamily::None };
+			bool pending{ false };
+		};
+		std::array<PickingGpuSample, 8> m_pickingGpuSamples{};
+		QPointer<QOpenGLContext> m_pickingGpuContext;
+		uint64_t m_pickingGpuPollRecord{ 0 }, m_pickingGpuSampleRecord{ 0 };
+		size_t m_pickingGpuSubmitted{ 0 };
+		std::array<size_t, 2> m_pickingGpuInRecord{};
+		int m_pickingGpuCounterBits{ -1 };
+		int beginPickingGpuTimer(PickProfiler::PickFamily);
+		void endPickingGpuTimer(int);
+		void pollPickingGpuTimers();
+		void dispatchProfiledPick(poca::core::CommandInfo*, const poca::core::CommandExecutionContext&, poca::core::CommandExecutionResult&, PickProfiler::RenderMetric);
 		uint64_t m_renderCameraId{ 0 };
 		SingleGLBuffer<poca::core::Vec3mf>* m_frameFaceBuffer{ &m_faceGridBuffer };
 		SingleGLBuffer<poca::core::Vec3mf>* m_frameLineBuffer{ &m_lineGridBuffer };
@@ -684,9 +715,9 @@ namespace poca::opengl {
 		_bufferId.bindBuffer(1);
 		_bufferFeature.bindBuffer(2);
 		if (_bufferVertex.getBufferIndices() != 0)
-			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
+			do { poca::core::PerformanceProfiler::pickingDraw(); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
+			do { poca::core::PerformanceProfiler::pickingDraw(); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -1321,7 +1352,7 @@ namespace poca::opengl {
 			_bufferVertex.bindBuffer(chunk, 0);
 			_bufferId.bindBuffer(chunk, 1);
 			_bufferFeature.bindBuffer(chunk, 2);
-			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			do { poca::core::PerformanceProfiler::pickingDraw(); glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
