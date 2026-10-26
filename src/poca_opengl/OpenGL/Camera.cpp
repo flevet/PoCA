@@ -2042,8 +2042,7 @@ namespace poca::opengl {
 			repaint();
 		}
 		else if (_event->key() == Qt::Key_N) {
-			scenePreparationTimer.stop();
-		bool ssao = false;
+			bool ssao = false;
 			poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
 			if (!comObj) return; 
 			if (comObj->hasParameter("useSSAO"))
@@ -4014,16 +4013,6 @@ namespace poca::opengl {
 		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
 		if (!testingSingleObject && multi != NULL && multi->nbColors() > 0) {
 			const size_t oldIndex = multi->currentObjectID();
-			struct RestoreOverlayState {
-				Camera& camera; MyMultipleObject& multi; size_t index; glm::mat4 model; bool& cache;
-				~RestoreOverlayState() { cache = false; multi.setCurrentObject(index < multi.nbColors() ? index : 0); camera.setModelMatrix(model); }
-			} restore{ *this, *multi, oldIndex, cameraOnlyModel, m_cacheChildFrameGeometry };
-			std::set<poca::core::MyObjectInterface*> live;
-			for (size_t n = 0; n < multi->nbColors(); ++n) live.insert(multi->getObject(n));
-			for (auto it = m_childFrameGeometry.begin(); it != m_childFrameGeometry.end();) {
-				if (live.count(it->first)) { ++it; continue; }
-				m_childFrameGeometryBytes -= it->second->bytes(); it = m_childFrameGeometry.erase(it);
-			}
 			testingSingleObject = true;
 			for (size_t n = 0; n < multi->nbColors(); ++n) {
 				multi->setCurrentObject(n);
@@ -4033,7 +4022,6 @@ namespace poca::opengl {
 					return elem;
 				}
 			}
-			m_cacheChildFrameGeometry = false;
 			multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
 			testingSingleObject = false;
 			return Gizmo_None;

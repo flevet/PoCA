@@ -21,6 +21,7 @@
 #include <General/PerformanceProfiler.hpp>
 
 #include "Camera.hpp"
+#include <QtGui/QOpenGLContext>
 
 namespace poca::opengl {
 	using ImageMetric = poca::core::PerformanceProfiler::ImageMetric;
@@ -78,7 +79,8 @@ namespace poca::opengl {
 		m_lastGpuQuery = std::chrono::steady_clock::now();
 		std::size_t dedicated = 0, available = 0;
 		bool measured = false;
-		if (GLEW_NVX_gpu_memory_info) {
+		const QOpenGLContext* glContext = QOpenGLContext::currentContext();
+		if (glContext->hasExtension(QByteArrayLiteral("GL_NVX_gpu_memory_info"))) {
 			GLint totalKiB = 0, freeKiB = 0;
 			glGetIntegerv(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, &totalKiB);
 			glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &freeKiB);
@@ -87,7 +89,7 @@ namespace poca::opengl {
 				measured = true; m_gpuBudgetSource = "NVX dedicated/current-available VRAM";
 			}
 		}
-		else if (GLEW_ATI_meminfo) {
+		else if (glContext->hasExtension(QByteArrayLiteral("GL_ATI_meminfo"))) {
 			GLint freeKiB[4]{ 0, 0, 0, 0 }; glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, freeKiB);
 			if (freeKiB[0] >= 0) {
 				available = streamMultiply(std::size_t(freeKiB[0]), 1024);

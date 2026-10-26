@@ -342,6 +342,8 @@ namespace poca::opengl {
 
 		void updateCameraEyeUp(bool eye, bool up);
 
+		void releaseFrameGeometry();
+
 	protected:
 		void initializeGL();
 		void paintGL();
@@ -354,7 +356,6 @@ namespace poca::opengl {
 		void wheelEvent(QWheelEvent*);
 		void resizeEvent(QResizeEvent*);
 		const bool testWhichFaceFrontCamera();
-		void releaseFrameGeometry();
 		static bool overlayBoxOutsideViewport(const poca::core::BoundingBox&, const glm::mat4&, const glm::vec2&, float, float);
 		void recomputeFrame(const poca::core::BoundingBox&);
 		glm::vec2 worldToScreenCoordinates(const glm::mat4&, const glm::mat4&, const glm::mat4&, const glm::uvec4&, const glm::vec3&) const;
