@@ -117,7 +117,8 @@ namespace poca::core {
 		};
 		class RenderFrame {
 		public:
-			RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive, const char* kind = nullptr, bool active = true);
+			RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive);
+			RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive, const char* kind, bool active = true);
 			~RenderFrame();
 			RenderFrame(const RenderFrame&) = delete;
 			RenderFrame& operator=(const RenderFrame&) = delete;

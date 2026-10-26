@@ -727,7 +727,7 @@ namespace poca::opengl {
 	void Camera::dispatchProfiledPick(poca::core::CommandInfo* info, const poca::core::CommandExecutionContext& context,
 		poca::core::CommandExecutionResult& result, PickProfiler::RenderMetric input)
 	{
-		auto* multiple = dynamic_cast<poca::core::MyMultipleObject*>(m_object);
+		auto* multiple = dynamic_cast<::MyMultipleObject*>(m_object);
 		PickProfiler::RenderFrame event(m_renderCameraId, false, false, multiple != nullptr, multiple ? multiple->nbColors() : 1,
 			getWidth(), getHeight(), true, "pick_event");
 		PickProfiler::renderCount(input);
@@ -2932,7 +2932,7 @@ namespace poca::opengl {
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 		{
-			PickProfiler::RenderFrame resize(m_renderCameraId, false, false, dynamic_cast<poca::core::MyMultipleObject*>(m_object) != nullptr, m_object->nbColors(), this->width(), this->height(), true, "pick_resize");
+			PickProfiler::RenderFrame resize(m_renderCameraId, false, false, dynamic_cast<::MyMultipleObject*>(m_object) != nullptr, m_object->nbColors(), this->width(), this->height(), true, "pick_resize");
 			poca::core::PerformanceProfiler::ScopedTimer timer("Picking buffer resize", "Camera::resizeEvent updatePickingBuffer");
 			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));
 		}

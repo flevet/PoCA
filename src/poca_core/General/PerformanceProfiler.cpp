@@ -215,6 +215,11 @@ namespace poca::core {
 		m_renderEnabled.store(enabled, std::memory_order_release);
 	}
 
+	PerformanceProfiler::RenderFrame::RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive)
+		: RenderFrame(camera, paint, offscreen, multiple, children, width, height, interactive, nullptr, true)
+	{
+	}
+
 	PerformanceProfiler::RenderFrame::RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive, const char* kind, bool active)
 	{
 		auto& profiler = renderInstance();

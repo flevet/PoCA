@@ -171,3 +171,21 @@ Tracked-file output of `git diff --stat` at the source checkpoint (the new repor
 ```
 
 `git diff --check`: PASS. New/untracked report plus the tracked paths above make 12 changed paths, including eight allowlisted production files. Source-only checks and the complete runtime limitations are stated above; no Stage 2 diff exists.
+
+## Diagnostic follow-up — 2026-10-26
+
+User-supplied Visual Studio diagnostics after checkpoint `2fd59e2` establish a failed user build (superseding unknown build status for that attempt). This follow-up is source-only; no rebuild, link, test or runtime capture has been performed by Codex, and Stage 2 remains gated.
+
+Source corrections, confined to the existing production allowlist:
+
+- `BasicDisplayCommand.cpp:33`: include Windows/GLEW before Qt, matching neighboring OpenGL implementation files. The new framebuffer-extension calls previously had no GLEW declarations in this translation unit; Windows OpenGL 1.1 declarations alone are insufficient. No GL call or framebuffer operation was changed.
+- `Camera.cpp:730` and `:2935`: use `dynamic_cast<::MyMultipleObject*>`; the class is declared in the global namespace in `poca_core/Objects/MyMultipleObject.hpp`, not `poca::core`. Picking dispatch and resize instrumentation remain identical.
+- `PerformanceProfiler.hpp:120` and `PerformanceProfiler.cpp:218`: restore the original explicit eight-argument `RenderFrame` entrypoint, delegating to the existing extended constructor with `kind=nullptr, active=true`. The extended constructor now requires `kind`, preventing overload ambiguity; nine-argument event calls still default `active=true`, and ten-argument conditional scopes remain supported. This restores the exact legacy constructor symbol reported missing without changing frame identity, timers, object layout or metric schema. All affected consumers still need a consistent rebuild; preserving a symbol does not validate stale binaries against changed record layouts.
+
+The diagnostic list also contains IntelliSense-only missing new profiler members/enum values and excessive initializer errors. Before editing, the reported `C:/DevC++/PoCA/src` profiler header/source, Camera and BasicDisplayCommand source hashes matched this checkout. The on-disk header contains every named missing member and all 125 enum entries; a header search under that reported tree found one PerformanceProfiler.hpp. Those IntelliSense diagnostics are inconsistent with current on-disk declarations. Stale IntelliSense state or a different selected include/build artifact remains UNCONFIRMED; no duplicate declarations, build-system changes or cache deletions were added to conceal it.
+
+`Camera::PickingGpuScope` constructor/destructor/stop and `BasicDisplayCommand::profilePickingCamera` definitions already exist in the registered `poca_opengl` sources. Their unresolved symbols are consistent with an old archive surviving the reported source compilation failures; the exact artifact-selection cause and final link success are UNCONFIRMED. Rebuild core/OpenGL and affected DLL consumers from the updated tree using the existing configured toolchain, then refresh/rescan IntelliSense if its active-error list remains inconsistent. No generated directories were modified.
+
+Static verification: four production files changed (+12/-3), source constructor declarations/definitions and 8/9/10-argument call resolution inspected; existing eight-argument nested-frame and explicit-event fixtures remain unchanged and NOT RUN. All 125 profiler metrics/schema, rendering bodies, ID/result handling, query pool and stage gate are retained. CRLF/UTF-8/BOM checks, lexical delimiter checks, exact method-body comparison and `git diff --check` are clean. This supersedes any interpretation of the earlier static PASS rows as proof of compilation. Runtime selection/performance remains NOT VERIFIED / NOT MEASURED. Earlier line-reference/diff tables describe the original checkpoint; the new overload shifts subsequent profiler source lines by five and the include addition shifts base-command lines by three.
+
+Follow-up changed files: PerformanceProfiler.hpp/.cpp, BasicDisplayCommand.cpp, Camera.cpp, this report, and mandatory CONTINUITY.md. No CMake, target registration, generated artifacts or unrelated files changed.
