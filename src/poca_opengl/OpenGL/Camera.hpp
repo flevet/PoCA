@@ -53,6 +53,7 @@
 #include <General/CommandableObject.hpp>
 #include <DesignPatterns/Observer.hpp>
 #include <General/Vec2.hpp>
+#include <General/PerformanceProfiler.hpp>
 #include <General/Vec4.hpp>
 #include <OpenGL/GLBuffer.hpp>
 #include <OpenGL/LodUpdateManager.hpp>
@@ -353,6 +354,8 @@ namespace poca::opengl {
 		void wheelEvent(QWheelEvent*);
 		void resizeEvent(QResizeEvent*);
 		const bool testWhichFaceFrontCamera();
+		void releaseFrameGeometry();
+		static bool overlayBoxOutsideViewport(const poca::core::BoundingBox&, const glm::mat4&, const glm::vec2&, float, float);
 		void recomputeFrame(const poca::core::BoundingBox&);
 		glm::vec2 worldToScreenCoordinates(const glm::mat4&, const glm::mat4&, const glm::mat4&, const glm::uvec4&, const glm::vec3&) const;
 		bool dispatchCameraMouseEvent(const std::string&, QMouseEvent*, const bool);
@@ -451,6 +454,30 @@ namespace poca::opengl {
 		poca::opengl::TriangleSingleGLBuffer <poca::core::Vec3mf> m_faceGridBuffer;
 		poca::opengl::LineSingleGLBuffer <poca::core::Vec3mf> m_lineGridBuffer, m_lineBboxBuffer;
 
+		// Each entry owns its GL names. Only cleared with this camera context current.
+		struct ChildFrameGeometry {
+			ChildFrameGeometry() = default;
+			ChildFrameGeometry(const ChildFrameGeometry&) = delete;
+			ChildFrameGeometry& operator=(const ChildFrameGeometry&) = delete;
+			std::array<float, 80> state{};
+			std::vector<poca::core::Vec3mf> lines, faces, grid;
+			TriangleSingleGLBuffer<poca::core::Vec3mf> faceBuffer;
+			LineSingleGLBuffer<poca::core::Vec3mf> lineBuffer, bboxBuffer;
+			size_t bytes() const;
+			bool matches(const std::array<float, 80>&, const std::vector<poca::core::Vec3mf>&,
+				const std::vector<poca::core::Vec3mf>&, const std::vector<poca::core::Vec3mf>&) const;
+			void upload();
+		};
+		bool useChildFrameGeometry(poca::core::MyObjectInterface*, const poca::core::BoundingBox&,
+			const std::vector<poca::core::Vec3mf>&, const std::vector<poca::core::Vec3mf>&, const std::vector<poca::core::Vec3mf>&);
+		void clearChildFrameGeometry();
+		std::map<poca::core::MyObjectInterface*, std::unique_ptr<ChildFrameGeometry>> m_childFrameGeometry;
+		size_t m_childFrameGeometryBytes{ 0 };
+		bool m_cacheChildFrameGeometry{ false };
+		uint64_t m_renderCameraId{ 0 };
+		SingleGLBuffer<poca::core::Vec3mf>* m_frameFaceBuffer{ &m_faceGridBuffer };
+		SingleGLBuffer<poca::core::Vec3mf>* m_frameLineBuffer{ &m_lineGridBuffer };
+		SingleGLBuffer<poca::core::Vec3mf>* m_frameBboxBuffer{ &m_lineBboxBuffer };
 		poca::opengl::PointGLBuffer <poca::core::Vec3mf> m_simplePointBuffer, m_debugPointBuffer;
 		poca::opengl::LineGLBuffer <poca::core::Vec3mf> m_cropBuffer;
 		std::vector <FrameText> m_frameTexts;
@@ -564,9 +591,9 @@ namespace poca::opengl {
 			_bufferNormal.bindBuffer(4);
 		}
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
 		glDisableVertexAttribArray(4);
@@ -609,9 +636,9 @@ namespace poca::opengl {
 			_bufferNormal.bindBuffer(4);
 		}
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
 		glDisableVertexAttribArray(4);
@@ -656,9 +683,9 @@ namespace poca::opengl {
 		_bufferId.bindBuffer(1);
 		_bufferFeature.bindBuffer(2);
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -699,9 +726,9 @@ namespace poca::opengl {
 		_bufferVertex.bindBuffer(0);
 		_bufferId.bindBuffer(1);
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 
@@ -783,9 +810,9 @@ namespace poca::opengl {
 		_bufferFeature.bindBuffer(2);
 		GL_CHECK_ERRORS();
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		GL_CHECK_ERRORS();
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
@@ -860,9 +887,9 @@ namespace poca::opengl {
 		_bufferNormal.bindBuffer(1);
 		_bufferFeature.bindBuffer(2);
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -926,9 +953,9 @@ namespace poca::opengl {
 			_bufferSigmas.bindBuffer(1);
 		_bufferFeature.bindBuffer(2);
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		if (!_bufferSigmas.empty())
 			glDisableVertexAttribArray(1);
@@ -982,9 +1009,9 @@ namespace poca::opengl {
 			_bufferNormal.bindBuffer(4);
 		}
 		if (_buffer.getBufferIndices() != 0)
-			glDrawElements(_buffer.getMode(), _buffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_buffer.getMode(), _buffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_buffer.getMode(), 0, _buffer.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_buffer.getMode(), 0, _buffer.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(4);
 
@@ -1010,7 +1037,7 @@ namespace poca::opengl {
 		const std::vector <size_t>& sizeStridesLocs = _buffer.getSizeBuffers();
 		for (size_t chunk = 0; chunk < _buffer.getNbBuffers(); chunk++) {
 			_buffer.bindBuffer(chunk, 0);
-			glDrawArrays(_buffer.getMode(), 0, (GLsizei)sizeStridesLocs[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_buffer.getMode(), 0, (GLsizei)sizeStridesLocs[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
 		glDisableVertexAttribArray(0);
 
@@ -1062,7 +1089,7 @@ namespace poca::opengl {
 			glEnableVertexAttribArray(2);
 			_feature.bindBuffer(2);
 		}
-		glDrawArrays(_buffer.getMode(), 0, _buffer.getNbElements());
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_buffer.getMode(), 0, _buffer.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -1118,9 +1145,9 @@ namespace poca::opengl {
 			_bufferNormals.bindBuffer(1);
 		}
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
@@ -1173,7 +1200,7 @@ namespace poca::opengl {
 			// 1rst attribute buffer : vertices
 			_bufferVertex.bindBuffer(chunk, 0);
 			_bufferFeature.bindBuffer(chunk, 2);
-			glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
@@ -1218,7 +1245,7 @@ namespace poca::opengl {
 			// 1rst attribute buffer : vertices
 			_bufferVertex.bindBuffer(chunk, 0);
 			_bufferColor.bindBuffer(chunk, 3);
-			glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
@@ -1259,7 +1286,7 @@ namespace poca::opengl {
 		glEnableVertexAttribArray(3);
 		_bufferVertex.bindBuffer(0);
 		_bufferColor.bindBuffer(3);
-		glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
 
@@ -1293,7 +1320,7 @@ namespace poca::opengl {
 			_bufferVertex.bindBuffer(chunk, 0);
 			_bufferId.bindBuffer(chunk, 1);
 			_bufferFeature.bindBuffer(chunk, 2);
-			glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::PickingDraws); glDrawArrays(_bufferVertex.getMode(), 0, (GLsizei)sizeStrides[chunk]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		}
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
@@ -1327,9 +1354,9 @@ namespace poca::opengl {
 		_bufferVertex.bindBuffer(0);
 		_selectBuffer.bindBuffer(1);
 		if (_bufferVertex.getBufferIndices() != 0)
-			glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawElements(_bufferVertex.getMode(), _bufferVertex.getNbIndices(), GL_UNSIGNED_INT, (void*)0); } while (false);
 		else
-			glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements());
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(_bufferVertex.getMode(), 0, _bufferVertex.getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 

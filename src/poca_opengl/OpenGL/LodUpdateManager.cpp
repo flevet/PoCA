@@ -16,8 +16,6 @@
 #include <chrono>
 #include <iostream>
 #include <QtCore/QMetaObject>
-#include <QtCore/QByteArray>
-#include <QtGui/QOpenGLContext>
 
 #include <General/Engine.hpp>
 #include <General/PerformanceProfiler.hpp>
@@ -80,11 +78,7 @@ namespace poca::opengl {
 		m_lastGpuQuery = std::chrono::steady_clock::now();
 		std::size_t dedicated = 0, available = 0;
 		bool measured = false;
-		// Check extensions against the currently bound OpenGL context instead of
-		// using optional GLEW_NVX_*/GLEW_ATI_* compile-time symbols. This is the
-		// same Qt-based extension test already used by DatasetAssemblerWidget.
-		QOpenGLContext* context = QOpenGLContext::currentContext();
-		if (context && context->hasExtension(QByteArrayLiteral("GL_NVX_gpu_memory_info"))) {
+		if (GLEW_NVX_gpu_memory_info) {
 			GLint totalKiB = 0, freeKiB = 0;
 			glGetIntegerv(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, &totalKiB);
 			glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &freeKiB);
@@ -93,7 +87,7 @@ namespace poca::opengl {
 				measured = true; m_gpuBudgetSource = "NVX dedicated/current-available VRAM";
 			}
 		}
-		else if (context && context->hasExtension(QByteArrayLiteral("GL_ATI_meminfo"))) {
+		else if (GLEW_ATI_meminfo) {
 			GLint freeKiB[4]{ 0, 0, 0, 0 }; glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, freeKiB);
 			if (freeKiB[0] >= 0) {
 				available = streamMultiply(std::size_t(freeKiB[0]), 1024);
@@ -127,6 +121,7 @@ namespace poca::opengl {
 	uint32_t LodUpdateManager::request(const ImageLodRequest& _request, uint64_t _frameIndex)
 	{
 		poca::core::PerformanceProfiler::ScopedTimer timer("LOD queue", "Queue image LOD request");
+		poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LodRequestAttempts);
 		std::lock_guard<std::mutex> lock(m_mutex);
 		ImageLodState& state = m_states[_request.imageId];
 
@@ -138,10 +133,12 @@ namespace poca::opengl {
 			state.forceLevelZero == _request.forceLevelZero && state.incremental == _request.incremental && state.residentSource == _request.residentSource && state.visible == _request.visible && sameRegion(state.sourceRegion, _request.sourceRegion) && state.role == _request.role && state.navigationClass == _request.navigationClass && state.reductionMode == _request.reductionMode && state.currentFrame == _request.currentFrame && state.sourceDims == _request.sourceDims && state.residentBottom == _request.residentBottom && state.residentTop == _request.residentTop && state.imageBottom == _request.imageBottom && state.imageTop == _request.imageTop;
 
 		if (sameTarget && (state.status == LodRequestStatus::Queued || state.status == LodRequestStatus::Preparing || state.status == LodRequestStatus::Ready)) {
+			poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LodRequestsDeduplicated);
 			const bool queuedPriorityIncreased = state.status == LodRequestStatus::Queued && _request.priority > state.priority;
 			state.priority = std::max(state.priority, _request.priority);
 			state.lastVisibleFrame = _frameIndex;
 			if (queuedPriorityIncreased) {
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LodPriorityRequeues);
 				removeQueuedRequestsForImageUnsafe(_request.imageId);
 				ImageLodRequest queued = _request;
 				queued.requestVersion = state.latestVersion;
@@ -173,6 +170,7 @@ namespace poca::opengl {
 		ImageLodRequest queued = _request;
 		queued.requestVersion = state.latestVersion;
 		m_requests.push(std::move(queued));
+		poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LodRequestsEnqueued);
 		if (lodDebugEnabled())
 			std::cout << "[PoCA][ImageLOD][queue-push] imageID=" << _request.imageId
 				<< " role=" << streamRoleName(_request.role) << " class=" << _request.navigationClass
@@ -448,6 +446,7 @@ namespace poca::opengl {
 	void LodUpdateManager::requestRedrawUnsafe()
 	{
 		if (!m_camera || m_stopWorker) return;
+		poca::core::PerformanceProfiler::renderWorkerCount(poca::core::PerformanceProfiler::RenderWorkerMetric::RedrawRequests);
 		if (m_redrawPending) {
 			poca::core::PerformanceProfiler::instance().addImageMetric(ImageMetric::RedrawRequests);
 			return;
@@ -472,6 +471,7 @@ namespace poca::opengl {
 			auto& ready = readyUploads[processed];
 			if (!isCurrent(ready) || !m_residency.visible(ready.imageId)) continue;
 			if (!ready.uploadCallback) throw std::logic_error("Image stream has no render-thread upload callback");
+			poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::ReadyUploadsProcessed);
 			const bool changed = ready.uploadCallback(ready);
 			if (changed) profiler.addImageMetric(ImageMetric::Uploads);
 			{ std::lock_guard<std::mutex> lock(m_mutex); auto it = m_states.find(ready.imageId);
@@ -492,6 +492,7 @@ namespace poca::opengl {
 				if (it != m_states.end() && it->second.latestVersion == ready.requestVersion) {
 					it->second.status = LodRequestStatus::Queued;
 					m_requests.push(std::move(*ready.continuation)); m_condition.notify_all();
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LodContinuationsEnqueued);
 				}
 			}
 			else {
@@ -510,10 +511,11 @@ namespace poca::opengl {
 					m_ready.push_back(std::move(ready));
 			}
 		}
-		if (profiler.imageMetricsEnabled()) {
+		if (profiler.imageMetricsEnabled() || profiler.renderMetricsEnabled()) {
 			std::size_t queued, ready, preparing;
 			{ std::lock_guard<std::mutex> lock(m_mutex); queued = m_requests.size(); ready = m_ready.size(); preparing = m_inFlight.size(); }
 			profiler.reportImageMetrics(queued, ready, preparing);
+			profiler.renderQueues(queued, ready, preparing);
 		}
 		return uploaded;
 	}
@@ -528,6 +530,7 @@ namespace poca::opengl {
 			if (state == m_states.end() || state->second.latestVersion != next.requestVersion) continue;
 			if (!next.estimatedPreparedBytes || next.estimatedPreparedBytes > imageStreamPolicy().cpuBytes || (next.incremental && next.readerScratchBytes >= next.estimatedPreparedBytes)) {
 				state->second.status = LodRequestStatus::Idle;
+				poca::core::PerformanceProfiler::renderWorkerCount(poca::core::PerformanceProfiler::RenderWorkerMetric::AdmissionRejected);
 				std::cerr << "[PoCA][ImageStream] Rejected unbounded CPU preparation" << std::endl;
 				continue;
 			}
@@ -539,6 +542,7 @@ namespace poca::opengl {
 					next.readerReservation = _reservation->splitPreparing(next.readerScratchBytes);
 				_request = std::move(next); found = true; break;
 			}
+			poca::core::PerformanceProfiler::renderWorkerCount(poca::core::PerformanceProfiler::RenderWorkerMetric::AdmissionDeferred);
 			deferred.push_back(std::move(next));
 		}
 		for (auto& queued : deferred) m_requests.push(std::move(queued));
@@ -572,6 +576,9 @@ namespace poca::opengl {
 			poca::core::PerformanceProfiler::ImageTimer preparationTimer(ImageMetric::PreparationUs, int(request.role));
 			poca::core::PerformanceProfiler::instance().addImageMetric(request.role == ImageStreamRole::EmergencyPreview ?
 				ImageMetric::PreviewPreparations : (request.role == ImageStreamRole::Navigation ? ImageMetric::NavigationPreparations : ImageMetric::DetailPreparations));
+			const bool renderPreparation = poca::core::PerformanceProfiler::renderInstance().renderMetricsEnabled();
+			const auto renderPreparationStart = renderPreparation ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+			if (renderPreparation) poca::core::PerformanceProfiler::renderWorkerCount(poca::core::PerformanceProfiler::RenderWorkerMetric::Preparations);
 			bool success = false;
 			std::string failureReason;
 			try {
@@ -591,6 +598,8 @@ namespace poca::opengl {
 				failureReason = error.what();
 				std::cerr << "[PoCA][ImageStream][read] image=" << request.imageId << " level=" << request.requestedLevel << ": " << error.what() << std::endl;
 			}
+			if (renderPreparation) poca::core::PerformanceProfiler::renderWorkerCount(poca::core::PerformanceProfiler::RenderWorkerMetric::PreparationUs,
+				uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - renderPreparationStart).count()));
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				auto state = m_states.find(request.imageId);

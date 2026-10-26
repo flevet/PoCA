@@ -37,6 +37,7 @@
 #include <stdexcept>
 
 #include <General/Vec4.hpp>
+#include <General/PerformanceProfiler.hpp>
 #include <General/Histogram.hpp>
 #include <General/MyData.hpp>
 #include <General/Misc.h>
@@ -77,6 +78,8 @@ namespace {
 		poca::opengl::Camera* camera = nullptr;
 		glm::mat4 modelBefore(1.f);
 		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::ChildDispatchUs, restoreCameraModel);
+		if (restoreCameraModel) poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::ChildDispatches);
 		if (restoreCameraModel) {
 			camera = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (camera != nullptr)
@@ -97,6 +100,8 @@ namespace {
 		poca::opengl::Camera* camera = nullptr;
 		glm::mat4 modelBefore(1.f);
 		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::ChildDispatchUs, restoreCameraModel);
+		if (restoreCameraModel) poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::ChildDispatches);
 		if (restoreCameraModel) {
 			camera = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (camera != nullptr)
@@ -117,6 +122,8 @@ namespace {
 		poca::opengl::Camera* camera = nullptr;
 		glm::mat4 modelBefore(1.f);
 		const bool restoreCameraModel = _ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>();
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::ChildDispatchUs, restoreCameraModel);
+		if (restoreCameraModel) poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::ChildDispatches);
 		if (restoreCameraModel) {
 			camera = _context.get<poca::opengl::ActiveCamera>().camera;
 			if (camera != nullptr)

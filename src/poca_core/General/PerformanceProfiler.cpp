@@ -12,6 +12,12 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
+#include <algorithm>
+#include <cmath>
+#include <locale>
+#include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QVariant>
 
@@ -97,6 +103,265 @@ namespace poca::core {
 		std::cout << line.str() << std::endl;
 	}
 
+	PerformanceProfiler& PerformanceProfiler::renderInstance()
+	{
+		static PerformanceProfiler& profiler = instance();
+		return profiler;
+	}
+
+	const char* PerformanceProfiler::renderMetricName(RenderMetric metric)
+	{
+		static const std::array<const char*, size_t(RenderMetric::Count)> names{
+			"paintgl_calls", "draw_elements_onscreen", "draw_elements_offscreen", "recompute_frame_calls", "child_frame_recomputes",
+			"grid_face_draws", "grid_line_draws", "bbox_draws", "raw_volume_gl_draws_single", "raw_volume_gl_draws_multi", "nonraw_volume_gl_draws",
+			"other_audited_gl_draws", "picking_gl_draws", "shared_descriptor_glBufferData_calls", "shared_descriptor_glBufferData_bytes",
+			"shared_descriptor_glBufferSubData_calls", "shared_descriptor_glBufferSubData_bytes", "frame_geometry_glBufferData_calls", "frame_geometry_glBufferData_bytes",
+			"overlap_pair_tests", "overlap_cache_hits", "overlap_cache_misses", "batch_count", "batch_max_images", "visible_images", "culled_images",
+			"child_display_dispatches", "picking_fbo_creates", "picking_fbo_clears", "visibility_calls", "visibility_cache_hits", "visibility_cache_misses",
+			"image_share_calls", "residency_map_entries_examined", "lod_request_attempts", "lod_requests_enqueued", "lod_requests_deduplicated",
+			"lod_priority_requeues", "lod_continuations_enqueued", "ready_uploads_processed", "texture3d_allocation_calls", "texture3d_upload_chunks",
+			"texture3d_uploaded_bytes", "stream_redraw_requests", "stream_redraw_scheduled", "depth_clears", "frame_cache_hits", "frame_cache_misses",
+			"frame_cache_entries", "frame_cache_bytes", "multi_batch_fallback_incompatible_settings", "multi_batch_fallback_overlays", "multi_batch_fallback_limit",
+			"draw_elements_us", "grid_preparation_us", "grid_draw_us", "child_dispatch_us", "visibility_us", "lod_planning_us", "images_list_us",
+			"multi_display_us", "overlap_us", "texture_upload_us", "picking_us", "scene_preparation_us", "object_display_us", "lod_requests_deferred", "texture3d_submitted_bytes", "render_frame_stack_spills"
+		};
+		return names.at(size_t(metric));
+	}
+
+	PerformanceProfiler::~PerformanceProfiler() { stopRenderCsv(); }
+
+	void PerformanceProfiler::setRenderMetricsEnabled(bool enabled)
+	{
+		if (renderMetricsEnabled() == enabled) return;
+		if (m_activeRender || std::any_of(m_betweenTimers.begin(), m_betweenTimers.end(), [](bool active) { return active; })) return; // Preserve active scopes.
+		m_renderEnabled.store(false, std::memory_order_relaxed);
+		stopRenderCsv();
+		if (m_renderThread == std::thread::id{}) m_renderThread = std::this_thread::get_id();
+		else if (m_renderThread != std::this_thread::get_id()) throw std::logic_error("Render profiler configuration requires its GUI thread");
+		m_renderRingNext = m_renderRingSize = m_renderWindowFrames = 0;
+		m_renderTotals.fill(0); m_renderBetweenFrames.fill(0);
+		for (auto& value : m_renderWorkers) value.store(0, std::memory_order_relaxed);
+		m_renderCsvDropped.store(0, std::memory_order_relaxed);
+		m_renderReportStart = std::chrono::steady_clock::now();
+		if (enabled) {
+			const QByteArray path = qgetenv("POCA_RENDER_PROFILE_CSV");
+			if (!path.isEmpty()) {
+				if (!QFileInfo(QString::fromLocal8Bit(path)).isAbsolute())
+					std::cerr << "[PoCA][RenderPerformance] CSV requires an absolute path; export disabled" << std::endl;
+				else {
+					m_renderCsvStop = false; m_renderCsvActive = true;
+					m_renderCsvThread = std::thread([this, path]() { renderCsvLoop(path.toStdString()); });
+				}
+			}
+		}
+		m_renderEnabled.store(enabled, std::memory_order_release);
+	}
+
+	PerformanceProfiler::RenderFrame::RenderFrame(uint64_t camera, bool paint, bool offscreen, bool multiple, uint64_t children, int width, int height, bool interactive)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled()) return;
+		if (std::this_thread::get_id() != profiler.m_renderThread) return;
+		// Only a same-camera onscreen draw inside paint is part of that paint record.
+		if (!paint && !offscreen && profiler.m_activeRender && profiler.m_activeRender->paint && profiler.m_activeRender->cameraId == camera) {
+			++profiler.m_activeRender->values[size_t(RenderMetric::DrawElementsOnscreen)];
+			return;
+		}
+		m_profiler = &profiler; m_parent = profiler.m_activeRender;
+		if (profiler.m_renderDepth < profiler.m_renderStack.size()) m_record = &profiler.m_renderStack[profiler.m_renderDepth];
+		else {
+			renderCount(RenderMetric::FrameStackSpills);
+			m_overflowRecord = std::make_unique<RenderRecord>(); m_record = m_overflowRecord.get();
+		}
+		++profiler.m_renderDepth;
+		*m_record = RenderRecord{};
+		m_record->frameId = ++profiler.m_renderSequence; m_record->cameraId = camera; m_record->children = children;
+		m_record->paint = paint; m_record->offscreen = offscreen; m_record->multiple = multiple; m_record->interactive = interactive;
+		m_record->width = width; m_record->height = height;
+		++m_record->values[size_t(paint ? RenderMetric::PaintGLCalls : (offscreen ? RenderMetric::DrawElementsOffscreen : RenderMetric::DrawElementsOnscreen))];
+		profiler.m_activeRender = m_record;
+		m_start = std::chrono::steady_clock::now();
+	}
+
+	PerformanceProfiler::RenderFrame::~RenderFrame()
+	{
+		if (!m_profiler) return;
+		m_record->cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_start).count();
+		m_profiler->m_activeRender = m_parent; --m_profiler->m_renderDepth;
+		m_profiler->finishRenderRecord(*m_record);
+	}
+
+	PerformanceProfiler::RenderTimer::RenderTimer(RenderMetric metric, bool active) : m_metric(metric)
+	{
+		auto& profiler = renderInstance();
+		if (!active || !profiler.renderMetricsEnabled()) return;
+		if (std::this_thread::get_id() != profiler.m_renderThread) return;
+		auto* record = profiler.m_activeRender;
+		if (!record) {
+			if (profiler.m_betweenTimers[size_t(metric)]) return;
+			profiler.m_betweenTimers[size_t(metric)] = true; m_betweenProfiler = &profiler;
+		}
+		else {
+			if (record->activeTimers[size_t(metric)]) return;
+			m_record = record; record->activeTimers[size_t(metric)] = true;
+		}
+		m_start = std::chrono::steady_clock::now();
+	}
+	PerformanceProfiler::RenderTimer::~RenderTimer() { stop(); }
+	void PerformanceProfiler::RenderTimer::stop()
+	{
+		if (m_betweenProfiler) {
+			if (m_betweenProfiler->renderMetricsEnabled()) m_betweenProfiler->m_renderBetweenFrames[size_t(m_metric)] +=
+				uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - m_start).count());
+			m_betweenProfiler->m_betweenTimers[size_t(m_metric)] = false; m_betweenProfiler = nullptr; return;
+		}
+		if (!m_record) return;
+		m_record->values[size_t(m_metric)] += uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - m_start).count());
+		m_record->activeTimers[size_t(m_metric)] = false;
+		m_record = nullptr;
+	}
+
+	void PerformanceProfiler::renderCount(RenderMetric metric, uint64_t value)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled()) return;
+		if (std::this_thread::get_id() != profiler.m_renderThread) return;
+		auto& values = profiler.m_activeRender ? profiler.m_activeRender->values : profiler.m_renderBetweenFrames;
+		values[size_t(metric)] += value;
+	}
+	void PerformanceProfiler::renderMaximum(RenderMetric metric, uint64_t value)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled()) return;
+		if (std::this_thread::get_id() != profiler.m_renderThread) return;
+		auto& values = profiler.m_activeRender ? profiler.m_activeRender->values : profiler.m_renderBetweenFrames;
+		values[size_t(metric)] = std::max(values[size_t(metric)], value);
+	}
+	void PerformanceProfiler::renderWorkerCount(RenderWorkerMetric metric, uint64_t value)
+	{
+		auto& profiler = renderInstance();
+		if (profiler.renderMetricsEnabled()) profiler.m_renderWorkers[size_t(metric)].fetch_add(value, std::memory_order_relaxed);
+	}
+	void PerformanceProfiler::renderQueues(size_t queued, size_t ready, size_t preparing)
+	{
+		if (!renderMetricsEnabled() || !m_activeRender) return;
+		m_activeRender->queued = int64_t(queued); m_activeRender->ready = int64_t(ready); m_activeRender->preparing = int64_t(preparing);
+	}
+	std::vector<PerformanceProfiler::RenderRecord> PerformanceProfiler::renderRecords() const
+	{
+		std::vector<RenderRecord> records; records.reserve(m_renderRingSize);
+		for (size_t i = 0; i < m_renderRingSize; ++i)
+			records.push_back(m_renderRing[(m_renderRingNext + m_renderRing.size() - m_renderRingSize + i) % m_renderRing.size()]);
+		return records;
+	}
+	std::string PerformanceProfiler::renderCsvHeader()
+	{
+		std::ostringstream out;
+		out << "schema,frame_id,camera_id,kind,offscreen,object_kind,children,width,height,interactive,cpu_ms,queued,ready,preparing,gpu_timing_available";
+		for (size_t i = 0; i < size_t(RenderMetric::Count); ++i) out << ',' << renderMetricName(RenderMetric(i));
+		return out.str();
+	}
+	std::string PerformanceProfiler::renderCsvRow(const RenderRecord& record)
+	{
+		std::ostringstream out; out.imbue(std::locale::classic());
+		out << "1," << record.frameId << ',' << record.cameraId << ',' << (record.paint ? "paint" : "draw") << ',' << record.offscreen << ','
+			<< (record.multiple ? "MyMultipleObject" : "MyObject") << ',' << record.children << ',' << record.width << ',' << record.height << ','
+			<< record.interactive << ',' << record.cpuMs << ',' << record.queued << ',' << record.ready << ',' << record.preparing << ",0";
+		for (const auto value : record.values) out << ',' << value;
+		return out.str();
+	}
+	void PerformanceProfiler::finishRenderRecord(const RenderRecord& record)
+	{
+		if (!renderMetricsEnabled()) return;
+		m_renderRing[m_renderRingNext] = record;
+		m_renderRingNext = (m_renderRingNext + 1) % m_renderRing.size();
+		m_renderRingSize = std::min(m_renderRingSize + 1, m_renderRing.size()); ++m_renderWindowFrames;
+		for (size_t i = 0; i < record.values.size(); ++i) {
+			const bool maximum = i == size_t(RenderMetric::BatchMaxImages) || i == size_t(RenderMetric::FrameCacheEntries) || i == size_t(RenderMetric::FrameCacheBytes);
+			if (maximum) m_renderTotals[i] = std::max(m_renderTotals[i], record.values[i]);
+			else m_renderTotals[i] += record.values[i];
+		}
+		{
+			std::lock_guard<std::mutex> lock(m_renderCsvMutex);
+			if (m_renderCsvActive) {
+				if (m_renderCsvSize == m_renderCsvQueue.size()) ++m_renderCsvDropped;
+				else { m_renderCsvQueue[(m_renderCsvHead + m_renderCsvSize++) % m_renderCsvQueue.size()] = record; m_renderCsvCondition.notify_one(); }
+			}
+		}
+		if (!m_activeRender) reportRenderMetrics(); // Keep nested offscreen work out of logging overhead in the parent.
+	}
+	void PerformanceProfiler::reportRenderMetrics()
+	{
+		const auto now = std::chrono::steady_clock::now();
+		const auto seconds = std::chrono::duration<double>(now - m_renderReportStart).count();
+		if (seconds < 1.) return;
+		const size_t samples = std::min(m_renderWindowFrames, m_renderRingSize);
+		std::vector<double> paintTimes; paintTimes.reserve(samples);
+		for (size_t i = 0; i < samples; ++i) {
+			const auto& record = m_renderRing[(m_renderRingNext + m_renderRing.size() - samples + i) % m_renderRing.size()];
+			if (record.paint) paintTimes.push_back(record.cpuMs);
+		}
+		std::sort(paintTimes.begin(), paintTimes.end());
+		std::ostringstream out; out.imbue(std::locale::classic());
+		out << "[PoCA][RenderPerformance] seconds=" << seconds << " records=" << m_renderWindowFrames << " paint_samples=" << paintTimes.size();
+		if (!paintTimes.empty()) {
+			const auto n = paintTimes.size(); double total = 0.; for (const double time : paintTimes) total += time;
+			out << " paint_mean_ms=" << total / n << " paint_median_ms=" << (paintTimes[(n - 1) / 2] + paintTimes[n / 2]) / 2.
+				<< " paint_p95_ms=" << paintTimes[size_t(std::ceil(.95 * n)) - 1] << " paint_max_ms=" << paintTimes.back();
+		}
+		else out << " paint_ms=not_instrumented";
+		for (size_t i = 0; i < m_renderTotals.size(); ++i) {
+			out << ' ' << renderMetricName(RenderMetric(i)) << '=' << m_renderTotals[i];
+			if (m_renderBetweenFrames[i]) out << " between_" << renderMetricName(RenderMetric(i)) << '=' << m_renderBetweenFrames[i];
+		}
+		static const std::array<const char*, size_t(RenderWorkerMetric::Count)> workerNames{
+			"worker_preparations", "worker_preparation_us", "worker_admission_deferred", "worker_admission_rejected", "manager_redraw_requests" };
+		for (size_t i = 0; i < workerNames.size(); ++i) out << ' ' << workerNames[i] << '=' << m_renderWorkers[i].exchange(0, std::memory_order_relaxed);
+		const auto& last = m_renderRing[(m_renderRingNext + m_renderRing.size() - 1) % m_renderRing.size()];
+		out << " queue_camera=" << last.cameraId << " queued=" << last.queued << " ready=" << last.ready << " preparing=" << last.preparing
+			<< " csv_dropped=" << m_renderCsvDropped.exchange(0) << " gpu_timing_unavailable=1";
+		std::cout << out.str() << std::endl;
+		m_renderTotals.fill(0); m_renderBetweenFrames.fill(0); m_renderWindowFrames = 0; m_renderReportStart = now;
+	}
+	void PerformanceProfiler::stopRenderCsv()
+	{
+		{ std::lock_guard<std::mutex> lock(m_renderCsvMutex); m_renderCsvStop = true; m_renderCsvCondition.notify_one(); }
+		if (m_renderCsvThread.joinable()) m_renderCsvThread.join();
+		m_renderCsvActive = false; m_renderCsvHead = m_renderCsvSize = 0;
+	}
+	void PerformanceProfiler::renderCsvLoop(const std::string& path)
+	{
+		QFile file(QString::fromLocal8Bit(path.c_str()));
+		if (!file.open(QIODevice::ReadWrite | QIODevice::Text)) {
+			std::cerr << "[PoCA][RenderPerformance] CSV open failed: " << file.errorString().toStdString() << std::endl;
+			std::lock_guard<std::mutex> lock(m_renderCsvMutex); m_renderCsvActive = false; return;
+		}
+		const QByteArray header = QByteArray::fromStdString(renderCsvHeader());
+		if (file.size() && file.readLine().trimmed() != header) {
+			std::cerr << "[PoCA][RenderPerformance] CSV schema mismatch; export disabled" << std::endl;
+			std::lock_guard<std::mutex> lock(m_renderCsvMutex); m_renderCsvActive = false; return;
+		}
+		if (!file.seek(file.size()) || (!file.size() && file.write(header + '\n') != header.size() + 1)) {
+			std::cerr << "[PoCA][RenderPerformance] CSV append/header failed: " << file.errorString().toStdString() << std::endl;
+			std::lock_guard<std::mutex> lock(m_renderCsvMutex); m_renderCsvActive = false; return;
+		}
+		for (;;) {
+			RenderRecord record;
+			{
+				std::unique_lock<std::mutex> lock(m_renderCsvMutex);
+				m_renderCsvCondition.wait(lock, [this]() { return m_renderCsvStop || m_renderCsvSize; });
+				if (!m_renderCsvSize && m_renderCsvStop) break;
+				record = m_renderCsvQueue[m_renderCsvHead]; m_renderCsvHead = (m_renderCsvHead + 1) % m_renderCsvQueue.size(); --m_renderCsvSize;
+			}
+			const QByteArray row = QByteArray::fromStdString(renderCsvRow(record)) + '\n';
+			if (file.write(row) != row.size()) {
+				std::cerr << "[PoCA][RenderPerformance] CSV write failed: " << file.errorString().toStdString() << std::endl;
+				std::lock_guard<std::mutex> lock(m_renderCsvMutex); m_renderCsvActive = false; m_renderCsvSize = 0; return;
+			}
+		}
+		if (!file.flush()) std::cerr << "[PoCA][RenderPerformance] CSV flush failed: " << file.errorString().toStdString() << std::endl;
+	}
+
 	PerformanceProfiler& PerformanceProfiler::instance()
 	{
 		/*
@@ -122,6 +387,10 @@ namespace poca::core {
 
 			PerformanceProfiler* profiler = new PerformanceProfiler();
 			app->setProperty(propertyName, QVariant::fromValue<quintptr>(reinterpret_cast<quintptr>(profiler)));
+			QObject::connect(app, &QCoreApplication::aboutToQuit, app, [profiler]() {
+				profiler->m_renderEnabled.store(false, std::memory_order_relaxed);
+				profiler->stopRenderCsv(); // Drain before Qt/plugin teardown.
+			}, Qt::DirectConnection);
 			return *profiler;
 		}
 

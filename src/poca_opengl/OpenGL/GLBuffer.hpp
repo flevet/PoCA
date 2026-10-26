@@ -101,6 +101,7 @@ do{ GLuint err = glGetError(); \
 #define glAssert(code) \
     code
 
+#if defined(POCA_ENABLE_RELEASE_GL_CHECKS)
 //#define GL_CHECK_ERRORS()
 #define GL_CHECK_ERRORS() \
 do{ GLuint err = glGetError(); \
@@ -112,6 +113,9 @@ do{ GLuint err = glGetError(); \
                   std::cerr << "Message : " << (const char*)gluErrorString(err) << "("<<err<<")" << "\n";\
               }\
 }while(false)
+#else
+#define GL_CHECK_ERRORS() do {} while (false)
+#endif
 #endif
 
 namespace poca::opengl {

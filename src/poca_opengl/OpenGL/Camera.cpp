@@ -54,6 +54,8 @@
 #include <QtGui/QPainterPath>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QOpenGLFramebufferObject>
+#include <QtGui/QOpenGLContext>
+#include <QtCore/QThread>
 #include <QtCore/qmath.h>
 #include <QtCore/QLineF>
 #include <QtCore/QDateTime>
@@ -572,6 +574,7 @@ namespace poca::opengl {
 
 	Camera::Camera(poca::core::MyObjectInterface* _obj, const size_t _dim, QWidget* _parent, Qt::WindowFlags _f) :QOpenGLWidget(_parent, _f), m_dimension(_dim), m_object(_obj), m_buttonOn(false), m_sizePatch(100), m_undoPossible(false), m_leftButtonOn(false), m_middleButtonOn(false), m_rightButtonOn(false), m_displayBoundingBox(true), m_nbMainGrid(4.f), m_nbIntermediateGrid(2.f), m_displayGrid(true), m_timer(NULL), m_timerCameraPath(NULL), m_alreadyInitialized(false), m_openGLContextInitializedNotified(false), m_multAnimation(1.f), m_scaling(false), m_insidePatchId(-1), m_currentInteractionMode(-1), m_ROI(NULL), m_sourceFactorBlending(GL_SRC_ALPHA), m_destFactorBlending(GL_ONE_MINUS_SRC_ALPHA), m_curIndexSource(6), m_curIndexDest(7), m_activateAntialias(true), m_preventRotation(false), m_fillPolygon(true), m_hoveredTransformGizmo(Gizmo_None), m_activeTransformGizmo(Gizmo_None), m_transformGizmoWorldCenter(0.f), m_displayTransformGizmo(true), m_displayClippingPlanes(false), m_identifyObjectsUntilMsec(0), m_pickingEnabled(true), m_hoveredClippingPlane(-1), m_activeClippingPlane(-1), m_resetedProj(true), m_interactiveRendering(false)
 	{
+		m_renderCameraId = poca::core::PerformanceProfiler::renderInstance().allocateRenderIdentity();
 		// Opaque occlusion requires an actual depth attachment, not only GL_DEPTH_TEST.
 		QSurfaceFormat surface = format();
 		surface.setDepthBufferSize(std::max(24, surface.depthBufferSize()));
@@ -613,6 +616,7 @@ namespace poca::opengl {
 
 	Camera::~Camera()
 	{
+		releaseFrameGeometry();
 		m_lodUpdateManager.reset(); // Join readers before destroying the camera's update receiver.
 		for (std::map <std::string, Shader*>::iterator it = m_shaders.begin(); it != m_shaders.end(); it++)
 			delete it->second;
@@ -626,6 +630,9 @@ namespace poca::opengl {
 	void Camera::initializeGL()
 	{
 		if (m_alreadyInitialized) return;
+		connect(context(), &QOpenGLContext::aboutToBeDestroyed, this, [this]() {
+			releaseFrameGeometry();
+		}, Qt::DirectConnection);
 
 		//glShadeModel(GL_SMOOTH);
 		glClearColor(0.0f, 0.0f, 0.0f, 0.5f);
@@ -761,7 +768,7 @@ namespace poca::opengl {
 		shader->setVec2("window", (float)width(), (float)height());
 		glEnableVertexAttribArray(0);
 		m_roundedRectBuffer.bindBuffer(0, 0);
-		glDrawArrays(m_roundedRectBuffer.getMode(), 0, m_roundedRectBuffer.getSizeBuffers()[0]);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(m_roundedRectBuffer.getMode(), 0, m_roundedRectBuffer.getSizeBuffers()[0]); } while (false);
 		glDisableVertexAttribArray(0);
 		shader->release();
 	}
@@ -788,7 +795,7 @@ namespace poca::opengl {
 		if (comObj->hasParameter("lineWidthGL"))
 			thickness = comObj->getParameter<uint32_t>("lineWidthGL");
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); } while (false);
 
 		if (m_resetedProj)
 			m_applyClippingPlanes = false;
@@ -822,6 +829,13 @@ namespace poca::opengl {
 
 	void Camera::paintGL()
 	{
+		using Profiler = poca::core::PerformanceProfiler;
+		auto& renderProfiler = Profiler::renderInstance();
+		auto* renderEngine = poca::core::Engine::instance();
+		renderProfiler.setRenderMetricsEnabled(renderEngine->verboseEnabled() && renderEngine->hasVerboseType("renderPerformance"));
+		auto* renderMulti = dynamic_cast<MyMultipleObject*>(m_object);
+		Profiler::RenderFrame renderFrame(m_renderCameraId, true, false, renderMulti != nullptr,
+			renderMulti ? renderMulti->nbColors() : 1, width(), height(), m_interactiveRendering);
 		poca::core::PerformanceProfiler::ScopedTimer timer("Rendering", "Camera::paintGL");
 		// First paint after the QOpenGLWidget has a valid context and size.
 		// Do not build heavy OpenGL component displays here yet: clear one frame,
@@ -832,7 +846,7 @@ namespace poca::opengl {
 			recalcModelView();
 			glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
 			glClearColor(0.f, 0.f, 0.f, 1.f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); } while (false);
 
 			poca::core::CommandInfo ci(false, "OpenGLContextInitialized");
 			poca::core::CommandExecutionContext runtimeContext;
@@ -864,8 +878,10 @@ namespace poca::opengl {
 		// GUI thread only. Workers enter through one gated, camera-bound queued call.
 		auto& profiler = poca::core::PerformanceProfiler::instance();
 		profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawRequests);
+		profiler.renderCount(poca::core::PerformanceProfiler::RenderMetric::StreamRedrawRequests);
 		if (!m_imageStreamRedrawDue && !m_imageStreamRedrawTimer.isActive()) {
 			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawScheduled);
+			profiler.renderCount(poca::core::PerformanceProfiler::RenderMetric::StreamRedrawScheduled);
 			m_imageStreamRedrawTimer.start();
 		}
 	}
@@ -875,6 +891,12 @@ namespace poca::opengl {
 		auto& profiler = poca::core::PerformanceProfiler::instance();
 		auto* engine = poca::core::Engine::instance();
 		profiler.setImageMetricsEnabled(engine->verboseEnabled() && engine->hasVerboseType("imagePerformance"));
+		profiler.setRenderMetricsEnabled(engine->verboseEnabled() && engine->hasVerboseType("renderPerformance"));
+		auto* renderMulti = dynamic_cast<MyMultipleObject*>(m_object);
+		poca::core::PerformanceProfiler::RenderFrame renderFrame(m_renderCameraId, false, _buffOffscreen != nullptr, renderMulti != nullptr,
+			renderMulti ? renderMulti->nbColors() : 1, _buffOffscreen ? _buffOffscreen->width() : width(), _buffOffscreen ? _buffOffscreen->height() : height(), m_interactiveRendering);
+		poca::core::PerformanceProfiler::RenderTimer renderDrawTimer(poca::core::PerformanceProfiler::RenderMetric::DrawElementsUs);
+		poca::core::PerformanceProfiler::RenderTimer scenePreparationTimer(poca::core::PerformanceProfiler::RenderMetric::ScenePreparationUs);
 		if (m_imageStreamRedrawDue || m_imageStreamRedrawTimer.isActive())
 			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::StreamingFrames);
 		m_imageStreamRedrawTimer.stop(); m_imageStreamRedrawDue = false;
@@ -949,7 +971,7 @@ namespace poca::opengl {
 		glClearDepth(1.0);
 		glDepthFunc(GL_LESS);
 		glDisable(GL_SCISSOR_TEST);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); } while (false);
 		GL_CHECK_ERRORS();
 
 		GLfloat bkColor[4];
@@ -974,32 +996,37 @@ namespace poca::opengl {
 		glEnable(GL_DEPTH_TEST);
 		glLineWidth(thickness);
 
+		scenePreparationTimer.stop();
 		bool ssao = false;
 		if (comObj->hasParameter("useSSAO"))
 			ssao = comObj->getParameter<bool>("useSSAO");
 		GL_CHECK_ERRORS();
 
-		if (!ssao) {
-			if (_buffOffscreen == NULL) {
-				poca::core::CommandInfo displayCommand(false, "display");
-				poca::core::CommandExecutionContext runtimeContext;
-				runtimeContext.set(poca::opengl::ActiveCamera{ this });
-				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
-				poca::core::CommandInfo overlayCommand(false, "displayOverlay");
-				m_object->executeCommand(&overlayCommand, runtimeContext);
+		{
+			poca::core::PerformanceProfiler::RenderTimer objectTimer(poca::core::PerformanceProfiler::RenderMetric::ObjectDisplayUs);
+			if (!ssao) {
+				if (_buffOffscreen == NULL) {
+					poca::core::CommandInfo displayCommand(false, "display");
+					poca::core::CommandExecutionContext runtimeContext;
+					runtimeContext.set(poca::opengl::ActiveCamera{ this });
+					m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+					poca::core::CommandInfo overlayCommand(false, "displayOverlay");
+					m_object->executeCommand(&overlayCommand, runtimeContext);
+				}
+				else
+				{
+					poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
+					poca::core::CommandExecutionContext runtimeContext;
+					runtimeContext.set(poca::opengl::ActiveCamera{ this });
+					m_object->executeGlobalCommand(&displayCommand, runtimeContext);
+					poca::core::CommandInfo overlayCommand(false, "displayOverlay", "offscreen", true);
+					m_object->executeCommand(&overlayCommand, runtimeContext);
+				}
 			}
-			else
-			{
-				poca::core::CommandInfo displayCommand(false, "display", "offscreen", true);
-				poca::core::CommandExecutionContext runtimeContext;
-				runtimeContext.set(poca::opengl::ActiveCamera{ this });
-				m_object->executeGlobalCommand(&displayCommand, runtimeContext);
-				poca::core::CommandInfo overlayCommand(false, "displayOverlay", "offscreen", true);
-				m_object->executeCommand(&overlayCommand, runtimeContext);
+			else {
+				drawSSAO(_buffOffscreen);
 			}
-		}
-		else {
-			drawSSAO(_buffOffscreen);
+
 		}
 
 		m_matrixModel = glm::translate(glm::mat4(1.f), m_stateCamera.m_translationModel);
@@ -1051,7 +1078,7 @@ namespace poca::opengl {
 		if (m_debugPointBuffer.getNbElements() != 0) {
 			shader->setVec4("singleColor", 1.f, 0.f, 1.f, 1.f);
 			m_debugPointBuffer.bindBuffer(0, 0);
-			glDrawArrays(m_debugPointBuffer.getMode(), 0, m_debugPointBuffer.getSizeBuffers()[0]);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(m_debugPointBuffer.getMode(), 0, m_debugPointBuffer.getSizeBuffers()[0]); } while (false);
 		}
 		glDisable(GL_POINT_SPRITE);
 		glDisable(GL_PROGRAM_POINT_SIZE);
@@ -1062,7 +1089,7 @@ namespace poca::opengl {
 		glDisable(GL_PROGRAM_POINT_SIZE);
 		if (m_currentInteractionMode == Crop && m_buttonOn) {
 			m_cropBuffer.bindBuffer(0, 0);
-			glDrawArrays(m_cropBuffer.getMode(), 0, m_cropBuffer.getSizeBuffers()[0]);
+			do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(m_cropBuffer.getMode(), 0, m_cropBuffer.getSizeBuffers()[0]); } while (false);
 		}
 		glDisableVertexAttribArray(0);
 		shader->release();
@@ -1096,7 +1123,7 @@ namespace poca::opengl {
 		glClearColor((float)colorBack[0] / 255.f, (float)colorBack[1] / 255.f, (float)colorBack[2] / 255.f, (float)colorBack[3] / 255.f);
 
 		glViewport(m_viewportThumbnailFrame[0], m_viewportThumbnailFrame[1], m_viewportThumbnailFrame[2], m_viewportThumbnailFrame[3]);
-		glClear(GL_DEPTH_BUFFER_BIT);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_DEPTH_BUFFER_BIT); } while (false);
 		auto clippingSave = m_applyClippingPlanes;
 		m_applyClippingPlanes = false;
 		displayArrowsFrame();
@@ -1215,7 +1242,7 @@ namespace poca::opengl {
 
 		bool success = classShaderSSAO.m_fboGeometry->bind();
 		if (!success) std::cout << "Problem with binding" << std::endl;
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); } while (false);
 
 		uint32_t thickness = 5;
 		if (comObj->hasParameter("lineWidthGL"))
@@ -1243,7 +1270,7 @@ namespace poca::opengl {
 
 		success = classShaderSSAO.m_fboSilhouette->bind();
 		if (!success) std::cout << "Problem with binding" << std::endl;
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::DepthClears); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); } while (false);
 		classShaderSSAO.m_shaderSilhouette->use();
 		classShaderSSAO.m_shaderSilhouette->setVec4("backColor", (float)colorBack[0] / 255.f, (float)colorBack[1] / 255.f, (float)colorBack[2] / 255.f, (float)colorBack[3] / 255.f);
 		for (unsigned int i = 0; i < 64; ++i)
@@ -1384,7 +1411,7 @@ namespace poca::opengl {
 			m_quadVertBufferFlippedH.bindBuffer(0, 0);
 			m_quadUvBufferFlippedH.bindBuffer(0, 1);
 		}
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, m_quadVertBuffer.getSizeBuffers()[0]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(GL_TRIANGLE_STRIP, 0, m_quadVertBuffer.getSizeBuffers()[0]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 	}
@@ -1498,29 +1525,157 @@ namespace poca::opengl {
 	}
 
 
+	size_t Camera::ChildFrameGeometry::bytes() const
+	{
+		return sizeof(*this) + (lines.capacity() + faces.capacity() + grid.capacity() + lines.size() + faces.size() + grid.size()) * sizeof(poca::core::Vec3mf);
+	}
+	bool Camera::ChildFrameGeometry::matches(const std::array<float, 80>& key, const std::vector<poca::core::Vec3mf>& l,
+		const std::vector<poca::core::Vec3mf>& f, const std::vector<poca::core::Vec3mf>& g) const
+	{
+		return state == key && lines == l && faces == f && grid == g;
+	}
+	void Camera::ChildFrameGeometry::upload()
+	{
+		bboxBuffer.generateBuffer(lines.size(), 3, GL_FLOAT); bboxBuffer.updateBuffer(lines);
+		faceBuffer.generateBuffer(faces.size(), 3, GL_FLOAT); faceBuffer.updateBuffer(faces);
+		lineBuffer.generateBuffer(grid.size(), 3, GL_FLOAT); lineBuffer.updateBuffer(grid);
+		using Profiler = poca::core::PerformanceProfiler;
+		Profiler::renderCount(Profiler::RenderMetric::FrameDataCalls, !lines.empty() + !faces.empty() + !grid.empty());
+		Profiler::renderCount(Profiler::RenderMetric::FrameDataBytes, (lines.size() + faces.size() + grid.size()) * sizeof(poca::core::Vec3mf));
+	}
+	void Camera::releaseFrameGeometry()
+	{
+		if (QThread::currentThread() != thread()) throw std::logic_error("Frame geometry cleanup requires the GUI thread");
+		if (m_childFrameGeometry.empty()) return;
+		auto* previous = QOpenGLContext::currentContext();
+		auto* surface = previous ? previous->surface() : nullptr;
+		if (previous != context()) makeCurrent();
+		if (!context() || QOpenGLContext::currentContext() != context())
+			throw std::runtime_error("Frame geometry cleanup requires the camera context");
+		clearChildFrameGeometry();
+		if (previous != context()) { if (previous) previous->makeCurrent(surface); else doneCurrent(); }
+	}
+	void Camera::clearChildFrameGeometry()
+	{
+		m_frameFaceBuffer = &m_faceGridBuffer; m_frameLineBuffer = &m_lineGridBuffer; m_frameBboxBuffer = &m_lineBboxBuffer;
+		m_childFrameGeometry.clear(); m_childFrameGeometryBytes = 0;
+	}
+	bool Camera::useChildFrameGeometry(poca::core::MyObjectInterface* object, const poca::core::BoundingBox& box,
+		const std::vector<poca::core::Vec3mf>& lines, const std::vector<poca::core::Vec3mf>& faces, const std::vector<poca::core::Vec3mf>& grid)
+	{
+		m_frameFaceBuffer = &m_faceGridBuffer; m_frameLineBuffer = &m_lineGridBuffer; m_frameBboxBuffer = &m_lineBboxBuffer;
+		if (!m_cacheChildFrameGeometry || !object) return false;
+		std::array<float, 80> key{}; size_t pos = 0;
+		for (int a = 0; a < 6; ++a) { key[pos++] = box[a]; key[pos++] = m_currentCrop[a]; key[pos++] = object->boundingBox()[a]; }
+		const auto model = object->getModelMatrix();
+		for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r) { key[pos++] = model[c][r]; key[pos++] = m_stateCamera.m_matrixView[c][r]; }
+		key[pos++] = float(m_dimension); key[pos++] = m_nbMainGrid; key[pos++] = m_nbIntermediateGrid;
+		for (int a = 0; a < 6; ++a) key[pos++] = float(m_facingDirections[a]);
+		auto* commands = dynamic_cast<poca::core::CommandableObject*>(object);
+		key[pos++] = float(commands->hasParameter("useNbForGrid"));
+		if (commands->hasParameter("useNbForGrid")) key[pos] = float(commands->getParameter<bool>("useNbForGrid"));
+		++pos;
+		key[pos++] = float(commands->hasParameter("nbGrid"));
+		if (commands->hasParameter("nbGrid")) { const auto value = commands->getParameter<std::array<uint8_t, 3>>("nbGrid"); for (int a = 0; a < 3; ++a) key[pos + a] = float(value[a]); } pos += 3;
+		key[pos++] = float(commands->hasParameter("stepGrid"));
+		if (commands->hasParameter("stepGrid")) { const auto value = commands->getParameter<std::array<float, 3>>("stepGrid"); for (int a = 0; a < 3; ++a) key[pos + a] = value[a]; }
+		auto found = m_childFrameGeometry.find(object);
+		using Profiler = poca::core::PerformanceProfiler;
+		if (found != m_childFrameGeometry.end() && found->second->matches(key, lines, faces, grid))
+			Profiler::renderCount(Profiler::RenderMetric::FrameCacheHits);
+		else {
+			Profiler::renderCount(Profiler::RenderMetric::FrameCacheMisses);
+			if (found != m_childFrameGeometry.end()) { m_childFrameGeometryBytes -= found->second->bytes(); m_childFrameGeometry.erase(found); }
+			constexpr size_t limit = 64ull * 1024 * 1024, maxEntries = 512;
+			if (m_childFrameGeometry.size() >= maxEntries || (lines.size() + faces.size() + grid.size()) * sizeof(poca::core::Vec3mf) > (limit - m_childFrameGeometryBytes) / 2) return false;
+			auto entry = std::make_unique<ChildFrameGeometry>();
+			entry->state = key; entry->lines = lines; entry->faces = faces; entry->grid = grid;
+			if (entry->bytes() > limit - m_childFrameGeometryBytes) return false;
+			entry->upload(); m_childFrameGeometryBytes += entry->bytes();
+			found = m_childFrameGeometry.emplace(object, std::move(entry)).first;
+		}
+		m_frameFaceBuffer = &found->second->faceBuffer; m_frameLineBuffer = &found->second->lineBuffer; m_frameBboxBuffer = &found->second->bboxBuffer;
+		Profiler::renderMaximum(Profiler::RenderMetric::FrameCacheEntries, m_childFrameGeometry.size());
+		Profiler::renderMaximum(Profiler::RenderMetric::FrameCacheBytes, m_childFrameGeometryBytes);
+		return true;
+	}
+	bool Camera::overlayBoxOutsideViewport(const poca::core::BoundingBox& box, const glm::mat4& mvp, const glm::vec2& viewport, float thickness, float antialias)
+	{
+		if (!(viewport.x > 0.f && viewport.y > 0.f) || !std::isfinite(viewport.x) || !std::isfinite(viewport.y) || !std::isfinite(thickness) || !std::isfinite(antialias)) return false;
+		// lineRendering.gs expands both ends by d pixels and resets Z. Never reject
+		// on near/far Z, across W=0, or without a conservative screen-space margin.
+		const float d = std::ceil(std::abs((thickness + 1.f) * 2.f) + 2.5f * std::abs(antialias));
+		const glm::vec2 margin = 4.f * d / viewport;
+		std::array<bool, 4> outside{ true, true, true, true };
+		for (int corner = 0; corner < 8; ++corner) {
+			const auto clip = mvp * glm::vec4(box[(corner & 1) ? 3 : 0], box[(corner & 2) ? 4 : 1], box[(corner & 4) ? 5 : 2], 1.f);
+			if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.z) || !std::isfinite(clip.w) || clip.w <= 0.f) return false;
+			outside[0] = outside[0] && clip.x < -(1.f + margin.x) * clip.w;
+			outside[1] = outside[1] && clip.x > (1.f + margin.x) * clip.w;
+			outside[2] = outside[2] && clip.y < -(1.f + margin.y) * clip.w;
+			outside[3] = outside[3] && clip.y > (1.f + margin.y) * clip.w;
+		}
+		return outside[0] || outside[1] || outside[2] || outside[3];
+	}
+
 	void Camera::displayGridAndBoundingBoxForVisibleObjects(const float _thickness, const float _antialias)
 	{
+		// Per-child options can differ. Inspect them without changing selection before
+		// skipping the original geometry loop; the selected child's flags alone are insufficient.
+		bool anyOverlay = objectBoolParameter("displayGrid", m_displayGrid) || objectBoolParameter("displayBoundingBox", m_displayBoundingBox);
+		if (!anyOverlay) if (auto* children = dynamic_cast<MyMultipleObject*>(m_object)) {
+			for (size_t n = 0; n < children->nbColors() && !anyOverlay; ++n) {
+				auto* child = dynamic_cast<poca::core::CommandableObject*>(children->getObject(n));
+				if (!child) continue;
+				anyOverlay = (child->hasParameter("displayGrid") ? child->getParameter<bool>("displayGrid") : m_displayGrid) ||
+					(child->hasParameter("displayBoundingBox") ? child->getParameter<bool>("displayBoundingBox") : m_displayBoundingBox);
+			}
+		}
+		if (!anyOverlay) { clearChildFrameGeometry(); return; }
 		const glm::mat4 cameraOnlyModel = m_matrixModel;
 		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
 		if (multi != NULL && multi->nbColors() > 0) {
 			const size_t oldIndex = multi->currentObjectID();
+			struct RestoreOverlayState {
+				Camera& camera; MyMultipleObject& multi; size_t index; glm::mat4 model; bool& cache;
+				~RestoreOverlayState() { cache = false; multi.setCurrentObject(index < multi.nbColors() ? index : 0); camera.setModelMatrix(model); }
+			} restore{ *this, *multi, oldIndex, cameraOnlyModel, m_cacheChildFrameGeometry };
+			std::set<poca::core::MyObjectInterface*> live;
+			for (size_t n = 0; n < multi->nbColors(); ++n) live.insert(multi->getObject(n));
+			for (auto it = m_childFrameGeometry.begin(); it != m_childFrameGeometry.end();) {
+				if (live.count(it->first)) { ++it; continue; }
+				m_childFrameGeometryBytes -= it->second->bytes(); it = m_childFrameGeometry.erase(it);
+			}
 			for (size_t n = 0; n < multi->nbColors(); ++n) {
 				poca::core::MyObjectInterface* child = multi->getObject(n);
 				if (child == NULL) continue;
+				const auto childBox = localObjectBoundingBox(child);
+				if (m_viewport[0] == 0 && m_viewport[1] == 0 && m_viewport[2] == uint32_t(width()) && m_viewport[3] == uint32_t(height()) &&
+					overlayBoxOutsideViewport(childBox, m_matrixProjection * m_stateCamera.m_matrixView * cameraOnlyModel * child->getModelMatrix(),
+						glm::vec2(width(), height()), _thickness, _antialias)) continue;
 				multi->setCurrentObject(n);
-				recomputeFrame(localObjectBoundingBox(child));
+				m_cacheChildFrameGeometry = true;
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::ChildFrameRecomputes);
+				recomputeFrame(childBox);
 				m_matrixModel = cameraOnlyModel * child->getModelMatrix();
 				if (objectBoolParameter("displayGrid", m_displayGrid))
 					displayGrid();
 				if (objectBoolParameter("displayBoundingBox", m_displayBoundingBox))
 					displayBoundingBox(_thickness, _antialias);
 			}
+			poca::core::PerformanceProfiler::renderMaximum(poca::core::PerformanceProfiler::RenderMetric::FrameCacheEntries, m_childFrameGeometry.size());
+			poca::core::PerformanceProfiler::renderMaximum(poca::core::PerformanceProfiler::RenderMetric::FrameCacheBytes, m_childFrameGeometryBytes);
+			m_cacheChildFrameGeometry = false;
 			multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
 			m_matrixModel = cameraOnlyModel;
 			recomputeFrame(currentDisplayObject() != NULL ? localObjectBoundingBox(currentDisplayObject()) : m_currentCrop);
 			return;
 		}
 
+		struct RestoreSingleOverlayModel {
+			Camera& camera; glm::mat4 model;
+			~RestoreSingleOverlayModel() { camera.setModelMatrix(model); }
+		} restore{ *this, cameraOnlyModel };
 		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
 		if (displayObject != NULL) {
 			recomputeFrame(localObjectBoundingBox(displayObject));
@@ -1535,6 +1690,7 @@ namespace poca::opengl {
 
 	void Camera::displayBoundingBox(const float _thickness, const float _antialias)
 	{
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::GridDrawUs);
 		if (!objectBoolParameter("displayBoundingBox", m_displayBoundingBox)) return;
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
@@ -1558,15 +1714,16 @@ namespace poca::opengl {
 		shader->setBool("useSingleColor", true);
 		shader->setBool("activatedCulling", false);
 		glEnableVertexAttribArray(0);
-		m_lineBboxBuffer.bindBuffer(0);
-		glDrawArrays(m_lineBboxBuffer.getMode(), 0, m_lineBboxBuffer.getNbElements());
+		m_frameBboxBuffer->bindBuffer(0);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::BboxDraws); glDrawArrays(m_frameBboxBuffer->getMode(), 0, m_frameBboxBuffer->getNbElements()); } while (false);
 		glDisableVertexAttribArray(0);
 		shader->release();
 	}
 
 	void Camera::displayGrid()
 	{
-		if (m_faceGridBuffer.empty() || !objectBoolParameter("displayGrid", m_displayGrid) || m_lineGridBuffer.getNbElements() == 0) return;
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::GridDrawUs);
+		if (m_frameFaceBuffer->empty() || !objectBoolParameter("displayGrid", m_displayGrid) || m_frameLineBuffer->getNbElements() == 0) return;
 
 		GL_CHECK_ERRORS();
 		GLfloat bkColor[4];
@@ -1595,16 +1752,16 @@ namespace poca::opengl {
 		float valueColor = a < 0.5 ? 242.f : 45.f;
 		shader->setVec4("singleColor", valueColor / 255.f, valueColor / 255.f, valueColor / 255.f, 1.f);
 		glEnableVertexAttribArray(0);
-		m_faceGridBuffer.bindBuffer(0);
-		glDrawArrays(m_faceGridBuffer.getMode(), 0, m_faceGridBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		m_frameFaceBuffer->bindBuffer(0);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::GridFaceDraws); glDrawArrays(m_frameFaceBuffer->getMode(), 0, m_frameFaceBuffer->getNbElements()); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
 		GL_CHECK_ERRORS();
 
 		valueColor = a < 0.5 ? 210.f : 75.f;
 		shader->setVec4("singleColor", valueColor / 255.f, valueColor / 255.f, valueColor / 255.f, 1.f);
 		glEnableVertexAttribArray(0);
-		m_lineGridBuffer.bindBuffer(0);
-		glDrawArrays(m_lineGridBuffer.getMode(), 0, m_lineGridBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		m_frameLineBuffer->bindBuffer(0);
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::GridLineDraws); glDrawArrays(m_frameLineBuffer->getMode(), 0, m_frameLineBuffer->getNbElements()); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
 		GL_CHECK_ERRORS();
 
@@ -1885,7 +2042,8 @@ namespace poca::opengl {
 			repaint();
 		}
 		else if (_event->key() == Qt::Key_N) {
-			bool ssao = false;
+			scenePreparationTimer.stop();
+		bool ssao = false;
 			poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(m_object);
 			if (!comObj) return; 
 			if (comObj->hasParameter("useSSAO"))
@@ -3029,6 +3187,8 @@ namespace poca::opengl {
 
 	void Camera::recomputeFrame(const poca::core::BoundingBox& _bbox)
 	{
+		poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::RecomputeFrameCalls);
+		poca::core::PerformanceProfiler::RenderTimer renderTimer(poca::core::PerformanceProfiler::RenderMetric::GridPreparationUs);
 		poca::core::MyObjectInterface* displayObject = currentDisplayObject();
 		poca::core::CommandableObject* comObj = dynamic_cast <poca::core::CommandableObject*>(displayObject);
 		if (!comObj || displayObject == NULL) return;
@@ -3270,9 +3430,24 @@ namespace poca::opengl {
 				}
 			}
 		}
-		m_lineBboxBuffer.updateBuffer(vecsLines);
-		m_faceGridBuffer.updateBuffer(vecsFaces);
-		m_lineGridBuffer.updateBuffer(grid);
+		if (!useChildFrameGeometry(displayObject, _bbox, vecsLines, vecsFaces, grid)) {
+			m_lineBboxBuffer.updateBuffer(vecsLines);
+			if (!vecsLines.empty()) {
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataCalls);
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataBytes, vecsLines.size() * sizeof(poca::core::Vec3mf));
+			}
+			m_faceGridBuffer.updateBuffer(vecsFaces);
+			if (!vecsFaces.empty()) {
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataCalls);
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataBytes, vecsFaces.size() * sizeof(poca::core::Vec3mf));
+			}
+			m_lineGridBuffer.updateBuffer(grid);
+			if (!grid.empty()) {
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataCalls);
+				poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::FrameDataBytes, grid.size() * sizeof(poca::core::Vec3mf));
+			}
+
+		}
 
 		m_debugPointBuffer.updateBuffer(vPoints);
 	
@@ -3720,7 +3895,7 @@ namespace poca::opengl {
 		shader->setBool("activatedCulling", false);
 		glEnableVertexAttribArray(0);
 		m_vertexArrowBuffer.bindBuffer(0, 0);
-		glDrawArrays(m_vertexArrowBuffer.getMode(), 0, m_vertexArrowBuffer.getSizeBuffers()[0]); // Starting from vertex 0; 3 vertices total -> 1 triangle
+		do { poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::OtherAuditedDraws); glDrawArrays(m_vertexArrowBuffer.getMode(), 0, m_vertexArrowBuffer.getSizeBuffers()[0]); } while (false); // Starting from vertex 0; 3 vertices total -> 1 triangle
 		glDisableVertexAttribArray(0);
 		shader->release();
 	}
@@ -3839,6 +4014,16 @@ namespace poca::opengl {
 		MyMultipleObject* multi = dynamic_cast<MyMultipleObject*>(m_object);
 		if (!testingSingleObject && multi != NULL && multi->nbColors() > 0) {
 			const size_t oldIndex = multi->currentObjectID();
+			struct RestoreOverlayState {
+				Camera& camera; MyMultipleObject& multi; size_t index; glm::mat4 model; bool& cache;
+				~RestoreOverlayState() { cache = false; multi.setCurrentObject(index < multi.nbColors() ? index : 0); camera.setModelMatrix(model); }
+			} restore{ *this, *multi, oldIndex, cameraOnlyModel, m_cacheChildFrameGeometry };
+			std::set<poca::core::MyObjectInterface*> live;
+			for (size_t n = 0; n < multi->nbColors(); ++n) live.insert(multi->getObject(n));
+			for (auto it = m_childFrameGeometry.begin(); it != m_childFrameGeometry.end();) {
+				if (live.count(it->first)) { ++it; continue; }
+				m_childFrameGeometryBytes -= it->second->bytes(); it = m_childFrameGeometry.erase(it);
+			}
 			testingSingleObject = true;
 			for (size_t n = 0; n < multi->nbColors(); ++n) {
 				multi->setCurrentObject(n);
@@ -3848,6 +4033,7 @@ namespace poca::opengl {
 					return elem;
 				}
 			}
+			m_cacheChildFrameGeometry = false;
 			multi->setCurrentObject(oldIndex < multi->nbColors() ? oldIndex : 0);
 			testingSingleObject = false;
 			return Gizmo_None;
