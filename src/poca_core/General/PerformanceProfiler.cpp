@@ -112,7 +112,7 @@ namespace poca::core {
 
 	const char* PerformanceProfiler::renderMetricName(RenderMetric metric)
 	{
-		static const std::array<const char*, size_t(RenderMetric::Count)> names{
+		static const std::array<const char*, size_t(RenderMetric::VisibleBegin)> names{
 			"paintgl_calls", "draw_elements_onscreen", "draw_elements_offscreen", "recompute_frame_calls", "child_frame_recomputes",
 			"grid_face_draws", "grid_line_draws", "bbox_draws", "raw_volume_gl_draws_single", "raw_volume_gl_draws_multi", "nonraw_volume_gl_draws",
 			"other_audited_gl_draws", "picking_gl_draws", "shared_descriptor_glBufferData_calls", "shared_descriptor_glBufferData_bytes",
@@ -180,9 +180,41 @@ namespace poca::core {
 			"pick_hover_dispatches",
 			"pick_left_dispatches",
 			"pick_right_dispatches",
-			"pick_other_dispatches"
+			"pick_other_dispatches",
+			"local_bounds_calls", "local_bounds_us", "collection_bounds_calls", "collection_bounds_us",
+			"collection_preparation_us", "collection_grid_calls", "collection_grid_us", "bbox_preparation_calls", "bbox_preparation_us",
+			"objectlist_batching_disabled", "detectionset_batching_disabled"
 		};
-		return names.at(size_t(metric));
+		if (size_t(metric) < names.size()) return names.at(size_t(metric));
+		// Construct once on CSV/report access, never in a disabled or per-object hot path.
+		static const auto visibleNames = [] {
+			const std::array<const char*, size_t(VisibleFamily::None)> families{
+				"objectlist_individual_", "objectlist_shared_", "detectionset_individual_", "detectionset_shared_" };
+			const std::array<const char*, size_t(VisibleMetric::Count)> fields{
+				"display_calls", "display_us", "offscreen_calls", "components_visited", "components_selected", "components_drawn",
+				"unselected", "no_display_bounds", "no_frustum_test", "handled", "fallback", "fallback_no_family", "fallback_settings",
+				"missing_command", "fallback_build", "fallback_memory", "builds", "build_us", "build_bytes",
+				"build_points", "build_triangle_vertices", "build_ellipsoid_instances", "can_batch_calls", "can_batch_us",
+				"transform_calls", "transform_us", "ranges", "triangle_visibility_checks", "triangle_unselected_spans",
+				"helper_invocations", "helper_gl_draws", "gl_draws", "draw_ranges", "indexed_triangle_indices", "array_triangle_vertices",
+				"submitted_triangles", "wire_triangle_elements", "submitted_points", "submitted_line_vertices",
+				"submitted_quad_indices", "submitted_quads", "ellipsoid_instances", "gpu_deferred",
+				"points_us", "points_draws", "points_submitted", "points_disabled", "points_empty",
+				"outline_us", "outline_draws", "outline_submitted", "outline_disabled", "outline_empty",
+				"opaque_us", "opaque_draws", "opaque_submitted", "opaque_disabled", "opaque_empty",
+				"translucent_us", "translucent_draws", "translucent_submitted", "translucent_disabled", "translucent_empty",
+				"ellipsoids_us", "ellipsoids_draws", "ellipsoids_submitted", "ellipsoids_disabled", "ellipsoids_empty",
+				"skeleton_us", "skeleton_draws", "skeleton_submitted", "skeleton_disabled", "skeleton_empty",
+				"links_us", "links_draws", "links_submitted", "links_disabled", "links_empty",
+				"bbox_us", "bbox_draws", "bbox_submitted", "bbox_disabled", "bbox_empty" };
+			std::array<std::string, size_t(VisibleFamily::None) * size_t(VisibleMetric::Count)> result;
+			for (size_t family = 0; family < families.size(); ++family)
+				for (size_t field = 0; field < fields.size(); ++field)
+					result[family * fields.size() + field] = std::string(families[family]) + fields[field];
+			result[size_t(VisibleFamily::ObjectListShared) * fields.size() + size_t(VisibleMetric::BuildBytes)] = "objectlist_shared_build_admitted_estimated_peak_bytes";
+			return result;
+		}();
+		return visibleNames.at(size_t(metric) - names.size()).c_str();
 	}
 
 	PerformanceProfiler::~PerformanceProfiler() { stopRenderCsv(); }
@@ -353,6 +385,104 @@ namespace poca::core {
 		m_profiler->m_activePickFamily = m_previous;
 	}
 
+	PerformanceProfiler::RenderMetric PerformanceProfiler::visibleMetric(VisibleFamily family, VisibleMetric metric)
+	{
+		return RenderMetric(size_t(RenderMetric::VisibleBegin) + size_t(family) * size_t(VisibleMetric::Count) + size_t(metric));
+	}
+	PerformanceProfiler::VisibleMetric PerformanceProfiler::visiblePassMetric(VisiblePass pass, size_t offset)
+	{
+		return VisibleMetric(size_t(VisibleMetric::PointsUs) + size_t(pass) * 5 + offset);
+	}
+	bool PerformanceProfiler::visibleActive()
+	{
+		auto& profiler = renderInstance();
+		return profiler.renderMetricsEnabled() && std::this_thread::get_id() == profiler.m_renderThread &&
+			profiler.m_activeVisibleFamily != VisibleFamily::None;
+	}
+	void PerformanceProfiler::visibleCount(VisibleFamily family, VisibleMetric metric, uint64_t value)
+	{
+		if (family != VisibleFamily::None) renderCount(visibleMetric(family, metric), value);
+	}
+	void PerformanceProfiler::visibleCount(VisibleMetric metric, uint64_t value)
+	{
+		if (visibleActive()) visibleCount(renderInstance().m_activeVisibleFamily, metric, value);
+	}
+	void PerformanceProfiler::visibleMode(VisiblePass pass, bool enabled, uint64_t elements)
+	{
+		if (!enabled) visibleCount(visiblePassMetric(pass, 3));
+		else if (!elements) visibleCount(visiblePassMetric(pass, 4));
+	}
+	void PerformanceProfiler::visibleDraw(VisiblePass pass, unsigned mode, uint64_t elements, bool indexed,
+		uint64_t instances, bool wire, uint64_t calls, uint64_t ranges)
+	{
+		if (!visibleActive() || !calls) return;
+		const uint64_t submitted = elements * instances * calls;
+		visibleCount(VisibleMetric::GlDraws, calls);
+		visibleCount(VisibleMetric::DrawRanges, ranges * calls);
+		visibleCount(visiblePassMetric(pass, 1), calls);
+		visibleCount(visiblePassMetric(pass, 2), submitted);
+		// OpenGL primitive constants; count submitted topology, never fragments/visible triangles.
+		if (mode == 0x0004) { // GL_TRIANGLES
+			visibleCount(indexed ? VisibleMetric::IndexedTriangleIndices : VisibleMetric::ArrayTriangleVertices, submitted);
+			visibleCount(VisibleMetric::SubmittedTriangles, (elements / 3) * instances * calls);
+			if (wire) visibleCount(VisibleMetric::WireTriangleElements, submitted);
+		}
+		else if (mode == 0x0000) visibleCount(VisibleMetric::SubmittedPoints, submitted); // GL_POINTS
+		else if (mode == 0x0001) visibleCount(VisibleMetric::SubmittedLineVertices, submitted); // GL_LINES
+		else if (mode == 0x0007) { // GL_QUADS
+			if (indexed) visibleCount(VisibleMetric::SubmittedQuadIndices, submitted);
+			visibleCount(VisibleMetric::SubmittedQuads, (elements / 4) * instances * calls);
+		}
+		if (pass == VisiblePass::Ellipsoids) visibleCount(VisibleMetric::EllipsoidInstances, instances * calls);
+	}
+	PerformanceProfiler::VisibleTimer::VisibleTimer(VisibleMetric metric, VisibleFamily family)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled() || std::this_thread::get_id() != profiler.m_renderThread) return;
+		if (family == VisibleFamily::None) family = profiler.m_activeVisibleFamily;
+		if (family != VisibleFamily::None) m_timer.emplace(visibleMetric(family, metric));
+	}
+	PerformanceProfiler::VisibleScope::VisibleScope(VisibleFamily family, bool offscreen) : m_family(family)
+	{
+		auto& profiler = renderInstance();
+		if (!profiler.renderMetricsEnabled() || std::this_thread::get_id() != profiler.m_renderThread) return;
+		m_profiler = &profiler; m_previous = profiler.m_activeVisibleFamily; profiler.m_activeVisibleFamily = family;
+		visibleCount(VisibleMetric::DisplayCalls);
+		if (offscreen) visibleCount(VisibleMetric::OffscreenCalls);
+		auto& values = profiler.m_activeRender ? profiler.m_activeRender->values : profiler.m_renderBetweenFrames;
+		m_draws = values[size_t(visibleMetric(family, VisibleMetric::GlDraws))];
+		m_timer.emplace(visibleMetric(family, VisibleMetric::DisplayUs));
+	}
+	PerformanceProfiler::VisibleScope::~VisibleScope()
+	{
+		if (!m_profiler) return;
+		auto& values = m_profiler->m_activeRender ? m_profiler->m_activeRender->values : m_profiler->m_renderBetweenFrames;
+		if (values[size_t(visibleMetric(m_family, VisibleMetric::GlDraws))] > m_draws) {
+			visibleCount(VisibleMetric::GpuDeferred); // GPU execution requires an external context-aware capture.
+			if (m_family == VisibleFamily::ObjectListIndividual || m_family == VisibleFamily::DetectionIndividual)
+				visibleCount(VisibleMetric::ComponentsDrawn);
+		}
+		m_profiler->m_activeVisibleFamily = m_previous;
+	}
+	PerformanceProfiler::VisibleHelperScope::VisibleHelperScope(VisiblePass pass, unsigned mode, uint64_t elements, bool indexed, bool wire)
+		: m_pass(pass), m_mode(mode), m_elements(elements), m_indexed(indexed), m_wire(wire)
+	{
+		if (!visibleActive()) return;
+		m_profiler = &renderInstance();
+		auto& values = m_profiler->m_activeRender ? m_profiler->m_activeRender->values : m_profiler->m_renderBetweenFrames;
+		m_before = values[size_t(RenderMetric::OtherAuditedDraws)];
+		visibleCount(VisibleMetric::HelperInvocations);
+		m_timer.emplace(visibleMetric(m_profiler->m_activeVisibleFamily, visiblePassMetric(pass)));
+	}
+	PerformanceProfiler::VisibleHelperScope::~VisibleHelperScope()
+	{
+		if (!m_profiler) return;
+		auto& values = m_profiler->m_activeRender ? m_profiler->m_activeRender->values : m_profiler->m_renderBetweenFrames;
+		const auto draws = values[size_t(RenderMetric::OtherAuditedDraws)] - m_before;
+		visibleCount(VisibleMetric::HelperGlDraws, draws);
+		visibleDraw(m_pass, m_mode, m_elements, m_indexed, 1, m_wire, draws);
+	}
+
 	void PerformanceProfiler::renderWorkerCount(RenderWorkerMetric metric, uint64_t value)
 	{
 		auto& profiler = renderInstance();
@@ -381,7 +511,7 @@ namespace poca::core {
 	std::string PerformanceProfiler::renderCsvRow(const RenderRecord& record)
 	{
 		std::ostringstream out; out.imbue(std::locale::classic());
-		out << "2," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
+		out << "3," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
 			<< (record.multiple ? "MyMultipleObject" : "MyObject") << ',' << record.children << ',' << record.width << ',' << record.height << ','
 			<< record.interactive << ',' << record.cpuMs << ',' << record.queued << ',' << record.ready << ',' << record.preparing << ",0";
 		for (const auto value : record.values) out << ',' << value;
@@ -444,6 +574,7 @@ namespace poca::core {
 		}
 		else out << " paint_ms=not_instrumented";
 		for (size_t i = 0; i < m_renderTotals.size(); ++i) {
+			if (i >= size_t(RenderMetric::VisibleBegin) && !m_renderTotals[i] && !m_renderBetweenFrames[i]) continue;
 			out << ' ' << renderMetricName(RenderMetric(i)) << '=' << m_renderTotals[i];
 			if (m_renderBetweenFrames[i]) out << " between_" << renderMetricName(RenderMetric(i)) << '=' << m_renderBetweenFrames[i];
 		}

@@ -53,6 +53,10 @@
 
 #include "DetectionSetDisplayCommand.hpp"
 
+using RenderProfiler = poca::core::PerformanceProfiler;
+using VisibleMetric = RenderProfiler::VisibleMetric;
+using VisiblePass = RenderProfiler::VisiblePass;
+
 
 DetectionSetDisplayCommand::DetectionSetDisplayCommand(poca::geometry::DetectionSet* _ds) : poca::opengl::BasicDisplayCommand(_ds, "DetectionSetDisplayCommand"), m_textureLutID(0)
 {
@@ -202,10 +206,14 @@ poca::core::Command* DetectionSetDisplayCommand::copy()
 
 void DetectionSetDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao)
 {
-	if (!m_dset->isSelected()) return;
+	RenderProfiler::VisibleScope profile(RenderProfiler::VisibleFamily::DetectionIndividual, _offscreen);
+	RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
+	if (!m_dset->isSelected()) { RenderProfiler::visibleCount(VisibleMetric::Unselected); return; }
+	RenderProfiler::visibleCount(VisibleMetric::ComponentsSelected);
+	RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
 
 	bool pointRendering = getParameter<bool>("pointRendering");
-	if (!pointRendering) return;
+	if (!pointRendering) { RenderProfiler::visibleMode(VisiblePass::Points, false, 0); return; }
 
 	drawElements(_cam, _ssao);
 	if (!_offscreen)
@@ -214,10 +222,15 @@ void DetectionSetDisplayCommand::display(poca::opengl::Camera* _cam, const bool 
 
 void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
-	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
+	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) { RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds); return; }
 	GL_CHECK_ERRORS();
-	if (m_pointBuffer.empty())
+	if (m_pointBuffer.empty()) {
+		RenderProfiler::VisibleTimer timer(VisibleMetric::BuildUs);
+		RenderProfiler::visibleCount(VisibleMetric::Builds);
 		createDisplay();
+		RenderProfiler::visibleCount(VisibleMetric::BuildPoints, RenderProfiler::visibleElements(m_pointBuffer, false));
+	}
+	RenderProfiler::visibleMode(VisiblePass::Points, true, RenderProfiler::visibleElements(m_pointBuffer, false));
 
 	GL_CHECK_ERRORS();
 	glEnable(GL_DEPTH_TEST);
@@ -228,23 +241,31 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 
 	uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
 	bool screenCoordinates = getParameter<bool>("screenCoordinates");
-	if (!m_colorBuffer.empty())
-		_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
-	else if (m_normalBuffer.empty()) {
-		poca::core::PaletteInterface* pal = m_dset->getPalette();
-		if (pal->getName() == "RandomOneColor") {
-			poca::core::Color4uc c = pal->getColor(0.5f);
-			glm::vec4 color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
-			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates, true, color);
+	{
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Points, m_pointBuffer.getMode(),
+			!m_colorBuffer.empty() ? RenderProfiler::visibleElements(m_pointBuffer, false) :
+			RenderProfiler::visibleElements(m_pointBuffer),
+			m_colorBuffer.empty() && m_pointBuffer.getBufferIndices() != 0);
+		if (!m_colorBuffer.empty())
+			_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
+		else if (m_normalBuffer.empty()) {
+			poca::core::PaletteInterface* pal = m_dset->getPalette();
+			if (pal->getName() == "RandomOneColor") {
+				poca::core::Color4uc c = pal->getColor(0.5f);
+				glm::vec4 color = glm::vec4((float)c[0] / 255.f, (float)c[1] / 255.f, (float)c[2] / 255.f, (float)c[3] / 255.f);
+				_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates, true, color);
+			}
+			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
 		}
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
-	}
-	else
-		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
+		else
+			_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_normalBuffer, m_featureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_currentMinOriginalFeature, m_currentMaxOriginalFeature, m_isScaleLUT, pointSize, _ssao, screenCoordinates);
 
+	}
 #ifdef DEBUG_NORMAL
-	if (!m_normalDebugBuffer.empty())
+	if (!m_normalDebugBuffer.empty()) {
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Links, m_normalDebugBuffer.getMode(), RenderProfiler::visibleElements(m_normalDebugBuffer, false));
 		_cam->drawUniformShader(m_normalDebugBuffer, poca::core::Color4D(0.f, 0.f, 0.f, 1.f));
+	}
 #endif
 	GL_CHECK_ERRORS();
 }

@@ -58,6 +58,10 @@
 
 #include "ObjectListDisplayCommand.hpp"
 
+using RenderProfiler = poca::core::PerformanceProfiler;
+using VisibleMetric = RenderProfiler::VisibleMetric;
+using VisiblePass = RenderProfiler::VisiblePass;
+
 char* fsLightSSAO = "#version 330 core\n"
 "layout (location = 0) out vec3 gPosition;\n"
 "layout(location = 1) out vec3 gNormal;\n"
@@ -368,7 +372,11 @@ poca::core::Command* ObjectListDisplayCommand::copy()
 
 void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao)
 {
-	if (!m_objects->isSelected()) return;
+	RenderProfiler::VisibleScope profile(RenderProfiler::VisibleFamily::ObjectListIndividual, _offscreen);
+	RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
+	if (!m_objects->isSelected()) { RenderProfiler::visibleCount(VisibleMetric::Unselected); return; }
+	RenderProfiler::visibleCount(VisibleMetric::ComponentsSelected);
+	RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
 
 	drawElements(_cam, _ssao);
 	if (!_offscreen)
@@ -377,9 +385,15 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 
 void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
-	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
-	if (m_triangleBuffer.empty())
+	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) { RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds); return; }
+	if (m_triangleBuffer.empty()) {
+		RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
+		RenderProfiler::visibleCount(VisibleMetric::Builds);
 		createDisplay();
+		RenderProfiler::visibleCount(VisibleMetric::BuildPoints, RenderProfiler::visibleElements(m_pointBuffer, false));
+		RenderProfiler::visibleCount(VisibleMetric::BuildTriangleVertices, RenderProfiler::visibleElements(m_triangleBuffer, false));
+		RenderProfiler::visibleCount(VisibleMetric::BuildEllipsoidInstances, RenderProfiler::visibleElements(m_ellipsoidTransformBuffer, false));
+	}
 	if (poca::core::POCA_ENABLE_PICKING && m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
@@ -424,13 +438,22 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	glDisable(GL_BLEND);
 	glCullFace(GL_BACK);
+	RenderProfiler::visibleMode(VisiblePass::Points, pointRendering, RenderProfiler::visibleElements(m_pointBuffer, false));
+	RenderProfiler::visibleMode(VisiblePass::Outline, outlinePointRendering, RenderProfiler::visibleElements(m_outlinePointBuffer, false));
+	RenderProfiler::visibleMode((useTranslucentMeshRendering || alpha < 1.f) ? VisiblePass::Translucent : VisiblePass::Opaque, shapeRendering, RenderProfiler::visibleElements(m_triangleBuffer, false));
+	RenderProfiler::visibleMode(VisiblePass::Skeleton, skeletonRendering, RenderProfiler::visibleElements(m_skeletonBuffer, false));
+	RenderProfiler::visibleMode(VisiblePass::Links, linkRendering, RenderProfiler::visibleElements(m_linksBuffer, false));
 	if (pointRendering) {
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Points, m_pointBuffer.getMode(),
+			RenderProfiler::visibleElements(m_pointBuffer), m_pointBuffer.getBufferIndices() != 0);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, _ssao);
 	}
 
 	if (outlinePointRendering && !m_outlinePointBuffer.empty()) {
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Outline, m_outlinePointBuffer.getMode(),
+			RenderProfiler::visibleElements(m_outlinePointBuffer), m_outlinePointBuffer.getBufferIndices() != 0);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		uint32_t pointSize = getParameter<uint32_t>("pointSizeGL");
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_outlinePointBuffer, m_outlineLocsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, _ssao);
@@ -442,14 +465,21 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		glCullFace(GL_BACK);
 
 	if (m_objects->hasSkeletons()) {
-		if (m_skeletonBuffer.empty())
+		if (m_skeletonBuffer.empty()) {
+			RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
+			RenderProfiler::visibleCount(VisibleMetric::Builds);
 			createDisplaySkeleton();
+		}
 
-		if (skeletonRendering && !m_skeletonBuffer.empty())
+		if (skeletonRendering && !m_skeletonBuffer.empty()) {
+			RenderProfiler::VisibleHelperScope pass(VisiblePass::Skeleton, m_skeletonBuffer.getMode(), RenderProfiler::visibleElements(m_skeletonBuffer, false));
 			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_skeletonBuffer, m_colorSkeletonBuffer);
+		}
 
-		if (linkRendering && !m_linksBuffer.empty())
+		if (linkRendering && !m_linksBuffer.empty()) {
+			RenderProfiler::VisibleHelperScope pass(VisiblePass::Links, m_linksBuffer.getMode(), RenderProfiler::visibleElements(m_linksBuffer, false));
 			_cam->drawSimpleShader<poca::core::Vec3mf, poca::core::Color4D>(m_linksBuffer, m_colorLinksBuffer);
+		}
 	}
 
 	glPolygonMode(GL_FRONT_AND_BACK, fill ? GL_FILL : GL_LINE);
@@ -465,6 +495,8 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	}
 
 	if (shapeRendering) {
+		const auto meshPass = (useTranslucentMeshRendering || alpha < 1.f) ? VisiblePass::Translucent : VisiblePass::Opaque;
+		RenderProfiler::VisibleTimer meshTimer(RenderProfiler::visiblePassMetric(meshPass));
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		if (useTranslucentMeshRendering)
@@ -514,10 +546,14 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 				m_triangleNormalBuffer.bindBuffer(1);
 				m_triangleFeatureBuffer.bindBuffer(2);
 
-				if (m_triangleBuffer.getBufferIndices() != 0)
+				if (m_triangleBuffer.getBufferIndices() != 0) {
+					RenderProfiler::visibleDraw(meshPass, m_triangleBuffer.getMode(), m_triangleBuffer.getNbIndices(), true, 1, !fill);
 					glDrawElements(m_triangleBuffer.getMode(), m_triangleBuffer.getNbIndices(), GL_UNSIGNED_INT, (void*)0);
-				else
+				}
+				else {
+					RenderProfiler::visibleDraw(meshPass, m_triangleBuffer.getMode(), m_triangleBuffer.getNbElements(), false, 1, !fill);
 					glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements());
+				}
 
 				//glDrawArrays(m_triangleBuffer.getMode(), 0, m_triangleBuffer.getNbElements()); // Starting from vertex 0; 3 vertices total -> 1 triangle
 				glDisableVertexAttribArray(0);
@@ -531,6 +567,11 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 			}
 		}
 		else {
+			const bool triangles = m_lineBuffer.empty() || fill;
+			RenderProfiler::VisibleHelperScope pass(meshPass, triangles ? m_triangleBuffer.getMode() : m_lineBuffer.getMode(),
+				triangles ? RenderProfiler::visibleElements(m_triangleBuffer) :
+				RenderProfiler::visibleElements(m_lineBuffer),
+				triangles ? m_triangleBuffer.getBufferIndices() != 0 : m_lineBuffer.getBufferIndices() != 0, !fill);
 			//_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
 			if (m_lineBuffer.empty() || fill)
 				_cam->drawSimpleShader<poca::core::Vec3mf, float>(m_textureLutID, m_triangleBuffer, m_triangleFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, alpha, useUniformColor, uniformColor);
@@ -549,6 +590,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
 	if (m_idSelection >= 0 && shapeRendering && displayBboxSelection) {
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Bbox, m_boundingBoxSelection.getMode(), RenderProfiler::visibleElements(m_boundingBoxSelection, false));
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		poca::core::Color4D color = poca::core::contrastColor(poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
@@ -567,6 +609,8 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 {
 	bool ellipsoidRendering = getParameter<bool>("ellipsoidRendering");
+	RenderProfiler::visibleMode(VisiblePass::Ellipsoids, ellipsoidRendering, RenderProfiler::visibleElements(m_ellipsoidTransformBuffer, false));
+	RenderProfiler::VisibleTimer passTimer(VisibleMetric::EllipsoidsUs);
 	if (m_ellipsoidTransformBuffer.empty() || !ellipsoidRendering)
 		return;
 
@@ -612,6 +656,7 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 		glEnableVertexAttribArray(5 + i);
 		m_ellipsoidTransformBuffer.bindBuffer(5 + i, (void*)(4 * sizeof(float) * i));
 	}
+	RenderProfiler::visibleDraw(VisiblePass::Ellipsoids, GL_QUADS, helper->getNbIndicesUnitSphere(), true, m_objects->nbElements(), true);
 	glDrawElementsInstanced(GL_QUADS, helper->getNbIndicesUnitSphere(), GL_UNSIGNED_SHORT, 0, m_objects->nbElements());
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
@@ -1024,6 +1069,8 @@ QString ObjectListDisplayCommand::getInfosTriangle(const int _id) const
 
 void ObjectListDisplayCommand::generateBoundingBoxSelection(const int _idx)
 {
+	RenderProfiler::RenderTimer timer(RenderProfiler::RenderMetric::BboxPreparationUs);
+	RenderProfiler::renderCount(RenderProfiler::RenderMetric::BboxPreparationCalls);
 	if (_idx < 0) return;
 	bool shapeRendering = getParameter<bool>("shapeRendering");
 	if (!shapeRendering) return;

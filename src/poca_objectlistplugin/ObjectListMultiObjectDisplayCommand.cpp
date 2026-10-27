@@ -43,6 +43,11 @@
 #include "ObjectListDisplayCommand.hpp"
 #include "ObjectListMultiObjectDisplayCommand.hpp"
 
+using RenderProfiler = poca::core::PerformanceProfiler;
+using VisibleMetric = RenderProfiler::VisibleMetric;
+using VisiblePass = RenderProfiler::VisiblePass;
+using VisibleFamily = RenderProfiler::VisibleFamily;
+
 namespace {
 	const std::string kRenderedComponentName = "ObjectLists";
 	const std::string kRenderedSubComponentName = "ObjectList";
@@ -710,8 +715,12 @@ poca::core::Command* ObjectListMultiObjectDisplayCommand::copy()
 
 bool ObjectListMultiObjectDisplayCommand::canBatch() const
 {
-	if (m_object == nullptr || m_object->nbColors() <= 1)
+	RenderProfiler::VisibleTimer timer(VisibleMetric::CanBatchUs, VisibleFamily::ObjectListShared);
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::CanBatchCalls);
+	if (m_object == nullptr || m_object->nbColors() <= 1) {
+		RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::FallbackNoFamily);
 		return false;
+	}
 
 	bool hasObjectListChild = false, first = true;
 	uint32_t dimension = 0;
@@ -724,15 +733,19 @@ bool ObjectListMultiObjectDisplayCommand::canBatch() const
 		else if (dimension != objs->dimension())
 			hasObjectListChild = false;
 	});
-	if (!hasObjectListChild || first)
+	if (!hasObjectListChild || first) {
+		RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, first ? VisibleMetric::FallbackNoFamily : VisibleMetric::FallbackSettings);
 		return false;
+	}
 	bool consistentDimensions = true;
 	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
 		if (objs->dimension() != dimension)
 			consistentDimensions = false;
 	});
-	if (!consistentDimensions)
+	if (!consistentDimensions) {
+		RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::FallbackSettings);
 		return false;
+	}
 	return hasObjectListChild;
 }
 
@@ -827,10 +840,61 @@ bool ObjectListMultiObjectDisplayCommand::rebuildEllipsoidBuffers()
 
 bool ObjectListMultiObjectDisplayCommand::rebuild()
 {
+	RenderProfiler::VisibleTimer timer(VisibleMetric::BuildUs, VisibleFamily::ObjectListShared);
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::Builds);
 	freeGPUMemory();
 	if (!canBatch())
 		return false;
 
+	// Bound additional shared allocations before generating/copying any geometry.
+	// 256 MiB is a conservative admission ceiling, not a GPU-memory availability
+	// claim. Charge six times the final payload for combined-vector growth,
+	// per-child scratch, GL buffer copies and GPU storage; child buffers coexist.
+	// Include every list (even hidden ones), normals, features, object indices,
+	// skeletons/links, potential ellipsoids, model matrices and range/LUT overhead.
+	// Existing metadata is authoritative; never materialize CGAL meshes here.
+	const size_t maxEstimatedBytes = size_t(256) * 1024 * 1024;
+	const size_t allocationCopies = 6;
+	size_t estimatedBytes = 0;
+	bool withinBudget = true;
+	auto account = [&](const size_t count, const size_t elementBytes) {
+		const size_t peakElementBytes = allocationCopies * elementBytes;
+		if (!withinBudget || count > (maxEstimatedBytes - estimatedBytes) / peakElementBytes) {
+			withinBudget = false;
+			return;
+		}
+		estimatedBytes += count * peakElementBytes;
+	};
+	account(m_object->nbColors(), sizeof(glm::mat4));
+	forEachObjectList(m_object, [&](size_t, poca::core::MyObjectInterface*, poca::geometry::ObjectListInterface* objs) {
+		if (!withinBudget) return;
+		const size_t points = objs->getLocsObjects().nbData();
+		// Mesh/polygon generateOutlineLocs currently uses all locs; Delaunay uses
+		// getLocOutlines. Taking the maximum safely covers both implementations.
+		const size_t outlinePoints = std::max(points, objs->getLocOutlines().nbData());
+		account(points, sizeof(poca::core::Vec3mf) + 2 * sizeof(float));
+		account(outlinePoints, sizeof(poca::core::Vec3mf) + 2 * sizeof(float));
+		account(objs->getTrianglesObjects().nbData(), 2 * sizeof(poca::core::Vec3mf) + 2 * sizeof(float));
+		if (objs->dimension() == 2)
+			account(objs->getOutlinesObjects().nbData(), sizeof(poca::core::Vec3mf) + 2 * sizeof(float));
+		if (auto* mesh = dynamic_cast<poca::geometry::ObjectListMesh*>(objs)) {
+			account(mesh->getSkeletons().nbData(), sizeof(poca::core::Vec3mf) + sizeof(poca::core::Color4D) + sizeof(float));
+			account(mesh->getLinks().nbData(), sizeof(poca::core::Vec3mf) + sizeof(poca::core::Color4D) + sizeof(float));
+		}
+		// Budget ellipsoids even while disabled, so later toggles remain covered.
+		// Also allow histogram/axis scalar materialization during feature updates.
+		account(objs->nbElements(), sizeof(glm::mat4) + 7 * sizeof(float));
+		account(1, sizeof(ObjectFeatureRange) + sizeof(ObjectTriangleRange) + sizeof(ListDrawRange) + 4096);
+	});
+	if (!withinBudget) {
+		RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::FallbackMemory);
+		poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::MultiFallbackLimit);
+		// No family-handled result is published: normal per-child commands draw
+		// all meshes with their original geometry and existing GPU resources.
+		return false;
+	}
+
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::BuildBytes, estimatedBytes);
 	std::vector<poca::core::Vec3mf> points, outlinePoints, triangles, triangleNormals, lines, skeletons, links;
 	std::vector<float> pointFeatures, outlinePointFeatures, triangleFeatures, lineFeatures;
 	std::vector<float> pointObjectIndices, outlinePointObjectIndices, triangleObjectIndices, lineObjectIndices, skeletonObjectIndices, linkObjectIndices;
@@ -1098,32 +1162,73 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	}
 	if (!rebuildEllipsoidBuffers())
 		return false;
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::BuildPoints, points.size());
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::BuildTriangleVertices, triangles.size());
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::BuildEllipsoidInstances, RenderProfiler::visibleElements(m_ellipsoidTransformBuffer, false));
 	return updateObjectModelBuffer();
 }
 
 void ObjectListMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
 	poca::core::PerformanceProfiler::ScopedTimer timer("ObjectList", "ObjectList multi-object display");
-	(void)_offscreen;
-	if (!canBatch())
+	RenderProfiler::VisibleScope profile(VisibleFamily::ObjectListShared, _offscreen);
+	if (!canBatch()) { RenderProfiler::visibleCount(VisibleMetric::Fallback); return; }
+	if (m_triangleBuffer.empty() && m_pointBuffer.empty() && !rebuild()) {
+		RenderProfiler::visibleCount(VisibleMetric::Fallback);
+		RenderProfiler::visibleCount(VisibleMetric::FallbackBuild);
 		return;
-	if (m_triangleBuffer.empty() && m_pointBuffer.empty() && !rebuild())
-		return;
+	}
 	// Keep the instanced object-model texture synchronized with per-child gizmo transforms.
 	if (!refreshTransformBuffers()) {
 		freeGPUMemory();
-		if (!rebuild())
+		if (!rebuild()) {
+			RenderProfiler::visibleCount(VisibleMetric::Fallback);
+			RenderProfiler::visibleCount(VisibleMetric::FallbackBuild);
 			return;
+		}
 	}
-	if (m_listDrawRanges.empty())
+	if (m_listDrawRanges.empty()) {
+		RenderProfiler::visibleCount(VisibleMetric::Fallback);
+		RenderProfiler::visibleCount(VisibleMetric::FallbackBuild);
 		return;
+	}
 
 	drawElements(_cam, _ssao);
+	RenderProfiler::visibleCount(VisibleMetric::Handled);
 	markComponentFamilyHandled(_result);
 }
 
 void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
 {
+	// Diagnostics only: enumerate source components once, not synthetic transparency ranges.
+	if (RenderProfiler::visibleActive()) {
+		for (const auto& range : m_listDrawRanges) {
+			for (const auto& source : range.objectFeatures) {
+				auto* objects = objectListAtIndex(m_object, source.objectIndex, range.listIndex);
+				RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
+				if (objects == nullptr) continue;
+				RenderProfiler::visibleCount(objects->isSelected() ? VisibleMetric::ComponentsSelected : VisibleMetric::Unselected);
+				RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
+				if (!objects->getCurrentHistogram()->hasDisplayBounds()) RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds);
+				if (range.displayCommand == nullptr) { RenderProfiler::visibleCount(VisibleMetric::MissingCommand); continue; }
+				const auto* command = range.displayCommand;
+				const bool decorations =
+					(command->getParameter<bool>("pointRendering") && source.pointCount) ||
+					(command->getParameter<bool>("outlinePointRendering") && source.outlinePointCount) ||
+					(command->getParameter<bool>("ellipsoidRendering") && source.ellipsoidCount);
+				// Count source contributions submitted by the shared buffers, including
+				// decorations whose feature values may discard them in the shader.
+				auto* mesh = dynamic_cast<poca::geometry::ObjectListMesh*>(objects);
+				const bool skeletons = mesh != nullptr &&
+					((command->getParameter<bool>("skeletonRendering") && mesh->getSkeletons().nbData()) ||
+					(command->getParameter<bool>("linkRendering") && mesh->getLinks().nbData()));
+				const bool shapes = command->getParameter<bool>("shapeRendering") && range.triangleCount &&
+					((range.is3D || command->getParameter<bool>("fill")) ?
+					(objects->isSelected() && source.triangleCount) : source.lineCount != 0);
+				if (decorations || skeletons || shapes) RenderProfiler::visibleCount(VisibleMetric::ComponentsDrawn);
+			}
+		}
+	}
 	bool displayBboxSelection = false;
 	for (const ListDrawRange& range : m_listDrawRanges) {
 		if (range.displayCommand == nullptr)
@@ -1139,7 +1244,10 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 			drawListRange(_cam, _ssao, decorations);
 		} else drawListRange(_cam, _ssao, range);
 	}
-	drawTransparentRanges(_cam, _ssao);
+	{
+		RenderProfiler::VisibleTimer transparentTimer(VisibleMetric::TranslucentUs);
+		drawTransparentRanges(_cam, _ssao);
+	}
 
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
@@ -1149,8 +1257,11 @@ void ObjectListMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _ca
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
 		const poca::core::Color4D color = poca::core::contrastColor(
 			poca::core::Color4D(bkColor[0] * 255.f, bkColor[1] * 255.f, bkColor[2] * 255.f, bkColor[3] * 255.f));
+		RenderProfiler::VisibleHelperScope pass(VisiblePass::Bbox, m_boundingBoxSelection.getMode(), RenderProfiler::visibleElements(m_boundingBoxSelection, false));
 		_cam->drawUniformShader<poca::core::Vec3mf>(m_boundingBoxSelection, color);
 	}
+	// Match individual meshes: keep wireframe local to the mesh/ellipsoid pass.
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 bool ObjectListMultiObjectDisplayCommand::usesTransparentMeshPass(const ListDrawRange& _range) const
@@ -1165,6 +1276,7 @@ bool ObjectListMultiObjectDisplayCommand::usesTransparentMeshPass(const ListDraw
 
 void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _cam, const bool _ssao, const ListDrawRange& range)
 {
+	RenderProfiler::visibleCount(VisibleMetric::Ranges);
 	ObjectListDisplayCommand* referenceCommand = range.displayCommand;
 	const bool pointRendering = referenceCommand->getParameter<bool>("pointRendering");
 	const bool outlinePointRendering = referenceCommand->getParameter<bool>("outlinePointRendering");
@@ -1179,13 +1291,22 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	const bool translucentRendering = referenceCommand->hasParameter("translucentRendering") ? referenceCommand->getParameter<bool>("translucentRendering") : false;
 	const bool useTranslucentMeshRendering = translucentRendering && range.is3D;
 	const bool transparentMeshPass = usesTransparentMeshPass(range);
+	const auto meshPass = transparentMeshPass ? VisiblePass::Translucent : VisiblePass::Opaque;
+	RenderProfiler::visibleMode(VisiblePass::Points, pointRendering, range.pointCount);
+	RenderProfiler::visibleMode(VisiblePass::Outline, outlinePointRendering, range.outlinePointCount);
+	RenderProfiler::visibleMode(meshPass, shapeRendering, range.triangleCount + range.lineCount);
+	RenderProfiler::visibleMode(VisiblePass::Ellipsoids, ellipsoidRendering, range.ellipsoidCount);
+	RenderProfiler::visibleMode(VisiblePass::Skeleton, skeletonRendering, range.skeletonCount);
+	RenderProfiler::visibleMode(VisiblePass::Links, linkRendering, range.linkCount);
 	bool allTriangleObjectsVisible = true;
 	std::vector<GLint> visibleTriangleFirsts;
 	std::vector<GLsizei> visibleTriangleCounts;
 	if (shapeRendering && range.triangleCount != 0) {
+		RenderProfiler::VisibleTimer meshTimer(RenderProfiler::visiblePassMetric(meshPass));
 		visibleTriangleFirsts.reserve(range.objectTriangles.size());
 		visibleTriangleCounts.reserve(range.objectTriangles.size());
 		for (const auto& span : range.objectTriangles) {
+			RenderProfiler::visibleCount(VisibleMetric::TriangleVisibilityChecks);
 			poca::geometry::ObjectListInterface* objects = objectListAtIndex(m_object, span.objectIndex, range.listIndex);
 			if (objects == nullptr)
 				throw std::runtime_error("Batched ObjectList triangle range no longer matches its source component.");
@@ -1193,10 +1314,18 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 				visibleTriangleFirsts.push_back((GLint)span.first);
 				visibleTriangleCounts.push_back((GLsizei)span.count);
 			}
-			else
+			else {
+				RenderProfiler::visibleCount(VisibleMetric::TriangleUnselectedSpans);
 				allTriangleObjectsVisible = false;
+			}
 		}
 	}
+	auto profileMultiDraw = [&]() {
+		if (!RenderProfiler::visibleActive()) return;
+		uint64_t submitted = 0;
+		for (const auto count : visibleTriangleCounts) submitted += uint64_t(count);
+		RenderProfiler::visibleDraw(meshPass, m_triangleBuffer.getMode(), submitted, false, 1, !fill, 1, visibleTriangleCounts.size());
+	};
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 	glDepthMask(GL_TRUE);
@@ -1222,6 +1351,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	};
 
 	if (pointRendering && range.pointCount != 0) {
+		RenderProfiler::VisibleTimer passTimer(VisibleMetric::PointsUs);
 		const uint32_t pointSize = referenceCommand->getParameter<uint32_t>("pointSizeGL");
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
@@ -1260,6 +1390,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		m_pointBuffer.bindBuffer(0);
 		m_locsFeatureBuffer.bindBuffer(2);
 		m_pointObjectIndexBuffer.bindBuffer(4);
+		RenderProfiler::visibleDraw(VisiblePass::Points, m_pointBuffer.getMode(), range.pointCount, false, 1, false);
 		glDrawArrays(m_pointBuffer.getMode(), (GLint)range.pointFirst, (GLsizei)range.pointCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
@@ -1272,6 +1403,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	}
 
 	if (outlinePointRendering && range.outlinePointCount != 0) {
+		RenderProfiler::VisibleTimer passTimer(VisibleMetric::OutlineUs);
 		const uint32_t pointSize = referenceCommand->getParameter<uint32_t>("pointSizeGL");
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSphereRenderingShader");
@@ -1310,6 +1442,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		m_outlinePointBuffer.bindBuffer(0);
 		m_outlineLocsFeatureBuffer.bindBuffer(2);
 		m_outlinePointObjectIndexBuffer.bindBuffer(4);
+		RenderProfiler::visibleDraw(VisiblePass::Outline, m_outlinePointBuffer.getMode(), range.outlinePointCount, false, 1, false);
 		glDrawArrays(m_outlinePointBuffer.getMode(), (GLint)range.outlinePointFirst, (GLsizei)range.outlinePointCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(2);
@@ -1326,6 +1459,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 
 	if (skeletonRendering && range.skeletonCount != 0)
 	{
+		RenderProfiler::VisibleTimer passTimer(VisibleMetric::SkeletonUs);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSimpleShader");
 		shader->use();
 		shader->setMat4("MVP", proj * view * cameraModel);
@@ -1344,6 +1478,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		m_skeletonBuffer.bindBuffer(0);
 		m_colorSkeletonBuffer.bindBuffer(3);
 		m_skeletonObjectIndexBuffer.bindBuffer(5);
+		RenderProfiler::visibleDraw(VisiblePass::Skeleton, m_skeletonBuffer.getMode(), range.skeletonCount, false, 1, false);
 		glDrawArrays(m_skeletonBuffer.getMode(), (GLint)range.skeletonFirst, (GLsizei)range.skeletonCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
@@ -1355,6 +1490,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 
 	if (linkRendering && range.linkCount != 0)
 	{
+		RenderProfiler::VisibleTimer passTimer(VisibleMetric::LinksUs);
 		poca::opengl::Shader* shader = _cam->getShader("multiObjectSimpleShader");
 		shader->use();
 		shader->setMat4("MVP", proj * view * cameraModel);
@@ -1373,6 +1509,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 		m_linksBuffer.bindBuffer(0);
 		m_colorLinksBuffer.bindBuffer(3);
 		m_linkObjectIndexBuffer.bindBuffer(5);
+		RenderProfiler::visibleDraw(VisiblePass::Links, m_linksBuffer.getMode(), range.linkCount, false, 1, false);
 		glDrawArrays(m_linksBuffer.getMode(), (GLint)range.linkFirst, (GLsizei)range.linkCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(3);
@@ -1392,6 +1529,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	else
 		glDisable(GL_BLEND);
 	if (shapeRendering && range.triangleCount != 0) {
+		RenderProfiler::VisibleTimer meshTimer(RenderProfiler::visiblePassMetric(meshPass));
 		if (range.is3D) {
 			poca::opengl::Shader* shader = useTranslucentMeshRendering ? _cam->getShader("multiObjectObjectRenderingTranslucentShader") : (_ssao ? _cam->getShader("multiObjectObjectRenderingSSAOShader") : _cam->getShader("multiObjectObjectRenderingShader"));
 			glm::vec3 orientation = _cam->getRotationSum() * glm::vec3(0.f, 0.f, 1.f);
@@ -1426,13 +1564,16 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 			m_triangleFeatureBuffer.bindBuffer(2);
 			m_triangleObjectIndexBuffer.bindBuffer(3);
 			auto drawTriangles = [&](size_t first, size_t count) {
+				RenderProfiler::visibleDraw(meshPass, m_triangleBuffer.getMode(), count, false, 1, !fill);
 				glDrawArrays(m_triangleBuffer.getMode(), (GLint)first, (GLsizei)count);
 			};
 			auto drawVisibleTriangles = [&]() {
 				if (range.objectTriangles.empty() || allTriangleObjectsVisible)
 					drawTriangles(range.triangleFirst, range.triangleCount);
-				else if (!visibleTriangleFirsts.empty())
+				else if (!visibleTriangleFirsts.empty()) {
+					profileMultiDraw();
 					glMultiDrawArrays(m_triangleBuffer.getMode(), visibleTriangleFirsts.data(), visibleTriangleCounts.data(), (GLsizei)visibleTriangleFirsts.size());
+				}
 			};
 			if (transparentMeshPass && !range.objectTriangles.empty()) {
 				for (const auto& span : range.objectTriangles) {
@@ -1490,10 +1631,14 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 			m_triangleBuffer.bindBuffer(0);
 			m_triangleFeatureBuffer.bindBuffer(2);
 			m_triangleObjectIndexBuffer.bindBuffer(5);
-			if (range.objectTriangles.empty() || allTriangleObjectsVisible)
+			if (range.objectTriangles.empty() || allTriangleObjectsVisible) {
+				RenderProfiler::visibleDraw(meshPass, m_triangleBuffer.getMode(), range.triangleCount, false, 1, !fill);
 				glDrawArrays(m_triangleBuffer.getMode(), (GLint)range.triangleFirst, (GLsizei)range.triangleCount);
-			else if (!visibleTriangleFirsts.empty())
+			}
+			else if (!visibleTriangleFirsts.empty()) {
+				profileMultiDraw();
 				glMultiDrawArrays(m_triangleBuffer.getMode(), visibleTriangleFirsts.data(), visibleTriangleCounts.data(), (GLsizei)visibleTriangleFirsts.size());
+			}
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(2);
 			glDisableVertexAttribArray(5);
@@ -1532,6 +1677,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 			m_lineBuffer.bindBuffer(0);
 			m_lineFeatureBuffer.bindBuffer(2);
 			m_lineObjectIndexBuffer.bindBuffer(3);
+			RenderProfiler::visibleDraw(meshPass, m_lineBuffer.getMode(), range.lineCount, false, 1, false);
 			glDrawArrays(m_lineBuffer.getMode(), (GLint)range.lineFirst, (GLsizei)range.lineCount);
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(2);
@@ -1548,6 +1694,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 	glDisable(GL_DEPTH_TEST);
 
 	if (ellipsoidRendering && range.ellipsoidCount != 0) {
+		RenderProfiler::VisibleTimer passTimer(VisibleMetric::EllipsoidsUs);
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
 		glDisable(GL_CULL_FACE);
@@ -1584,6 +1731,7 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 			glEnableVertexAttribArray(5 + i);
 			m_ellipsoidTransformBuffer.bindBuffer(5 + i, (void*)(range.ellipsoidFirst * sizeof(glm::mat4) + 4 * sizeof(float) * i));
 		}
+		RenderProfiler::visibleDraw(VisiblePass::Ellipsoids, GL_QUADS, helper->getNbIndicesUnitSphere(), true, range.ellipsoidCount, true);
 		glDrawElementsInstanced(GL_QUADS, helper->getNbIndicesUnitSphere(), GL_UNSIGNED_SHORT, 0, (GLsizei)range.ellipsoidCount);
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
@@ -1600,6 +1748,8 @@ void ObjectListMultiObjectDisplayCommand::drawListRange(poca::opengl::Camera* _c
 
 void ObjectListMultiObjectDisplayCommand::generateBoundingBoxSelection(const int _idx)
 {
+	RenderProfiler::RenderTimer timer(RenderProfiler::RenderMetric::BboxPreparationUs);
+	RenderProfiler::renderCount(RenderProfiler::RenderMetric::BboxPreparationCalls);
 	if (_idx < 0 || (size_t)_idx >= m_object->nbColors())
 		return;
 	poca::core::MyObjectInterface* child = m_object->getObject((size_t)_idx);
@@ -1675,6 +1825,8 @@ bool ObjectListMultiObjectDisplayCommand::updateObjectModelBuffer()
 
 bool ObjectListMultiObjectDisplayCommand::refreshTransformBuffers()
 {
+	RenderProfiler::VisibleTimer timer(VisibleMetric::TransformUs, VisibleFamily::ObjectListShared);
+	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::TransformCalls);
 	if (!updateObjectModelBuffer())
 		return false;
 	if (m_idSelection >= 0)

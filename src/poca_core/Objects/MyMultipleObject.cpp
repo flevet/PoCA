@@ -39,6 +39,7 @@
 #include <General/Vec4.hpp>
 #include <General/PerformanceProfiler.hpp>
 #include <General/Histogram.hpp>
+#include <General/BasicComponentList.hpp>
 #include <General/MyData.hpp>
 #include <General/Misc.h>
 #include <Interfaces/CameraInterface.hpp>
@@ -49,6 +50,23 @@
 #include "MyMultipleObject.hpp"
 
 namespace {
+	// CommandableObject::name() is the stable component type, unlike the editable
+	// list name. Use core interfaces only; never depend on the geometry/plugin DLL.
+	void initializeMeshDecorations(poca::core::BasicComponentInterface* component)
+	{
+		if (component == nullptr) return;
+		if (auto* list = dynamic_cast<poca::core::BasicComponentList*>(component)) {
+			for (uint32_t i = 0; i < list->nbComponents(); ++i)
+				initializeMeshDecorations(list->getComponent(i));
+		}
+		else if (component->name() == "ObjectListMesh") {
+			for (const char* setting : { "pointRendering", "outlinePointRendering", "ellipsoidRendering" }) {
+				poca::core::CommandInfo command(false, setting, false);
+				component->loadParameters(&command);
+			}
+		}
+	}
+
 	bool isComponentFamilyHandled(const poca::core::CommandExecutionResult& _result, const std::string& _componentName)
 	{
 		if (!_result.has<poca::opengl::RenderedComponentFamilies>())
@@ -138,6 +156,8 @@ namespace {
 
 	poca::core::BoundingBox localObjectBoundingBox(poca::core::MyObjectInterface* _object)
 	{
+		poca::core::PerformanceProfiler::RenderTimer timer(poca::core::PerformanceProfiler::RenderMetric::LocalBoundsUs);
+		poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::LocalBoundsCalls);
 		if (_object == nullptr)
 			return poca::core::BoundingBox::initBBox();
 
@@ -173,6 +193,7 @@ namespace {
 	std::vector<poca::core::MyObjectInterface*> objectsOrderedForDisplay(
 		const std::vector<poca::core::MyObjectInterface*>& _objects, poca::opengl::Camera* _camera)
 	{
+		poca::core::PerformanceProfiler::RenderTimer timer(poca::core::PerformanceProfiler::RenderMetric::CollectionPreparationUs);
 		std::vector<ChildViewDepth> depths;
 		depths.reserve(_objects.size());
 		for (size_t index = 0; index < _objects.size(); ++index) {
@@ -210,6 +231,14 @@ namespace {
 MyMultipleObject::MyMultipleObject(std::vector<poca::core::MyObjectInterface*> _colors, const bool _batchComponentRendering, const bool _initializeGrid) :MyObject(), m_colors(_colors), m_currentColor(0), m_batchComponentRendering(_batchComponentRendering)
 {
 	m_internalId = poca::core::NbObjects++;
+
+	// One-time per-instance defaults, after child command/global/Zarr restoration.
+	// Parent Zarr characteristics address parent owners only, never these children.
+	if (m_colors.size() > 1)
+		for (auto* child : m_colors)
+			if (child != nullptr)
+				for (auto* component : child->getComponents())
+					initializeMeshDecorations(component);
 
 	if (_initializeGrid && !m_colors.empty()) recomputeGrid();
 }
@@ -355,6 +384,8 @@ poca::core::CommandInfo MyMultipleObject::createCommand(const std::string& _name
 
 const poca::core::BoundingBox MyMultipleObject::boundingBox() const
 {
+	poca::core::PerformanceProfiler::RenderTimer timer(poca::core::PerformanceProfiler::RenderMetric::CollectionBoundsUs);
+	poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::CollectionBoundsCalls);
 	poca::core::BoundingBox bbox(FLT_MAX, FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
 	for (poca::core::MyObjectInterface* obj : m_colors) {
 		if (obj == NULL) continue;
@@ -432,6 +463,23 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	// Disabled batching installs no shared plugin command. Report that concrete
+	// dispatch policy here, without pretending canBatch() rejected the family.
+	using Profiler = poca::core::PerformanceProfiler;
+	if (_ci != nullptr && _ci->nameCommand == "display" && !m_batchComponentRendering &&
+		m_colors.size() > 1 && Profiler::renderInstance().renderMetricsEnabled()) {
+		bool objects = false, detections = false;
+		for (auto* child : m_colors) {
+			if (child == nullptr) continue;
+			for (auto* component : child->getComponents()) {
+				if (component == nullptr) continue;
+				objects = objects || component->name() == "ObjectLists" || component->name() == "ObjectListMesh" || component->name() == "ObjectList";
+				detections = detections || component->name() == "DetectionSet";
+			}
+		}
+		if (objects) Profiler::renderCount(Profiler::RenderMetric::ObjectBatchingDisabled);
+		if (detections) Profiler::renderCount(Profiler::RenderMetric::DetectionBatchingDisabled);
+	}
 	//executeCommand(_ci);
 	poca::core::MyObject::executeCommand(_ci, _context, _result);
 	if (_ci != nullptr && _ci->nameCommand == "updatePickingBuffer") {
@@ -515,6 +563,8 @@ void MyMultipleObject::resetModelMatrices(const bool _gridSelected) {
 
 void MyMultipleObject::recomputeGrid()
 {
+	poca::core::PerformanceProfiler::RenderTimer timer(poca::core::PerformanceProfiler::RenderMetric::CollectionGridUs);
+	poca::core::PerformanceProfiler::renderCount(poca::core::PerformanceProfiler::RenderMetric::CollectionGridCalls);
 	uint32_t PADDING_BINS = 0;
 	size_t total = 0, maxD = 0;
 	std::vector<stbrp_rect> rects;

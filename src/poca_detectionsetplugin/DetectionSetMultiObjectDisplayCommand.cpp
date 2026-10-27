@@ -36,6 +36,11 @@
 #include "DetectionSetDisplayCommand.hpp"
 #include "DetectionSetMultiObjectDisplayCommand.hpp"
 
+using RenderProfiler = poca::core::PerformanceProfiler;
+using VisibleMetric = RenderProfiler::VisibleMetric;
+using VisiblePass = RenderProfiler::VisiblePass;
+using VisibleFamily = RenderProfiler::VisibleFamily;
+
 namespace {
 	const std::string kRenderedComponentName = "DetectionSet";
 
@@ -327,8 +332,12 @@ poca::core::Command* DetectionSetMultiObjectDisplayCommand::copy()
 
 bool DetectionSetMultiObjectDisplayCommand::canBatch() const
 {
-	if (m_object == nullptr || m_object->nbColors() <= 1)
+	RenderProfiler::VisibleTimer timer(VisibleMetric::CanBatchUs, VisibleFamily::DetectionShared);
+	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::CanBatchCalls);
+	if (m_object == nullptr || m_object->nbColors() <= 1) {
+		RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::FallbackNoFamily);
 		return false;
+	}
 
 	bool hasDetectionSetChild = false, hasNormals = false, hasColors = false, first = true;
 	for (size_t n = 0; n < m_object->nbColors(); n++) {
@@ -345,9 +354,12 @@ bool DetectionSetMultiObjectDisplayCommand::canBatch() const
 			hasColors = childHasColors;
 			first = false;
 		}
-		else if (hasNormals != childHasNormals || hasColors != childHasColors)
+		else if (hasNormals != childHasNormals || hasColors != childHasColors) {
+			RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::FallbackSettings);
 			return false;
+		}
 	}
+	if (!hasDetectionSetChild) RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::FallbackNoFamily);
 	return hasDetectionSetChild;
 }
 
@@ -366,13 +378,17 @@ DetectionSetDisplayCommand* DetectionSetMultiObjectDisplayCommand::referenceDisp
 
 bool DetectionSetMultiObjectDisplayCommand::rebuild()
 {
+	RenderProfiler::VisibleTimer timer(VisibleMetric::BuildUs, VisibleFamily::DetectionShared);
+	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::Builds);
 	freeGPUMemory();
 	if (!canBatch())
 		return false;
 
 	DetectionSetDisplayCommand* referenceCommand = referenceDisplayCommand();
-	if (referenceCommand == nullptr)
+	if (referenceCommand == nullptr) {
+		RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::MissingCommand);
 		return false;
+	}
 
 	std::vector<poca::core::Vec3mf> points, normals;
 	std::vector<float> features;
@@ -452,6 +468,9 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 	if (referenceDset == nullptr)
 		return false;
 
+	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::BuildPoints, points.size());
+	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::BuildBytes,
+		(points.size() + normals.size()) * sizeof(poca::core::Vec3mf) + features.size() * sizeof(float) + colors.size() * sizeof(poca::core::Color4D));
 	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(referenceDset->getPalette());
 	m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
 	m_featureBuffer.generateBuffer(features.size(), 1, GL_FLOAT);
@@ -471,6 +490,8 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 
 bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 {
+	RenderProfiler::VisibleTimer timer(VisibleMetric::TransformUs, VisibleFamily::DetectionShared);
+	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::TransformCalls);
 	if (!canBatch())
 		return false;
 	if (m_pointBuffer.empty())
@@ -566,28 +587,54 @@ bool DetectionSetMultiObjectDisplayCommand::transformBuffersDirty() const
 void DetectionSetMultiObjectDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao, poca::core::CommandExecutionResult& _result)
 {
 	poca::core::PerformanceProfiler::ScopedTimer timer("DetectionSet", "DetectionSet multi-object display");
-	(void)_offscreen;
-	if (!canBatch())
+	RenderProfiler::VisibleScope profile(VisibleFamily::DetectionShared, _offscreen);
+	if (!canBatch()) { RenderProfiler::visibleCount(VisibleMetric::Fallback); return; }
+	if (m_pointBuffer.empty() && !rebuild()) {
+		RenderProfiler::visibleCount(VisibleMetric::Fallback);
+		RenderProfiler::visibleCount(VisibleMetric::FallbackBuild);
 		return;
-	if (m_pointBuffer.empty() && !rebuild())
-		return;
+	}
 	// Keep batched vertices synchronized even if a transform notification was missed,
 	// without retransformation and upload while the effective child matrices are unchanged.
 	if (!m_pointBuffer.empty() && transformBuffersDirty() && !refreshTransformBuffers()) {
 		freeGPUMemory();
-		if (!rebuild())
+		if (!rebuild()) {
+			RenderProfiler::visibleCount(VisibleMetric::Fallback);
+			RenderProfiler::visibleCount(VisibleMetric::FallbackBuild);
 			return;
+		}
 	}
 
 	DetectionSetDisplayCommand* referenceCommand = referenceDisplayCommand();
-	if (referenceCommand == nullptr)
+	if (referenceCommand == nullptr) {
+		RenderProfiler::visibleCount(VisibleMetric::Fallback);
+		RenderProfiler::visibleCount(VisibleMetric::MissingCommand);
 		return;
+	}
 
 	const bool pointRendering = referenceCommand->getParameter<bool>("pointRendering");
-	if (!pointRendering)
+	RenderProfiler::visibleMode(VisiblePass::Points, pointRendering, RenderProfiler::visibleElements(m_pointBuffer, false));
+	if (!pointRendering) {
+		RenderProfiler::visibleCount(VisibleMetric::Fallback);
+		RenderProfiler::visibleCount(VisibleMetric::FallbackSettings);
 		return;
+	}
 
+	if (RenderProfiler::visibleActive()) {
+		for (size_t n = 0; n < m_object->nbColors(); ++n) {
+			auto* child = m_object->getObject(n);
+			auto* dset = child != nullptr ? dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
+			if (dset == nullptr) continue;
+			RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
+			RenderProfiler::visibleCount(dset->isSelected() ? VisibleMetric::ComponentsSelected : VisibleMetric::Unselected);
+			RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
+			if (!dset->getCurrentHistogram()->hasDisplayBounds()) RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds);
+		}
+		for (const auto& range : m_objectPointRanges)
+			if (range.count) RenderProfiler::visibleCount(VisibleMetric::ComponentsDrawn);
+	}
 	drawElements(_cam, _ssao, referenceCommand);
+	RenderProfiler::visibleCount(VisibleMetric::Handled);
 	markComponentFamilyHandled(_result);
 }
 
@@ -720,6 +767,11 @@ void DetectionSetMultiObjectDisplayCommand::drawElements(poca::opengl::Camera* _
 
 	const uint32_t pointSize = _referenceCommand->getParameter<uint32_t>("pointSizeGL");
 	const bool screenCoordinates = _referenceCommand->getParameter<bool>("screenCoordinates");
+	RenderProfiler::visibleCount(VisibleMetric::Ranges, m_objectPointRanges.size());
+	RenderProfiler::VisibleHelperScope pass(VisiblePass::Points, m_pointBuffer.getMode(),
+		!m_colorBuffer.empty() ? RenderProfiler::visibleElements(m_pointBuffer, false) :
+		RenderProfiler::visibleElements(m_pointBuffer),
+		m_colorBuffer.empty() && m_pointBuffer.getBufferIndices() != 0);
 	if (!m_colorBuffer.empty())
 		_cam->drawSimpleShaderWithColor<poca::core::Vec3mf, poca::core::Color4D>(m_pointBuffer, m_colorBuffer);
 	else if (m_normalBuffer.empty())

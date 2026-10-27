@@ -74,6 +74,29 @@ namespace poca::core {
 		void recordImageTiffRead(uint64_t planes, uint64_t stackEquivalents, bool firstRead);
 		void reportImageMetrics(size_t queued, size_t ready, size_t preparing);
 
+		// Fixed per-renderer blocks in the existing frame/CSV record. No per-component rows.
+		enum class VisibleFamily : size_t { ObjectListIndividual, ObjectListShared, DetectionIndividual, DetectionShared, None };
+		enum class VisiblePass : size_t { Points, Outline, Opaque, Translucent, Ellipsoids, Skeleton, Links, Bbox, Count };
+		enum class VisibleMetric : size_t {
+			DisplayCalls, DisplayUs, OffscreenCalls, ComponentsVisited, ComponentsSelected, ComponentsDrawn,
+			Unselected, NoDisplayBounds, NoFrustumTest, Handled, Fallback, FallbackNoFamily, FallbackSettings,
+			MissingCommand, FallbackBuild, FallbackMemory, Builds, BuildUs, BuildBytes,
+			BuildPoints, BuildTriangleVertices, BuildEllipsoidInstances, CanBatchCalls, CanBatchUs,
+			TransformCalls, TransformUs, Ranges, TriangleVisibilityChecks, TriangleUnselectedSpans,
+			HelperInvocations, HelperGlDraws, GlDraws, DrawRanges, IndexedTriangleIndices, ArrayTriangleVertices,
+			SubmittedTriangles, WireTriangleElements, SubmittedPoints, SubmittedLineVertices,
+			SubmittedQuadIndices, SubmittedQuads, EllipsoidInstances, GpuDeferred,
+			// Each pass has CPU microseconds, GL calls, submitted elements, OFF and empty occurrences.
+			PointsUs, PointsDraws, PointsSubmitted, PointsDisabled, PointsEmpty,
+			OutlineUs, OutlineDraws, OutlineSubmitted, OutlineDisabled, OutlineEmpty,
+			OpaqueUs, OpaqueDraws, OpaqueSubmitted, OpaqueDisabled, OpaqueEmpty,
+			TranslucentUs, TranslucentDraws, TranslucentSubmitted, TranslucentDisabled, TranslucentEmpty,
+			EllipsoidsUs, EllipsoidsDraws, EllipsoidsSubmitted, EllipsoidsDisabled, EllipsoidsEmpty,
+			SkeletonUs, SkeletonDraws, SkeletonSubmitted, SkeletonDisabled, SkeletonEmpty,
+			LinksUs, LinksDraws, LinksSubmitted, LinksDisabled, LinksEmpty,
+			BboxUs, BboxDraws, BboxSubmitted, BboxDisabled, BboxEmpty, Count
+		};
+
 		// Render-thread diagnostics. Records/scopes are shared through instance(), never DLL-local TLS.
 		enum class RenderMetric : size_t {
 			PaintGLCalls, DrawElementsOnscreen, DrawElementsOffscreen, RecomputeFrameCalls, ChildFrameRecomputes,
@@ -101,7 +124,11 @@ namespace poca::core {
 			DetectionPickReadpixelsUs, DetectionPickComponentsVisited, DetectionPickComponentsRendered, DetectionPickReadHits,
 			DetectionPickReadMisses, DetectionPickFboOutsideDrawCpuUs, DetectionPickGpuSupported, DetectionPickGpuUnavailable,
 			DetectionPickGpuQueries, DetectionPickGpuSamples, DetectionPickGpuElapsedNs, DetectionPickGpuSkipped,
-			PickHoverDispatches, PickLeftDispatches, PickRightDispatches, PickOtherDispatches, Count
+			PickHoverDispatches, PickLeftDispatches, PickRightDispatches, PickOtherDispatches,
+			LocalBoundsCalls, LocalBoundsUs, CollectionBoundsCalls, CollectionBoundsUs,
+			CollectionPreparationUs, CollectionGridCalls, CollectionGridUs, BboxPreparationCalls, BboxPreparationUs,
+			ObjectBatchingDisabled, DetectionBatchingDisabled,
+			VisibleBegin, Count = size_t(VisibleBegin) + size_t(VisibleFamily::None) * size_t(VisibleMetric::Count)
 		};
 		enum class RenderWorkerMetric : size_t { Preparations, PreparationUs, AdmissionDeferred, AdmissionRejected, RedrawRequests, Count };
 		struct RenderRecord {
@@ -142,6 +169,56 @@ namespace poca::core {
 			RenderMetric m_metric;
 			std::chrono::steady_clock::time_point m_start;
 		};
+		static RenderMetric visibleMetric(VisibleFamily, VisibleMetric);
+		static VisibleMetric visiblePassMetric(VisiblePass, size_t offset = 0);
+		static void visibleCount(VisibleMetric, uint64_t value = 1);
+		static void visibleCount(VisibleFamily, VisibleMetric, uint64_t value = 1);
+		static void visibleMode(VisiblePass, bool enabled, uint64_t elements);
+		// mode is the actual GLenum value; no GL dependency or state query in the core profiler.
+		static void visibleDraw(VisiblePass, unsigned mode, uint64_t elements, bool indexed = false,
+			uint64_t instances = 1, bool wire = false, uint64_t calls = 1, uint64_t ranges = 1);
+		static bool visibleActive();
+		template<class Buffer> static uint64_t visibleElements(const Buffer& buffer, bool allowIndices = true)
+		{
+			// Empty GL buffers need not initialize their element-count members.
+			if (buffer.empty()) return 0;
+			return allowIndices && buffer.getBufferIndices() != 0 ? buffer.getNbIndices() : buffer.getNbElements();
+		}
+		class VisibleTimer {
+		public:
+			explicit VisibleTimer(VisibleMetric, VisibleFamily = VisibleFamily::None);
+		private:
+			std::optional<RenderTimer> m_timer;
+		};
+		class VisibleScope {
+		public:
+			VisibleScope(VisibleFamily, bool offscreen);
+			~VisibleScope();
+			VisibleScope(const VisibleScope&) = delete;
+			VisibleScope& operator=(const VisibleScope&) = delete;
+		private:
+			PerformanceProfiler* m_profiler{ nullptr };
+			VisibleFamily m_previous{ VisibleFamily::None }, m_family;
+			uint64_t m_draws{ 0 };
+			std::optional<RenderTimer> m_timer;
+		};
+		// Camera's audited helpers already count their actual GL call sites. Take a
+		// scoped delta, including their early returns, rather than predicting draws.
+		class VisibleHelperScope {
+		public:
+			VisibleHelperScope(VisiblePass, unsigned mode, uint64_t elements, bool indexed = false, bool wire = false);
+			~VisibleHelperScope();
+			VisibleHelperScope(const VisibleHelperScope&) = delete;
+			VisibleHelperScope& operator=(const VisibleHelperScope&) = delete;
+		private:
+			PerformanceProfiler* m_profiler{ nullptr };
+			VisiblePass m_pass;
+			unsigned m_mode;
+			uint64_t m_elements, m_before{ 0 };
+			bool m_indexed, m_wire;
+			std::optional<RenderTimer> m_timer;
+		};
+
 		enum class PickFamily : size_t { ObjectList, DetectionSet, None };
 		enum class PickMetric : size_t {
 			DrawInvocations, GlDraws, CpuUs, FboAllocations, FboReallocations,
@@ -206,6 +283,7 @@ namespace poca::core {
 		std::thread::id m_renderThread;
 		RenderRecord* m_activeRender{ nullptr };
 		PickFamily m_activePickFamily{ PickFamily::None };
+		VisibleFamily m_activeVisibleFamily{ VisibleFamily::None };
 		std::array<uint64_t, 2> m_pickLive{}, m_pickPeak{}, m_pickBytes{}, m_pickUnknown{};
 		std::array<RenderRecord, 16> m_renderStack{};
 		size_t m_renderDepth{ 0 };
