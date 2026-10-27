@@ -186,8 +186,27 @@ namespace poca::opengl {
 		m_pickFBO = NULL;
 	}
 
+	bool BasicDisplayCommand::skipDisabledPickingCommand(poca::core::CommandInfo* info)
+	{
+		if (poca::core::POCA_ENABLE_PICKING) return false;
+		m_idSelection = -1;
+		if (!info) return true;
+		return info->nameCommand == "pick" || info->nameCommand == "updatePickingBuffer" ||
+			info->nameCommand == "getObjectPickedID" || info->nameCommand == "getInfoObjectCurrentlyPicked" ||
+			info->nameCommand == "setIDObjectPicked" ||
+			(info->nameCommand == "doubleClickCamera" && !info->hasParameter("objectID"));
+	}
+
+	bool BasicDisplayCommand::skipDisabledPickingCommand(poca::core::CommandInfo* info, poca::core::CommandExecutionResult& result)
+	{
+		if (!skipDisabledPickingCommand(info)) return false;
+		result = poca::core::CommandExecutionResult{}; // Existing no-hit contract: no selected ID/info/point/bbox/preview payload.
+		return true;
+	}
+
 	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos)
 	{
+		if (skipDisabledPickingCommand(_infos)) return;
 		if (_infos == NULL)
 			return;
 		if (_infos->nameCommand == "updatePickingBuffer") {
@@ -229,13 +248,15 @@ namespace poca::opengl {
 		execute(_infos);
 	}
 
-	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult&)
+	void BasicDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 	{
+		if (skipDisabledPickingCommand(_infos, _result)) return;
 		execute(_infos, _context);
 	}
 
 	void BasicDisplayCommand::pick(const int _x, const int _y, const bool _saveImage)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 		int sizeImage = m_wImage * m_hImage;
 		if (m_pickFBO == NULL) return;
 		const bool profile = m_pickProfileFamily != PickProfiler::PickFamily::None && PickProfiler::renderInstance().renderMetricsEnabled();
@@ -310,6 +331,7 @@ namespace poca::opengl {
 	bool BasicDisplayCommand::pickObjectBoundingBox(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::MyObjectInterface* _object, int& _id) const
 	{
 		_id = -1;
+		if (!poca::core::POCA_ENABLE_PICKING) return true;
 		if (!m_pickingEnabled)
 			return true;
 		if (_infos == nullptr || _object == nullptr || !_infos->hasParameter("x") || !_infos->hasParameter("y"))
@@ -384,6 +406,7 @@ namespace poca::opengl {
 
 	void BasicDisplayCommand::updatePickingFBO(const int _w, const int _h)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 		if (_w <= 0 || _h <= 0)
 			return;
 		if (m_pickFBO != NULL && m_wImage == _w && m_hImage == _h)

@@ -94,6 +94,7 @@ void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void VoronoiDiagramDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
@@ -203,7 +204,7 @@ void VoronoiDiagramDisplayCommand::display(poca::opengl::Camera* _cam, const boo
 
 	drawElements(_cam);
 	if (!_offscreen)
-		drawPicking(_cam);
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void VoronoiDiagramDisplayCommand::drawElements(poca::opengl::Camera* _cam)
@@ -279,6 +280,7 @@ void VoronoiDiagramDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 
 void VoronoiDiagramDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	GL_CHECK_ERRORS();
 	if (m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());

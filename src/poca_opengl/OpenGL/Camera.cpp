@@ -623,6 +623,7 @@ namespace poca::opengl {
 
 	int Camera::beginPickingGpuTimer(PickProfiler::PickFamily family)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return -1;
 		auto* current = QOpenGLContext::currentContext();
 		const auto format = current ? current->format() : QSurfaceFormat{};
 		const bool coreTimer = format.majorVersion() > 3 || (format.majorVersion() == 3 && format.minorVersion() >= 3);
@@ -664,6 +665,7 @@ namespace poca::opengl {
 	}
 	void Camera::endPickingGpuTimer(int slot)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return;
 		auto& sample = m_pickingGpuSamples[size_t(slot)];
 		if (QOpenGLContext::currentContext() != m_pickingGpuContext.data()) return;
 		glQueryCounter(sample.queries[1], GL_TIMESTAMP); sample.pending = true;
@@ -671,6 +673,7 @@ namespace poca::opengl {
 	}
 	void Camera::pollPickingGpuTimers()
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return;
 		const auto record = PickProfiler::renderInstance().currentRenderId();
 		if (!record || record == m_pickingGpuPollRecord || QOpenGLContext::currentContext() != m_pickingGpuContext.data()) return;
 		m_pickingGpuPollRecord = record;
@@ -731,6 +734,11 @@ namespace poca::opengl {
 		PickProfiler::RenderFrame event(m_renderCameraId, false, false, multiple != nullptr, multiple ? multiple->nbColors() : 1,
 			getWidth(), getHeight(), true, "pick_event");
 		PickProfiler::renderCount(input);
+		if (!poca::core::POCA_ENABLE_PICKING) {
+			result = poca::core::CommandExecutionResult{};
+			m_infoPicking.clear(); m_pickedPoints.clear();
+			return;
+		}
 		m_object->executeGlobalCommand(info, context, result);
 	}
 
@@ -1379,9 +1387,14 @@ namespace poca::opengl {
 
 		poca::core::CommandExecutionContext runtimeContext;
 		runtimeContext.set(poca::opengl::ActiveCamera{ this });
+		// Picking no longer establishes framebuffer state: explicitly target SSAO geometry.
+		if (!poca::core::POCA_ENABLE_PICKING)
+			glBindFramebuffer(GL_FRAMEBUFFER, classShaderSSAO.m_fboGeometry->handle());
 		poca::core::CommandInfo objectListDisplay(false, "display", "offscreen", true, "ssao", true);
 		m_object->executeCommandOnSpecificComponent("ObjectList", &objectListDisplay, runtimeContext);
 
+		if (!poca::core::POCA_ENABLE_PICKING)
+			glBindFramebuffer(GL_FRAMEBUFFER, classShaderSSAO.m_fboGeometry->handle());
 		poca::core::CommandInfo detectionSetDisplay(false, "display", "ssao", true);
 		m_object->executeCommandOnSpecificComponent("DetectionSet", &detectionSetDisplay, runtimeContext);
 		success = classShaderSSAO.m_fboGeometry->release();
@@ -1643,7 +1656,7 @@ namespace poca::opengl {
 
 	bool Camera::pickingEnabled() const
 	{
-		return m_pickingEnabled;
+		return poca::core::POCA_ENABLE_PICKING && m_pickingEnabled;
 	}
 
 
@@ -2409,8 +2422,10 @@ namespace poca::opengl {
 
 				mediator->actionAskedAllObservers(&poca::core::CommandInfo(false, "updatePickedObject"));
 
-				glm::vec3 worldCoord = getWorldCoordinates(glm::vec2(x, this->height() - y));
-				m_object->executeCommandOnSpecificComponent("VoronoiDiagram" , &poca::core::CommandInfo(false, "determineTrianglesLinkedToPoint", "x", worldCoord[0], "y", worldCoord[1], "z", 0.f));
+				if (poca::core::POCA_ENABLE_PICKING) {
+					glm::vec3 worldCoord = getWorldCoordinates(glm::vec2(x, this->height() - y));
+					m_object->executeCommandOnSpecificComponent("VoronoiDiagram" , &poca::core::CommandInfo(false, "determineTrianglesLinkedToPoint", "x", worldCoord[0], "y", worldCoord[1], "z", 0.f));
+				}
 			}
 			else {
 				poca::core::CommandInfo ci2("selectObject", "id" , m_infoObjects[m_insidePatchId]->m_id);
@@ -2768,6 +2783,7 @@ namespace poca::opengl {
 			for (std::string info : listInfos)
 				m_infoPicking.push_back(QString::fromStdString(info));
 
+			if (!poca::core::POCA_ENABLE_PICKING) break; // No mouse-picked preview/selection to consume.
 			ci = poca::core::CommandInfo(true, "doubleClickCamera");
 			poca::core::CommandExecutionContext runtimeContext;
 			poca::core::CommandExecutionResult runtimeResult;
@@ -2859,7 +2875,7 @@ namespace poca::opengl {
 					m_insidePatchId = n;
 			}
 			poca::core::MediatorWObjectFWidget* mediator = poca::core::MediatorWObjectFWidget::instance();
-			if (m_insidePatchId == -1) {
+			if (m_insidePatchId == -1 && poca::core::POCA_ENABLE_PICKING) {
 				glm::vec3 coords = getWorldCoordinates(glm::vec2(_event->pos().x(), this->height() - _event->pos().y()));
 				//poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "camera", this, "worldPosition", coords);
 				poca::core::CommandInfo ci = poca::core::CommandInfo(false, "doubleClickCamera", "worldPosition", coords, "screenPosition", glm::vec3(_event->pos().x(), this->height() - _event->pos().y(), 0));
@@ -2931,7 +2947,7 @@ namespace poca::opengl {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
-		{
+		if (poca::core::POCA_ENABLE_PICKING) {
 			PickProfiler::RenderFrame resize(m_renderCameraId, false, false, dynamic_cast<::MyMultipleObject*>(m_object) != nullptr, m_object->nbColors(), this->width(), this->height(), true, "pick_resize");
 			poca::core::PerformanceProfiler::ScopedTimer timer("Picking buffer resize", "Camera::resizeEvent updatePickingBuffer");
 			m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "updatePickingBuffer", "width", this->width(), "height", this->height()));

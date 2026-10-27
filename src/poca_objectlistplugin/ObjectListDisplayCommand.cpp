@@ -183,6 +183,7 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 
 void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	std::optional<PickProfiler::RenderFrame> pickEvent;
 	if (_infos && _infos->nameCommand == "pick" && PickProfiler::renderInstance().renderMetricsEnabled() && !PickProfiler::renderInstance().hasPickEvent()) {
 		auto* camera = _context.has<poca::opengl::ActiveCamera>() ? _context.get<poca::opengl::ActiveCamera>().camera : nullptr;
@@ -371,7 +372,7 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 
 	drawElements(_cam, _ssao);
 	if (!_offscreen)
-		drawPicking(_cam);
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
@@ -379,7 +380,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
 	if (m_triangleBuffer.empty())
 		createDisplay();
-	if (m_pickFBO == NULL)
+	if (poca::core::POCA_ENABLE_PICKING && m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
 	poca::opengl::Shader* shader = _ssao ? _cam->getShader("objectRenderingSSAOShader") : _cam->getShader("objectRenderingShader");
@@ -624,6 +625,7 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 
 void ObjectListDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	PickProfiler::PickScope pickingProfile(PickProfiler::PickFamily::ObjectList);
 	profilePickingCamera(_cam);
 	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.

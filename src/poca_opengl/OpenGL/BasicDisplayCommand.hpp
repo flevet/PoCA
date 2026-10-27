@@ -35,6 +35,7 @@
 
 #include <QtCore/QPointer>
 #include <General/Command.hpp>
+#include <General/PickingPolicy.hpp>
 #include <General/PerformanceProfiler.hpp>
 #include <General/Vec6.hpp>
 
@@ -67,6 +68,8 @@ namespace poca::opengl {
 
 	protected:
 		using PickProfiler = poca::core::PerformanceProfiler;
+		bool skipDisabledPickingCommand(poca::core::CommandInfo*);
+		bool skipDisabledPickingCommand(poca::core::CommandInfo*, poca::core::CommandExecutionResult&);
 		void profilePickingCamera(Camera*);
 		void releasePickingGpuProfile();
 		std::vector<QPointer<Camera>> m_pickProfileCameras; // Enabled diagnostics only; never owns cameras.

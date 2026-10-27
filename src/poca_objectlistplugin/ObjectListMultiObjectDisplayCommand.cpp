@@ -617,6 +617,7 @@ void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _info
 
 void ObjectListMultiObjectDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	if (_infos == nullptr)
 		return;
 	if (_infos->nameCommand != "pick" && _infos->nameCommand != "updatePickingBuffer")

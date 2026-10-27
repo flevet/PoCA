@@ -149,3 +149,15 @@ Source diff review: no scientific coordinate/voxel/data-model changes, no change
 This subsequent change extends the existing profiler with type-separated mesh/detection picking counters, explicit pick-event/resource rows and bounded asynchronous GPU timestamp samples. CSV schema 2 appends fields while retaining all previous columns. Earlier sections above describe the preceding profiler/optimization checkpoint; the linked report documents the new targeted GPU measurements and their limitations, including the unchanged whole-frame `gpu_timing_available=0` field. `compare_csv.py` remains paint-only and unchanged.
 
 **Baseline CPU/GPU cost: NOT MEASURED. Stage 2: NOT STARTED.** Source-only workspace policy prevents compilation/runtime capture here. Legacy per-paint picking/FBO allocations and synchronous hover/click behavior remain; a real instrumented legacy capture and selection reference are required before demand-driven behavior changes. No measured speedup is claimed.
+
+## Mesh/detection picking — Stage 2 stop receipt (2026-10-26)
+
+The supplied IND83 baseline authorizes Stage 2 investigation: 332 redundant picking draws and ~18 ms CPU work per onscreen pass, with 332 persistent targets. The 249-vs-83 mesh resize discrepancy is explained by ObjectListsCommands displaying all entries but forwarding resize/pick only to the current list.
+
+Stage 2 was stopped under the user's equivalence rule: SSAO's component-specific display bypasses the normal object-model push, and DetectionSet's legacy picking pass changes the framebuffer seen by subsequent visible child draws. An unconditional on-demand replacement cannot claim unchanged selection/visible rendering across those paths. The draft production/test changes were restored; Stage 1 behavior/profiler remain intact. See [MESH_DETECTION_PICKING_STAGE2.md](MESH_DETECTION_PICKING_STAGE2.md) for exact call sites, required decision and NOT RUN matrix. No compilation, updated runtime validation, comparable Stage 2 capture or measured improvement occurred.
+
+## GPU/component picking disabled — diagnostic policy (2026-10-27)
+
+The replacement request supersedes demand-driven Stage 2. Production source now retains the full legacy implementation behind one central default-false constant, poca::core::POCA_ENABLE_PICKING in General/PickingPolicy.hpp. Component/camera picking, ID framebuffers, readbacks and picking resize dispatch are guarded; visible rendering and non-picking SSAO/filter/export/explicit preview targets remain active. SSAO explicitly binds its geometry target when picking is disabled.
+
+[Picking shutdown implementation, complete source inventory and NOT RUN matrix](PICKING_DISABLED.md). The 305-dataset runtime/build remains untested under the never-compile workspace rule; source changes are retained. Set the constant true and consistently rebuild consumers to restore legacy picking. No demand-driven or shared-target mechanism was introduced, and no measured improvement is claimed.

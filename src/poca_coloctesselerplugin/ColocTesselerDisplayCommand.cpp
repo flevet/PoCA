@@ -72,6 +72,7 @@ void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void ColocTesselerDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context)
 {
+	if (skipDisabledPickingCommand(_infos)) return;
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "updateFeature") {
 		generateFeatureBuffer();
@@ -115,7 +116,7 @@ void ColocTesselerDisplayCommand::display(poca::opengl::Camera* _cam, const bool
 
 	drawElements(_cam);
 	if (!_offscreen)
-		drawPicking(_cam);
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void ColocTesselerDisplayCommand::drawElements(poca::opengl::Camera* _cam)
@@ -145,6 +146,7 @@ void ColocTesselerDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 
 void ColocTesselerDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	if (m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 

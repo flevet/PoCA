@@ -55,6 +55,7 @@ set(GENERAL_HEADER_FILES
   General/MyData.hpp
   General/Palette.hpp
   General/PerformanceProfiler.hpp
+  General/PickingPolicy.hpp
   General/PluginList.hpp
   General/PythonInterpreter.hpp
   General/Region3D.hpp

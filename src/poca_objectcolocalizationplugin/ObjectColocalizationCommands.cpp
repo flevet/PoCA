@@ -90,6 +90,7 @@ void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos)
 
 void ObjectColocalizationCommands::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "display") {
 		poca::opengl::Camera* cam = nullptr;
@@ -245,14 +246,14 @@ void ObjectColocalizationCommands::display(poca::opengl::Camera* _cam, const boo
 
 	drawElements(_cam);
 	if (!_offscreen)
-		drawPicking(_cam);
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void ObjectColocalizationCommands::drawElements(poca::opengl::Camera* _cam)
 {
 	if (m_triangleBuffer.empty())
 		createDisplay();
-	if (m_pickFBO == NULL)
+	if (poca::core::POCA_ENABLE_PICKING && m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
 	bool pointRendering = hasParameter("pointRendering") ? getParameter<bool>("pointRendering") : false;
@@ -312,6 +313,7 @@ void ObjectColocalizationCommands::drawElements(poca::opengl::Camera* _cam)
 
 void ObjectColocalizationCommands::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	if (m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 

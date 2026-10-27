@@ -86,6 +86,7 @@ void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _info
 
 void DelaunayTriangulationDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::opengl::BasicDisplayCommand::execute(_infos);
 	if (_infos->nameCommand == "histogram" || _infos->nameCommand == "updateFeature") {
@@ -162,14 +163,14 @@ void DelaunayTriangulationDisplayCommand::display(poca::opengl::Camera* _cam, co
 
 	drawElements(_cam);
 	if (!_offscreen)
-		drawPicking(_cam);
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void DelaunayTriangulationDisplayCommand::drawElements(poca::opengl::Camera* _cam)
 {
 	if (m_triangleBuffer.empty())
 		createDisplay();
-	if (m_pickFBO == NULL)
+	if (poca::core::POCA_ENABLE_PICKING && m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
 	bool ok;
@@ -201,6 +202,7 @@ void DelaunayTriangulationDisplayCommand::drawElements(poca::opengl::Camera* _ca
 
 void DelaunayTriangulationDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	if (m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 

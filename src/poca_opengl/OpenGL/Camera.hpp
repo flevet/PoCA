@@ -55,6 +55,7 @@
 #include <DesignPatterns/Observer.hpp>
 #include <General/Vec2.hpp>
 #include <General/PerformanceProfiler.hpp>
+#include <General/PickingPolicy.hpp>
 #include <General/Vec4.hpp>
 #include <OpenGL/GLBuffer.hpp>
 #include <OpenGL/LodUpdateManager.hpp>
@@ -683,6 +684,7 @@ namespace poca::opengl {
 	template < class T, class M >
 	void Camera::drawPickingShader(const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferId, const SingleGLBuffer<M>& _bufferFeature, const GLfloat _minF)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return;
 		GL_CHECK_ERRORS();
 		if (_bufferVertex.empty() || _bufferId.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = getShader("pickShader");
@@ -729,6 +731,7 @@ namespace poca::opengl {
 	template < class T, class M >
 	void Camera::drawPickingShader(const SingleGLBuffer<T>& _bufferVertex, const SingleGLBuffer<M>& _bufferId)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return;
 		if (_bufferVertex.empty() || _bufferId.empty()) return;
 		poca::opengl::Shader* shader = getShader("pickShader");
 
@@ -1330,6 +1333,7 @@ namespace poca::opengl {
 	template < class T, class M >
 	void Camera::drawPickingShader(const GLBuffer<T>& _bufferVertex, const GLBuffer<M>& _bufferId, const GLBuffer<M>& _bufferFeature, const GLfloat _minF)
 	{
+		if (!poca::core::POCA_ENABLE_PICKING) return;
 		if (_bufferVertex.empty() || _bufferId.empty() || _bufferFeature.empty()) return;
 		poca::opengl::Shader* shader = getShader("pickShader");
 

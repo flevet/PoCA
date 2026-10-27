@@ -93,6 +93,7 @@ void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos)
 
 void DetectionSetDisplayCommand::execute(poca::core::CommandInfo* _infos, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	if (skipDisabledPickingCommand(_infos, _result)) return;
 	std::optional<PickProfiler::RenderFrame> pickEvent;
 	if (_infos && _infos->nameCommand == "pick" && PickProfiler::renderInstance().renderMetricsEnabled() && !PickProfiler::renderInstance().hasPickEvent()) {
 		auto* camera = _context.has<poca::opengl::ActiveCamera>() ? _context.get<poca::opengl::ActiveCamera>().camera : nullptr;
@@ -208,7 +209,7 @@ void DetectionSetDisplayCommand::display(poca::opengl::Camera* _cam, const bool 
 
 	drawElements(_cam, _ssao);
 	if (!_offscreen)
-		drawPicking(_cam); 
+		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
 void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
@@ -250,6 +251,7 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 
 void DetectionSetDisplayCommand::drawPicking(poca::opengl::Camera* _cam)
 {
+	if (!poca::core::POCA_ENABLE_PICKING) { m_idSelection = -1; return; }
 	PickProfiler::PickScope pickingProfile(PickProfiler::PickFamily::DetectionSet);
 	profilePickingCamera(_cam);
 	if (!m_dset->getCurrentHistogram()->hasDisplayBounds()) return; // No LUT domain for undefined features.
