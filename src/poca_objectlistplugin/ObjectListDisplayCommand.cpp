@@ -559,6 +559,8 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	//m_skeletonBuffer
 
 	drawEllipsoid(_cam);
+	// Do not leak mesh or ellipsoid wireframe state into subsequent passes.
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	GL_CHECK_ERRORS();
 }
 
