@@ -33,6 +33,8 @@
 #ifndef ObjectListDisplayCommand_h__
 #define ObjectListDisplayCommand_h__
 
+#include <array>
+
 #include <General/Vec3.hpp>
 #include <General/Palette.hpp>
 #include <Interfaces/HistogramInterface.hpp>
@@ -63,13 +65,21 @@ public:
 
 protected:
 	void display(poca::opengl::Camera*, const bool, const bool = false);
-	void drawElements(poca::opengl::Camera*, const bool = false);
+	void drawElements(poca::opengl::Camera*, const bool = false, const bool = true);
 	void drawEllipsoid(poca::opengl::Camera*);
 	void drawPicking(poca::opengl::Camera*);
 
 	void displayZoomToBBox(poca::opengl::Camera*, const poca::core::BoundingBox&);
 	void createDisplay();
 	void createDisplaySkeleton();
+	void ensurePointDisplay();
+	void ensureEllipsoidDisplay();
+	void ensureOutlinePointDisplay();
+	void refreshFeatureBuffers(poca::core::HistogramInterface*, bool, bool, bool);
+	void prepareMeshVisibility();
+	int surfaceFrustumStatus(poca::opengl::Camera*);
+	void profileMeshSizes(poca::opengl::Camera*);
+	static bool projectMeshBounds(const poca::core::BoundingBox&, const glm::mat4&, const glm::mat4&, std::array<glm::vec4, 8>&, float&);
 	void sortWrtCameraPosition(const glm::vec3&, const glm::vec3&);
 
 protected:
@@ -110,6 +120,11 @@ protected:
 	QImage m_imageObject;
 
 	std::vector<float> m_centroidsTriangles;
+
+	bool m_surfaceReady{ false }, m_pointsReady{ false }, m_outlinePointsReady{ false }, m_ellipsoidsReady{ false };
+	bool m_objectFeaturesAvailable{ false };
+	bool m_meshVisibilityReady{ false }, m_surfaceBoundsValid{ false }, m_meshRangesValid{ false };
+	poca::core::BoundingBox m_surfaceBounds;
 };
 #endif // DetectionSetDisplayCommand_h__
 

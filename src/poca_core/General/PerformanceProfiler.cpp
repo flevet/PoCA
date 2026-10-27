@@ -206,7 +206,14 @@ namespace poca::core {
 				"ellipsoids_us", "ellipsoids_draws", "ellipsoids_submitted", "ellipsoids_disabled", "ellipsoids_empty",
 				"skeleton_us", "skeleton_draws", "skeleton_submitted", "skeleton_disabled", "skeleton_empty",
 				"links_us", "links_draws", "links_submitted", "links_disabled", "links_empty",
-				"bbox_us", "bbox_draws", "bbox_submitted", "bbox_disabled", "bbox_empty" };
+				"bbox_us", "bbox_draws", "bbox_submitted", "bbox_disabled", "bbox_empty",
+				"frustum_tests", "frustum_us", "frustum_culled", "frustum_bypassed", "frustum_deferred_builds",
+				"surface_build_us", "surface_allocations", "surface_upload_bytes",
+				"point_build_us", "point_allocations", "point_upload_bytes", "point_deferred_builds", "point_deferred_estimated_bytes",
+				"ellipsoid_build_us", "ellipsoid_allocations", "ellipsoid_upload_bytes", "ellipsoid_deferred_builds", "ellipsoid_deferred_estimated_bytes",
+				"outline_dormant", "outline_build_us", "outline_allocations", "outline_upload_bytes",
+				"lod_planning_us", "lod_tests", "lod_subpixel_samples", "lod_one_to_two_samples", "lod_larger_samples", "lod_unknown_samples",
+				"lod_subpixel_triangle_samples", "lod_full_draw_fallbacks", "lod_suppressed_objects", "lod_omitted_triangles", "lod_retained_ranges" };
 			std::array<std::string, size_t(VisibleFamily::None) * size_t(VisibleMetric::Count)> result;
 			for (size_t family = 0; family < families.size(); ++family)
 				for (size_t field = 0; field < fields.size(); ++field)
@@ -511,7 +518,7 @@ namespace poca::core {
 	std::string PerformanceProfiler::renderCsvRow(const RenderRecord& record)
 	{
 		std::ostringstream out; out.imbue(std::locale::classic());
-		out << "3," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
+		out << "4," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
 			<< (record.multiple ? "MyMultipleObject" : "MyObject") << ',' << record.children << ',' << record.width << ',' << record.height << ','
 			<< record.interactive << ',' << record.cpuMs << ',' << record.queued << ',' << record.ready << ',' << record.preparing << ",0";
 		for (const auto value : record.values) out << ',' << value;

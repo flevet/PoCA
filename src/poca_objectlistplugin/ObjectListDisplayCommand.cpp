@@ -37,6 +37,8 @@
 #include <QtGui/QImage>
 #include <glm/gtx/string_cast.hpp>
 #include <cstddef>
+#include <cmath>
+#include <limits>
 
 #include <General/Engine.hpp>
 #include <General/Palette.hpp>
@@ -162,7 +164,7 @@ ObjectListDisplayCommand::ObjectListDisplayCommand(poca::geometry::ObjectListInt
 	}
 }
 
-ObjectListDisplayCommand::ObjectListDisplayCommand(const ObjectListDisplayCommand& _o) : poca::opengl::BasicDisplayCommand(_o), m_fill(_o.m_fill)
+ObjectListDisplayCommand::ObjectListDisplayCommand(const ObjectListDisplayCommand& _o) : poca::opengl::BasicDisplayCommand(_o), m_textureLutID(0), m_fill(_o.m_fill), m_pickOneObject(nullptr)
 {
 	m_objects = _o.m_objects;
 }
@@ -320,7 +322,11 @@ void ObjectListDisplayCommand::execute(poca::core::CommandInfo* _infos, const po
 			m_centroidsTriangles[cur++] = c.z();
 		}
 		m_objects->setBoundingBox(bbox);
-		m_triangleBuffer.updateBuffer(triangles); 
+		m_triangleBuffer.updateBuffer(triangles);
+		// explode changes displayed vertices, not the scientific per-mesh boxes.
+		m_surfaceBounds = bbox;
+		m_meshVisibilityReady = m_surfaceBoundsValid = true;
+		m_meshRangesValid = false;
 	}
 }
 
@@ -370,23 +376,207 @@ poca::core::Command* ObjectListDisplayCommand::copy()
 	return new ObjectListDisplayCommand(*this);
 }
 
+bool ObjectListDisplayCommand::projectMeshBounds(const poca::core::BoundingBox& _bbox,
+	const glm::mat4& _viewProjection, const glm::mat4& _model, std::array<glm::vec4, 8>& _corners, float& _margin)
+{
+	for (size_t axis = 0; axis < 3; ++axis)
+		if (!std::isfinite(_bbox[axis]) || !std::isfinite(_bbox[axis + 3]) || _bbox[axis] > _bbox[axis + 3])
+			return false;
+	for (size_t col = 0; col < 4; ++col)
+		for (size_t row = 0; row < 4; ++row)
+			if (!std::isfinite(_viewProjection[col][row]) || !std::isfinite(_model[col][row])) return false;
+	// The shader drops model.w. Unsupported non-affine models retain the draw.
+	if (_model[0][3] != 0.f || _model[1][3] != 0.f || _model[2][3] != 0.f || _model[3][3] != 1.f) return false;
+	const float determinant = glm::determinant(_viewProjection) * glm::determinant(_model);
+	if (!std::isfinite(determinant) || determinant == 0.f) return false;
+	// Bound float cancellation in BOTH shader stages, including large translations.
+	glm::dvec4 magnitude(1.);
+	for (size_t axis = 0; axis < 3; ++axis)
+		magnitude[axis] = (std::max)(std::abs(double(_bbox[axis])), std::abs(double(_bbox[axis + 3])));
+	glm::dvec4 modelMagnitude(0.), clipMagnitude(0.);
+	for (size_t row = 0; row < 3; ++row)
+		for (size_t col = 0; col < 4; ++col)
+			modelMagnitude[row] += std::abs(double(_model[col][row])) * magnitude[col];
+	modelMagnitude.w = 1.;
+	for (size_t row = 0; row < 4; ++row)
+		for (size_t col = 0; col < 4; ++col)
+			clipMagnitude[row] += std::abs(double(_viewProjection[col][row])) * modelMagnitude[col];
+	double bound = 1.;
+	for (size_t axis = 0; axis < 4; ++axis) bound = (std::max)(bound, clipMagnitude[axis]);
+	_margin = static_cast<float>(1.e-4 * bound);
+	if (!std::isfinite(_margin)) return false;
+	for (size_t corner = 0; corner < _corners.size(); ++corner) {
+		const glm::vec4 local(_bbox[(corner & 1) ? 3 : 0], _bbox[(corner & 2) ? 4 : 1],
+			_bbox[(corner & 4) ? 5 : 2], 1.f);
+		auto& clip = _corners[corner];
+		clip = _viewProjection * glm::vec4(glm::vec3(_model * local), 1.f);
+		for (size_t axis = 0; axis < 4; ++axis)
+			if (!std::isfinite(clip[axis])) return false;
+		if (clip.w <= _margin) return false;
+	}
+	return true;
+}
+
+void ObjectListDisplayCommand::prepareMeshVisibility()
+{
+	if (m_meshVisibilityReady) return;
+	m_meshVisibilityReady = true;
+	m_surfaceBoundsValid = m_meshRangesValid = false;
+	const auto* mesh = dynamic_cast<const poca::geometry::ObjectListMesh*>(m_objects);
+	if (!mesh) return;
+	const auto& boxes = mesh->getBBoxMeshes();
+	const auto& triangles = mesh->getTrianglesObjects();
+	const auto& firsts = triangles.getFirstElements();
+	if (boxes.empty() || boxes.size() != m_objects->nbElements() ||
+		firsts.size() != boxes.size() + 1 || firsts.front() != 0 || firsts.back() != triangles.nbData())
+		return;
+	auto bounds = poca::core::BoundingBox::initBBox();
+	bool hasSurface = false;
+	for (size_t object = 0; object < boxes.size(); ++object) {
+		if (firsts[object] > firsts[object + 1] || (firsts[object + 1] - firsts[object]) % 3 != 0) return;
+		if (firsts[object] == firsts[object + 1]) continue;
+		const auto& box = boxes[object];
+		for (size_t axis = 0; axis < 3; ++axis) {
+			if (!std::isfinite(box[axis]) || !std::isfinite(box[axis + 3]) || box[axis] > box[axis + 3]) return;
+			bounds[axis] = (std::min)(bounds[axis], box[axis]);
+			bounds[axis + 3] = (std::max)(bounds[axis + 3], box[axis + 3]);
+		}
+		hasSurface = true;
+	}
+	m_surfaceBounds = bounds;
+	m_surfaceBoundsValid = hasSurface;
+	// generateTriangles copies this sequence unchanged. Indexed persistence expands
+	// faces in object order, bounded to uint32_t; signed GL ranges are stricter.
+	m_meshRangesValid = hasSurface && firsts.back() <= static_cast<size_t>((std::numeric_limits<GLsizei>::max)());
+}
+
+int ObjectListDisplayCommand::surfaceFrustumStatus(poca::opengl::Camera* _cam)
+{
+	prepareMeshVisibility();
+	const auto& viewport = _cam->getViewport();
+	if (!m_surfaceBoundsValid || viewport[2] == 0 || viewport[3] == 0) return -1;
+	std::array<glm::vec4, 8> corners;
+	// Identical order and model as objectRenderingShader; no extra voxel scale.
+	const glm::mat4 viewProjection = _cam->getProjectionMatrix() * _cam->getViewMatrix();
+	float margin = 0.f;
+	if (!projectMeshBounds(m_surfaceBounds, viewProjection, _cam->getModelMatrix(), corners, margin)) return -1;
+	unsigned outside = 0x3f;
+	unsigned nearOutside = 0;
+	for (const auto& corner : corners) {
+		const float distances[6] = { corner.w + corner.x, corner.w - corner.x,
+			corner.w + corner.y, corner.w - corner.y, corner.w + corner.z, corner.w - corner.z };
+		unsigned mask = 0;
+		for (unsigned plane = 0; plane < 6; ++plane) {
+			if (!std::isfinite(distances[plane])) return -1;
+			if (distances[plane] < -margin) mask |= 1u << plane;
+		}
+		outside &= mask;
+		if (distances[4] <= margin) ++nearOutside;
+	}
+	if (nearOutside != 0 && nearOutside != corners.size()) return -1;
+	return outside ? 1 : 0;
+}
+
+void ObjectListDisplayCommand::profileMeshSizes(poca::opengl::Camera* _cam)
+{
+	// Diagnostic only: omission remains deferred until visual/performance gates
+	// can be measured. No glMultiDraw path or visibility state is introduced.
+	if (!RenderProfiler::visibleActive() || !_cam->getObject() || _cam->getObject()->nbColors() <= 1 ||
+		m_objects->dimension() != 3 || !getParameter<bool>("shapeRendering")) return;
+	RenderProfiler::visibleCount(VisibleMetric::LodFullDrawFallbacks);
+	RenderProfiler::VisibleTimer timer(VisibleMetric::LodPlanningUs);
+	prepareMeshVisibility();
+	const auto* mesh = dynamic_cast<const poca::geometry::ObjectListMesh*>(m_objects);
+	if (!mesh || !m_meshRangesValid) return;
+	const auto& viewport = _cam->getViewport();
+	if (!viewport[2] || !viewport[3]) return;
+	const auto& boxes = mesh->getBBoxMeshes();
+	const auto& firsts = mesh->getTrianglesObjects().getFirstElements();
+	const glm::mat4 viewProjection = _cam->getProjectionMatrix() * _cam->getViewMatrix();
+	// At most 128 evenly spaced object samples per list/redraw, only while profiling.
+	const size_t stride = (std::max)(size_t(1), (boxes.size() + 127) / 128);
+	for (size_t object = 0; object < boxes.size(); object += stride) {
+		if (firsts[object] == firsts[object + 1]) continue;
+		RenderProfiler::visibleCount(VisibleMetric::LodTests);
+		std::array<glm::vec4, 8> corners;
+		float margin = 0.f;
+		bool known = projectMeshBounds(boxes[object], viewProjection, _cam->getModelMatrix(), corners, margin);
+		glm::vec2 low((std::numeric_limits<float>::max)()), high((std::numeric_limits<float>::lowest)());
+		if (known) {
+			for (const auto& corner : corners) {
+				if (corner.z <= -corner.w + margin) { known = false; break; }
+				const glm::vec2 xy = glm::vec2(corner) / corner.w;
+				low = glm::min(low, xy);
+				high = glm::max(high, xy);
+			}
+		}
+		if (!known) {
+			RenderProfiler::visibleCount(VisibleMetric::LodUnknownSamples);
+			continue;
+		}
+		const glm::vec2 pixels = (high - low) * glm::vec2(viewport[2], viewport[3]) * 0.5f;
+		if (!std::isfinite(pixels.x) || !std::isfinite(pixels.y)) {
+			RenderProfiler::visibleCount(VisibleMetric::LodUnknownSamples);
+			continue;
+		}
+		const float extent = (std::max)(pixels.x, pixels.y);
+		if (extent < 1.f) {
+			RenderProfiler::visibleCount(VisibleMetric::LodSubpixelSamples);
+			RenderProfiler::visibleCount(VisibleMetric::LodSubpixelTriangleSamples, (firsts[object + 1] - firsts[object]) / 3);
+		}
+		else RenderProfiler::visibleCount(extent < 2.f ? VisibleMetric::LodOneToTwoSamples : VisibleMetric::LodLargerSamples);
+	}
+}
+
 void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _offscreen, const bool _ssao)
 {
 	RenderProfiler::VisibleScope profile(RenderProfiler::VisibleFamily::ObjectListIndividual, _offscreen);
 	RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
 	if (!m_objects->isSelected()) { RenderProfiler::visibleCount(VisibleMetric::Unselected); return; }
 	RenderProfiler::visibleCount(VisibleMetric::ComponentsSelected);
-	RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
 
-	drawElements(_cam, _ssao);
+	bool surfaceVisible = true;
+	// Special passes retain their existing viewport, model and framebuffer contracts.
+	if (!_offscreen && !_ssao && !poca::core::POCA_ENABLE_PICKING &&
+		m_objects->dimension() == 3 && getParameter<bool>("shapeRendering") &&
+		dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects) != nullptr) {
+		RenderProfiler::VisibleTimer timer(VisibleMetric::FrustumUs);
+		const int status = surfaceFrustumStatus(_cam);
+		if (status < 0) {
+			RenderProfiler::visibleCount(VisibleMetric::FrustumBypassed);
+			RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
+		}
+		else {
+			RenderProfiler::visibleCount(VisibleMetric::FrustumTests);
+			if (status > 0) {
+				surfaceVisible = false;
+				RenderProfiler::visibleCount(VisibleMetric::FrustumCulled);
+				const bool independentPass = getParameter<bool>("pointRendering") ||
+					getParameter<bool>("outlinePointRendering") || getParameter<bool>("ellipsoidRendering") ||
+					(m_objects->hasSkeletons() && (getParameter<bool>("skeletonRendering") || getParameter<bool>("linkRendering"))) ||
+					(m_idSelection >= 0 && getParameter<bool>("bboxSelection"));
+				if (!independentPass) {
+					if (!m_surfaceReady) RenderProfiler::visibleCount(VisibleMetric::FrustumDeferredBuilds);
+					return;
+				}
+			}
+		}
+	}
+	else {
+		RenderProfiler::visibleCount(VisibleMetric::FrustumBypassed);
+		RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
+	}
+
+	if (surfaceVisible && !_offscreen && !_ssao) profileMeshSizes(_cam);
+	drawElements(_cam, _ssao, surfaceVisible);
 	if (!_offscreen)
 		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
 }
 
-void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao)
+void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bool _ssao, const bool _surfaceVisible)
 {
 	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) { RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds); return; }
-	if (m_triangleBuffer.empty()) {
+	if (!m_surfaceReady) {
 		RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
 		RenderProfiler::visibleCount(VisibleMetric::Builds);
 		createDisplay();
@@ -394,6 +584,10 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		RenderProfiler::visibleCount(VisibleMetric::BuildTriangleVertices, RenderProfiler::visibleElements(m_triangleBuffer, false));
 		RenderProfiler::visibleCount(VisibleMetric::BuildEllipsoidInstances, RenderProfiler::visibleElements(m_ellipsoidTransformBuffer, false));
 	}
+	m_objectFeaturesAvailable = m_objects->getCurrentHistogram()->nbElements() == m_objects->getSelection().size();
+	if (m_objectFeaturesAvailable && (getParameter<bool>("pointRendering") || poca::core::POCA_ENABLE_PICKING)) ensurePointDisplay();
+	if (m_objectFeaturesAvailable && getParameter<bool>("ellipsoidRendering")) ensureEllipsoidDisplay();
+	if (m_objectFeaturesAvailable && getParameter<bool>("outlinePointRendering")) ensureOutlinePointDisplay();
 	if (poca::core::POCA_ENABLE_PICKING && m_pickFBO == NULL)
 		updatePickingFBO(_cam->getWidth(), _cam->getHeight());
 
@@ -401,7 +595,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	bool pointRendering = getParameter<bool>("pointRendering");
 	bool outlinePointRendering = getParameter<bool>("outlinePointRendering");
-	bool shapeRendering = getParameter<bool>("shapeRendering");
+	bool shapeRendering = getParameter<bool>("shapeRendering") && _surfaceVisible;
 	bool fill = getParameter<bool>("fill");
 	bool displayBboxSelection = getParameter<bool>("bboxSelection");
 	bool cullFaceActivated = _cam->cullFaceActivated();
@@ -443,7 +637,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	RenderProfiler::visibleMode((useTranslucentMeshRendering || alpha < 1.f) ? VisiblePass::Translucent : VisiblePass::Opaque, shapeRendering, RenderProfiler::visibleElements(m_triangleBuffer, false));
 	RenderProfiler::visibleMode(VisiblePass::Skeleton, skeletonRendering, RenderProfiler::visibleElements(m_skeletonBuffer, false));
 	RenderProfiler::visibleMode(VisiblePass::Links, linkRendering, RenderProfiler::visibleElements(m_linksBuffer, false));
-	if (pointRendering) {
+	if (pointRendering && m_objectFeaturesAvailable) {
 		RenderProfiler::VisibleHelperScope pass(VisiblePass::Points, m_pointBuffer.getMode(),
 			RenderProfiler::visibleElements(m_pointBuffer), m_pointBuffer.getBufferIndices() != 0);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -451,7 +645,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 		_cam->drawSphereRendering<poca::core::Vec3mf, float>(m_textureLutID, m_pointBuffer, m_locsFeatureBuffer, m_minOriginalFeature, m_maxOriginalFeature, m_minOriginalFeature, m_maxOriginalFeature, false, pointSize, _ssao);
 	}
 
-	if (outlinePointRendering && !m_outlinePointBuffer.empty()) {
+	if (outlinePointRendering && m_objectFeaturesAvailable && !m_outlinePointBuffer.empty()) {
 		RenderProfiler::VisibleHelperScope pass(VisiblePass::Outline, m_outlinePointBuffer.getMode(),
 			RenderProfiler::visibleElements(m_outlinePointBuffer), m_outlinePointBuffer.getBufferIndices() != 0);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -589,7 +783,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
-	if (m_idSelection >= 0 && shapeRendering && displayBboxSelection) {
+	if (m_idSelection >= 0 && getParameter<bool>("shapeRendering") && displayBboxSelection) {
 		RenderProfiler::VisibleHelperScope pass(VisiblePass::Bbox, m_boundingBoxSelection.getMode(), RenderProfiler::visibleElements(m_boundingBoxSelection, false));
 		GLfloat bkColor[4];
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, bkColor);
@@ -611,7 +805,7 @@ void ObjectListDisplayCommand::drawEllipsoid(poca::opengl::Camera* _cam)
 	bool ellipsoidRendering = getParameter<bool>("ellipsoidRendering");
 	RenderProfiler::visibleMode(VisiblePass::Ellipsoids, ellipsoidRendering, RenderProfiler::visibleElements(m_ellipsoidTransformBuffer, false));
 	RenderProfiler::VisibleTimer passTimer(VisibleMetric::EllipsoidsUs);
-	if (m_ellipsoidTransformBuffer.empty() || !ellipsoidRendering)
+	if (m_ellipsoidTransformBuffer.empty() || !ellipsoidRendering || !m_objectFeaturesAvailable)
 		return;
 
 	glEnable(GL_DEPTH_TEST);
@@ -839,41 +1033,10 @@ void ObjectListDisplayCommand::displayZoomToBBox(poca::opengl::Camera* _cam, con
 
 void ObjectListDisplayCommand::createDisplay()
 {
+	RenderProfiler::VisibleTimer timer(VisibleMetric::SurfaceBuildUs);
 	freeGPUMemory();
 
 	m_textureLutID = poca::opengl::HelperSingleton::instance()->generateLutTexture(m_objects->getPalette());
-
-	//For locs
-	std::vector <poca::core::Vec3mf> locsB;
-	m_objects->generateLocs(locsB);
-	std::vector <poca::core::Vec3mf> normsB;
-	m_objects->generateNormalLocs(normsB);
-	std::vector <float> idsLocs;
-	m_objects->generateLocsPickingIndices(idsLocs);
-	m_pointBuffer.generateBuffer(locsB.size(), 3, GL_FLOAT);
-	m_pointNormalBuffer.generateBuffer(normsB.size(), 3, GL_FLOAT);
-	m_locsFeatureBuffer.generateBuffer(locsB.size(), 1, GL_FLOAT);
-	m_idLocsBuffer.generateBuffer(locsB.size(), 1, GL_FLOAT);
-	m_pointBuffer.updateBuffer(locsB.data());
-	m_pointNormalBuffer.updateBuffer(normsB.data());
-	m_idLocsBuffer.updateBuffer(idsLocs.data());
-
-	/*std::vector <poca::core::Vec3mf> outlineLocs;
-	m_objects->generateOutlineLocs(outlineLocs);
-	m_outlinePointBuffer.generateBuffer(outlineLocs.size(), 3, GL_FLOAT);
-	m_outlineLocsFeatureBuffer.generateBuffer(outlineLocs.size(), 1, GL_FLOAT);
-	m_outlinePointBuffer.updateBuffer(outlineLocs.data());*/
-
-	const std::vector <poca::core::Vec3mf>& normalOutline = m_objects->getNormalOutlineLocs();
-	if (!normalOutline.empty()) {
-		/*std::vector <poca::core::Vec3mf> normalsOutLoc(outlineLocs.size() * 2);
-		for (size_t n = 0; n < outlineLocs.size(); n++) {
-			normalsOutLoc[2 * n] = outlineLocs[n];
-			normalsOutLoc[2 * n + 1] = outlineLocs[n] + 10.f * normalOutline[n];
-		}
-		m_normalsBuffer.generateBuffer(normalsOutLoc.size(), 3, GL_FLOAT);
-		m_normalsBuffer.updateBuffer(normalsOutLoc.data());*/
-	}
 
 	//For objects
 	std::vector <poca::core::Vec3mf> triangles;
@@ -909,6 +1072,79 @@ void ObjectListDisplayCommand::createDisplay()
 		m_lineFeatureBuffer.generateBuffer(outlines.size(), 1, GL_FLOAT);
 	}
 
+	poca::core::HistogramInterface* hist = m_objects->getCurrentHistogram();
+	generateFeatureBuffer(hist);
+	m_surfaceReady = true;
+	RenderProfiler::visibleCount(VisibleMetric::SurfaceAllocations,
+		3 + (!m_triangleFeatureBuffer.empty() ? 1 : 0) +
+		(m_objects->dimension() == 2 ? 1 + (!m_lineBuffer.empty() ? 1 : 0) : 0));
+	RenderProfiler::visibleCount(VisibleMetric::SurfaceUploadBytes,
+		triangles.size() * (sizeof(poca::core::Vec3mf) + 2 * sizeof(float)) + normals.size() * sizeof(poca::core::Vec3mf) +
+		RenderProfiler::visibleElements(m_lineBuffer, false) * (sizeof(poca::core::Vec3mf) + sizeof(float)));
+	if (!getParameter<bool>("pointRendering") && !poca::core::POCA_ENABLE_PICKING) {
+		RenderProfiler::visibleCount(VisibleMetric::PointDeferredBuilds);
+		RenderProfiler::visibleCount(VisibleMetric::PointDeferredBytes,
+			m_objects->getLocsObjects().nbData() * (sizeof(poca::core::Vec3mf) + sizeof(float)));
+	}
+	if (!getParameter<bool>("ellipsoidRendering") && m_objects->dimension() == 3 && m_objects->hasData("major")) {
+		RenderProfiler::visibleCount(VisibleMetric::EllipsoidDeferredBuilds);
+		RenderProfiler::visibleCount(VisibleMetric::EllipsoidDeferredBytes, m_objects->nbElements() * (sizeof(glm::mat4) + sizeof(float)));
+	}
+	// Outline points were previously dormant; no saved bytes claimed for OFF.
+	if (!getParameter<bool>("outlinePointRendering")) RenderProfiler::visibleCount(VisibleMetric::OutlineDormant);
+}
+
+void ObjectListDisplayCommand::ensurePointDisplay()
+{
+	if (m_pointsReady) return;
+	RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
+	RenderProfiler::VisibleTimer timer(VisibleMetric::PointBuildUs);
+	std::vector<poca::core::Vec3mf> points;
+	m_objects->generateLocs(points);
+	if (!points.empty()) {
+		m_pointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
+		m_pointBuffer.updateBuffer(points.data());
+		m_locsFeatureBuffer.generateBuffer(points.size(), 1, GL_FLOAT);
+		RenderProfiler::visibleCount(VisibleMetric::PointAllocations, 2);
+		RenderProfiler::visibleCount(VisibleMetric::PointUploadBytes, points.size() * (sizeof(poca::core::Vec3mf) + sizeof(float)));
+		if (poca::core::POCA_ENABLE_PICKING) {
+			std::vector<float> ids;
+			m_objects->generateLocsPickingIndices(ids);
+			m_idLocsBuffer.generateBuffer(ids.size(), 1, GL_FLOAT);
+			m_idLocsBuffer.updateBuffer(ids.data());
+			RenderProfiler::visibleCount(VisibleMetric::PointAllocations);
+			RenderProfiler::visibleCount(VisibleMetric::PointUploadBytes, ids.size() * sizeof(float));
+		}
+		refreshFeatureBuffers(nullptr, false, true, false);
+	}
+	m_pointsReady = true;
+	RenderProfiler::visibleCount(VisibleMetric::BuildPoints, points.size());
+	// Point normals have no consumer in this command's sphere/picking paths.
+}
+
+void ObjectListDisplayCommand::ensureOutlinePointDisplay()
+{
+	if (m_outlinePointsReady) return;
+	RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
+	RenderProfiler::VisibleTimer timer(VisibleMetric::OutlineBuildUs);
+	std::vector<poca::core::Vec3mf> points;
+	m_objects->generateOutlineLocs(points);
+	if (!points.empty()) {
+		m_outlinePointBuffer.generateBuffer(points.size(), 3, GL_FLOAT);
+		m_outlinePointBuffer.updateBuffer(points.data());
+		m_outlineLocsFeatureBuffer.generateBuffer(points.size(), 1, GL_FLOAT);
+		refreshFeatureBuffers(nullptr, false, true, false);
+		RenderProfiler::visibleCount(VisibleMetric::OutlineAllocations, 2);
+		RenderProfiler::visibleCount(VisibleMetric::OutlineUploadBytes, points.size() * (sizeof(poca::core::Vec3mf) + sizeof(float)));
+	}
+	m_outlinePointsReady = true;
+}
+
+void ObjectListDisplayCommand::ensureEllipsoidDisplay()
+{
+	if (m_ellipsoidsReady || m_objects->dimension() != 3 || !m_objects->hasData("major")) return;
+	RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
+	RenderProfiler::VisibleTimer timer(VisibleMetric::EllipsoidBuildUs);
 	if (m_objects->dimension() == 3) {
 		if (m_objects->hasData("major")) {
 			const std::vector < std::array<poca::core::Vec3mf, 3>>& axisPCA = m_objects->getAxisObjects();
@@ -938,8 +1174,14 @@ void ObjectListDisplayCommand::createDisplay()
 		}
 	}
 
-	poca::core::HistogramInterface* hist = m_objects->getCurrentHistogram();
-	generateFeatureBuffer(hist);
+	if (!m_ellipsoidTransformBuffer.empty()) {
+		refreshFeatureBuffers(nullptr, false, false, true);
+		RenderProfiler::visibleCount(VisibleMetric::EllipsoidAllocations, 2);
+		RenderProfiler::visibleCount(VisibleMetric::EllipsoidUploadBytes,
+			m_ellipsoidTransformBuffer.getNbElements() * (sizeof(glm::mat4) + sizeof(float)));
+		RenderProfiler::visibleCount(VisibleMetric::BuildEllipsoidInstances, m_ellipsoidTransformBuffer.getNbElements());
+	}
+	m_ellipsoidsReady = true;
 }
 
 void ObjectListDisplayCommand::createDisplaySkeleton()
@@ -976,6 +1218,13 @@ void ObjectListDisplayCommand::createDisplaySkeleton()
 
 void ObjectListDisplayCommand::freeGPUMemory()
 {
+	m_surfaceReady = m_pointsReady = m_outlinePointsReady = m_ellipsoidsReady = m_objectFeaturesAvailable = false;
+	m_meshVisibilityReady = m_surfaceBoundsValid = m_meshRangesValid = false;
+	m_pointNormalBuffer.freeGPUMemory();
+	m_outlinePointBuffer.freeGPUMemory();
+	m_outlineLocsFeatureBuffer.freeGPUMemory();
+	m_triangleNormalBuffer.freeGPUMemory();
+	m_ellipsoidFeatureBuffer.freeGPUMemory();
 	m_pointBuffer.freeGPUMemory();
 	m_idLocsBuffer.freeGPUMemory();
 	m_locsFeatureBuffer.freeGPUMemory();
@@ -1001,6 +1250,18 @@ void ObjectListDisplayCommand::freeGPUMemory()
 
 void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterface* _histogram)
 {
+	refreshFeatureBuffers(_histogram, true, true, true);
+}
+
+void ObjectListDisplayCommand::refreshFeatureBuffers(poca::core::HistogramInterface* _histogram,
+	bool _surfaces, bool _points, bool _ellipsoids)
+{
+	_surfaces = _surfaces && !m_triangleFeatureBuffer.empty();
+	const bool pointFeatures = _points && !m_locsFeatureBuffer.empty();
+	const bool outlineFeatures = _points && !m_outlineLocsFeatureBuffer.empty();
+	_points = pointFeatures || outlineFeatures;
+	_ellipsoids = _ellipsoids && !m_ellipsoidFeatureBuffer.empty();
+	if (!_surfaces && !_points && !_ellipsoids) return;
 	if (_histogram == NULL)
 		_histogram = m_objects->getCurrentHistogram();
 	poca::core::Histogram<float>* histogram = dynamic_cast<poca::core::Histogram<float>*>(_histogram);
@@ -1010,46 +1271,48 @@ void ObjectListDisplayCommand::generateFeatureBuffer(poca::core::HistogramInterf
 	m_maxOriginalFeature = _histogram->getMax();
 	m_actualValueFeature = m_maxOriginalFeature;
 
-	if (values.size() == selection.size()) {
-		std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs, featureEllipsoid(values.size());
+	m_objectFeaturesAvailable = values.size() == selection.size();
+	if (m_objectFeaturesAvailable) {
+		std::vector <float> featureLocs, featureValues, featureOutlines, featureOutlineLocs, featureEllipsoid(_ellipsoids ? values.size() : 0);
 		if (m_objects->isHiLow()) {
 			float inter = m_maxOriginalFeature - m_minOriginalFeature;
 			float selectedValue = m_minOriginalFeature + inter / 4.f;
 			float notSelectedValue = m_minOriginalFeature + inter * (3.f / 4.f);
-			m_objects->getLocsFeatureInSelectionHiLow(featureLocs, selection, selectedValue, notSelectedValue);
-			m_objects->getFeatureInSelectionHiLow(featureValues, selection, selectedValue, notSelectedValue);
-			if(!m_outlineLocsFeatureBuffer.empty())
+			if (pointFeatures) m_objects->getLocsFeatureInSelectionHiLow(featureLocs, selection, selectedValue, notSelectedValue);
+			if (_surfaces) m_objects->getFeatureInSelectionHiLow(featureValues, selection, selectedValue, notSelectedValue);
+			if (outlineFeatures)
 				m_objects->getOutlineLocsFeatureInSelectionHiLow(featureOutlineLocs, selection, selectedValue, notSelectedValue);
-			if (!m_lineBuffer.empty())
+			if (_surfaces && !m_lineBuffer.empty())
 				m_objects->getOutlinesFeatureInSelectionHiLow(featureOutlines, selection, selectedValue, notSelectedValue);
 
-			for (auto n = 0; n < values.size(); n++)
+			for (size_t n = 0; n < featureEllipsoid.size(); n++)
 				featureEllipsoid[n] = selection[n] ? selectedValue : notSelectedValue;
 		}
 		else {
-			m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			m_objects->getFeatureInSelection(featureValues, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			if (!m_outlineLocsFeatureBuffer.empty())
+			if (pointFeatures) m_objects->getLocsFeatureInSelection(featureLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			if (_surfaces) m_objects->getFeatureInSelection(featureValues, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
+			if (outlineFeatures)
 				m_objects->getOutlineLocsFeatureInSelection(featureOutlineLocs, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
-			if (!m_lineBuffer.empty())
+			if (_surfaces && !m_lineBuffer.empty())
 				m_objects->getOutlinesFeatureInSelection(featureOutlines, values, selection, poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER);
 
-			for (auto n = 0; n < values.size(); n++)
+			for (size_t n = 0; n < featureEllipsoid.size(); n++)
 				featureEllipsoid[n] = selection[n] && std::isfinite(values[n]) ? values[n] : poca::opengl::Shader::MIN_VALUE_FEATURE_SHADER;
 		}
-		m_locsFeatureBuffer.updateBuffer(featureLocs.data());
-		m_triangleFeatureBuffer.updateBuffer(featureValues.data());
-		if (!m_outlineLocsFeatureBuffer.empty())
+		if (pointFeatures) m_locsFeatureBuffer.updateBuffer(featureLocs.data());
+		if (_surfaces) m_triangleFeatureBuffer.updateBuffer(featureValues.data());
+		if (outlineFeatures)
 			m_outlineLocsFeatureBuffer.updateBuffer(featureOutlineLocs.data());
-		if (!m_lineBuffer.empty())
+		if (_surfaces && !m_lineBuffer.empty())
 			m_lineFeatureBuffer.updateBuffer(featureOutlines);
 
-		if (!m_ellipsoidFeatureBuffer.empty())
+		if (_ellipsoids)
 			m_ellipsoidFeatureBuffer.updateBuffer(featureEllipsoid.data());
 	}
 	else {
-		//For now the only case of such is when we have added an histogram on the triangles, and not the objects
-		m_triangleFeatureBuffer.updateBuffer(values.data());
+		// Triangle-level histograms have no point/outline/ellipsoid feature mapping.
+		// Keep surfaces current and suppress decoration draws until an object histogram returns.
+		if (_surfaces) m_triangleFeatureBuffer.updateBuffer(values.data());
 	}
 }
 
@@ -1084,6 +1347,8 @@ void ObjectListDisplayCommand::generateBoundingBoxSelection(const int _idx)
 
 void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPosition, const glm::vec3& _cameraForwardVec)
 {
+	// Sorting must not materialize an index buffer for a deferred surface or points.
+	if (!m_surfaceReady) return;
 	if (dynamic_cast<poca::geometry::ObjectListMesh*>(m_objects) != nullptr && !getParameter<bool>("translucentRendering")) return;
 	if (m_objects->dimension() == 2) return;
 #ifdef NO_CUDA
@@ -1103,7 +1368,7 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 		[&](int A, int B) -> bool {
 			return distances[A] < distances[B];
 		});
-	m_pointBuffer.updateIndices(indices);
+	if (getParameter<bool>("pointRendering") && !m_pointBuffer.empty() && !indices.empty()) m_pointBuffer.updateIndices(indices);
 #else
 	size_t numData = m_objects->getLocsObjects().nbData();
 	std::vector <uint32_t> indices(numData), indicesTriangles(m_centroidsTriangles.size() / 3);
@@ -1113,7 +1378,7 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 	if (static_cast <poca::geometry::ObjectListMesh*>(m_objects) != NULL) {
 		sortArrayWRTPoint_GPU(xs, ys, zs, numData, poca::core::Vec3mf(_cameraPosition.x, _cameraPosition.y, _cameraPosition.z), indices);
 		sortCentroidTrianglesWRTPoint_GPU(m_centroidsTriangles, poca::core::Vec3mf(_cameraPosition.x, _cameraPosition.y, _cameraPosition.z), indicesTriangles);
-		m_triangleBuffer.updateIndices(indicesTriangles);
+		if (!indicesTriangles.empty()) m_triangleBuffer.updateIndices(indicesTriangles);
 	}
 	else {
 		const std::vector <uint32_t>& locs = m_objects->getLocsObjects().getData();
@@ -1126,7 +1391,7 @@ void ObjectListDisplayCommand::sortWrtCameraPosition(const glm::vec3& _cameraPos
 		}
 		sortArrayWRTKeys(distances, indices);
 	}
-	m_pointBuffer.updateIndices(indices);
+	if (getParameter<bool>("pointRendering") && !m_pointBuffer.empty() && !indices.empty()) m_pointBuffer.updateIndices(indices);
 #endif
 }
 
