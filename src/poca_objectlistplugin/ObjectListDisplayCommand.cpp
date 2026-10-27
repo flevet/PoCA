@@ -64,6 +64,12 @@ using RenderProfiler = poca::core::PerformanceProfiler;
 using VisibleMetric = RenderProfiler::VisibleMetric;
 using VisiblePass = RenderProfiler::VisiblePass;
 
+namespace {
+	// The current experiment samples projected mesh sizes but always draws the full list.
+	// Keep its per-object work out of normal rendering, including renderPerformance captures.
+	constexpr bool kEnableObjectListPerObjectSubpixelLod = false;
+}
+
 char* fsLightSSAO = "#version 330 core\n"
 "layout (location = 0) out vec3 gPosition;\n"
 "layout(location = 1) out vec3 gNormal;\n"
@@ -567,7 +573,14 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 		RenderProfiler::visibleCount(VisibleMetric::NoFrustumTest);
 	}
 
-	if (surfaceVisible && !_offscreen && !_ssao) profileMeshSizes(_cam);
+	if (surfaceVisible && !_offscreen && !_ssao) {
+		if constexpr (kEnableObjectListPerObjectSubpixelLod)
+			profileMeshSizes(_cam);
+		else if (RenderProfiler::visibleActive() && _cam->getObject() && _cam->getObject()->nbColors() > 1 &&
+			m_objects->dimension() == 3 && getParameter<bool>("shapeRendering"))
+			// Same candidate scope as the experiment; actual submissions remain visibleDraw's responsibility.
+			RenderProfiler::visibleCount(VisibleMetric::LodFastBypasses);
+	}
 	drawElements(_cam, _ssao, surfaceVisible);
 	if (!_offscreen)
 		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);

@@ -101,7 +101,8 @@ namespace poca::core {
 			EllipsoidBuildUs, EllipsoidAllocations, EllipsoidUploadBytes, EllipsoidDeferredBuilds, EllipsoidDeferredBytes,
 			OutlineDormant, OutlineBuildUs, OutlineAllocations, OutlineUploadBytes,
 			LodPlanningUs, LodTests, LodSubpixelSamples, LodOneToTwoSamples, LodLargerSamples, LodUnknownSamples,
-			LodSubpixelTriangleSamples, LodFullDrawFallbacks, LodSuppressedObjects, LodOmittedTriangles, LodRetainedRanges, Count
+			LodSubpixelTriangleSamples, LodFullDrawFallbacks, LodSuppressedObjects, LodOmittedTriangles, LodRetainedRanges,
+			LodFastBypasses, Count
 		};
 
 		// Render-thread diagnostics. Records/scopes are shared through instance(), never DLL-local TLS.
