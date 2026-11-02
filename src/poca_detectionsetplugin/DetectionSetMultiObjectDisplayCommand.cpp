@@ -70,7 +70,7 @@ namespace {
 	glm::mat4 currentObjectModel(MyMultipleObject* _object)
 	{
 		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
-		return child != nullptr ? glm::inverse(_object->getModelMatrix()) * child->getModelMatrix() : glm::mat4(1.f);
+		return child != nullptr ? child->getModelMatrix() : glm::mat4(1.f);
 	}
 
 	std::string transformedObjectName(poca::core::MyObjectInterface* _source)
@@ -334,7 +334,7 @@ bool DetectionSetMultiObjectDisplayCommand::canBatch() const
 {
 	RenderProfiler::VisibleTimer timer(VisibleMetric::CanBatchUs, VisibleFamily::DetectionShared);
 	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::CanBatchCalls);
-	if (m_object == nullptr || m_object->nbColors() <= 1) {
+	if (m_object == nullptr || !m_object->batchComponentRendering() || m_object->nbColors() <= 1) {
 		RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::FallbackNoFamily);
 		return false;
 	}
@@ -411,7 +411,7 @@ bool DetectionSetMultiObjectDisplayCommand::rebuild()
 		if (histogram == nullptr)
 			continue;
 
-		const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
+		const glm::mat4 model = child->getModelMatrix();
 		const std::vector<float>& xs = dset->getMyData("x")->getData<float>();
 		const std::vector<float>& ys = dset->getMyData("y")->getData<float>();
 		const std::vector<float>* zs = dset->hasData("z") ? &dset->getMyData("z")->getData<float>() : nullptr;
@@ -500,7 +500,6 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 	std::vector<poca::core::Vec3mf> points, normals;
 	std::vector<glm::mat4> transforms;
 	const bool updateNormals = !m_normalBuffer.empty();
-	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
 
 	for (const ObjectPointRange& range : m_objectPointRanges) {
 		if (range.objectIndex >= m_object->nbColors())
@@ -513,7 +512,7 @@ bool DetectionSetMultiObjectDisplayCommand::refreshTransformBuffers()
 		if (dset == nullptr || !dset->isSelected())
 			return false;
 
-		const glm::mat4 model = parentInvModel * child->getModelMatrix();
+		const glm::mat4 model = child->getModelMatrix();
 		transforms.push_back(model);
 		const std::vector<float>& xs = dset->getMyData("x")->getData<float>();
 		const std::vector<float>& ys = dset->getMyData("y")->getData<float>();
@@ -565,7 +564,6 @@ bool DetectionSetMultiObjectDisplayCommand::transformBuffersDirty() const
 	}
 	if (selectedCount != m_objectPointRanges.size())
 		return true;
-	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
 	for (size_t n = 0; n < m_objectPointRanges.size(); n++) {
 		const ObjectPointRange& range = m_objectPointRanges[n];
 		if (range.objectIndex >= m_object->nbColors())
@@ -575,7 +573,7 @@ bool DetectionSetMultiObjectDisplayCommand::transformBuffersDirty() const
 			dynamic_cast<poca::geometry::DetectionSet*>(child->getBasicComponent("DetectionSet")) : nullptr;
 		if (dset == nullptr || !dset->isSelected())
 			return true;
-		const glm::mat4 model = parentInvModel * child->getModelMatrix();
+		const glm::mat4 model = child->getModelMatrix();
 		for (size_t column = 0; column < 4; column++)
 			for (size_t row = 0; row < 4; row++)
 				if (model[column][row] != m_cachedTransforms[n][column][row])

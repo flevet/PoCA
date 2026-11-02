@@ -89,9 +89,8 @@ void ray_box_intersection(Ray ray, AABB box, out float t_0, out float t_1)
     t_1 = min(t.x, t.y);
 }
 
-bool sampleFeatureValue(int imageIndex, vec3 parentPosition, out float featureValue)
+bool sampleFeatureValue(ImageDescriptor desc, vec3 parentPosition, out float featureValue)
 {
-    ImageDescriptor desc = images[imageIndex];
     vec3 imagePosition = (desc.invModel * vec4(parentPosition, 1.0)).xyz;
     if (any(lessThan(imagePosition, desc.bottom.xyz)) || any(greaterThan(imagePosition, desc.top.xyz)))
         return false;
@@ -169,6 +168,47 @@ bool clippedByPlane(vec3 worldPos)
     return false;
 }
 
+// Conservative slab test in image-local coordinates. Ray t stays in parent units:
+// never normalize the inverse-transformed direction. Uncertain arithmetic keeps the scan.
+bool rayMayIntersect(ImageDescriptor desc, Ray parentRay, float begin, float end, vec3 sampleStart, vec3 sampleStep)
+{
+    vec3 origin = (desc.invModel * vec4(parentRay.origin, 1.0)).xyz;
+    vec3 direction = (desc.invModel * vec4(parentRay.direction, 0.0)).xyz;
+    if (end < begin || nb_steps <= 0)
+        return true;
+    // Include roundoff from the original repeated-add sample grid. A mathematically
+    // missing ray must not reject a channel reached by that floating-point grid.
+    float accumulation = float(nb_steps) * 1.192092896e-7;
+    if (accumulation >= 0.5)
+        return true;
+    vec3 parentError = (accumulation / (1.0 - accumulation)) *
+        (abs(sampleStart) + float(nb_steps) * abs(sampleStep));
+    for (int axis = 0; axis < 3; ++axis) {
+        if (isnan(origin[axis]) || isinf(origin[axis]) || isnan(direction[axis]) || isinf(direction[axis]))
+            return true;
+        float errorMargin = 1e-4 * max(1.0, max(abs(origin[axis]), max(abs(desc.bottom[axis]), abs(desc.top[axis]))));
+        errorMargin += dot(abs(vec3(desc.invModel[0][axis], desc.invModel[1][axis], desc.invModel[2][axis])), parentError);
+        if (isnan(errorMargin) || isinf(errorMargin))
+            return true;
+        if (direction[axis] == 0.0) {
+            if (origin[axis] < desc.bottom[axis] - errorMargin || origin[axis] > desc.top[axis] + errorMargin)
+                return false;
+        }
+        else {
+            float a = (desc.bottom[axis] - errorMargin - origin[axis]) / direction[axis];
+            float b = (desc.top[axis] + errorMargin - origin[axis]) / direction[axis];
+            if (isnan(a) || isinf(a) || isnan(b) || isinf(b))
+                return true;
+            begin = max(begin, min(a, b));
+            end = min(end, max(a, b));
+            float tolerance = 1e-4 * max(1.0, max(abs(begin), abs(end)));
+            if (begin > end + tolerance)
+                return false;
+        }
+    }
+    return true;
+}
+
 void main()
 {
     vec4 ndcPos;
@@ -201,37 +241,33 @@ void main()
     vec3 ray_start = current_ray_origin + current_ray_direction * t_0;
     vec3 ray_stop = current_ray_origin + current_ray_direction * t_1;
     vec3 ray_step = (ray_stop - ray_start) / float(nb_steps);
-    vec3 parentPosition = ray_start;
-
-    float maximumIntensity[1024];
-    for (int n = 0; n < nbImages; ++n)
-        maximumIntensity[n] = -3.402823466e+38;
-
-    for (int step = 0; step < nb_steps; ++step) {
-        parentPosition += ray_step;
-        for (int curImage = 0; curImage < nbImages; ++curImage) {
-            float featureValue;
-            if (!sampleFeatureValue(curImage, parentPosition, featureValue))
-                continue;
-
-            ImageDescriptor desc = images[curImage];
-            if (desc.flags.w != 0u) {
-                if (featureValue >= maximumIntensity[curImage])
-                    maximumIntensity[curImage] = featureValue;
-            }
-            else if (featureValue >= maximumIntensity[curImage] && featureValue <= desc.featureParams.y) {
-                maximumIntensity[curImage] = featureValue;
-            }
-        }
-    }
-
+    // Each channel's MIP is independent. Retain its exact repeated-add sampling grid
+    // and final channel addition order, but keep only one maximum alive per ray.
     a_colour = vec4(0.0);
     bool hasContribution = false;
     for (int curImage = 0; curImage < nbImages; ++curImage) {
-        if (maximumIntensity[curImage] > -3.0e+38)
+        ImageDescriptor desc = images[curImage];
+        float maximumIntensity = -3.402823466e+38;
+        if (rayMayIntersect(desc, casting_ray, t_0, t_1, ray_start, ray_step)) {
+            vec3 parentPosition = ray_start;
+            for (int step = 0; step < nb_steps; ++step) {
+                parentPosition += ray_step;
+                float featureValue;
+                if (!sampleFeatureValue(desc, parentPosition, featureValue))
+                    continue;
+                if (desc.flags.w != 0u) {
+                    if (featureValue >= maximumIntensity)
+                        maximumIntensity = featureValue;
+                }
+                else if (featureValue >= maximumIntensity && featureValue <= desc.featureParams.y) {
+                    maximumIntensity = featureValue;
+                }
+            }
+        }
+        if (maximumIntensity > -3.0e+38)
             hasContribution = true;
-        vec4 currentColor = computeImageColor(images[curImage], maximumIntensity[curImage]);
-        a_colour += currentColor;
+        // Preserve even the legacy sentinel-to-LUT behavior of a noncontributing channel.
+        a_colour += computeImageColor(desc, maximumIntensity);
     }
     if (!hasContribution)
         discard;

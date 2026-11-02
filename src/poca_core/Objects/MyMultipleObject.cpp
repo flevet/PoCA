@@ -46,6 +46,7 @@
 #include <Interfaces/BasicComponentInterface.hpp>
 #include <General/stb_rect_pack.h>
 #include <OpenGL/RenderCommandContext.hpp>
+#include <General/CollectionRenderPlan.hpp>
 
 #include "MyMultipleObject.hpp"
 
@@ -183,48 +184,6 @@ namespace {
 		return hasBBox ? bbox : _object->boundingBox();
 	}
 
-	struct ChildViewDepth {
-		poca::core::MyObjectInterface* object = nullptr;
-		size_t originalIndex = 0;
-		float depth = 0.f;
-		bool validDepth = false;
-	};
-
-	std::vector<poca::core::MyObjectInterface*> objectsOrderedForDisplay(
-		const std::vector<poca::core::MyObjectInterface*>& _objects, poca::opengl::Camera* _camera)
-	{
-		poca::core::PerformanceProfiler::RenderTimer timer(poca::core::PerformanceProfiler::RenderMetric::CollectionPreparationUs);
-		std::vector<ChildViewDepth> depths;
-		depths.reserve(_objects.size());
-		for (size_t index = 0; index < _objects.size(); ++index) {
-			poca::core::MyObjectInterface* object = _objects[index];
-			if (object == nullptr)
-				continue;
-			const poca::core::BoundingBox bbox = localObjectBoundingBox(object);
-			const glm::vec4 center(
-				(bbox[0] + bbox[3]) * .5f,
-				(bbox[1] + bbox[4]) * .5f,
-				(bbox[2] + bbox[5]) * .5f,
-				1.f);
-			const glm::vec4 viewCenter = _camera->getViewMatrix() * _camera->getModelMatrix() * object->getModelMatrix() * center;
-			depths.push_back({ object, index, viewCenter.z, std::isfinite(viewCenter.z) });
-		}
-
-		// glm::lookAt places visible geometry on negative view-space Z, so ascending Z draws far to near.
-		std::stable_sort(depths.begin(), depths.end(), [](const ChildViewDepth& _lhs, const ChildViewDepth& _rhs) {
-			if (_lhs.validDepth != _rhs.validDepth)
-				return _lhs.validDepth;
-			if (_lhs.validDepth && _lhs.depth != _rhs.depth)
-				return _lhs.depth < _rhs.depth;
-			return _lhs.originalIndex < _rhs.originalIndex;
-		});
-
-		std::vector<poca::core::MyObjectInterface*> orderedObjects;
-		orderedObjects.reserve(depths.size());
-		for (const ChildViewDepth& entry : depths)
-			orderedObjects.push_back(entry.object);
-		return orderedObjects;
-	}
 
 }
 
@@ -435,7 +394,7 @@ void MyMultipleObject::executeCommandOnSpecificComponent(const std::string& _nam
 	poca::core::BasicComponentInterface* bci = getBasicComponent(_nameComponent);
 	if (bci)
 		bci->executeCommand(_ci, _context, _result);
-	if (_result.has<poca::opengl::ChildObjectRenderingHandled>() && _result.get<poca::opengl::ChildObjectRenderingHandled>().handled)
+	if (_ci && (_ci->nameCommand == "display" || _ci->nameCommand == "updatePickingBuffer" || _ci->nameCommand == "pick") && isComponentFamilyHandled(_result, _nameComponent))
 		return;
 	if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
@@ -463,6 +422,15 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 
 void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const poca::core::CommandExecutionContext& _context, poca::core::CommandExecutionResult& _result)
 {
+	poca::core::CommandExecutionContext dispatchContext(_context);
+	poca::core::CollectionRenderPlan plan;
+	if (_ci && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>()) {
+		if (auto* camera = _context.get<poca::opengl::ActiveCamera>().camera) {
+			plan.build(m_colors, getModelMatrix(), camera->getModelMatrix() * getModelMatrix(),
+				camera->getProjectionMatrix() * camera->getViewMatrix(), camera->getViewMatrix(), m_batchComponentRendering);
+			dispatchContext.set(poca::opengl::CollectionRenderPlanContext{ &plan });
+		}
+	}
 	// Disabled batching installs no shared plugin command. Report that concrete
 	// dispatch policy here, without pretending canBatch() rejected the family.
 	using Profiler = poca::core::PerformanceProfiler;
@@ -481,49 +449,48 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 		if (detections) Profiler::renderCount(Profiler::RenderMetric::DetectionBatchingDisabled);
 	}
 	//executeCommand(_ci);
-	poca::core::MyObject::executeCommand(_ci, _context, _result);
+	poca::core::MyObject::executeCommand(_ci, dispatchContext, _result);
 	if (_ci != nullptr && _ci->nameCommand == "updatePickingBuffer") {
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			poca::core::BasicComponentInterface* bc = *it;
-			if (isComponentFamilyHandled(_result, bc->getName()))
+			if (_ci && (_ci->nameCommand == "display" || _ci->nameCommand == "updatePickingBuffer") && isComponentFamilyHandled(_result, bc->getName()))
 				continue;
-			bc->executeCommand(_ci, _context, _result);
+			bc->executeCommand(_ci, dispatchContext, _result);
 		}
 		if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 			for (const size_t index : m_selectedObjectIndices) {
 				if (index < m_colors.size() && m_colors[index] != NULL)
-					executeChildGlobalCommand(m_colors[index], _ci, _context, _result);
+					executeChildGlobalCommand(m_colors[index], _ci, dispatchContext, _result);
 			}
 		}
 		else {
 			for (poca::core::MyObjectInterface* obj : m_colors)
-				executeChildGlobalCommand(obj, _ci, _context, _result);
+				executeChildGlobalCommand(obj, _ci, dispatchContext, _result);
 		}
 		return;
 	}
-	if (_ci != nullptr && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>()) {
-		poca::opengl::Camera* camera = _context.get<poca::opengl::ActiveCamera>().camera;
+	if (_ci != nullptr && _ci->nameCommand == "display" && dispatchContext.has<poca::opengl::ActiveCamera>()) {
+		poca::opengl::Camera* camera = dispatchContext.get<poca::opengl::ActiveCamera>().camera;
 		if (camera != nullptr) {
-			const std::vector<poca::core::MyObjectInterface*> orderedObjects = objectsOrderedForDisplay(m_colors, camera);
-			for (poca::core::MyObjectInterface* obj : orderedObjects)
-				executeChildGlobalCommand(obj, _ci, _context, _result);
+			for (const auto& child : plan.children())
+				executeChildGlobalCommand(child.source, _ci, dispatchContext, _result);
 		}
 	}
 	else if (!m_selectedObjectIndices.empty() && !shouldForwardToAllChildren(_ci)) {
 		for (const size_t index : m_selectedObjectIndices) {
 			if (index < m_colors.size() && m_colors[index] != NULL)
-				executeChildGlobalCommand(m_colors[index], _ci, _context, _result);
+				executeChildGlobalCommand(m_colors[index], _ci, dispatchContext, _result);
 		}
 	}
 	else {
 		for (poca::core::MyObjectInterface* obj : m_colors)
-			executeChildGlobalCommand(obj, _ci, _context, _result);
+			executeChildGlobalCommand(obj, _ci, dispatchContext, _result);
 	}
 	for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 		poca::core::BasicComponentInterface* bc = *it;
-		if (isComponentFamilyHandled(_result, bc->getName()))
+		if (_ci && (_ci->nameCommand == "display" || _ci->nameCommand == "updatePickingBuffer") && isComponentFamilyHandled(_result, bc->getName()))
 			continue;
-		bc->executeCommand(_ci, _context, _result);
+		bc->executeCommand(_ci, dispatchContext, _result);
 	}
 }
 

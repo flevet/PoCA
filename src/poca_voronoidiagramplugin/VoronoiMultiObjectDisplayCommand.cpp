@@ -199,7 +199,7 @@ poca::core::Command* VoronoiMultiObjectDisplayCommand::copy()
 
 bool VoronoiMultiObjectDisplayCommand::canBatch() const
 {
-	if (m_object == nullptr || m_object->nbColors() <= 1)
+	if (m_object == nullptr || !m_object->batchComponentRendering() || m_object->nbColors() <= 1)
 		return false;
 
 	bool first = true;
@@ -274,7 +274,7 @@ bool VoronoiMultiObjectDisplayCommand::rebuild()
 		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
 		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
 
-		const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
+		const glm::mat4 model = child->getModelMatrix();
 		const std::vector<float>& values = histogram->getValues();
 		const std::vector<bool>& selection = voro->getSelection();
 		const std::vector<bool>& borderLocs = voro->borderLocalizations();

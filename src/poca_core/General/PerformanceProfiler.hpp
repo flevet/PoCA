@@ -136,6 +136,8 @@ namespace poca::core {
 			LocalBoundsCalls, LocalBoundsUs, CollectionBoundsCalls, CollectionBoundsUs,
 			CollectionPreparationUs, CollectionGridCalls, CollectionGridUs, BboxPreparationCalls, BboxPreparationUs,
 			ObjectBatchingDisabled, DetectionBatchingDisabled,
+			CollectionCandidateItems, CollectionSelectedItems, ImagePlanVisible, ImagePlanBatched, ImagePlanFallback,
+			ImagePlanGroups, DescriptorCacheHits, SharedGeometryAllocations,
 			VisibleBegin, Count = size_t(VisibleBegin) + size_t(VisibleFamily::None) * size_t(VisibleMetric::Count)
 		};
 		enum class RenderWorkerMetric : size_t { Preparations, PreparationUs, AdmissionDeferred, AdmissionRejected, RedrawRequests, Count };

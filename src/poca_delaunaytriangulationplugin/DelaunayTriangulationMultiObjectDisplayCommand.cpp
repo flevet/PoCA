@@ -186,7 +186,7 @@ poca::core::Command* DelaunayTriangulationMultiObjectDisplayCommand::copy()
 
 bool DelaunayTriangulationMultiObjectDisplayCommand::canBatch() const
 {
-	if (m_object == nullptr || m_object->nbColors() <= 1)
+	if (m_object == nullptr || !m_object->batchComponentRendering() || m_object->nbColors() <= 1)
 		return false;
 
 	bool hasDelaunayChild = false, first = true;
@@ -244,7 +244,7 @@ bool DelaunayTriangulationMultiObjectDisplayCommand::rebuild()
 
 		m_minOriginalFeature = std::min(m_minOriginalFeature, histInterface->getMin());
 		m_maxOriginalFeature = std::max(m_maxOriginalFeature, histInterface->getMax());
-		const glm::mat4 model = glm::inverse(m_object->getModelMatrix()) * child->getModelMatrix();
+		const glm::mat4 model = child->getModelMatrix();
 
 		std::vector<poca::core::Vec3mf> localTriangles;
 		delau->generateTriangles(localTriangles);

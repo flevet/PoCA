@@ -55,6 +55,7 @@ set(GENERAL_HEADER_FILES
   General/MyData.hpp
   General/Palette.hpp
   General/PerformanceProfiler.hpp
+  General/CollectionRenderPlan.hpp
   General/PickingPolicy.hpp
   General/PluginList.hpp
   General/PythonInterpreter.hpp
@@ -83,6 +84,7 @@ set(GENERAL_SOURCE_FILES
   General/MyData.cpp
   General/Palette.cpp
   General/PerformanceProfiler.cpp
+  General/CollectionRenderPlan.cpp
   General/PluginList.cpp
   General/PythonInterpreter.cpp
   General/Scatterplot.cpp

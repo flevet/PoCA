@@ -108,7 +108,7 @@ namespace {
 	glm::mat4 currentObjectModel(MyMultipleObject* _object)
 	{
 		poca::core::MyObjectInterface* child = _object != nullptr ? _object->currentObject() : nullptr;
-		return child != nullptr ? glm::inverse(_object->getModelMatrix()) * child->getModelMatrix() : glm::mat4(1.f);
+		return child != nullptr ? child->getModelMatrix() : glm::mat4(1.f);
 	}
 
 	std::string transformedObjectName(poca::core::MyObjectInterface* _source)
@@ -717,7 +717,7 @@ bool ObjectListMultiObjectDisplayCommand::canBatch() const
 {
 	RenderProfiler::VisibleTimer timer(VisibleMetric::CanBatchUs, VisibleFamily::ObjectListShared);
 	RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::CanBatchCalls);
-	if (m_object == nullptr || m_object->nbColors() <= 1) {
+	if (m_object == nullptr || !m_object->batchComponentRendering() || m_object->nbColors() <= 1) {
 		RenderProfiler::visibleCount(VisibleFamily::ObjectListShared, VisibleMetric::FallbackNoFamily);
 		return false;
 	}
@@ -1802,10 +1802,9 @@ bool ObjectListMultiObjectDisplayCommand::updateObjectModelBuffer()
 
 	std::vector<glm::vec4> matrices;
 	matrices.reserve(m_object->nbColors() * 4);
-	const glm::mat4 parentInvModel = glm::inverse(m_object->getModelMatrix());
 	for (size_t n = 0; n < m_object->nbColors(); n++) {
 		poca::core::MyObjectInterface* child = m_object->getObject(n);
-		const glm::mat4 model = child == nullptr ? glm::mat4(1.f) : parentInvModel * child->getModelMatrix();
+		const glm::mat4 model = child == nullptr ? glm::mat4(1.f) : child->getModelMatrix();
 		matrices.push_back(model[0]);
 		matrices.push_back(model[1]);
 		matrices.push_back(model[2]);

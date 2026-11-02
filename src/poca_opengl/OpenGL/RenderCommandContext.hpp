@@ -20,6 +20,7 @@
 #include <Interfaces/MyObjectInterface.hpp>
 
 class QOpenGLFramebufferObject;
+namespace poca::core { class CollectionRenderPlan; }
 
 namespace poca::opengl {
 	class Camera;
@@ -36,6 +37,10 @@ namespace poca::opengl {
 
 	struct DeferImageListOverlays {
 		bool defer = false;
+	};
+
+	struct CollectionRenderPlanContext {
+		poca::core::CollectionRenderPlan* plan = nullptr;
 	};
 
 	struct RenderedComponentFamilies {

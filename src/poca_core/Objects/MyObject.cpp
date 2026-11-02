@@ -37,6 +37,7 @@
 
 #include <OpenGL/Camera.hpp>
 #include <OpenGL/RenderCommandContext.hpp>
+#include <General/CollectionRenderPlan.hpp>
 
 #include "../General/Vec4.hpp"
 #include "../General/Histogram.hpp"
@@ -415,8 +416,12 @@ namespace poca::core {
 		executeCommand(_ci, _context, _result);
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = m_components.begin(); it != m_components.end(); it++) {
 			poca::core::BasicComponentInterface* bc = *it;
-			if (isComponentFamilyHandled(_result, bc->getName()))
-				continue;
+			const bool rendering = _ci && (_ci->nameCommand == "display" || _ci->nameCommand == "updatePickingBuffer");
+			if (rendering && isComponentFamilyHandled(_result, bc->getName())) continue;
+			if (_ci && _ci->nameCommand == "display" && _context.has<poca::opengl::CollectionRenderPlanContext>()) {
+				auto* plan = _context.get<poca::opengl::CollectionRenderPlanContext>().plan;
+				if (plan && plan->handled(this, bc)) continue;
+			}
 			bc->executeCommand(_ci, _context, _result);
 		}
 	}

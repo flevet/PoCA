@@ -183,7 +183,9 @@ namespace poca::core {
 			"pick_other_dispatches",
 			"local_bounds_calls", "local_bounds_us", "collection_bounds_calls", "collection_bounds_us",
 			"collection_preparation_us", "collection_grid_calls", "collection_grid_us", "bbox_preparation_calls", "bbox_preparation_us",
-			"objectlist_batching_disabled", "detectionset_batching_disabled"
+			"objectlist_batching_disabled", "detectionset_batching_disabled",
+			"collection_candidate_items", "collection_selected_items", "image_plan_visible", "image_plan_batched",
+			"image_plan_fallback", "image_plan_groups", "shared_descriptor_cache_hits", "shared_geometry_allocations"
 		};
 		if (size_t(metric) < names.size()) return names.at(size_t(metric));
 		// Construct once on CSV/report access, never in a disabled or per-object hot path.
@@ -519,7 +521,7 @@ namespace poca::core {
 	std::string PerformanceProfiler::renderCsvRow(const RenderRecord& record)
 	{
 		std::ostringstream out; out.imbue(std::locale::classic());
-		out << "5," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
+		out << "6," << record.frameId << ',' << record.cameraId << ',' << (record.kind ? record.kind : (record.paint ? "paint" : "draw")) << ',' << record.offscreen << ','
 			<< (record.multiple ? "MyMultipleObject" : "MyObject") << ',' << record.children << ',' << record.width << ',' << record.height << ','
 			<< record.interactive << ',' << record.cpuMs << ',' << record.queued << ',' << record.ready << ',' << record.preparing << ",0";
 		for (const auto value : record.values) out << ',' << value;
