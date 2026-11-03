@@ -118,6 +118,8 @@ protected:
 	void computeColocalization(const std::vector < MdiChild*>&, const bool = false);
 
 	void openFile(const QString &, poca::core::CommandInfo*);
+	bool openProgressiveFile(const QString&, poca::core::CommandInfo*);
+	void refreshLoadingControls();
 
 	poca::opengl::CameraInterface* createWindows(poca::core::MyObjectInterface*);
 	poca::core::MyObjectInterface* createWindows(poca::core::BasicComponent*, const QString&, const QString&);
@@ -261,4 +263,4 @@ private:
 	uint32_t m_currentDuplicate;
 };
 
-#endif // MainWindow_h__ 
+#endif // MainWindow_h__

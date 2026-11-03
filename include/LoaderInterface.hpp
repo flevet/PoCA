@@ -43,6 +43,7 @@ namespace poca {
 		class BasicComponentInterface;
 		class MyObjectInterface;
 		class Engine;
+		class ProgressiveObjectLoad;
 	}
 };
 
@@ -70,6 +71,13 @@ public:
 
 
 
+// Optional GUI-only extension; synchronous and unregistered APIs keep their contracts.
+class ProgressiveObjectLoaderInterface {
+public:
+	virtual ~ProgressiveObjectLoaderInterface() = default;
+	virtual poca::core::ProgressiveObjectLoad* createProgressiveLoad(const QString&, QObject*) = 0;
+};
+
 QT_BEGIN_NAMESPACE
 
 #define LoaderInterface_iid "POCA.LoaderInterface_iid"
@@ -77,11 +85,9 @@ QT_BEGIN_NAMESPACE
 Q_DECLARE_INTERFACE(LoaderInterface, LoaderInterface_iid)
 #define UnregisteredObjectLoaderInterface_iid "POCA.UnregisteredObjectLoaderInterface_iid"
 Q_DECLARE_INTERFACE(UnregisteredObjectLoaderInterface, UnregisteredObjectLoaderInterface_iid)
+#define ProgressiveObjectLoaderInterface_iid "POCA.ProgressiveObjectLoaderInterface_iid"
+Q_DECLARE_INTERFACE(ProgressiveObjectLoaderInterface, ProgressiveObjectLoaderInterface_iid)
 QT_END_NAMESPACE
 
 //! [0]
 #endif
-
-
-
-

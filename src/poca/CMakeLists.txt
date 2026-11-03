@@ -39,6 +39,7 @@ set(WIDGET_SOURCE_FILES
   Widgets/ColocalizationChoiceDialog.cpp
   Widgets/MacroWidget.cpp
   Widgets/MainWindow.cpp
+  Widgets/MainWindowLoading.cpp
   Widgets/MergeDatasetsChoiceDialog.cpp
   Widgets/PythonWidget.cpp
   Widgets/ROIGeneralWidget.cpp

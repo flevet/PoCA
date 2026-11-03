@@ -80,7 +80,8 @@
 
 #include <General/Engine.hpp>
 #include <General/Misc.h>
-#include <General/stb_rect_pack.h>
+#include <General/DatasetPlacement.hpp>
+#include <General/PlacementPreviewWidget.hpp>
 #include <Interfaces/MyObjectInterface.hpp>
 #include <Interfaces/BasicComponentInterface.hpp>
 #include <Objects/MyMultipleObject.hpp>
@@ -105,6 +106,12 @@
 #endif
 
 namespace {
+	using poca::core::PlacementPreviewItem;
+	using poca::core::PlacementPreviewGroup;
+	using poca::core::PlacementPreviewWidget;
+	using poca::core::computeRegularGridPlacement;
+	using poca::core::computePackPlacement;
+	using poca::core::computeCirclePlacement;
 	constexpr int RuleParametersColumn = 6;
 	constexpr int RuleParametersRole = Qt::UserRole;
 
@@ -208,74 +215,6 @@ namespace {
 	}
 
 
-	struct PlacementPreviewItem {
-		QRectF rect;
-		int group{ -1 };
-	};
-
-	struct PlacementPreviewGroup {
-		QPointF center;
-		float radius{ 0.f };
-		QString label;
-	};
-
-	class PlacementPreviewWidget : public QWidget {
-	public:
-		PlacementPreviewWidget(QWidget* _parent = nullptr) : QWidget(_parent) { setMinimumSize(520, 360); }
-		void setPreview(const std::vector<PlacementPreviewItem>& _items, const std::vector<PlacementPreviewGroup>& _groups) {
-			m_items = _items; m_groups = _groups; update();
-		}
-	protected:
-		void paintEvent(QPaintEvent*) override {
-			QPainter painter(this);
-			painter.fillRect(rect(), palette().base());
-			if (m_items.empty() && m_groups.empty()) {
-				painter.drawText(rect(), Qt::AlignCenter, QObject::tr("Press Preview to compute a placement."));
-				return;
-			}
-			QRectF bounds;
-			bool hasBounds = false;
-			for (const auto& item : m_items) {
-				bounds = hasBounds ? bounds.united(item.rect) : item.rect;
-				hasBounds = true;
-			}
-			for (const auto& group : m_groups) {
-				QRectF circle(group.center.x() - group.radius, group.center.y() - group.radius, group.radius * 2.f, group.radius * 2.f);
-				bounds = hasBounds ? bounds.united(circle) : circle;
-				hasBounds = true;
-			}
-			if (!hasBounds || bounds.width() <= 0.0 || bounds.height() <= 0.0)
-				return;
-			const float margin = 20.f;
-			const double scale = std::min((width() - 2.0 * margin) / bounds.width(), (height() - 2.0 * margin) / bounds.height());
-			auto mapRect = [&](const QRectF& r) {
-				return QRectF(margin + (r.left() - bounds.left()) * scale, height() - margin - (r.bottom() - bounds.top()) * scale, r.width() * scale, r.height() * scale).normalized();
-			};
-			auto mapPoint = [&](const QPointF& p) {
-				return QPointF(margin + (p.x() - bounds.left()) * scale, height() - margin - (p.y() - bounds.top()) * scale);
-			};
-			QPen groupPen(Qt::DashLine);
-			groupPen.setWidth(2);
-			painter.setPen(groupPen);
-			painter.setBrush(Qt::NoBrush);
-			for (const auto& group : m_groups) {
-				const QPointF c = mapPoint(group.center);
-				const double r = group.radius * scale;
-				painter.drawEllipse(c, r, r);
-				painter.drawText(c + QPointF(4, -4), group.label);
-			}
-			for (size_t i = 0; i < m_items.size(); ++i) {
-				QColor color = QColor::fromHsv(int((i * 47) % 360), 170, 220, 110);
-				painter.setPen(QPen(color.darker(160), 1));
-				painter.setBrush(QBrush(color));
-				painter.drawRect(mapRect(m_items[i].rect));
-			}
-		}
-	private:
-		std::vector<PlacementPreviewItem> m_items;
-		std::vector<PlacementPreviewGroup> m_groups;
-	};
-
 	poca::core::BoundingBox localObjectBBox(poca::core::MyObjectInterface* _object)
 	{
 		if (_object == nullptr) {
@@ -319,104 +258,6 @@ namespace {
 			poca::core::BoundingBox bbox = localObjectBBox(_object->getObject(i));
 			bbox.set(0.f, 0.f, 0.f, std::max(1.f, bbox.realWidth()), std::max(1.f, bbox.realHeight()), bbox.realThick());
 			result.push_back(bbox);
-		}
-		return result;
-	}
-
-	std::vector<poca::core::BoundingBox> computeRegularGridPlacement(const std::vector<poca::core::BoundingBox>& _base, int _columns, int _rows)
-	{
-		std::vector<poca::core::BoundingBox> result = _base;
-		if (_base.empty()) return result;
-		_columns = std::max(1, _columns);
-		_rows = std::max(1, _rows);
-		float cellSide = 1.f;
-		for (const auto& b : _base)
-			cellSide = std::max(cellSide, std::max(b.realWidth(), b.realHeight()));
-		for (size_t i = 0; i < result.size(); ++i) {
-			const int col = int(i % _columns);
-			const int row = int(i / _columns);
-			const float x = col * cellSide + (cellSide - _base[i].realWidth()) * 0.5f;
-			const float y = row * cellSide + (cellSide - _base[i].realHeight()) * 0.5f;
-			result[i].set(x, y, 0.f, x + _base[i].realWidth(), y + _base[i].realHeight(), _base[i].realThick());
-		}
-		return result;
-	}
-
-	std::vector<poca::core::BoundingBox> computePackPlacement(const std::vector<poca::core::BoundingBox>& _base, double _initialMultiplier)
-	{
-		std::vector<poca::core::BoundingBox> result = _base;
-		if (_base.empty()) return result;
-		size_t total = 0, maxD = 1;
-		std::vector<stbrp_rect> rects;
-		for (size_t i = 0; i < _base.size(); ++i) {
-			const int w = std::max(1, int(std::ceil(_base[i].realWidth())));
-			const int h = std::max(1, int(std::ceil(_base[i].realHeight())));
-			rects.push_back({ int(i), w, h, 0, 0, 0 });
-			const size_t d = size_t(std::max(w, h));
-			total += d;
-			maxD = std::max(maxD, d);
-		}
-		Bin bin{ std::max(1, int(maxD * std::max(1.0, _initialMultiplier))), std::max(1, int(maxD * std::max(1.0, _initialMultiplier))) };
-		const int maxW = std::max(bin.w, int(std::max<size_t>(total, maxD)));
-		const int maxH = std::max(bin.h, int(std::max<size_t>(total, maxD)));
-		while (true) {
-			auto work = rects;
-			if (try_pack(bin, work)) {
-				for (const auto& r : work)
-					result[r.id].set(float(r.x), float(r.y), 0.f, float(r.x) + _base[r.id].realWidth(), float(r.y) + _base[r.id].realHeight(), _base[r.id].realThick());
-				break;
-			}
-			Bin next = grow(bin, maxW, maxH, 1.25f);
-			if (next.w == bin.w && next.h == bin.h)
-				break;
-			bin = next;
-		}
-		return result;
-	}
-
-	std::vector<poca::core::BoundingBox> computeCirclePlacement(const std::vector<poca::core::BoundingBox>& _base, const std::vector<std::vector<size_t>>& _groups, const QStringList& _groupLabels, std::vector<PlacementPreviewGroup>* _previewGroups = nullptr)
-	{
-		std::vector<poca::core::BoundingBox> result = _base;
-		if (_base.empty()) return result;
-		std::vector<std::vector<poca::geometry::PackingCircle>> circlesGroups;
-		for (const auto& group : _groups) {
-			if (group.empty()) continue;
-			circlesGroups.push_back({});
-			auto& circles = circlesGroups.back();
-			for (size_t id : group) {
-				if (id >= _base.size()) continue;
-				const float radius = 0.5f * std::sqrt(_base[id].realWidth() * _base[id].realWidth() + _base[id].realHeight() * _base[id].realHeight()) + 1.f;
-				circles.push_back({ radius, radius, std::max(1.f, radius), int(id) });
-			}
-			poca::geometry::packCirclesFast(circles, 200, 0.0015f, 0.55f);
-		}
-		std::vector<poca::geometry::PackingCircle> groupCircles;
-		std::vector<poca::core::BoundingBox> groupBounds;
-		for (size_t g = 0; g < circlesGroups.size(); ++g) {
-			poca::core::BoundingBox bbox = poca::core::BoundingBox::initBBox();
-			for (const auto& c : circlesGroups[g]) {
-				bbox.addPointBBox(c.x - c.r, c.y - c.r, 0.f);
-				bbox.addPointBBox(c.x + c.r, c.y + c.r, 0.f);
-			}
-			groupBounds.push_back(bbox);
-			const float radius = std::max(bbox.realWidth(), bbox.realHeight()) / 2.f;
-			groupCircles.push_back({ radius, radius, std::max(1.f, radius), int(g) });
-		}
-		poca::geometry::packCirclesFast(groupCircles, 200, 0.0015f, 0.55f);
-		if (_previewGroups) _previewGroups->clear();
-		for (const auto& cg : groupCircles) {
-			const int g = cg.id;
-			const auto& circles = circlesGroups[g];
-			const auto& bbox = groupBounds[g];
-			const float gx = cg.x - cg.r;
-			const float gy = cg.y - cg.r;
-			if (_previewGroups) _previewGroups->push_back({ QPointF(cg.x, cg.y), cg.r, g >= 0 && g < _groupLabels.size() ? _groupLabels[g] : QString("Group %1").arg(g + 1) });
-			for (const auto& c : circles) {
-				const size_t id = size_t(c.id);
-				const float x = c.x - c.r - bbox.x() + gx;
-				const float y = c.y - c.r - bbox.y() + gy;
-				result[id].set(x, y, 0.f, x + _base[id].realWidth(), y + _base[id].realHeight(), _base[id].realThick());
-			}
 		}
 		return result;
 	}

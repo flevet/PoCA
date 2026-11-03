@@ -42,6 +42,7 @@ set(GENERAL_HEADER_FILES
   General/CommandableObject.hpp
   General/EquationFit.hpp
   General/Engine.hpp
+  General/ProgressiveObjectLoad.hpp
   General/Histogram.hpp
   General/HistogramStorageStatistics.hpp
   General/Image.hpp
@@ -56,6 +57,8 @@ set(GENERAL_HEADER_FILES
   General/Palette.hpp
   General/PerformanceProfiler.hpp
   General/CollectionRenderPlan.hpp
+  General/DatasetPlacement.hpp
+  General/PlacementPreviewWidget.hpp
   General/PickingPolicy.hpp
   General/PluginList.hpp
   General/PythonInterpreter.hpp
@@ -85,6 +88,8 @@ set(GENERAL_SOURCE_FILES
   General/Palette.cpp
   General/PerformanceProfiler.cpp
   General/CollectionRenderPlan.cpp
+  General/DatasetPlacement.cpp
+  General/PlacementPreviewWidget.cpp
   General/PluginList.cpp
   General/PythonInterpreter.cpp
   General/Scatterplot.cpp
@@ -113,6 +118,7 @@ set(MY_OBJECT_HEADER_FILES
 set(MY_OBJECT_SOURCE_FILES
   Objects/MyObject.cpp
   Objects/MyMultipleObject.cpp
+  Objects/MyMultipleObjectLoading.cpp
   Objects/MyObjectDisplayCommand.cpp
   )
 

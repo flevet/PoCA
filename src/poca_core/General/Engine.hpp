@@ -60,6 +60,7 @@ namespace poca::core {
 	class CommandInfo;
 	class MyObjectInterface;
 	class BasicComponentList;
+	class ProgressiveObjectLoad;
 	class BasicComponent;
 	class ImageInterface;
 	class CommandExecutionContext;
@@ -92,6 +93,7 @@ namespace poca::core {
 
 		void addGUI(QTabWidget*);
 
+		ProgressiveObjectLoad* createProgressiveLoad(const QString&, QObject*);
 		MyObjectInterface* loadDataAndCreateObject(const QString&, poca::core::CommandInfo* = NULL);
 		std::unique_ptr<MyObjectInterface> reconstructDataObject(const QString&, poca::core::CommandInfo* = NULL);
 		const bool loadDataAndAddToObject(const QString&, MyObjectInterface*, CommandInfo* = NULL);

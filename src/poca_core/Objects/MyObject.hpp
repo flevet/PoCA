@@ -125,10 +125,14 @@ namespace poca::core {
 			m_modelMatrix = _mat;
 			m_translation = glm::vec3(-_mat[3][0], -_mat[3][1], -_mat[3][2]);
 			m_rotationMatrix = glm::mat4(1.f);
+			m_transformResidual = glm::mat4(1.f);
 		}
 		virtual const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 		virtual glm::mat4& getModelMatrix() { return m_modelMatrix; }
 		virtual void updateModelMatrixFromTransform();
+		// Retain the exact saved affine model and its independent editing state.
+		void restoreModelTransform(const glm::mat4&, const glm::mat4&, const glm::vec3&);
+		void offsetModelTranslation(const glm::vec3&);
 		virtual bool translateCurrentObjectBy(const glm::vec3&);
 		virtual bool rotateCurrentObjectBy(const glm::mat4&);
 		virtual void setRotationMatrix(const glm::mat4& _mat) { m_rotationMatrix = _mat; }
@@ -165,9 +169,9 @@ namespace poca::core {
 		std::vector <poca::core::ROIInterface*> m_ROIs;
 	
 		glm::mat4 m_modelMatrixOG, m_modelMatrix, m_rotationMatrix;
+		glm::mat4 m_transformResidual{ 1.f };
 		glm::vec3 m_translation;
 };
 }
 
 #endif // MyObject_h__
-

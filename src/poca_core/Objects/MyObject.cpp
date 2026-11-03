@@ -31,6 +31,8 @@
 */
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <QtCore/QFileInfo>
 #include <QtCore/QDir>
 #include <glm/gtx/transform.hpp>
@@ -128,6 +130,7 @@ namespace poca::core {
 		m_modelMatrix = _o.m_modelMatrix;
 		m_rotationMatrix = _o.m_rotationMatrix;
 		m_translation = _o.m_translation;
+		m_transformResidual = _o.m_transformResidual;
 		for (std::vector < poca::core::BasicComponentInterface* >::const_iterator it = _o.m_components.begin(); it != _o.m_components.end(); it++)
 			this->addBasicComponent((*it)->copy());
 	}
@@ -145,9 +148,29 @@ namespace poca::core {
 		const glm::mat4 translationMatrix = glm::translate(glm::mat4(1.f), glm::vec3(-m_translation.x, -m_translation.y, -m_translation.z));
 		const glm::mat4 toCenter = glm::translate(glm::mat4(1.f), center);
 		const glm::mat4 fromCenter = glm::translate(glm::mat4(1.f), -center);
-		m_modelMatrix = translationMatrix * toCenter * m_rotationMatrix * fromCenter;
+		m_modelMatrix = translationMatrix * toCenter * m_rotationMatrix * fromCenter * m_transformResidual;
 	}
 
+	void MyObject::restoreModelTransform(const glm::mat4& model, const glm::mat4& rotation, const glm::vec3& translation)
+	{
+		const glm::vec3 center = bboxCenter(localObjectBoundingBox(m_components));
+		const auto canonical = glm::translate(glm::mat4(1.f),-translation) *
+			glm::translate(glm::mat4(1.f),center) * rotation * glm::translate(glm::mat4(1.f),-center);
+		if (!std::isfinite(glm::determinant(canonical)) || std::abs(glm::determinant(canonical)) < 1e-20f)
+			throw std::runtime_error("Cannot restore a singular dataset editing transform");
+		m_transformResidual = glm::inverse(canonical) * model;
+		m_modelMatrix = model;
+		m_rotationMatrix = rotation;
+		m_translation = translation;
+	}
+
+	void MyObject::offsetModelTranslation(const glm::vec3& displacement)
+	{
+		if (!std::isfinite(displacement.x) || !std::isfinite(displacement.y) || !std::isfinite(displacement.z))
+			throw std::invalid_argument("Dataset placement displacement must be finite");
+		m_translation -= displacement; // updateModelMatrixFromTransform uses translate(-m_translation).
+		m_modelMatrix = glm::translate(glm::mat4(1.f),displacement) * m_modelMatrix;
+	}
 	bool MyObject::translateCurrentObjectBy(const glm::vec3& _delta)
 	{
 		poca::core::MyObjectInterface* object = currentObject();
@@ -645,4 +668,3 @@ namespace poca::core {
 		}
 	}
 }
-

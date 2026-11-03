@@ -1007,6 +1007,12 @@ void MainWindow::actionFromPlugin()
 
 	QObject* sender = QObject::sender();
 	poca::core::Engine* engine = poca::core::Engine::instance();
+		if (auto* multiple = dynamic_cast<MyMultipleObject*>(obj)) {
+		if (!multiple->isLoadComplete()) {
+			QMessageBox::information(this,tr("Incomplete collection"),tr("Dataset operations are unavailable until this collection has finished loading."));
+			return;
+		}
+	}
 	obj = engine->getPlugins()->actionTriggered(sender, obj);
 
 	if (obj != NULL) {
@@ -1418,15 +1424,14 @@ void MainWindow::refreshObjectsPanel()
 
 void MainWindow::refreshObjectControls()
 {
-	const bool hasMultipleObject = m_currentMdi != NULL
-		&& m_currentMdi->getWidget() != NULL
-		&& dynamic_cast<MyMultipleObject*>(m_currentMdi->getWidget()->getObject()) != NULL;
-	if (m_applyAllObjectsButton) m_applyAllObjectsButton->setEnabled(hasMultipleObject);
-	if (m_recomputeGridButton) m_recomputeGridButton->setEnabled(hasMultipleObject);
-	if (m_toggleGridCenteredButton) m_toggleGridCenteredButton->setEnabled(hasMultipleObject);
-	if (m_exportObjectsButton) m_exportObjectsButton->setEnabled(hasMultipleObject);
+	auto* object = m_currentMdi && m_currentMdi->getWidget() ? m_currentMdi->getWidget()->getObject() : nullptr;
+	const auto* multiple = dynamic_cast<MyMultipleObject*>(object);
+	const bool available = multiple && multiple->isLoadComplete();
+	if (m_applyAllObjectsButton) m_applyAllObjectsButton->setEnabled(available);
+	if (m_recomputeGridButton) m_recomputeGridButton->setEnabled(available);
+	if (m_toggleGridCenteredButton) m_toggleGridCenteredButton->setEnabled(available);
+	if (m_exportObjectsButton) m_exportObjectsButton->setEnabled(available);
 }
-
 void MainWindow::refreshPropertiesPanel()
 {
 	if (m_propertiesTable == NULL) return;
@@ -1448,6 +1453,16 @@ void MainWindow::refreshPropertiesPanel()
 	poca::core::MyObjectInterface* object = m_currentMdi->getWidget()->getObject();
 	const poca::core::BoundingBox bbox = object->boundingBox();
 
+	if (auto* multiple = dynamic_cast<MyMultipleObject*>(object)) {
+		addRow(tr("Collection state"),multiple->isLoadComplete() ? tr("Complete") : tr("Incomplete: %1 / %2 datasets ready")
+			.arg(qulonglong(multiple->nbColors())).arg(qulonglong(multiple->expectedChildren())));
+		if (!multiple->isLoadComplete()) {
+			addRow(tr("Ready datasets"),QString::number(qulonglong(multiple->nbColors())));
+			addRow(tr("Pending datasets"),QString::number(qulonglong(multiple->expectedChildren()-multiple->nbColors()-multiple->failedChildren())));
+			addRow(tr("Failed datasets"),QString::number(qulonglong(multiple->failedChildren())));
+		}
+		if (!multiple->loadDiagnostic().empty()) addRow(tr("Loading detail"),QString::fromStdString(multiple->loadDiagnostic()));
+	}
 	addRow(tr("Name"), QString::fromStdString(object->getName()));
 	addRow(tr("Directory"), QString::fromStdString(object->getDir()));
 	addRow(tr("Dimension"), QString::number(object->dimension()));
@@ -1660,6 +1675,7 @@ void MainWindow::addComponentToCurrentMdi(const QString& _filename, const poca::
 
 void MainWindow::openFile(const QString& _filename, poca::core::CommandInfo* _command)
 {
+	if (_command && _command->isRecordable() && openProgressiveFile(_filename,_command)) return;
 	std::cout << __LINE__ << _filename.toStdString() << std::endl;
 	poca::core::Engine* engine = poca::core::Engine::instance();
 	poca::core::PluginList* plugins = engine->getPlugins();
@@ -1907,6 +1923,7 @@ void MainWindow::setActiveMdiChild(MdiChild * _mdiChild)
 	updateTabWidget();
 	refreshObjectsPanel();
 	refreshPropertiesPanel();
+	refreshLoadingControls();
 }
 
 void MainWindow::aboutDialog()
@@ -1936,6 +1953,7 @@ void MainWindow::closeAllDatasets()
 	m_currentMdi = NULL;
 	refreshObjectsPanel();
 	refreshPropertiesPanel();
+	refreshLoadingControls();
 }
 
 MdiChild * MainWindow::getChild(const unsigned int _idx)
@@ -1988,6 +2006,7 @@ void MainWindow::update(poca::core::SubjectInterface* _subj, const poca::core::C
 		updateTabWidget();
 		refreshObjectsPanel();
 		refreshPropertiesPanel();
+		refreshLoadingControls();
 	}
 	if (_action == "addCommandLastAddedComponent") {
 		poca::core::BasicComponentInterface* bci = obj->getLastAddedBasicComponent();
@@ -2215,6 +2234,7 @@ void MainWindow::changeColorObject(int _index)
 	obj->notifyAll("updateDisplay");
 	refreshObjectsPanel();
 	refreshPropertiesPanel();
+	refreshLoadingControls();
 }
 
 void MainWindow::currentCameraForPath()
@@ -2765,6 +2785,8 @@ void MainWindow::runMacro(const nlohmann::json& _json)
 				command.addParameter(key, _json[tmp][key].get<float>());
 			else if (key == "calibration_t")
 				command.addParameter(key, _json[tmp][key].get<float>());
+			else if (key == "zarrPlacement")
+				command.addParameter(key,_json[tmp][key]);
 			else if (key == "separator")
 				command.addParameter(key, _json[tmp][key].get<char>());
 			else

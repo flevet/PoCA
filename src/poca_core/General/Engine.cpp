@@ -414,6 +414,17 @@ namespace poca::core {
 		m_plugins->addGUI(m_mediator, _tab);
 	}
 
+	ProgressiveObjectLoad* Engine::createProgressiveLoad(const QString& filename, QObject* owner)
+	{
+		const QFileInfo file(filename);
+		if (!file.exists()) throw std::runtime_error("Dataset path does not exist: " + filename.toStdString());
+		for (auto* loader : m_loadersFile) {
+			if (!poca::core::utils::isExtensionInList(file.suffix(),loader->extensions())) continue;
+			auto* extension = qobject_cast<ProgressiveObjectLoaderInterface*>(dynamic_cast<QObject*>(loader));
+			if (extension) if (auto* load = extension->createProgressiveLoad(filename,owner)) return load;
+		}
+		return nullptr; // Explicit capability probe; ordinary loaders remain synchronous.
+	}
 	poca::core::MyObjectInterface* Engine::loadDataAndCreateObject(const QString& _filename, poca::core::CommandInfo* _command)
 	{
 		QFileInfo finfo(_filename);
@@ -579,8 +590,10 @@ namespace poca::core {
 
 	MyObjectInterface* Engine::generateMultipleObject(const std::vector <MyObjectInterface*>& _objs, const bool _batchComponentRendering)
 	{
-		for (poca::core::MyObjectInterface* obj : _objs)
+		for (poca::core::MyObjectInterface* obj : _objs) {
 			if (obj == NULL) return NULL;
+			if (auto* multiple = dynamic_cast<MyMultipleObject*>(obj)) multiple->requireCompleteCollection();
+		}
 
 		poca::core::ChangeManagerSingleton* singleton = poca::core::ChangeManagerSingleton::instance();
 		poca::core::CommandInfo ciHeatmap(false, "DetectionSet", "displayHeatmap", false);

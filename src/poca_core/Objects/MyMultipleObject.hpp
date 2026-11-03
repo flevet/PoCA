@@ -41,6 +41,9 @@
 
 #include <map>
 #include <memory>
+#include <optional>
+#include <functional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -96,7 +99,11 @@ public:
 	const poca::core::MyObjectInterface* getObject(const size_t _index) const { return m_colors[_index]; }
 	poca::core::MyObjectInterface* currentObject() { return m_colors[m_currentColor]; }
 	size_t currentObjectID() const { return m_currentColor; }
-	void setCurrentObject(const size_t _idx) { m_currentColor = _idx; }
+	void setCurrentObject(const size_t _idx) {
+		if (_idx >= m_colors.size()) throw std::out_of_range("Current child is not ready");
+		if (m_loadState == LoadState::Loading && _idx != m_currentColor) m_loadingSelectionChanged=true;
+		m_currentColor = _idx;
+	}
 
 	inline void setGridBBoxes(const std::vector <poca::core::BoundingBox>& _bboxes) { m_gridBBoxes = _bboxes; }
 	inline const std::vector <poca::core::BoundingBox>& getGridBBoxes() const { return m_gridBBoxes; }
@@ -113,11 +120,38 @@ public:
 	const std::vector<size_t>& selectedObjectIndices() const { return m_selectedObjectIndices; }
 	bool hasSelectedObjectIndices() const { return !m_selectedObjectIndices.empty(); }
 	void setBatchComponentRendering(const bool _batch) { m_batchComponentRendering = _batch; }
-	bool batchComponentRendering() const { return m_batchComponentRendering; }
+	bool batchComponentRendering() const { return m_batchComponentRendering && isLoadComplete(); }
 	// Move out all owned children, leaving a safely destructible empty container.
 	std::vector<std::unique_ptr<poca::core::MyObjectInterface>> releaseObjects();
 
+	enum class LoadState { Complete, Loading, Cancelled, Failed };
+	struct LoadingCommandRejection { std::string message; };
+	void beginProgressiveLoad(const std::vector<std::string>&, const std::optional<poca::core::BoundingBox>&);
+	void appendObject(size_t, std::unique_ptr<poca::core::MyObjectInterface>&&);
+	void finishProgressiveLoad();
+	void stopProgressiveLoad(LoadState, const std::string&, size_t);
+	bool isLoadComplete() const { return m_loadState == LoadState::Complete; }
+	LoadState loadState() const { return m_loadState; }
+	size_t failedChildren() const { return m_failedChildren; }
+	bool loadingSelectionChanged() const { return m_loadingSelectionChanged; }
+	size_t expectedChildren() const { return m_expectedNames.empty() ? m_colors.size() : m_expectedNames.size(); }
+	const std::string& loadDiagnostic() const { return m_loadDiagnostic; }
+	uint64_t childrenRevision() const { return m_childrenRevision; }
+	void requireCompleteCollection() const;
+	void setLoadingCancellation(std::function<void()> callback) { m_loadingCancellation=std::move(callback); }
+
 protected:
+	static void initializeMeshDecorations(poca::core::BasicComponentInterface*);
+	std::string incompleteLoadMessage() const;
+	bool checkLoadingCommand(const poca::core::CommandInfo*, poca::core::CommandExecutionResult&) const;
+	LoadState m_loadState{ LoadState::Complete };
+	std::vector<std::string> m_expectedNames;
+	std::optional<poca::core::BoundingBox> m_pendingBounds;
+	std::string m_loadDiagnostic;
+	uint64_t m_childrenRevision{ 0 };
+	size_t m_failedChildren{ 0 };
+	bool m_loadingSelectionChanged{ false };
+	std::function<void()> m_loadingCancellation;
 	std::vector <poca::core::MyObjectInterface*> m_colors;
 	size_t m_currentColor;
 
@@ -129,4 +163,3 @@ protected:
 };
 
 #endif // SMLMObject_h__
-
