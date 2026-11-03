@@ -48,19 +48,39 @@ namespace poca::opengl {
 	}
 	struct CameraBoxFit { float extent, distance; };
 	inline CameraBoxFit fitCameraBox(const glm::vec3& size, const glm::mat4& view, const glm::vec2& viewport, float fov) {
-		if (viewport.x <= 0 || viewport.y <= 0) throw std::invalid_argument("Cannot fit camera to an empty viewport");
+		if (!std::isfinite(viewport.x) || !std::isfinite(viewport.y) || viewport.x <= 0 || viewport.y <= 0)
+			throw std::invalid_argument("Cannot fit camera to an invalid viewport");
+		if (!std::isfinite(fov) || fov <= 0.f || fov >= 180.f)
+			throw std::invalid_argument("Cannot fit camera with an invalid field of view");
+		for (int axis=0;axis<3;++axis)
+			if (!std::isfinite(size[axis]) || size[axis] < 0.f)
+				throw std::invalid_argument("Cannot fit camera to invalid box dimensions");
+		for (int column=0;column<4;++column) for (int row=0;row<4;++row)
+			if (!std::isfinite(view[column][row]))
+				throw std::invalid_argument("Cannot fit camera with a nonfinite view");
+		const float determinant=glm::determinant(glm::mat3(view));
+		if (!std::isfinite(determinant) || std::abs(determinant) < 1e-6f)
+			throw std::invalid_argument("Cannot fit camera with a degenerate view");
 		const float aspect = viewport.x / viewport.y, tangent = cameraHalfFovTangent(fov);
+		if (!std::isfinite(aspect) || aspect <= 0.f || !std::isfinite(tangent) || tangent <= 0.f ||
+			!std::isfinite(aspect*tangent) || aspect*tangent <= 0.f)
+			throw std::invalid_argument("Camera fit projection is not representable");
 		const auto factors = cameraProjectionFactors(viewport.x,viewport.y);
 		CameraBoxFit fit{0.0001f,0.f};
 		for (int corner=0;corner<8;++corner) {
 			const glm::vec3 local((corner&1) ? size.x/2 : -size.x/2,
 				(corner&2) ? size.y/2 : -size.y/2,(corner&4) ? size.z/2 : -size.z/2);
 			const auto p=glm::mat3(view)*local;
+			if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+				throw std::overflow_error("Camera fit corner is not representable");
 			fit.extent=std::max(fit.extent,std::max(std::abs(p.x)/factors.x,std::abs(p.y)/factors.y));
 			fit.distance=std::max(fit.distance,p.z+std::max(std::abs(p.x)/(aspect*tangent),std::abs(p.y)/tangent));
 		}
 		// Keep the positive near plane outside the bounding sphere at any orientation.
 		fit.distance=std::max(fit.distance,glm::length(size)*.505f+.001f);
+		if (!std::isfinite(fit.extent) || !std::isfinite(fit.distance) || fit.extent <= 0.f || fit.distance <= 0.f ||
+			!std::isfinite(fit.extent*factors.x) || !std::isfinite(fit.extent*factors.y))
+			throw std::overflow_error("Camera fit projection is not representable");
 		return fit;
 	}
 	inline void convertCameraProjection(bool _toPerspective, float _fov, float _factorH, float& _extent, float& _distance) {

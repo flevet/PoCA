@@ -90,13 +90,13 @@ namespace poca::opengl {
 
 	class StateCamera {
 	public:
-		glm::mat4 m_matrixView;
-		glm::quat m_rotationSum, m_rotation;
-		glm::vec3 m_center;
-		glm::vec3 m_eye;
-		glm::mat4 m_matrix;
-		glm::vec3 m_up;
-		glm::vec3 m_translationModel;
+		glm::mat4 m_matrixView{1.f};
+		glm::quat m_rotationSum{1.f, 0.f, 0.f, 0.f}, m_rotation{1.f, 0.f, 0.f, 0.f};
+		glm::vec3 m_center{0.f};
+		glm::vec3 m_eye{0.f, 0.f, 1.f};
+		glm::mat4 m_matrix{1.f};
+		glm::vec3 m_up{0.f, 1.f, 0.f};
+		glm::vec3 m_translationModel{0.f};
 	};
 
 	class InfosObjectImages {

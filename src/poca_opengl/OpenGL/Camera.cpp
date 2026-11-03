@@ -880,8 +880,10 @@ namespace poca::opengl {
 
 		createArrowsFrame();
 
-		resetProjection();
+		// The oriented fit consumes the view: establish it before fitting, and do
+		// not overwrite it afterwards while retaining distances from another view.
 		reset();
+		resetProjection();
 		m_ssaoShader.init(this->width(), this->height());
 
 		m_alreadyInitialized = true;

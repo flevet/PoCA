@@ -2,6 +2,58 @@
 
 Date: 2026-11-03. Source delivery; runtime acceptance PENDING.
 
+## Critical blank-viewer correction (D280)
+
+The startup-order defect is established by source inspection. Attribution of the supplied 83-child run to this defect remains UNCONFIRMED without a matching executable/store reproduction. No runtime success or counter improvement is claimed below.
+
+### Cause and smallest correction
+
+Before this correction, Camera::initializeGL called resetProjection before reset (Camera.cpp, now lines 883-887). resetProjection calls zoomToBoundingBox, whose rotated fit first calls updateCameraEyeUp(true,true). computeCameraEye adds the orientation to StateCamera::m_center; updateCamera then calls physicalCameraPosition and glm::lookAt. StateCamera had no explicit initialization for its center, eye, up, translation or matrices (Camera.hpp, lines 91-101); only its quaternions were assigned by the Camera constructor. No GLM_FORCE_CTOR_INIT definition was found in the inspected project sources/build declarations.
+
+Thus the first fit could consume an indeterminate center and a degenerate/nonfinite view. Large finite garbage can also make center+orientation round back to center. NaN corner coordinates need not propagate as NaN fit values: std::max can retain the 0.0001 extent while rejecting NaN comparisons. The subsequent reset repaired the view but retained the earlier bad extent/distance and projection. A tiny extent can then consistently reject positioned children before any LOD request, matching the supplied zero-visible/zero-upload symptom. Undefined initialization does not imply an identical failure on every launch.
+
+All StateCamera members now have deterministic in-class values: identity matrices/quaternions, zero center/translation, +Z eye, +Y up. initializeGL establishes the canonical view with reset before resetProjection fits it; no later startup reset overwrites the fitted view. zoomToBoundingBox still fits all eight rotated corners, preserves independent orthographic extent/physical distance, and uses the collection bounding envelope. fitCameraBox now rejects nonfinite/negative dimensions, invalid viewport/FOV, nonfinite or singular view, unrepresentable projection ratios/corners, and nonfinite/nonpositive output. Invalid input fails explicitly instead of installing a replacement camera or silently accepting a degenerate fit. The existing positive minimum extent for point/planar boxes is retained.
+
+### Selected RAW image coordinate and visibility trace
+
+This is a source trace; values for a particular real child were not captured.
+
+1. PocaZarrPositioning::apply (PocaZarrPositioning.cpp:192) applies only an explicitly chosen layout displacement; original placement returns immediately. collectionBounds (:202) unions child-local-model layout bounds. Preflight RAW bounds use voxel XYZ; origin/spacing are calibration, not an additional display translation. No positioning code changed.
+2. PocaZarrProgressiveLoad::receive (:305-310) installs collectionBounds through beginProgressiveLoad before objectReady creates the viewer. MyMultipleObject::boundingBox (MyMultipleObject.cpp:348) starts with that pending envelope and unions every ready child's eight transformed corners. This is the existing collection/parent-local coordinate space; completion removes the pending envelope.
+3. Camera::resetProjection fits boundingBox and sets the camera model translation to minus its center. The view operates on that centered scene. Camera paint installs the camera translation model and fitted view; recalcModelView constructs the orthographic/perspective projection and depth range. The initialization fix changes this camera state, not child placement.
+4. CollectionRenderPlan::build (CollectionRenderPlan.cpp:41) keeps childModel as localModel and forms effectiveModel=parentRenderModel*childModel. MyMultipleObject passes parentRenderModel=cameraModel*parentModel. The resulting MVP is projection*view*cameraModel*parentModel*childModel. Parent model, child model and camera translation are each composed once.
+5. DisplayPlan::build (ImagesListCollectionPlan.cpp:32) passes effectiveModel into visibleForView and childModel as localToCrop. Crop is supplied only when the camera is cropped. After initial reset and Reset Viewer the full-envelope crop flag is false; the crop-box intersection is omitted. Crop mapping itself is unchanged.
+6. ImageDisplayCommand::visibleForView (ImageDisplayStreaming.cpp:73) builds/caches the exact view stamp and calls visibleImageRegion. The latter extracts six clip planes and intersects the image box and any crop box (ImageViewRegion.cpp:18). Final acceptance is geometric visibility AND the existing image selected state. Failed visibility cancels that image's LOD request; accepted visibility observes the view and allows existing preview/navigation/detail planning, asynchronous preparation, staged upload and coalesced redraw.
+
+No culling, crop algorithm, selected component, RAW/LABEL semantics, parent/child transform composition, LOD policy, budget, reconstruction, format or producer code changed. The real parent's saved model and selected image's model/crop/frustum classification still need a zarrLoadVisibility runtime receipt; source inspection cannot supply those matrices or rule out additional store-specific issues.
+
+### Regression coverage and measurement status
+
+The existing Tests > camera > Progressive Reset Viewer (actual image pixels), ID progressive_reset_pixels, now starts a new Camera through the normal QOpenGLWidget initializeGL lifecycle for every variant. It asserts image pixels before any manual reset/rotation/selection change, then verifies by a deselected-image framebuffer comparison that those pixels came from the selected image. At 1/10/40/83 attached children it checks progressive display, rotation, translation and Reset Viewer. The selected child has its own nonidentity rotation/translation. RAW/LABEL, shared/individual, orthographic/perspective, resident pixels and callback-backed native pyramids are covered. Native pyramid callbacks supply bright synthetic values without materializing scientific pixels. Only the first image is selected, so later-child refinement cannot impersonate image recovery. This isolates visibility; it is not an acceptance test for every child's simultaneous display or actual OME-Zarr I/O.
+
+The fixture checks finite camera vectors/view/projection, nondegenerate orientation, positive finite extent/distance, pending-envelope lifetime and unchanged child model/selection/frame. Its initial camera-filtered profiler records must have positive visible_images, lod_request_attempts and texture3d_upload_chunks. It prints measured values when executed. The fixture temporarily enables only renderPerformance and restores prior Engine/profiler diagnostic settings even on failure. Initial/progressive/movement checks require at least eight actual image-contributed RGB pixels; Reset retains the existing selected/deselected final-framebuffer difference assertion. These bounded waits measure asynchronous visibility readiness, not immediate full-resolution materialization.
+
+ImageCameraZoomTests retains the rotated eight-corner landscape/portrait checks for both projections and adds explicit invalid-input rejection and positive finite point/planar/deep-box fits. Both fixtures remain in their existing source registrations; no new source file or command path was introduced.
+
+| Evidence | Supplied blank run, 17/83 attached | After correction |
+|---|---:|---:|
+| visible_images | 0 across recorded intervals | UNMEASURED |
+| culled_images | greater than 0 | UNMEASURED |
+| raw_volume_gl_draws_single | 0 | UNMEASURED; shared RAW/LABEL use different draw metrics |
+| lod_request_attempts | 0 | UNMEASURED |
+| texture3d_upload_chunks | 0 | UNMEASURED |
+| Initial final-framebuffer image pixels | viewer reported blank | NOT EXECUTED |
+| Reset Viewer at 1/10/40/83 | no new receipt supplied | NOT EXECUTED |
+| Real 83-child OME-Zarr matrix/LOD/preview capture | paths unavailable | NOT EXECUTED |
+
+For runtime acceptance, use a compatible executable containing this source. Run the registered pixel fixture, then open the real store with original placement/component choices and capture initial display, movement and Reset at the four checkpoints for both projections. Use zarrLoadVisibility for model/view/projection/crop/selection/frustum/preview diagnostics and renderPerformance for the existing visibility/request/upload counters. Require final framebuffer image contribution and progressive appearance; GL draw counts alone do not pass. The real-store path and compatible executable were requested and remain unsupplied.
+
+### Concurrency and verification
+
+The persistent producer runPipeline, two-slot FIFO, GUI release-before-commit, exit-only join, terminal acknowledgement, dataset preparation and mesh reconstruction are unchanged from HEAD. This preserves the source implementation of concurrency and the prior loading/rendering optimizations; no new timing or overlap measurement was made.
+
+Static checks only: declarations and call order, source registrations, modified-file UTF-8/BOM/CRLF, diff whitespace and quoting artifacts. No configure, compilation, tests, application, helper, backend or benchmark execution occurred. Runtime behavior, actual first-visible pyramid level and after-change counters remain UNCONFIRMED. The earlier D279 report below records its historical source changes and pending acceptance; D280 supersedes its startup-camera assumptions, not its loading optimizations.
+
 ## Visualization findings and corrections
 
 Three concrete source defects affect Reset Viewer. Their presence is established by source inspection; identifying which dominated the supplied real-store disappearance still requires the requested reproduction.
