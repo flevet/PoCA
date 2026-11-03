@@ -8,6 +8,7 @@
 #include <OpenGL/Camera.hpp>
 #include <QtCore/QPointer>
 #include <QtCore/QTimer>
+#include <QtGui/QFontMetrics>
 #include <General/ProgressiveLoadProfile.hpp>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QHBoxLayout>
@@ -56,8 +57,13 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 	});
 	auto* panel=new QWidget(this);
 	auto* row=new QHBoxLayout(panel); row->setContentsMargins(4,0,4,0);
-	auto* label=new QLabel(tr("Loading OME-Zarr: reading metadata"),panel);
-	auto* progress=new QProgressBar(panel); progress->setRange(0,0);
+	auto* label=new QLabel(tr("OME-Zarr metadata: reading root manifest"),panel);
+	label->setFixedWidth(440);
+	const auto showStatus=[label](const QString& text) {
+		label->setToolTip(text);
+		label->setText(label->fontMetrics().elidedText(text,Qt::ElideRight,label->width()));
+	};
+	auto* progress=new QProgressBar(panel); progress->setRange(0,0); progress->setFixedWidth(150);
 	auto* cancel=new QPushButton(tr("Cancel loading"),panel);
 	row->addWidget(label); row->addWidget(progress); row->addWidget(cancel);
 	statusBar()->addPermanentWidget(panel);
@@ -106,10 +112,19 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 		}
 		if (view->window) view->window->setWindowTitle(QString::fromStdString(root->getName()));
 	});
-	connect(load,&poca::core::ProgressiveObjectLoad::progressChanged,this,
-		[label,progress,view](qulonglong ready,qulonglong total,qulonglong failed,const QString& state) {
+	connect(load,&poca::core::ProgressiveObjectLoad::preflightProgressChanged,panel,
+		[showStatus,progress](qulonglong completed,qulonglong total,const QString& stage) {
+			showStatus(total ? tr("OME-Zarr metadata: %1 / %2 scanned - %3").arg(completed).arg(total).arg(stage)
+				: tr("OME-Zarr metadata: %1").arg(stage));
+			if (total) { progress->setRange(0,int(total)); progress->setValue(int(completed)); }
+			else progress->setRange(0,0);
+			progress->setFormat(total ? tr("%v / %m scanned") : QString{});
+		},Qt::QueuedConnection);
+	connect(load,&poca::core::ProgressiveObjectLoad::progressChanged,panel,
+		[showStatus,progress,view](qulonglong ready,qulonglong total,qulonglong failed,const QString& state) {
 			const auto pending=total >= ready+failed ? total-ready-failed : 0;
-			label->setText(tr("OME-Zarr: %1 / %2 ready; %3 pending; %4 failed - %5").arg(ready).arg(total).arg(pending).arg(failed).arg(state));
+			showStatus(tr("OME-Zarr: %1 / %2 ready; %3 pending; %4 failed - %5").arg(ready).arg(total).arg(pending).arg(failed).arg(state));
+			progress->setFormat(tr("%v / %m ready"));
 			if (total) { progress->setRange(0,int(total)); progress->setValue(int(ready)); }
 			if (view->window && view->camera) {
 				auto* root=view->camera->getObject();
@@ -117,7 +132,7 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 				view->window->setWindowTitle(QString::fromStdString(root->getName())+
 					(multiple && multiple->isLoadComplete() ? QString{} : tr(" [Incomplete: %1/%2 - %3]").arg(ready).arg(total).arg(state)));
 			}
-		});
+		},Qt::QueuedConnection);
 	connect(load,&poca::core::ProgressiveObjectLoad::finished,this,[this,load,panel,view](const QString& error) {
 		statusBar()->removeWidget(panel); panel->deleteLater();
 		view->refresh->stop(); view->refresh->deleteLater();

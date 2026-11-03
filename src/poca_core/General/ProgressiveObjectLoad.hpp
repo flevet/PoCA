@@ -18,6 +18,8 @@ namespace poca::core {
 		void objectReady(poca::core::MyObjectInterface*);
 		void childAttached(poca::core::MyObjectInterface*, poca::core::MyObjectInterface*);
 		void collectionCompleted(poca::core::MyObjectInterface*);
+		// Metadata children scanned, independent of reconstructed datasets. total==0 is indeterminate.
+		void preflightProgressChanged(qulonglong completed, qulonglong total, const QString& stage);
 		void progressChanged(qulonglong ready, qulonglong total, qulonglong failed, const QString& state);
 		void finished(const QString& error);
 	};
