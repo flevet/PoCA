@@ -48,6 +48,7 @@
 #include <vector>
 
 #include <Objects/MyObject.hpp>
+#include <General/ProgressiveLoadProfile.hpp>
 
 class MyMultipleObject : public poca::core::MyObject {
 public:
@@ -121,6 +122,10 @@ public:
 	bool hasSelectedObjectIndices() const { return !m_selectedObjectIndices.empty(); }
 	void setBatchComponentRendering(const bool _batch) { m_batchComponentRendering = _batch; }
 	bool batchComponentRendering() const { return m_batchComponentRendering && isLoadComplete(); }
+	// Only the existing image provider tolerates an append-only ready prefix.
+	bool imageComponentRendering() const { return m_batchComponentRendering; }
+	void setLoadingProfile(std::shared_ptr<poca::core::ProgressiveLoadProfile> profile) { m_loadingProfile=std::move(profile); }
+	std::shared_ptr<poca::core::ProgressiveLoadProfile> loadingProfile() const { return m_loadingProfile; }
 	// Move out all owned children, leaving a safely destructible empty container.
 	std::vector<std::unique_ptr<poca::core::MyObjectInterface>> releaseObjects();
 
@@ -152,6 +157,7 @@ protected:
 	size_t m_failedChildren{ 0 };
 	bool m_loadingSelectionChanged{ false };
 	std::function<void()> m_loadingCancellation;
+	std::shared_ptr<poca::core::ProgressiveLoadProfile> m_loadingProfile;
 	std::vector <poca::core::MyObjectInterface*> m_colors;
 	size_t m_currentColor;
 

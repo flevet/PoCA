@@ -7,7 +7,8 @@
 #include <Objects/MyMultipleObject.hpp>
 #include <OpenGL/Camera.hpp>
 #include <QtCore/QPointer>
-#include <QtCore/QElapsedTimer>
+#include <QtCore/QTimer>
+#include <General/ProgressiveLoadProfile.hpp>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -23,6 +24,8 @@ namespace {
 	struct LoadingView {
 		QPointer<poca::opengl::Camera> camera;
 		QPointer<MdiChild> window;
+		QPointer<QTimer> refresh;
+		bool panelsDirty{false}, completed{false};
 	};
 }
 bool MainWindow::openProgressiveFile(const QString& filename, poca::core::CommandInfo* command)
@@ -39,7 +42,18 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 	const auto opening=*command;
 	command->setRecordable(false);
 	auto view=std::make_shared<LoadingView>();
-	QElapsedTimer started; started.start();
+	view->refresh=new QTimer(this);
+	view->refresh->setSingleShot(true); view->refresh->setInterval(100);
+	connect(view->refresh,&QTimer::timeout,this,[this,view] {
+		if (!view->camera) return;
+		auto* root=view->camera->getObject();
+		// Reuse the camera gate shared with image streaming; camera/input updates stay immediate.
+		view->camera->requestImageStreamRedraw();
+		if (view->panelsDirty && m_currentMdi && m_currentMdi->getWidget()->getObject() == root) {
+			refreshObjectsPanel(); refreshPropertiesPanel();
+			view->panelsDirty=false;
+		}
+	});
 	auto* panel=new QWidget(this);
 	auto* row=new QHBoxLayout(panel); row->setContentsMargins(4,0,4,0);
 	auto* label=new QLabel(tr("Loading OME-Zarr: reading metadata"),panel);
@@ -48,24 +62,23 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 	row->addWidget(label); row->addWidget(progress); row->addWidget(cancel);
 	statusBar()->addPermanentWidget(panel);
 	connect(cancel,&QPushButton::clicked,load,[load,cancel] { cancel->setEnabled(false); load->cancel(); });
-	connect(load,&poca::core::ProgressiveObjectLoad::objectReady,this,[this,load,view,opening,engine,started](poca::core::MyObjectInterface* root) {
+	connect(load,&poca::core::ProgressiveObjectLoad::objectReady,this,[this,load,view,opening,engine](poca::core::MyObjectInterface* root) {
 		try {
 			auto* camera=dynamic_cast<poca::opengl::Camera*>(createWindows(root));
 			if (!camera) throw std::runtime_error("Could not create the progressive collection camera");
 			view->camera=camera; view->window=m_currentMdi;
 			engine->addCameraToObject(root,camera);
 			connect(camera,&QObject::destroyed,load,[load] { load->detach(); });
-			auto firstFrame=std::make_shared<bool>(true);
-			connect(camera,&poca::opengl::Camera::frameSwapped,camera,[root,started,firstFrame] {
-				if (!*firstFrame) return;
-				*firstFrame=false;
-				std::cout << "[PoCA][Zarr][Progressive] first submitted frame ms=" << started.elapsed()
-					<< " ready children=" << root->nbColors() << std::endl;
+			// Existing render commands lazily create only visible/selected resources on paint.
+			connect(camera,&poca::opengl::Camera::frameSwapped,camera,[view] {
+				if (view->camera) {
+					if (auto profile=poca::core::ProgressiveLoadProfile::forObject(view->camera->getObject())) profile->frameSubmitted();
+				}
+				if (view->completed && view->camera) {
+					if (auto profile=poca::core::ProgressiveLoadProfile::forObject(view->camera->getObject()); profile && profile->hasCompletedScene()) profile->report("first_completed_collection_frame");
+				}
 			});
-			// Constructor framing uses the complete available metadata envelope, once.
-			camera->makeCurrent();
-			poca::core::CommandInfo display(false,"createDisplay"); root->executeGlobalCommand(&display);
-			camera->doneCurrent(); camera->update();
+			camera->requestImageStreamRedraw();
 			auto recorded=opening;
 			const auto parameters=load->openingParameters();
 			for (const auto& item : parameters.items()) recorded.addParameter(item.key(),item.value());
@@ -79,24 +92,17 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 			QMessageBox::warning(this,tr("Cannot create OME-Zarr viewer"),QString::fromUtf8(error.what()));
 		}
 	});
-	connect(load,&poca::core::ProgressiveObjectLoad::childAttached,this,[this,view](poca::core::MyObjectInterface* root,poca::core::MyObjectInterface* child) {
+	connect(load,&poca::core::ProgressiveObjectLoad::childAttached,this,[view](poca::core::MyObjectInterface*,poca::core::MyObjectInterface*) {
 		if (!view->camera) return;
-		view->camera->makeCurrent();
-		poca::core::CommandInfo display(false,"createDisplay"); child->executeGlobalCommand(&display);
-		view->camera->doneCurrent(); view->camera->update();
-		if (m_currentMdi && m_currentMdi->getWidget()->getObject() == root) {
-			refreshObjectsPanel(); refreshPropertiesPanel();
-		}
+		view->panelsDirty=true;
+		if (!view->refresh->isActive()) view->refresh->start();
 	});
 	connect(load,&poca::core::ProgressiveObjectLoad::collectionCompleted,this,[this,view](poca::core::MyObjectInterface* root) {
 		if (!view->camera) return;
-		view->camera->makeCurrent();
-		poca::core::CommandInfo display(false,"createDisplay");
-		for (auto* component : root->getComponents()) component->executeCommand(&display);
-		view->camera->doneCurrent(); view->camera->update();
+		view->completed=true; view->panelsDirty=true;
+		if (!view->refresh->isActive()) view->refresh->start();
 		if (m_currentMdi && m_currentMdi->getWidget()->getObject() == root) {
-			root->notify("LoadObjCharacteristicsAllWidgets");
-			refreshObjectsPanel(); refreshPropertiesPanel(); refreshLoadingControls();
+			root->notify("LoadObjCharacteristicsAllWidgets"); refreshLoadingControls();
 		}
 		if (view->window) view->window->setWindowTitle(QString::fromStdString(root->getName()));
 	});
@@ -114,6 +120,8 @@ bool MainWindow::openProgressiveFile(const QString& filename, poca::core::Comman
 		});
 	connect(load,&poca::core::ProgressiveObjectLoad::finished,this,[this,load,panel,view](const QString& error) {
 		statusBar()->removeWidget(panel); panel->deleteLater();
+		view->refresh->stop(); view->refresh->deleteLater();
+		if (view->camera) view->camera->requestImageStreamRedraw();
 		if (view->camera && m_currentMdi && m_currentMdi->getWidget()->getObject() == view->camera->getObject()) {
 			refreshObjectsPanel(); refreshPropertiesPanel(); refreshLoadingControls();
 		}

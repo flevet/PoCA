@@ -58,6 +58,7 @@
 #include <Geometry/ObjectListMesh.hpp>
 #include <Cuda/Misc.h>
 
+#include <General/ProgressiveLoadProfile.hpp>
 #include "ObjectListDisplayCommand.hpp"
 
 using RenderProfiler = poca::core::PerformanceProfiler;
@@ -592,6 +593,7 @@ void ObjectListDisplayCommand::drawElements(poca::opengl::Camera* _cam, const bo
 	if (!m_surfaceReady) {
 		RenderProfiler::VisibleTimer buildTimer(VisibleMetric::BuildUs);
 		RenderProfiler::visibleCount(VisibleMetric::Builds);
+		poca::core::ProgressiveLoadProfile::GpuScope loading(_cam->getObject(),"ObjectList individual lazy createDisplay");
 		createDisplay();
 		RenderProfiler::visibleCount(VisibleMetric::BuildPoints, RenderProfiler::visibleElements(m_pointBuffer, false));
 		RenderProfiler::visibleCount(VisibleMetric::BuildTriangleVertices, RenderProfiler::visibleElements(m_triangleBuffer, false));

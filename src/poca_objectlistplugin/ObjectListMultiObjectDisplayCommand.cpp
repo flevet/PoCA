@@ -41,6 +41,7 @@
 #include <General/PerformanceProfiler.hpp>
 
 #include "ObjectListDisplayCommand.hpp"
+#include <General/ProgressiveLoadProfile.hpp>
 #include "ObjectListMultiObjectDisplayCommand.hpp"
 
 using RenderProfiler = poca::core::PerformanceProfiler;
@@ -845,6 +846,7 @@ bool ObjectListMultiObjectDisplayCommand::rebuild()
 	freeGPUMemory();
 	if (!canBatch())
 		return false;
+	poca::core::ProgressiveLoadProfile::GpuScope loading(m_object,"ObjectList completed shared rebuild");
 
 	// Bound additional shared allocations before generating/copying any geometry.
 	// 256 MiB is a conservative admission ceiling, not a GPU-memory availability

@@ -37,7 +37,7 @@ void MyMultipleObject::appendObject(size_t index, std::unique_ptr<poca::core::My
 	m_colors.push_back(child.get()); child.release();
 	++m_childrenRevision;
 	// CollectionRenderPlan is frame-local. Per-child commands and GL resources stay untouched.
-	notify("updateDisplay");
+	// Progressive GUI owns the coalesced refresh; append never invalidates existing GPU data.
 }
 void MyMultipleObject::finishProgressiveLoad()
 {

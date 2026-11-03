@@ -43,6 +43,7 @@ set(GENERAL_HEADER_FILES
   General/EquationFit.hpp
   General/Engine.hpp
   General/ProgressiveObjectLoad.hpp
+  General/ProgressiveLoadProfile.hpp
   General/Histogram.hpp
   General/HistogramStorageStatistics.hpp
   General/Image.hpp
@@ -87,6 +88,7 @@ set(GENERAL_SOURCE_FILES
   General/MyData.cpp
   General/Palette.cpp
   General/PerformanceProfiler.cpp
+  General/ProgressiveLoadProfile.cpp
   General/CollectionRenderPlan.cpp
   General/DatasetPlacement.cpp
   General/PlacementPreviewWidget.cpp

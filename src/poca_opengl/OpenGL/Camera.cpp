@@ -1000,6 +1000,7 @@ namespace poca::opengl {
 			if (objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo))
 				drawTransformGizmos();
 			drawObjectIdentificationLabels();
+			if (auto profile=poca::core::ProgressiveLoadProfile::forObject(m_object)) profile->sceneDrawn(renderMulti && renderMulti->isLoadComplete());
 		}
 	}
 
@@ -1010,6 +1011,7 @@ namespace poca::opengl {
 		profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawRequests);
 		profiler.renderCount(poca::core::PerformanceProfiler::RenderMetric::StreamRedrawRequests);
 		if (!m_imageStreamRedrawDue && !m_imageStreamRedrawTimer.isActive()) {
+			if (auto profile=poca::core::ProgressiveLoadProfile::forObject(m_object)) profile->redrawScheduled("camera_stream_gate");
 			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::RedrawScheduled);
 			profiler.renderCount(poca::core::PerformanceProfiler::RenderMetric::StreamRedrawScheduled);
 			m_imageStreamRedrawTimer.start();

@@ -51,6 +51,7 @@
 #include <Cuda/Misc.h>
 #include <General/Misc.h>
 
+#include <General/ProgressiveLoadProfile.hpp>
 #include "DetectionSetDisplayCommand.hpp"
 
 using RenderProfiler = poca::core::PerformanceProfiler;
@@ -227,6 +228,7 @@ void DetectionSetDisplayCommand::drawElements(poca::opengl::Camera* _cam, const 
 	if (m_pointBuffer.empty()) {
 		RenderProfiler::VisibleTimer timer(VisibleMetric::BuildUs);
 		RenderProfiler::visibleCount(VisibleMetric::Builds);
+		poca::core::ProgressiveLoadProfile::GpuScope loading(_cam->getObject(),"DetectionSet individual lazy createDisplay");
 		createDisplay();
 		RenderProfiler::visibleCount(VisibleMetric::BuildPoints, RenderProfiler::visibleElements(m_pointBuffer, false));
 	}

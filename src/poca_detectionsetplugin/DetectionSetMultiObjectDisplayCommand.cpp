@@ -34,6 +34,7 @@
 #include <General/PerformanceProfiler.hpp>
 
 #include "DetectionSetDisplayCommand.hpp"
+#include <General/ProgressiveLoadProfile.hpp>
 #include "DetectionSetMultiObjectDisplayCommand.hpp"
 
 using RenderProfiler = poca::core::PerformanceProfiler;
@@ -378,6 +379,7 @@ DetectionSetDisplayCommand* DetectionSetMultiObjectDisplayCommand::referenceDisp
 
 bool DetectionSetMultiObjectDisplayCommand::rebuild()
 {
+	poca::core::ProgressiveLoadProfile::GpuScope loading(m_object,"DetectionSet completed shared rebuild");
 	RenderProfiler::VisibleTimer timer(VisibleMetric::BuildUs, VisibleFamily::DetectionShared);
 	RenderProfiler::visibleCount(VisibleFamily::DetectionShared, VisibleMetric::Builds);
 	freeGPUMemory();

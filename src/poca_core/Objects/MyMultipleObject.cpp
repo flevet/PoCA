@@ -433,7 +433,7 @@ void MyMultipleObject::executeGlobalCommand(poca::core::CommandInfo* _ci, const 
 	if (_ci && _ci->nameCommand == "display" && _context.has<poca::opengl::ActiveCamera>()) {
 		if (auto* camera = _context.get<poca::opengl::ActiveCamera>().camera) {
 			plan.build(m_colors, getModelMatrix(), camera->getModelMatrix() * getModelMatrix(),
-				camera->getProjectionMatrix() * camera->getViewMatrix(), camera->getViewMatrix(), batchComponentRendering());
+				camera->getProjectionMatrix() * camera->getViewMatrix(), camera->getViewMatrix(), imageComponentRendering());
 			dispatchContext.set(poca::opengl::CollectionRenderPlanContext{ &plan });
 		}
 	}
