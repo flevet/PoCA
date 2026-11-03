@@ -54,9 +54,10 @@ namespace poca::core {
 		std::lock_guard<std::mutex> lock(m_mutex); ++m_stats.frames;
 		if (m_stats.frames == 1) writeEvent("first_submitted_frame_not_visibility",size_t(-1));
 	}
-	void ProgressiveLoadProfile::sceneDrawn(bool complete)
+	void ProgressiveLoadProfile::sceneDrawn(bool complete, double ms)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex); ++m_stats.sceneDraws;
+		m_stats.sceneCpuMs+=ms; m_stats.maxSceneCpuMs=(std::max)(m_stats.maxSceneCpuMs,ms);
 		m_completedScene=m_completedScene || complete;
 	}
 	bool ProgressiveLoadProfile::hasCompletedScene() const { std::lock_guard<std::mutex> lock(m_mutex); return m_completedScene; }
@@ -72,7 +73,8 @@ namespace poca::core {
 		std::cout << " worker_busy_ms=" << m_stats.workerBusyMs << " queue_slot_wait_ms=" << m_stats.queueWaitMs
 			<< " gui_commit_ms=" << m_stats.guiCommitMs << " gpu_cpu_ms=" << m_stats.gpuInitializationMs
 			<< " peak_queue_depth=" << m_stats.peakQueueDepth << " peak_accounted_queue_bytes=" << m_stats.peakQueuedBytes
-			<< " redraw_schedules=" << m_stats.redrawSchedules << " scene_redraws=" << m_stats.sceneDraws << " submitted_frames=" << m_stats.frames << std::endl;
+			<< " redraw_schedules=" << m_stats.redrawSchedules << " scene_redraws=" << m_stats.sceneDraws << " submitted_frames=" << m_stats.frames
+			<< " scene_cpu_ms=" << m_stats.sceneCpuMs << " max_scene_cpu_ms=" << m_stats.maxSceneCpuMs << std::endl;
 	}
 	ProgressiveLoadProfile::GpuScope::GpuScope(MyObjectInterface* object, const char* label, bool trace)
 		: m_profile(forObject(object)), m_label(label), m_trace(trace), m_start(Clock::now())

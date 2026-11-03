@@ -758,6 +758,7 @@ void MainWindow::toggleDebugMarchingCube(bool _enabled)
 void MainWindow::registerTests()
 {
 	poca::core::Engine* engine = poca::core::Engine::instance();
+	registerMdiChildLoadingTests(engine->tests());
 #ifndef NO_CUDA
 	registerFaceConnectedComponentTests(engine->tests());
 #endif

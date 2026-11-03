@@ -36,6 +36,7 @@ set(WIDGET_HEADER_FILES
 set(WIDGET_SOURCE_FILES
   Widgets/MainFilterWidget.cpp
   Widgets/MdiChild.cpp
+  Widgets/MdiChildLoadingTests.cpp
   Widgets/ColocalizationChoiceDialog.cpp
   Widgets/MacroWidget.cpp
   Widgets/MainWindow.cpp

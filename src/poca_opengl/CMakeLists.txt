@@ -31,6 +31,7 @@ set(OPENGL_SOURCE_FILES
   OpenGL/BasicDisplayCommand.cpp
   OpenGL/Camera.cpp
   OpenGL/CameraPersistence.cpp
+  OpenGL/CameraLoading.cpp
   OpenGL/Helper.cpp
   OpenGL/LodUpdateManager.cpp
   OpenGL/SsaoShader.cpp

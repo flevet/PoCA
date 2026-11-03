@@ -71,7 +71,8 @@ bool MyMultipleObject::checkLoadingCommand(const poca::core::CommandInfo* comman
 	const auto& name = command->nameCommand;
 	for (const char* allowed : {"display","displayOverlay","createDisplay","freeGPU","updatePickingBuffer","pick",
 		"requestLodUpdate","updateTransform","sortWRTCameraPosition","cameraMouseEvent","OpenGLContextInitialized",
-		"displaySSAO","drawSSAO","getBoundingBox","boundingBox","updateDisplay","updateInfosObject"})
+		"displaySSAO","drawSSAO","getBoundingBox","boundingBox","updateDisplay","updateInfosObject",
+		"updatePickedObject","getInfoObjectCurrentlyPicked","setCurrentFrame","togglePicking"})
 		if (name == allowed) return true;
 	const auto message=incompleteLoadMessage();
 	command->errorMessage(message);

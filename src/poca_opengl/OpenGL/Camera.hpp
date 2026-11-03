@@ -272,6 +272,19 @@ namespace poca::opengl {
 		void setUp(const glm::vec3& u);
 		void updateCamera();
 		void resetProjection();
+		// Loading-only refinement; existing resources continue drawing every frame.
+		bool admitProgressiveGeometryInitialization();
+		bool loadingVisibilityDiagnostics() const { return m_loadingVisibilityFrames != 0; }
+		void traceResetView() const;
+		class ImageContributionScope {
+		public:
+			ImageContributionScope(Camera*, const char*);
+			~ImageContributionScope() noexcept(false);
+		private:
+			Camera* m_camera;
+			const char* m_pass;
+			QImage m_before;
+		};
 		void displayBoundingBox(const float, const float);
 		void displayGrid();
 
@@ -526,6 +539,9 @@ namespace poca::opengl {
 		int m_sizePatch, m_insidePatchId;
 
 		bool m_undoPossible, m_resetedProj;
+		uint32_t m_progressiveGeometryInitializations{0}, m_loadingVisibilityFrames{0};
+		bool m_progressivePreviewFrame{true};
+		QImage imageContributionSnapshot() const;
 		float m_distanceOrthoSaved, m_cameraDistanceSaved, m_multAnimation;
 		glm::mat4 m_matrixModelSaved, m_matrixViewSaved;
 

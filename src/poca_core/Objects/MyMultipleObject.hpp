@@ -142,6 +142,7 @@ public:
 	size_t expectedChildren() const { return m_expectedNames.empty() ? m_colors.size() : m_expectedNames.size(); }
 	const std::string& loadDiagnostic() const { return m_loadDiagnostic; }
 	uint64_t childrenRevision() const { return m_childrenRevision; }
+	const std::optional<poca::core::BoundingBox>& pendingLoadBounds() const { return m_pendingBounds; }
 	void requireCompleteCollection() const;
 	void setLoadingCancellation(std::function<void()> callback) { m_loadingCancellation=std::move(callback); }
 

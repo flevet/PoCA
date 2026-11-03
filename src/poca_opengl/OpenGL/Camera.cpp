@@ -988,7 +988,15 @@ namespace poca::opengl {
 			return;
 		}*/
 
+		// Explicit diagnostic run only: keep preparation/attachment active, suppress scene work.
+		if (renderMulti && renderMulti->loadState() == MyMultipleObject::LoadState::Loading && qEnvironmentVariableIntValue("POCA_ZARR_SUPPRESS_RENDERING") == 1) {
+			m_imageStreamRedrawTimer.stop(); m_imageStreamRedrawDue = false;
+			m_lodUpdateManager->acknowledgeRedraw();
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			return;
+		}
 		if (m_openGLContextInitializedNotified) {
+			const auto sceneStart = poca::core::ProgressiveLoadProfile::Clock::now();
 			drawElements();
 			if (poca::core::Engine::instance()->verbose("debugGizmo")) {
 				static unsigned int debugPaintCounter = 0;
@@ -1000,7 +1008,9 @@ namespace poca::opengl {
 			if (objectBoolParameter("displayTransformGizmo", m_displayTransformGizmo))
 				drawTransformGizmos();
 			drawObjectIdentificationLabels();
-			if (auto profile=poca::core::ProgressiveLoadProfile::forObject(m_object)) profile->sceneDrawn(renderMulti && renderMulti->isLoadComplete());
+			if (m_loadingVisibilityFrames) --m_loadingVisibilityFrames;
+			if (auto profile=poca::core::ProgressiveLoadProfile::forObject(m_object)) profile->sceneDrawn(renderMulti && renderMulti->isLoadComplete(),
+				std::chrono::duration<double,std::milli>(poca::core::ProgressiveLoadProfile::Clock::now()-sceneStart).count());
 		}
 	}
 
@@ -1033,6 +1043,8 @@ namespace poca::opengl {
 			profiler.addImageMetric(poca::core::PerformanceProfiler::ImageMetric::StreamingFrames);
 		m_imageStreamRedrawTimer.stop(); m_imageStreamRedrawDue = false;
 		m_lodUpdateManager->acknowledgeRedraw();
+		m_progressiveGeometryInitializations = m_progressivePreviewFrame ? 0 : 1;
+		m_progressivePreviewFrame = false;
 		poca::core::PerformanceProfiler::ScopedTimer timer("Rendering", _buffOffscreen == NULL ? "Camera::drawElements onscreen" : "Camera::drawElements offscreen");
 		auto start = std::chrono::high_resolution_clock::now();
 		GL_CHECK_ERRORS();
@@ -3222,8 +3234,11 @@ namespace poca::opengl {
 
 		float w = _bbox[3] - _bbox[0], h = _bbox[4] - _bbox[1], t = _bbox[5] - _bbox[2];
 		if (_recomputeOrthoD) {
-			m_distanceOrtho = w > h ? w / 2 : h / 2;
-			m_cameraDistance = safeInitialCameraDistance(m_distanceOrtho, glm::vec3(w, h, t), m_perspectiveFov);
+			updateCameraEyeUp(true, true);
+			const auto fit = fitCameraBox(glm::vec3(w,h,t),m_stateCamera.m_matrix,
+				glm::vec2(width(),height()),m_perspectiveFov);
+			m_distanceOrtho = fit.extent;
+			m_cameraDistance = fit.distance;
 			
 			m_translation.x = _bbox[0] + (_bbox[3] - _bbox[0]) / 2.f;
 			m_translation.y = _bbox[1] + (_bbox[4] - _bbox[1]) / 2.f;
@@ -3245,8 +3260,8 @@ namespace poca::opengl {
 		m_clip[5] = glm::vec4(0, 0, -1, translatedBBox[5]);
 		m_currentCrop = _bbox;
 
-		//paintGL();
-		repaint();
+		// Paint only after the caller has finished changing crop/reset state.
+		update();
 	}
 
 	void Camera::resetProjection()
@@ -3270,6 +3285,13 @@ namespace poca::opengl {
 		m_clip[5] = glm::vec4(0, 0, -1, translatedBBox[5]);
 
 		m_resetedProj = true;
+		m_imageStreamSettleTimer.stop();
+		m_interactiveRendering = false;
+		auto* engine = poca::core::Engine::instance();
+		m_loadingVisibilityFrames = engine->verboseEnabled() && engine->hasVerboseType("zarrLoadVisibility") ? 8 : 0;
+		if (m_loadingVisibilityFrames) traceResetView();
+		m_object->executeGlobalCommand(&poca::core::CommandInfo(false, "requestLodUpdate"));
+		update();
 	}
 
 	const bool Camera::testWhichFaceFrontCamera()

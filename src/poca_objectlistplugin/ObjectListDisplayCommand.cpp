@@ -541,6 +541,12 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 	RenderProfiler::visibleCount(VisibleMetric::ComponentsVisited);
 	if (!m_objects->isSelected()) { RenderProfiler::visibleCount(VisibleMetric::Unselected); return; }
 	RenderProfiler::visibleCount(VisibleMetric::ComponentsSelected);
+	// Do not spend the progressive initialization slot on a non-renderable component.
+	if (!m_objects->getCurrentHistogram()->hasDisplayBounds()) { RenderProfiler::visibleCount(VisibleMetric::NoDisplayBounds); return; }
+	const bool requested = getParameter<bool>("shapeRendering") || getParameter<bool>("pointRendering") ||
+		getParameter<bool>("outlinePointRendering") || getParameter<bool>("ellipsoidRendering") ||
+		(m_objects->hasSkeletons() && (getParameter<bool>("skeletonRendering") || getParameter<bool>("linkRendering")));
+	if (!poca::core::POCA_ENABLE_PICKING && !requested) return;
 
 	bool surfaceVisible = true;
 	// Special passes retain their existing viewport, model and framebuffer contracts.
@@ -582,6 +588,7 @@ void ObjectListDisplayCommand::display(poca::opengl::Camera* _cam, const bool _o
 			// Same candidate scope as the experiment; actual submissions remain visibleDraw's responsibility.
 			RenderProfiler::visibleCount(VisibleMetric::LodFastBypasses);
 	}
+	if (!_offscreen && !_ssao && !m_surfaceReady && !_cam->admitProgressiveGeometryInitialization()) return;
 	drawElements(_cam, _ssao, surfaceVisible);
 	if (!_offscreen)
 		if (poca::core::POCA_ENABLE_PICKING) drawPicking(_cam);
@@ -1067,14 +1074,16 @@ void ObjectListDisplayCommand::createDisplay()
 	std::vector <poca::core::Vec3mf> normals;
 	m_objects->generateNormals(normals);
 	std::vector <float> ids;
-	m_objects->generatePickingIndices(ids);
+	if (poca::core::POCA_ENABLE_PICKING) m_objects->generatePickingIndices(ids);
 	m_triangleBuffer.generateBuffer(triangles.size(), 3, GL_FLOAT);
 	m_triangleNormalBuffer.generateBuffer(normals.size(), 3, GL_FLOAT);
 	m_triangleFeatureBuffer.generateBuffer(triangles.size(), 1, GL_FLOAT);
-	m_idBuffer.generateBuffer(triangles.size(), 1, GL_FLOAT);
 	m_triangleBuffer.updateBuffer(triangles.data());
 	m_triangleNormalBuffer.updateBuffer(normals.data());
-	m_idBuffer.updateBuffer(ids.data());
+	if (poca::core::POCA_ENABLE_PICKING) {
+		m_idBuffer.generateBuffer(triangles.size(), 1, GL_FLOAT);
+		m_idBuffer.updateBuffer(ids.data());
+	}
 
 	m_boundingBoxSelection.generateBuffer(24, 3, GL_FLOAT);
 
@@ -1091,10 +1100,10 @@ void ObjectListDisplayCommand::createDisplay()
 	generateFeatureBuffer(hist);
 	m_surfaceReady = true;
 	RenderProfiler::visibleCount(VisibleMetric::SurfaceAllocations,
-		3 + (!m_triangleFeatureBuffer.empty() ? 1 : 0) +
+		2 + (poca::core::POCA_ENABLE_PICKING ? 1 : 0) + (!m_triangleFeatureBuffer.empty() ? 1 : 0) +
 		(m_objects->dimension() == 2 ? 1 + (!m_lineBuffer.empty() ? 1 : 0) : 0));
 	RenderProfiler::visibleCount(VisibleMetric::SurfaceUploadBytes,
-		triangles.size() * (sizeof(poca::core::Vec3mf) + 2 * sizeof(float)) + normals.size() * sizeof(poca::core::Vec3mf) +
+		triangles.size() * (sizeof(poca::core::Vec3mf) + (poca::core::POCA_ENABLE_PICKING ? 2 : 1) * sizeof(float)) + normals.size() * sizeof(poca::core::Vec3mf) +
 		RenderProfiler::visibleElements(m_lineBuffer, false) * (sizeof(poca::core::Vec3mf) + sizeof(float)));
 	if (!getParameter<bool>("pointRendering") && !poca::core::POCA_ENABLE_PICKING) {
 		RenderProfiler::visibleCount(VisibleMetric::PointDeferredBuilds);

@@ -45,6 +45,9 @@
 
 #include <OpenGL/Camera.hpp>
 
+namespace poca::core { class TestRegistry; }
+void registerMdiChildLoadingTests(poca::core::TestRegistry&);
+
 class MyMdiArea: public QMdiArea{
 	Q_OBJECT
 public:

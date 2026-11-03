@@ -3,6 +3,7 @@
 #define CameraGeometry_hpp__
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <glm/glm.hpp>
 namespace poca::opengl {
 	// distanceOrtho is projection half-extent; cameraDistance is signed physical
@@ -23,6 +24,7 @@ namespace poca::opengl {
 		// a deep box fitted using only its existing XY projection extent.
 		return std::max(perspectiveEquivalentDistance(_extent, _fov, 1.f), radius * 1.01f + 0.001f);
 	}
+
 	inline void applyCameraExtent(float _value, bool _perspective, float _fov, float& _extent, float& _distance) {
 		_extent = std::max(0.0001f, _value);
 		if (_perspective)
@@ -43,6 +45,23 @@ namespace poca::opengl {
 		else
 			factors.y = _height / _width;
 		return factors;
+	}
+	struct CameraBoxFit { float extent, distance; };
+	inline CameraBoxFit fitCameraBox(const glm::vec3& size, const glm::mat4& view, const glm::vec2& viewport, float fov) {
+		if (viewport.x <= 0 || viewport.y <= 0) throw std::invalid_argument("Cannot fit camera to an empty viewport");
+		const float aspect = viewport.x / viewport.y, tangent = cameraHalfFovTangent(fov);
+		const auto factors = cameraProjectionFactors(viewport.x,viewport.y);
+		CameraBoxFit fit{0.0001f,0.f};
+		for (int corner=0;corner<8;++corner) {
+			const glm::vec3 local((corner&1) ? size.x/2 : -size.x/2,
+				(corner&2) ? size.y/2 : -size.y/2,(corner&4) ? size.z/2 : -size.z/2);
+			const auto p=glm::mat3(view)*local;
+			fit.extent=std::max(fit.extent,std::max(std::abs(p.x)/factors.x,std::abs(p.y)/factors.y));
+			fit.distance=std::max(fit.distance,p.z+std::max(std::abs(p.x)/(aspect*tangent),std::abs(p.y)/tangent));
+		}
+		// Keep the positive near plane outside the bounding sphere at any orientation.
+		fit.distance=std::max(fit.distance,glm::length(size)*.505f+.001f);
+		return fit;
 	}
 	inline void convertCameraProjection(bool _toPerspective, float _fov, float _factorH, float& _extent, float& _distance) {
 		// Ortho extent is based on the smaller viewport dimension; perspective FOV

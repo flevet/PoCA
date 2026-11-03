@@ -16,6 +16,7 @@ namespace poca::core {
 		using Clock = std::chrono::steady_clock;
 		struct Snapshot {
 			double workerBusyMs{}, queueWaitMs{}, guiCommitMs{}, gpuInitializationMs{};
+			double sceneCpuMs{}, maxSceneCpuMs{};
 			size_t queueDepth{}, peakQueueDepth{}, queuedBytes{}, peakQueuedBytes{};
 			uint64_t redrawSchedules{}, frames{}, sceneDraws{};
 		};
@@ -40,7 +41,7 @@ namespace poca::core {
 		void gpuInitialization(const char*, double, bool);
 		void redrawScheduled(const char*);
 		void frameSubmitted();
-		void sceneDrawn(bool);
+		void sceneDrawn(bool, double);
 		bool hasCompletedScene() const;
 		void beginPipeline();
 		void report(const char*, bool = true);

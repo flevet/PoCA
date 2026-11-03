@@ -43,6 +43,7 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QVBoxLayout>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QSignalBlocker>
 #include <algorithm>
 #include <float.h>
 
@@ -357,7 +358,7 @@ void MdiChild::actionNeeded(int _val)
 	if (cam == NULL)
 		return;
 	QObject* sender = QObject::sender();
-	if (sender == m_tSlider) {
+	if (sender == m_tSlider && m_2DtButton->isChecked()) {
 		auto plane = getPlane(_val);
 		applyFramePlane(plane);
 	}
@@ -575,17 +576,19 @@ void MdiChild::resetViewer()
 {
 	poca::core::MyObjectInterface* object = m_widget->getObject();
 	const poca::core::BoundingBox& bbox = object->boundingBox();
+	// Slider indices are relative to m_minT. Refreshing a hidden 3D control
+	// must never emit a slice command and crop the freshly reset volume.
+	const int previousPlane = getPlane(m_tSlider->value());
 	m_minT = ceil(bbox[2]);
-	m_maxT = ceil(bbox[5] - 1);
-	if (m_maxT == -1)
-		return;
+	m_maxT = std::max(m_minT, int(ceil(bbox[5] - 1)));
 	m_interval = m_maxT - m_minT;
-	m_tSlider->setMinimum(0);
-	m_tSlider->setMaximum(m_interval);
-	if (m_tSlider->value() < m_minT)
-		m_tSlider->setValue(m_minT);
-	if (m_tSlider->value() > m_maxT)
-		m_tSlider->setValue(m_maxT);
+	{
+		const QSignalBlocker blocked(m_tSlider);
+		m_tSlider->setRange(0, m_interval);
+		m_tSlider->setValue(std::clamp(previousPlane - m_minT, 0, m_interval));
+	}
+	m_tLabel->setText(QString::number(getPlane(m_tSlider->value())).rightJustified(5, '0'));
+	if (m_2DtButton->isChecked()) applyFramePlane(getPlane(m_tSlider->value()));
 }
 
 MyMdiArea::MyMdiArea( QWidget * _w ):QMdiArea( _w )
