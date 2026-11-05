@@ -8,6 +8,10 @@ float streamUnsigned(usampler3D tex, vec3 coord, bool linear)
     if (!linear) return float(texture(tex, coord).r);
     ivec3 dims = textureSize(tex, 0);
     vec3 voxel = coord * vec3(dims) - 0.5;
+#ifdef STREAM_NATIVE_FRAME
+    // Preserve XY interpolation while pinning Z to the selected native texel.
+    voxel.z = floor(voxel.z + 0.5);
+#endif
     ivec3 first = ivec3(floor(voxel));
     vec3 weight = fract(voxel);
     float value = 0.0;
@@ -25,6 +29,10 @@ float streamFloat(sampler3D tex, vec3 coord, bool linear)
     if (!linear) return texture(tex, coord).r;
     ivec3 dims = textureSize(tex, 0);
     vec3 voxel = coord * vec3(dims) - 0.5;
+#ifdef STREAM_NATIVE_FRAME
+    // Preserve XY interpolation while pinning Z to the selected native texel.
+    voxel.z = floor(voxel.z + 0.5);
+#endif
     ivec3 first = ivec3(floor(voxel));
     vec3 weight = fract(voxel);
     float value = 0.0;

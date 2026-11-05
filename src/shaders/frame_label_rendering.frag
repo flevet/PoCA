@@ -54,6 +54,7 @@ uniform vec3 light_position;
 
 uniform int nb_steps;
 uniform bool applyThreshold;
+uniform bool framePending;
 uniform bool isFloat;
 uniform bool isLabel;
 uniform bool scaleLUT;
@@ -100,6 +101,7 @@ struct AABB {
     vec3 bottom;
 };
 
+#define STREAM_NATIVE_FRAME
 #define STREAM_SINGLE
 #include "image_stream_sampling.glsl"
 
@@ -236,6 +238,12 @@ void main()
     position.z = (float(currentFrame) + 0.5) / max(1.0, scientificDepth);
     position = clamp(position, vec3(0.0), vec3(1.0));
 
+    if (framePending) {
+        vec4 pendingClip = ModelViewProjectionMatrix * vec4(worldPos, 1.0);
+        gl_FragDepth = 0.5 * pendingClip.z / pendingClip.w + 0.5;
+        a_colour = vec4(vec3(0.18), 1.0);
+        return;
+    }
     float value;
     if (!sampleFeatureValue(position, value))
         discard;

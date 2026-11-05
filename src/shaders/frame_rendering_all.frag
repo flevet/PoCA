@@ -31,6 +31,7 @@ uniform bool applyThreshold[MAX_NB_IMAGES];
 uniform bool isFloat[MAX_NB_IMAGES];
 uniform bool isLabel[MAX_NB_IMAGES];
 uniform bool scaleLUT[MAX_NB_IMAGES];
+uniform bool framePending[MAX_NB_IMAGES];
 
 uniform float width_feature_texture[MAX_NB_IMAGES];
 uniform float height_feature_texture[MAX_NB_IMAGES];
@@ -53,6 +54,7 @@ struct Ray {
     vec3 direction;
 };
 
+#define STREAM_NATIVE_FRAME
 #define STREAM_ARRAY
 #include "image_stream_sampling.glsl"
 
@@ -174,7 +176,9 @@ void main()
 
     a_colour = vec4(0.0);
     bool hasContribution = false;
+    bool loading = false;
     for (int curImage = 0; curImage < nbImages; curImage++) {
+        if (framePending[curImage]) { loading = true; continue; }
         float value;
         if (!sampleFeatureValue(curImage, position, value))
             continue;
@@ -185,7 +189,11 @@ void main()
         a_colour += currentColor;
     }
 
-    if (!hasContribution)
-        discard;
+    if (!hasContribution) {
+        if (!loading) discard;
+        // Only the unavailable scientific image region gets a neutral placeholder.
+        // Other ready channels keep their existing LUT/compositing behavior.
+        a_colour = vec4(vec3(0.18), 1.0);
+    }
     a_colour = clamp(a_colour, 0.0, 1.0);
 }
