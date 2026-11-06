@@ -37,6 +37,7 @@
 #include <tuple>
 #include <utility>
 #include <mutex>
+#include <memory>
 
 #include <General/BasicComponentList.hpp>
 #include <array>
@@ -149,6 +150,8 @@ namespace poca::geometry {
 		virtual void getOutlineLocsFeatureInSelection(std::vector <float>&, const std::vector <float>&, const std::vector <bool>&, const float) const;
 		virtual void getOutlineLocsFeatureInSelectionHiLow(std::vector <float>&, const std::vector <bool>&, const float, const float) const;
 
+		// Independent curvature-flow smoothing. Source geometry/caches are never mutated.
+		std::unique_ptr<ObjectListMesh> smoothShape(double, uint32_t, bool) const;
 		void computeSkeletons();
 		void saveAsOBJ(const std::string&) const;
 
@@ -180,7 +183,7 @@ namespace poca::geometry {
 										std::vector <poca::core::Vec3mf>&, std::vector <std::uint32_t>&, 
 										std::vector <poca::core::Vec3mf>&, std::vector <std::uint32_t>&,
 										std::vector <poca::core::Vec3mf>&, std::vector <std::uint32_t>&,
-										std::vector <float>&);
+										std::vector <float>&, const MeshInspection* = nullptr);
 
 	protected:
 		void ensureMeshesMaterialized() const; // Caller holds m_meshMutex.

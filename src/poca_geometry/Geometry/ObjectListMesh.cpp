@@ -35,6 +35,10 @@
 #include <chrono>
 #include <execution>
 #include <CGAL/Polygon_mesh_processing/measure.h>
+#include <CGAL/Polygon_mesh_processing/bbox.h>
+#include <CGAL/Polygon_mesh_processing/smooth_shape.h>
+#include <CGAL/Eigen_solver_traits.h>
+#include <General/Palette.hpp>
 #include <CGAL/poisson_surface_reconstruction.h>
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 #include <CGAL/Polygon_mesh_processing/IO/polygon_mesh_io.h>
@@ -422,7 +426,11 @@ namespace poca::geometry {
 		const bool unchanged = !_repair && !_remesh && _inspections.size() == m_meshes.size();
 		size_t sourceIndex = 0;
 		for (auto& mesh : m_meshes) {
-			bool res = processSurfaceMesh(mesh, triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes);
+			const MeshInspection* inspection = unchanged ? &_inspections[sourceIndex] : nullptr;
+			if (inspection && (!inspection->validPolygonMesh || !inspection->triangleMesh ||
+				!inspection->finiteCoordinates || inspection->vertexCount < 3))
+				throw std::runtime_error("Cannot reconstruct an empty, non-finite or structurally invalid input mesh; source is unchanged.");
+			bool res = processSurfaceMesh(mesh, triPoCA, nbTriPoCA, edges, nbEdges, links, nbLinks, volumes, inspection);
 			if (res) {
 				validMeshes.push_back(mesh);
 				m_cgalValidatedObjects.push_back(unchanged && MeshRepair::isStrictlyValid(_inspections[sourceIndex]));
@@ -439,7 +447,7 @@ namespace poca::geometry {
 
 		m_centroids.resize(m_meshes.size());
 
-		m_bbox.set(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min(), std::numeric_limits<float>::min());
+		m_bbox = poca::core::BoundingBox::initBBox();
 		std::vector <uint32_t> points, nbPts{ 0 }; //_mesh.number_of_vertices()
 		for (const auto& mesh : m_meshes) {
 			for (const auto& vert : mesh.vertices()) {
@@ -714,7 +722,7 @@ namespace poca::geometry {
 		std::vector <poca::core::Vec3mf>& _trianglesPoCA, std::vector <std::uint32_t>& _nbTriPoCA,
 		std::vector <poca::core::Vec3mf>& _edgesSkeleton, std::vector <std::uint32_t>& _nbSkeletons,
 		std::vector <poca::core::Vec3mf>& _linksSkeleton, std::vector <std::uint32_t>& _nbLinks,
-		std::vector <float>& _volumes)
+		std::vector <float>& _volumes, const MeshInspection* _inspection)
 	{
 		poca::core::Engine* engine = poca::core::Engine::instance();
 		
@@ -741,7 +749,10 @@ namespace poca::geometry {
 			PMP::isotropic_remeshing(faces(_mesh), m_targetLength, _mesh, CGAL::parameters::number_of_iterations(m_iterations));
 			//std::cout << "End remeshing (" << num_faces(mesh) << " faces)..." << std::endl;
 		}
-		float volume = fabs(PMP::volume(_mesh));
+		// Validated reconstruction also preserves open/degenerate source nuclei.
+		// Their enclosed volume is undefined; never call volume() on an open mesh.
+		float volume = _inspection ? (_inspection->volumeChecked && _inspection->finiteVolume ?
+			float(std::abs(_inspection->volume)) : 0.f) : fabs(PMP::volume(_mesh));
 		if (volume < 0.f) {
 			return false;
 		}
@@ -772,12 +783,31 @@ namespace poca::geometry {
 		m_bboxMeshes.push_back(bbox);
 
 		Facet_vector_3_map facetNormals = _mesh.add_property_map<face_descriptor, Kernel::Vector_3>("f:norm").first;
-		PMP::compute_face_normals(_mesh, facetNormals);
-
-		//std::cout << "Done creating normal per vertex" << std::endl;
-
 		Vertex_vector_3_map vertexNormals = _mesh.add_property_map<vertex_descriptor, Kernel::Vector_3>("v:norm").first;
-		PMP::compute_vertex_normals(_mesh, vertexNormals);
+		if (_inspection && _inspection->degenerateTriangleCount != 0) {
+			// A degenerate original is retained for comparison, with zero normals on
+			// its zero-area faces. Avoid CGAL normal preconditions in this branch.
+			for (auto v : _mesh.vertices()) vertexNormals[v] = CGAL::NULL_VECTOR;
+			for (auto f : _mesh.faces()) {
+				const auto h = _mesh.halfedge(f);
+				const auto a = _mesh.point(source(h, _mesh)), b = _mesh.point(target(h, _mesh));
+				const auto c = _mesh.point(target(next(h, _mesh), _mesh));
+				auto normal = CGAL::cross_product(b - a, c - a);
+				const double squared = CGAL::to_double(normal.squared_length());
+				if (std::isfinite(squared) && squared > 0.) normal = normal / std::sqrt(squared);
+				else normal = CGAL::NULL_VECTOR;
+				facetNormals[f] = normal;
+				for (auto v : vertices_around_face(h, _mesh)) vertexNormals[v] = vertexNormals[v] + normal;
+			}
+			for (auto v : _mesh.vertices()) {
+				const double squared = CGAL::to_double(vertexNormals[v].squared_length());
+				if (std::isfinite(squared) && squared > 0.) vertexNormals[v] = vertexNormals[v] / std::sqrt(squared);
+			}
+		}
+		else {
+			PMP::compute_face_normals(_mesh, facetNormals);
+			PMP::compute_vertex_normals(_mesh, vertexNormals);
+		}
 
 		return true;
 	}
@@ -1074,6 +1104,85 @@ namespace poca::geometry {
 			}
 
 		}
+	}
+
+	std::unique_ptr<ObjectListMesh> ObjectListMesh::smoothShape(double timestep, uint32_t iterations, bool rescale) const
+	{
+		if (!std::isfinite(timestep) || timestep <= 0. || iterations == 0)
+			throw std::invalid_argument("CGAL shape smoothing needs a positive finite timestep and nonzero iterations.");
+		const auto start = MarchingCubeClock::now();
+		const auto& originals = getMeshes(); // Const access preserves indexed authority.
+		if (originals.empty()) throw std::runtime_error("Selected mesh component has no nuclei.");
+		auto meshes = originals;
+		std::vector<MeshInspection> inspections;
+		inspections.reserve(meshes.size());
+		std::size_t processed = 0, preserved = 0;
+		for (std::size_t i = 0; i < meshes.size(); ++i) {
+			auto before = MeshRepair::inspect(originals[i]);
+			try {
+				if (!MeshRepair::isStrictlyValid(before))
+					throw std::runtime_error("input is not a closed, finite, outward valid nucleus");
+				auto candidate = originals[i];
+				candidate.collect_garbage(); // CGAL solver indices must be dense.
+				// The v6.0.1 API returns void and silently breaks on solver failure.
+				// Its Eigen traits share the solver across named-parameter copies,
+				// so check the actual solve status before committing any positions.
+				using Solver = CGAL::Eigen_solver_traits<Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteLUT<double>>>;
+				Solver solver;
+				PMP::smooth_shape(candidate, timestep,
+					CGAL::parameters::number_of_iterations(iterations).do_scale(rescale).sparse_linear_solver(solver));
+				if (solver.solver().info() != Eigen::Success)
+					throw std::runtime_error("CGAL shape-smoothing linear solver failed");
+				auto after = MeshRepair::inspect(candidate);
+				if (!MeshRepair::isStrictlyValid(after))
+					throw std::runtime_error("smoothed mesh failed strict validation");
+				if (candidate.number_of_vertices() != originals[i].number_of_vertices() || candidate.number_of_faces() != originals[i].number_of_faces())
+					throw std::runtime_error("CGAL shape smoothing unexpectedly changed topology");
+				bool moved = false;
+				auto sourcePoint = originals[i].points().begin();
+				for (const auto& point : candidate.points()) {
+					moved = moved || point != *sourcePoint;
+					++sourcePoint;
+				}
+				if (!moved) throw std::runtime_error("CGAL returned unchanged geometry (stationary shape)");
+				const auto oldBox = PMP::bbox(originals[i]), newBox = PMP::bbox(candidate);
+				const std::array<double, 3> boxRatios{
+					(newBox.xmax() - newBox.xmin()) / (oldBox.xmax() - oldBox.xmin()),
+					(newBox.ymax() - newBox.ymin()) / (oldBox.ymax() - oldBox.ymin()),
+					(newBox.zmax() - newBox.zmin()) / (oldBox.zmax() - oldBox.zmin()) };
+				const bool distortion = std::abs(after.volume / before.volume - 1.) > .25 ||
+					std::any_of(boxRatios.begin(), boxRatios.end(), [](double r) { return std::abs(r - 1.) > .25; });
+				if (poca::core::Engine::instance()->verbose(marchingCubeDebugType) || distortion)
+					std::cout << "[CGAL shape smoothing] nucleus " << i + 1 << ": volume " << before.volume <<
+						" -> " << after.volume << " (ratio=" << after.volume / before.volume << "), bbox ratios=" <<
+						boxRatios[0] << "," << boxRatios[1] << "," << boxRatios[2] <<
+						(distortion ? " (morphology deviation; geometry retained)" : "") << std::endl;
+				meshes[i] = std::move(candidate);
+				before = std::move(after);
+				++processed;
+			}
+			catch (const std::exception& exception) {
+				++preserved;
+				std::cerr << "[CGAL shape smoothing] nucleus " << i + 1 << ": preserved original: " << exception.what() <<
+					", issues=" << before.issueMask << std::endl;
+			}
+			inspections.push_back(std::move(before));
+		}
+		auto result = std::make_unique<ObjectListMesh>(meshes, false, 0.f, 0u, false, inspections);
+		if (result->nbObjects() != nbObjects())
+			throw std::runtime_error("Shape smoothing reconstruction changed the number of nuclei; source is unchanged.");
+		result->setSelection(getSelection());
+		result->setUseVertexNormals(useVertexNormals());
+		result->setPalette(new poca::core::Palette(*m_palette));
+		// Keep instance IDs, but recompute every geometry-derived feature above.
+		for (const std::string feature : { "id", "sourceLabel" })
+			if (hasData(feature))
+				result->replaceFeature(feature, std::make_unique<poca::core::MyData>(*getData().at(feature)));
+		if (result->hasData(currentHistogramType())) result->setCurrentHistogramType(currentHistogramType());
+		result->setHiLow(isHiLow());
+		std::cout << "[CGAL shape smoothing] processed=" << processed << ", preserved=" << preserved <<
+			", total=" << marchingCubeElapsedMilliseconds(start) << " ms (including rendering arrays/PCA/features)" << std::endl;
+		return result;
 	}
 
 	void ObjectListMesh::computeSkeletons()
